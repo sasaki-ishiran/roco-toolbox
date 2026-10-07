@@ -23,7 +23,7 @@ export default defineConfig({
       manifest: {
         name: '洛克工具箱',
         short_name: '洛克工具箱',
-        description: '洛克王国：世界 孵蛋规划工具箱（数据只存在本机，不上传）',
+        description: '洛克王国：世界 孵蛋规划工具箱（数据默认只存在本机；开启云同步后账号数据会上传到云端）',
         lang: 'zh-CN',
         start_url: '.',
         scope: '.',

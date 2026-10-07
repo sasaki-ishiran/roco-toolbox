@@ -52,7 +52,6 @@ test('分享一份采集数据进来，页面自动导入并回到首页', async
   await page.getByRole('button', { name: '导入数据', exact: true }).click();
   await expect(page.getByTestId('data-message')).toContainText('已导入分享进来的采集数据');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await expect(page.getByText('0 / 255', { exact: true })).toHaveCount(0);
 
   // 再刷新一次不会重复导入（暂存取走就删了；有数据时默认回看板）
   await page.reload();
@@ -80,7 +79,6 @@ test('原生壳 APK 注入分享数据后自动导入（应用已经开着的情
   await page.getByRole('button', { name: '导入数据', exact: true }).click();
   await expect(page.getByTestId('data-message')).toContainText('已导入分享进来的采集数据');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await expect(page.getByText('0 / 255', { exact: true })).toHaveCount(0);
 });
 
 test('分享导入后自动做一次云同步（跨设备用户不用再手动点）', async ({ page }) => {

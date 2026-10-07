@@ -174,11 +174,6 @@ export function arrangeClusters(clusters: NestPosition[][]): NestPosition[][] {
   return arranged;
 }
 
-/** 按「连通组大小」生成编组式布局（纯几何版本）。 */
-export function buildGroupedLayout(componentSizes: number[]): NestPosition[][] {
-  return arrangeClusters(componentSizes.map(buildClusterOffsets));
-}
-
 export interface LayoutViolation {
   a: NestPosition;
   b: NestPosition;

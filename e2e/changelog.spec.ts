@@ -1,16 +1,17 @@
 import { expect, test } from '@playwright/test';
+import { GUIDE_VERSION } from '../src/ui/guide';
 
 // 覆盖 config 里「已读」的预置，才能看到首启弹窗。
 // 但教程引导（roco.guideSeen）仍预置为已读：本文件只验证更新弹窗，
 // 教程由 guide.spec.ts 单独验证；否则关掉更新弹窗后教程会立刻盖上、挡住后续点击。
-// 注意：值要跟 src/ui/guide.ts 的 GUIDE_VERSION 保持一致，否则教程会重新弹出并挡住用例。
+// 版本号直接从 src/ui/guide.ts 取，不再手抄（手抄的漏同步会让教程挡住全部用例）。
 test.use({
   storageState: {
     cookies: [],
     origins: [
       {
         origin: 'http://localhost:4173',
-        localStorage: [{ name: 'roco.guideSeen', value: '3' }],
+        localStorage: [{ name: 'roco.guideSeen', value: GUIDE_VERSION }],
       },
     ],
   },

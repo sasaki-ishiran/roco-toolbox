@@ -93,8 +93,8 @@ interface Bucket {
   grade: PetGrade;
   /** 物种名 → 该物种的代表条目（同物种的多个形态只留一只） */
   options: Map<string, SwapOption>;
-  /** 物种名 → 换上它之后能推进的格（ready = 马上能配，advanced = 还差一只） */
-  unlockedBy: Map<string, { ready: string[]; advanced: string[] }>;
+  /** 物种名 → 换上它之后**马上能配**的缺口 key 列表 */
+  unlockedBy: Map<string, string[]>;
 }
 
 export function rankSwapWishes(input: RankSwapWishesInput): SwapWish[] {
@@ -134,19 +134,17 @@ export function rankSwapWishes(input: RankSwapWishesInput): SwapWish[] {
     return list;
   };
   /**
-   * 把候选蛋当成「多拥有了一只」，看它能把哪些缺口推成什么样：
-   * - ready：换上马上能配（原本缺 → covered/breedable）
-   * - advanced：换上还差一只，但已经是进步（原本完全没人 → 还差一只）
-   * 不管它将来是公还是母，哪一侧成立都算——用户不需要关心这一步。
+   * 把候选蛋当成「多拥有了一只」，看它能把哪些缺口推成**马上能配**：
+   * 换上后该格变成 covered（有合格种公）或 breedable（学院小窝那对凑得齐）才算数。
+   * 候选将来是公还是母不用区分，哪一侧成立都算——用户不需要关心这一步。
    */
   const unlockedByCandidate = (
     item: SpeciesEntry,
     natureName: string,
     grade: PetGrade,
-  ): { ready: string[]; advanced: string[] } => {
+  ): string[] => {
     const groups = (item.eggGroups ?? []).filter(isBreedableGroup);
     const ready: string[] = [];
-    const advanced: string[] = [];
     for (const cell of coverage.cells) {
       if (!needsSwap(cell.state) || cell.grade !== grade) continue;
       if (!groups.includes(cell.groupId)) continue;
@@ -160,12 +158,11 @@ export function rankSwapWishes(input: RankSwapWishesInput): SwapWish[] {
       const after = (['公', '母'] as const).map((gender) =>
         cellStateFor([...matched, candidatePet(item, gender, natureName, cell.grade)], slot, canBreedMale),
       );
-      const key = `${cell.groupId}|${cell.natureName}|${cell.grade}`;
-      if (after.some((state) => state === 'covered' || state === 'breedable')) ready.push(key);
-      // 「往前推一步」只算真的变了：原本完全没人 → 现在有人了
-      else if (cell.state === 'empty' && after.some((state) => state === 'missingStud')) advanced.push(key);
+      if (after.some((state) => state === 'covered' || state === 'breedable')) {
+        ready.push(`${cell.groupId}|${cell.natureName}|${cell.grade}`);
+      }
     }
-    return { ready, advanced };
+    return ready;
   };
 
   for (const item of species) {
@@ -214,7 +211,7 @@ export function rankSwapWishes(input: RankSwapWishesInput): SwapWish[] {
           natureName,
           grade,
           options: new Map<string, SwapOption>(),
-          unlockedBy: new Map<string, { ready: string[]; advanced: string[] }>(),
+          unlockedBy: new Map<string, string[]>(),
         };
         // 形态在交易里要报官方名（`雪绒鸟_夏天的样子`），不同形态是不同目标，各自留一只代表
         const existing = bucket.options.get(option.displayName);
@@ -229,7 +226,7 @@ export function rankSwapWishes(input: RankSwapWishesInput): SwapWish[] {
 
   const wishes: SwapWish[] = [];
   for (const bucket of buckets.values()) {
-    const readyCount = (name: string): number => bucket.unlockedBy.get(name)?.ready.length ?? 0;
+    const readyCount = (name: string): number => bucket.unlockedBy.get(name)?.length ?? 0;
     // 建议物种优先挑「换上能多配几格」的，再按原来的未拥有 / 图鉴号
     const options = [...bucket.options.values()].sort(
       (a, b) =>
@@ -240,7 +237,7 @@ export function rankSwapWishes(input: RankSwapWishesInput): SwapWish[] {
     );
     const suggested = options[0];
     if (!suggested) continue;
-    const unlocked = bucket.unlockedBy.get(suggested.displayName) ?? { ready: [], advanced: [] };
+    const unlocked = bucket.unlockedBy.get(suggested.displayName) ?? [];
 
     wishes.push({
       fillGroups: bucket.fillGroups,
@@ -253,8 +250,8 @@ export function rankSwapWishes(input: RankSwapWishesInput): SwapWish[] {
       suggested,
       optionCount: options.length,
       unownedOptionCount: options.filter((candidate) => !candidate.owned).length,
-      unlockedCells: unlocked.ready.length,
-      unlockedCellKeys: unlocked.ready,
+      unlockedCells: unlocked.length,
+      unlockedCellKeys: unlocked,
     });
   }
 

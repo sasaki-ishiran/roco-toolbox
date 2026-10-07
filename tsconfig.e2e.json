@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "//": "e2e 单独一个工程：它用 @playwright/test 的类型，且会 import src 里的纯模块（如 guide.ts 的 GUIDE_VERSION）。",
+  "//include": "composite 工程要求「程序里出现的文件都得在 include 里」，所以 src/ui/guide.ts 必须显式列上（它是自包含的，不会再牵出别的文件）。",
+  "include": ["e2e", "src/ui/guide.ts"]
+}

@@ -18,7 +18,6 @@ dist/
 test-results/
 playwright-report/
 *.tsbuildinfo
-test-results/
 # 打包好的安卓壳 APK（产物，需要时本地重新 assembleDebug）
 *.apk
 

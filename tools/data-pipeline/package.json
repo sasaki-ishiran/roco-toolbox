@@ -8,8 +8,7 @@
     "refresh": "node refresh.mjs"
   },
   "dependencies": {
-    "luaparse": "^0.3.1",
-    "xlsx": "^0.18.5"
+    "luaparse": "^0.3.1"
   },
   "devDependencies": {
     "vitest": "^5.0.2"

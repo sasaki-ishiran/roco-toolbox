@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
+  arrangeClusters,
   buildClusterOffsets,
-  buildGroupedLayout,
   centerDistance,
   checkLayout,
   GROUP_GAP,
@@ -68,7 +68,7 @@ describe('贪心密排：尽量多连线', () => {
 
 describe('编组式布局：组内密排（多连线）、组间拉开（不串线）', () => {
   test('组间拉开 ≥24 单元 → 不串线、不重叠', () => {
-    const clusters = buildGroupedLayout([4, 2]);
+    const clusters = arrangeClusters([buildClusterOffsets(4), buildClusterOffsets(2)]);
     expect(GROUP_GAP).toBeGreaterThan(PAIR_RANGE);
     const report = checkLayout(clusters);
     expect(report.ok).toBe(true);

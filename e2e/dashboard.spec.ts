@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { expectProgressZero, progressOf } from './progress';
 
 /**
  * 「数据管理」（导出全部数据 / 合并导入 / 重置）在「导入数据」页底部、**默认收起**（2026-10-06 重排）：
@@ -22,8 +23,8 @@ test('看板首页展示两块进度卡与署名', async ({ page }) => {
     page.getByTestId('progress-card-action-mother').getByRole('heading', { name: '母本全收集' }),
   ).toBeVisible();
 
-  await expect(page.getByText('0 / 14', { exact: true })).toBeVisible();
-  await expect(page.getByText('0 / 199', { exact: true }).first()).toBeVisible();
+  // 两块进度卡都从 0 起（分母随图鉴变化，从卡上读，不写死）
+  await expectProgressZero(page);
 
   const source = page.getByText('CC BY-SA 4.0');
   await expect(source).toBeVisible();
@@ -86,7 +87,8 @@ test('优质种公推荐：勾选移入已换到折叠区，可展开还原', as
 test('重置按钮一键清空已导入的数据', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
-  await expect(page.getByText('0 / 199')).toHaveCount(0);
+  // 导入后母本全收集不再是 0（分子 > 0）
+  expect((await progressOf(page, 'progress-card-action-mother')).numerator).toBeGreaterThan(0);
 
   // 导入后默认落看板，重置按钮在「导入数据」页，先切过去
   page.on('dialog', (dialog) => dialog.accept());
@@ -97,8 +99,7 @@ test('重置按钮一键清空已导入的数据', async ({ page }) => {
   await expect(page.getByText('还没有数据')).toBeVisible();
   // 清空后回到看板：两块进度归零、署名仍在
   await page.getByRole('button', { name: '看板' }).click();
-  await expect(page.getByText('0 / 14', { exact: true })).toBeVisible();
-  await expect(page.getByText('0 / 199', { exact: true }).first()).toBeVisible();
+  await expectProgressZero(page);
 });
 
 test('切页签不再闪"正在读取本地数据"', async ({ page }) => {
@@ -142,7 +143,7 @@ test('导出全部数据 → 清空 → 导入备份，数据完整恢复（"共
   // 恢复后回到看板：进度不再是 0
   await page.getByRole('button', { name: '看板' }).click();
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await expect(page.getByText('0 / 255', { exact: true })).toHaveCount(0);
+  expect((await progressOf(page, 'progress-card-action-mother')).numerator).toBeGreaterThan(0);
 });
 
 test('合并导入：两台设备的数据合到一起，谁的账号都不会被清掉', async ({ browser }) => {
@@ -362,7 +363,7 @@ test('账号筛选：三页共用一份，取消账号后看板进度跟着变',
   await expect(page.getByTestId('account-filter')).toContainText('账号（2/2）');
   await page.getByTestId('account-filter-toggle-all').click();
   await expect(page.getByTestId('account-filter')).toContainText('账号（0/2）');
-  await expect(page.getByText('0 / 14', { exact: true })).toBeVisible();
+  expect((await progressOf(page, 'progress-card-action-stud')).numerator).toBe(0);
 });
 
 test('种公全收集卡可点：跳「我的精灵 · 种公视角」', async ({ page }) => {

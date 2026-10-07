@@ -8,6 +8,7 @@ import android.content.pm.ApplicationInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Message;
 import android.provider.OpenableColumns;
 import android.webkit.JavascriptInterface;
 import android.webkit.JsResult;
@@ -55,6 +56,15 @@ import androidx.core.content.FileProvider;
 public class MainActivity extends Activity {
 
     private static final String SITE_URL = "https://roco-toolbox.pages.dev/";
+
+    /**
+     * 允许留在 WebView 内导航的域名（含它的预览子域）。其余链接一律交给系统浏览器：
+     * 页脚的 Wiki / CC BY-SA 外链是 {@code target="_blank"}，壳不接管就表现成「点了没反应」。
+     *
+     * 顺带收窄了 JS 桥的暴露面：主框架永远只停在自家站点上，
+     * 别的来源就没机会拿到 {@code RocoShare} 这个注入接口。
+     */
+    private static final String SITE_HOST = "roco-toolbox.pages.dev";
 
     /**
      * 网页从这个地址取分享进来的抓包。这个域名是假的、永远不会真的联网 ——
@@ -134,6 +144,19 @@ public class MainActivity extends Activity {
                     showMessage("打不开网页，请检查手机网络后重试。");
                 }
             }
+
+            /** 页面导航：本站继续在 WebView 里走，其余交系统浏览器（见 openExternalIfNeeded）。 */
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return openExternalIfNeeded(request.getUrl());
+            }
+
+            /** API 23 及以下只有这个旧签名（minSdk 23）。 */
+            @SuppressWarnings("deprecation")
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return openExternalIfNeeded(Uri.parse(url));
+            }
         });
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -196,6 +219,21 @@ public class MainActivity extends Activity {
                 // 这个网页不需要摄像头 / 麦克风；显式拒绝，别让默认行为以后变化时打开权限
                 request.deny();
             }
+
+            /**
+             * {@code target="_blank"} 的链接不会走 shouldOverrideUrlLoading，而是来这里要一个新窗口。
+             * 我们不开新窗口：用 hit-test 取到地址后交系统浏览器，返回 false 表示不创建。
+             */
+            @Override
+            public boolean onCreateWindow(
+                WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                WebView.HitTestResult hit = view.getHitTestResult();
+                String url = hit == null ? null : hit.getExtra();
+                if (url != null) {
+                    openExternalIfNeeded(Uri.parse(url));
+                }
+                return false;
+            }
         });
         setContentView(webView);
         handleShareIntent(getIntent());
@@ -220,6 +258,15 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         cancelPendingFileChooser();
+        if (webView != null) {
+            // WebView 持有 Activity 与 JS 引擎线程，不按标准序列销毁会一直泄漏。
+            // 先摘掉注入的 JS 接口，再断开页面、销毁。
+            webView.removeJavascriptInterface("RocoShare");
+            webView.loadUrl("about:blank");
+            webView.removeAllViews();
+            webView.destroy();
+            webView = null;
+        }
         super.onDestroy();
     }
 
@@ -228,6 +275,28 @@ public class MainActivity extends Activity {
         if (filePathCallback == null) return;
         filePathCallback.onReceiveValue(null);
         filePathCallback = null;
+    }
+
+    /**
+     * 本站（及其预览子域）的链接继续在 WebView 里走；其余一律交系统浏览器打开。
+     *
+     * @return true 表示已经接管，WebView 不要再导航到该地址。
+     */
+    private boolean openExternalIfNeeded(Uri uri) {
+        if (uri == null) return false;
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        boolean internal =
+            "https".equals(scheme)
+                && host != null
+                && (host.equals(SITE_HOST) || host.endsWith("." + SITE_HOST));
+        if (internal || "about".equals(scheme)) return false;
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, uri));
+        } catch (Exception error) {
+            showMessage("打不开这个链接：" + error.getMessage());
+        }
+        return true;
     }
 
     @Override

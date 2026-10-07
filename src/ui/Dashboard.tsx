@@ -1,7 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { OwnedPet } from '../domain/types';
 import { buildNestPlans } from '../domain/nestPlan';
-import { computeMotherCoverage } from '../domain/motherCoverage';
 import {
   MOTHER_CLASS_ORDER,
   TARGET_MODE_LABELS,
@@ -60,8 +59,10 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
   const [gradeMenuOpen, setGradeMenuOpen] = useState(false);
 
   const { owned, accounts } = useOwnedPets();
-  const mother = useMemo(() => computeMotherCoverage(species, owned, mode), [owned, mode]);
   const speciesByGameId = useMemo(() => new Map(species.map((entry) => [entry.gameId, entry])), []);
+  // 母本清单的「蛋」全集。卡片的**分子与分母都从这里出**（2026-10-07 收敛）：
+  // 以前分母来自另一套实现（computeMotherCoverage），两套口径各算一遍、
+  // 只改一边就会让卡片分数与点进去的清单对不上。
   const motherGroups = useMemo(
     () => groupMothersByEgg(owned, speciesByGameId, species, mode),
     [owned, speciesByGameId, mode],
@@ -234,7 +235,7 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
         <ProgressCard
           title="母本全收集"
           numerator={collectedMotherChains}
-          denominator={mother.total}
+          denominator={motherGroups.length}
           hint="已收集 = 有达标母本的蛋；达标条件可自定义，下方清单可切档位"
           onClick={onOpenMothers}
           action="看我的待补齐母本"

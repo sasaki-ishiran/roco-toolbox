@@ -24,7 +24,6 @@ export const SYNCED_PREF_KEYS = [
   'roco.myPetsFilter',
   'roco.coverageFilter',
   'roco.excludedAccounts',
-  'roco.nestPins',
   'roco.petPageSize',
   'roco.copyPreviewOff',
 ] as const;
