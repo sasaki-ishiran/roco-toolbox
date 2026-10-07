@@ -94,9 +94,11 @@ export async function handleEvent(request: Request, env: Env, origin: string | n
 export async function handleStats(request: Request, env: Env): Promise<Response> {
   const origin = resolveOrigin(request, env);
   const url = new URL(request.url);
-  // 只认 Authorization 头：令牌放 URL query 会进访问日志 / Referer / 浏览器历史
+  // 只认 Authorization 头：令牌放 URL query 会进访问日志 / Referer / 浏览器历史。
+  // 配置值先 trim：`secret put` 时手滑带上的首尾空格/换行不该让令牌永远对不上。
   const token = (request.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
-  if (!env.STATS_TOKEN || !timingSafeEqual(token, env.STATS_TOKEN)) {
+  const expected = (env.STATS_TOKEN ?? '').trim();
+  if (!expected || !timingSafeEqual(token, expected)) {
     return json({ ok: false, error: 'unauthorized' }, 401, origin);
   }
   if (!(await rateLimit(env, `stats:${clientIp(request)}`, 60, 3_600_000))) {
