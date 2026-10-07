@@ -1,0 +1,29 @@
+# 依赖
+node_modules/
+
+# 临时文件
+*.tmp
+
+# 日志（e2e / 构建跑测产物）
+*.log
+
+# 你的账号数据（含个人游戏数据，默认不入版本库）
+补充数据/*.json
+补充数据/*.xls
+
+# 构建产物
+dist/
+.vite/
+test-results/
+playwright-report/
+*.tsbuildinfo
+test-results/
+# 打包好的安卓壳 APK（产物，需要时本地重新 assembleDebug）
+*.apk
+
+# Superpowers 工作区（隔离 worktree 与任务账本）
+.worktrees/
+.superpowers/
+
+# IDE 计划文档（.trae/documents 下的临时计划，不进版本库）
+.trae/

@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "type": "hatch-backup",
+    "version": 9,
+    "exportedAt": "2026-09-25T13:00:00.000Z",
+    "gameId": 1000002,
+    "playerName": "测试乙",
+    "counts": { "petBackpackItems": 2, "matched": 2, "male": 1, "female": 1 }
+  },
+  "collections": {
+    "petBackpack": {
+      "items": [
+        {
+          "id": "capture_1000002_1",
+          "speciesPetId": 3002,
+          "name": "水蓝蓝",
+          "gender": "母",
+          "nature": "开朗",
+          "natureId": 23,
+          "voiceDb": 98,
+          "medalBody": "",
+          "isShiny": false,
+          "boxNumber": 1,
+          "group": "盒子01",
+          "rawFields": {}
+        },
+        {
+          "id": "capture_1000002_2",
+          "speciesPetId": 3001,
+          "name": "喵喵",
+          "gender": "公",
+          "nature": "固执",
+          "natureId": 2,
+          "voiceDb": 55,
+          "medalBody": "大块头",
+          "isShiny": true,
+          "boxNumber": 2,
+          "group": "盒子02",
+          "rawFields": {}
+        }
+      ]
+    },
+    "eggInventory": { "eggs": [] }
+  },
+  "rawProtocol": { "messages": ["should-be-dropped"] }
+}

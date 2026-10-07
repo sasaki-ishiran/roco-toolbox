@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "type": "hatch-backup",
+    "version": 9,
+    "decoderVersion": "1.1.7",
+    "schemaVersion": "protocol-raw-v1",
+    "exportedAt": "2026-10-03T13:00:00.000Z",
+    "source": "collection-20261003.pcap",
+    "gameId": 4155201,
+    "playerName": "小号",
+    "counts": {
+      "petBackpackItems": 1,
+      "matched": 1,
+      "shiny": 0,
+      "male": 1,
+      "female": 0
+    }
+  },
+  "collections": {
+    "petBackpack": {
+      "items": [
+        {
+          "id": "capture_4155201_901",
+          "speciesPetId": 3438,
+          "name": "梦游",
+          "gender": "公",
+          "nature": "懒散",
+          "natureId": 20,
+          "voiceDb": 100,
+          "medalBody": "小不点",
+          "weightPercent": 1.2,
+          "isShiny": false,
+          "boxNumber": 3,
+          "group": "盒子03",
+          "slotOrder": 5,
+          "rawFields": {}
+        }
+      ]
+    },
+    "eggInventory": {
+      "eggs": []
+    }
+  },
+  "rawProtocol": {
+    "messages": []
+  }
+}

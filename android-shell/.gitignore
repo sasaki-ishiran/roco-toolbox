@@ -1,0 +1,5 @@
+# Gradle 构建产物与机器相关配置
+build/
+.gradle/
+local.properties
+*.apk

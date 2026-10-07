@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- 与网页底色（manifest 的 background_color）一致 -->
+    <color name="page_background">#F8FAFC</color>
+</resources>

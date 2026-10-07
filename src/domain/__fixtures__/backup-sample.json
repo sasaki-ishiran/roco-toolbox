@@ -1,0 +1,107 @@
+{
+  "meta": {
+    "type": "hatch-backup",
+    "version": 9,
+    "decoderVersion": "1.1.7",
+    "schemaVersion": "protocol-raw-v1",
+    "exportedAt": "2026-09-25T12:38:43.262Z",
+    "source": "collection-20260925.pcap",
+    "gameId": 1000001,
+    "playerName": "测试甲",
+    "counts": {
+      "petBackpackItems": 4,
+      "matched": 4,
+      "shiny": 1,
+      "male": 2,
+      "female": 2
+    }
+  },
+  "collections": {
+    "petBackpack": {
+      "items": [
+        {
+          "id": "capture_1000001_715",
+          "speciesPetId": 3200,
+          "name": "机械方方",
+          "gender": "母",
+          "nature": "大胆",
+          "natureId": 1,
+          "voiceDb": 100,
+          "medalBody": "大块头",
+          "weightPercent": 98.4,
+          "isShiny": true,
+          "boxNumber": 1,
+          "group": "盒子01",
+          "runtimePetId": "runtime-should-be-dropped",
+          "rawFields": {}
+        },
+        {
+          "id": "capture_1000001_716",
+          "speciesPetId": 3453,
+          "name": "鸭吉吉",
+          "gender": "公",
+          "nature": "固执",
+          "natureId": 2,
+          "voiceDb": 96,
+          "medalBody": "",
+          "weightPercent": 55.2,
+          "isShiny": false,
+          "boxNumber": 1,
+          "group": "盒子01",
+          "runtimePetId": "runtime-should-be-dropped",
+          "rawFields": {}
+        },
+        {
+          "id": "capture_1000001_717",
+          "speciesPetId": 3001,
+          "name": "喵喵",
+          "gender": "未知",
+          "nature": "踏实",
+          "natureId": 30,
+          "voiceDb": 40,
+          "medalBody": "小不点",
+          "weightPercent": 0.8,
+          "isShiny": false,
+          "boxNumber": 2,
+          "group": "盒子02",
+          "runtimePetId": "runtime-should-be-dropped",
+          "rawFields": {}
+        },
+        {
+          "id": "capture_1000001_718",
+          "speciesPetId": 3003,
+          "name": "火花",
+          "gender": "公",
+          "nature": "固执",
+          "natureId": 2,
+          "voiceDb": 100,
+          "medalBody": "大块头",
+          "weightPercent": 99.1,
+          "isShiny": false,
+          "boxNumber": 1,
+          "group": "盒子01",
+          "slotOrder": 3,
+          "runtimePetId": "runtime-should-be-dropped",
+          "rawFields": {}
+        }
+      ]
+    },
+    "eggInventory": {
+      "eggs": [
+        {
+          "petName": "鸭吉吉_等一等鸭",
+          "weightGrams": 6194,
+          "obtainedAt": "2026-05-03T01:10:53.000Z"
+        },
+        {
+          "petName": "火花",
+          "weightGrams": 2100,
+          "obtainedAt": "2026-05-04T02:00:00.000Z"
+        }
+      ]
+    }
+  },
+  "rawProtocol": {
+    "messages": ["should-be-dropped"]
+  }
+}

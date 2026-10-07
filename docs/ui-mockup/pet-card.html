@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>我的精灵卡片原型（可交互）— 编排用</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f1f5f9; margin: 0; padding: 16px; box-sizing: border-box; }
+  h1 { font-size: 14px; color: #475569; margin: 0 0 4px; }
+  .note { font-size: 12px; color: #94a3b8; margin: 0 0 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+  .bar button { font-size: 12px; border: 1px solid #cbd5e1; background: #fff; color: #475569; border-radius: 9999px; padding: 6px 12px; cursor: pointer; }
+  .bar button.on { border-color: #10b981; background: #ecfdf5; color: #047857; font-weight: 600; }
+  .group { margin-bottom: 20px; }
+  .acc { font-size: 12px; font-weight: 600; color: #94a3b8; margin: 0 0 6px; }
+  .card { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; max-width: 400px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05); }
+  .name { font-size: 14px; font-weight: 600; color: #0f172a; }
+  .tagrow { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; align-items: center; }
+  .tag { font-size: 11px; line-height: 1; padding: 4px 7px; border-radius: 9999px; background: #f1f5f9; color: #334155; white-space: nowrap; cursor: pointer; user-select: none; border: 1px solid transparent; }
+  .tag.sel { border-color: #10b981; background: #ecfdf5; color: #047857; }
+  .tag.shiny { background: #ccfbf1; color: #0f766e; }
+  .tag.colorful { background: #fae8ff; color: #a21caf; }
+  .tag.shinycolour { background: #d1fae5; color: #be185d; }
+  .notes { font-size: 11px; color: #94a3b8; margin: 4px 0 0; }
+</style>
+</head>
+<body>
+<h1>改造后 · 单卡信息小标签排布（可交互）</h1>
+<p class="note">点下面的标签试试：会切换「选中」态；点「异色 / 炫彩 / 异色炫彩」按钮可切换稀有度展示；点卡片上的每个标签能单独勾选/取消。改布局请直接编辑本文件。</p>
+
+<div class="bar">
+  <button type="button" data-rarity="none" class="on">普通</button>
+  <button type="button" data-rarity="shiny">异色</button>
+  <button type="button" data-rarity="colorful">炫彩</button>
+  <button type="button" data-rarity="both">异色炫彩</button>
+  <button type="button" id="clearTags">清除所有标签选中</button>
+</div>
+
+<div class="group">
+  <p class="acc">测试丁</p>
+  <div class="card">
+    <span class="name">圣剑侍从</span>
+    <span class="tag rarity-tag" hidden></span>
+    <div class="tagrow">
+      <span class="tag">母 · 固执</span>
+      <span class="tag">盒子01 · 1</span>
+      <span class="tag">100dB · 大块头</span>
+      <span class="tag">巨灵组</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="name">白发懒人</span>
+    <span class="tag rarity-tag" hidden></span>
+    <div class="tagrow">
+      <span class="tag">公 · 胆小</span>
+      <span class="tag">盒子02 · 3</span>
+      <span class="tag">-100dB · 小不点</span>
+      <span class="tag">动物组</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="name">喵喵</span>
+    <span class="tag rarity-tag" hidden></span>
+    <div class="tagrow">
+      <span class="tag">母 · 认真</span>
+      <span class="tag">盒子03 · 1</span>
+      <span class="tag">100dB · 大块头</span>
+      <span class="tag">拟人组 × 动物组</span>
+    </div>
+  </div>
+</div>
+
+<div class="group">
+  <p class="acc">测试丙</p>
+  <div class="card">
+    <span class="name">大耳帽兜</span>
+    <span class="tag rarity-tag" hidden></span>
+    <div class="tagrow">
+      <span class="tag">母 · 固执</span>
+      <span class="tag">盒子01 · 2</span>
+      <span class="tag">100dB · 大块头</span>
+      <span class="tag">动物组</span>
+    </div>
+  </div>
+</div>
+
+<p class="notes">对应的真实页面已上线（看板进度卡下方 / 我的精灵）。字段对应：名称 speciesDisplayName ｜ 稀有度 isShiny/isColorful（导入内容读取）｜ 性别+性格 gender·nature ｜ 位置 boxGroup·slotOrder ｜ 分贝体重 voiceDb·medalBody ｜ 蛋组 eggGroups（多组用 ×）。账号与图鉴编号不再出现在卡内。</p>
+
+<script>
+  // 稀有度切换
+  const RARITY_STYLE = {
+    none: { cls: '', text: '' },
+    shiny: { cls: 'shiny', text: '异色' },
+    colorful: { cls: 'colorful', text: '炫彩' },
+    both: { cls: 'shinycolour', text: '异色炫彩' },
+  };
+  const rarityBtns = document.querySelectorAll('[data-rarity]');
+  const setRarity = (key) => {
+    rarityBtns.forEach((btn) => btn.classList.toggle('on', btn.dataset.rarity === key));
+    const meta = RARITY_STYLE[key];
+    document.querySelectorAll('.rarity-tag').forEach((tag) => {
+      tag.textContent = meta.text;
+      tag.className = 'tag rarity-tag' + (meta.cls ? ' ' + meta.cls : '');
+      tag.hidden = !meta.text;
+    });
+  };
+  rarityBtns.forEach((btn) => btn.addEventListener('click', () => setRarity(btn.dataset.rarity)));
+  setRarity('none');
+
+  // 每个标签点一下切换选中态（演示多选效果）
+  document.querySelectorAll('.tagrow .tag').forEach((tag) =>
+    tag.addEventListener('click', () => tag.classList.toggle('sel')),
+  );
+  document.getElementById('clearTags').addEventListener('click', () =>
+    document.querySelectorAll('.tag.sel').forEach((tag) => tag.classList.remove('sel')),
+  );
+</script>
+</body>
+</html>

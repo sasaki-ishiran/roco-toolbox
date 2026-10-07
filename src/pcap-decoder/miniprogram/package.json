@@ -1,0 +1,6 @@
+{
+  "name": "pcap-decoder-upstream-miniprogram",
+  "private": true,
+  "description": "上游采集器这些文件用的是 CommonJS（require / module.exports），而本项目整体是 ESM，所以在这里限定该子树按 CommonJS 解析。不要删除。",
+  "type": "commonjs"
+}

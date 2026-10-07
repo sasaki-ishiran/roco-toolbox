@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>筛选器交互原型 v3（视觉精修）</title>
+<style>
+  :root {
+    --em-500:#10b981; --em-600:#059669; --em-50:#ecfdf5; --em-100:#d1fae5;
+    --sl-900:#0f172a; --sl-700:#334155; --sl-500:#64748b; --sl-400:#94a3b8; --sl-300:#cbd5e1; --sl-100:#f1f5f9; --sl-50:#f8fafc;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #eef2f7; padding: 16px; color: var(--sl-900); }
+  .wrap { max-width: 420px; margin: 0 auto; }
+
+  .sheet {
+    background: #fff; border-radius: 20px; box-shadow: 0 1px 2px rgb(15 23 42 / .04), 0 8px 24px rgb(15 23 42 / .06);
+    padding: 18px 16px;
+  }
+  .bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .bar .title { font-size: 15px; font-weight: 700; letter-spacing: .2px; color: var(--sl-900); }
+  .reset { font-size: 12px; font-weight: 500; color: var(--sl-500); background: none; border: none; padding: 8px 4px; cursor: pointer; }
+
+  /* 档位：分段控制（iOS 风） */
+  .seg { display: flex; background: var(--sl-100); border-radius: 9999px; padding: 3px; gap: 2px; margin-bottom: 16px; }
+  .seg button { flex: 1; min-height: 32px; border: none; border-radius: 9999px; background: transparent; font-size: 12px; font-weight: 500; color: var(--sl-400); cursor: pointer; transition: all .18s; }
+  .seg button.on { background: #fff; color: var(--em-600); box-shadow: 0 1px 3px rgb(15 23 42 / .12); font-weight: 600; }
+
+  /* 维度头部：两行网格，Tab 风格（透明底 + 展开时淡色 + 底部强调线） */
+  .grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tile {
+    flex: 0 0 calc((100% - 16px) / 3); position: relative;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    min-height: 46px; padding: 8px 10px;
+    background: var(--sl-50); border: 1px solid transparent; border-radius: 14px;
+    cursor: pointer; transition: background .18s, border-color .18s;
+  }
+  .tile:active { transform: scale(.97); }
+  .tile .lbl { font-size: 12px; font-weight: 500; color: var(--sl-700); }
+  .tile .right { display: flex; align-items: center; gap: 5px; }
+  .none-hint { font-size: 11px; color: var(--sl-300); font-weight: 400; }
+  .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9999px; background: var(--em-500); color: #fff; font-size: 10px; font-weight: 600; opacity: 0; transform: scale(.6); transition: all .18s; }
+  .badge.show { opacity: 1; transform: scale(1); }
+  .chev { color: var(--sl-300); font-size: 10px; transition: transform .2s; }
+  .tile.open { background: var(--em-50); border-color: var(--em-100); }
+  .tile.open .lbl { color: var(--em-600); font-weight: 600; }
+  .tile.open .chev { transform: rotate(180deg); color: var(--em-500); }
+  .tile.open::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 5px; height: 2px; border-radius: 2px; background: var(--em-500); }
+
+  /* 展开面板：从头部下方滑出（连接式，非浮空弹窗） */
+  .panel { margin-top: 6px; display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease; }
+  .panel.open { grid-template-rows: 1fr; }
+  .panel-in { overflow: hidden; }
+  .panel .head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 8px; }
+  .panel .head b { font-size: 12px; color: var(--sl-700); }
+  .panel .clear { font-size: 11px; color: var(--em-600); background: none; border: none; cursor: pointer; font-weight: 500; }
+
+  /* 选项 chip：Material Filter Chip 风（选中实色填充白字） */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt {
+    font-size: 12px; padding: 7px 13px; border-radius: 9999px;
+    background: var(--sl-100); color: var(--sl-500); border: none; cursor: pointer;
+    transition: all .16s; font-weight: 500;
+  }
+  .opt:active { transform: scale(.95); }
+  .opt.on { background: var(--em-500); color: #fff; box-shadow: 0 2px 8px rgb(16 185 129 / .35); font-weight: 600; }
+
+  .demo { margin-top: 14px; font-size: 12px; color: var(--sl-400); }
+  .demo b { color: var(--sl-700); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="sheet">
+    <div class="bar">
+      <span class="title">筛选</span>
+      <button class="reset" id="reset">重置</button>
+    </div>
+
+    <!-- 档位：分段控制，不折叠 -->
+    <div class="seg" id="grades">
+      <button class="on">大婉</button>
+      <button>小婉</button>
+      <button>大粗</button>
+      <button>小粗</button>
+    </div>
+
+    <!-- 维度网格：第一行 性别/体型/声音，第二行 性格/蛋组 -->
+    <div class="grid" id="heads">
+      <button class="tile" data-group="gender">
+        <span class="lbl">性别</span>
+        <span class="right"><span class="badge">0</span><span class="chev">▼</span></span>
+      </button>
+      <button class="tile" data-group="body">
+        <span class="lbl">体型</span>
+        <span class="right"><span class="badge">0</span><span class="chev">▼</span></span>
+      </button>
+      <button class="tile" data-group="voice">
+        <span class="lbl">声音</span>
+        <span class="right"><span class="badge">0</span><span class="chev">▼</span></span>
+      </button>
+      <button class="tile" data-group="nature">
+        <span class="lbl">性格</span>
+        <span class="right"><span class="badge">0</span><span class="chev">▼</span></span>
+      </button>
+      <button class="tile" data-group="eggGroup">
+        <span class="lbl">蛋组</span>
+        <span class="right"><span class="badge">0</span><span class="chev">▼</span></span>
+      </button>
+    </div>
+
+    <div class="panel" id="panel">
+      <div class="panel-in">
+        <div class="head"><b id="pname"></b><button class="clear" id="clearGroup">清除本组</button></div>
+        <div class="chips" id="popts"></div>
+      </div>
+    </div>
+
+    <p class="demo">当前：<b id="demo">全部精灵</b></p>
+  </div>
+</div>
+
+<script>
+  const GROUPS = {
+    gender: { name: '性别', options: ['♂ 公 (13)', '♀ 母 (10)'] },
+    body:   { name: '体型', options: ['大块头 (17)', '小不点 (6)'] },
+    voice:  { name: '声音', options: ['+100 (12)', '-100 (3)', '婉转声 (2)', '粗嗓门 (4)'] },
+    nature: { name: '性格', options: ['固执 (6)', '开朗 (4)', '胆小 (2)', '悠闲 (1)', '懒散 (1)'] },
+    eggGroup:{ name: '蛋组', options: ['巨灵组 (9)', '动物组 (7)', '妖精组 (5)', '拟人组 (4)'] },
+  };
+  const selected = Object.fromEntries(Object.keys(GROUPS).map((g) => [g, []]));
+  const tiles = new Map([...document.querySelectorAll('.tile')].map((t) => [t.dataset.group, t]));
+  const panel = document.getElementById('panel');
+  let active = null;
+
+  const refreshBadges = () => {
+    for (const [g, list] of Object.entries(selected)) {
+      const right = tiles.get(g).querySelector('.right');
+      const badge = right.querySelector('.badge');
+      badge.textContent = String(list.length);
+      badge.classList.toggle('show', list.length > 0);
+      // 未选时头部显示淡色小号「不限」
+      let hint = right.querySelector('.none-hint');
+      if (list.length === 0) {
+        if (!hint) {
+          hint = document.createElement('span');
+          hint.className = 'none-hint';
+          hint.textContent = '不限';
+          right.insertBefore(hint, badge);
+        }
+      } else if (hint) {
+        hint.remove();
+      }
+    }
+    const parts = Object.values(selected).filter((x) => x.length).flat();
+    document.getElementById('demo').textContent = parts.length ? parts.join('、') : '全部精灵';
+  };
+
+  const render = (group) => {
+    document.getElementById('pname').textContent = GROUPS[group].name;
+    const box = document.getElementById('popts');
+    box.innerHTML = '';
+    GROUPS[group].options.forEach((label) => {
+      const b = document.createElement('button');
+      b.className = 'opt' + (selected[group].includes(label) ? ' on' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        const on = selected[group].includes(label);
+        selected[group] = on ? selected[group].filter((t) => t !== label) : [...selected[group], label];
+        if (on) b.classList.remove('on'); else b.classList.add('on');
+        refreshBadges(); // 不自动收起：同一维度内可连点多选，仅手风琴切换/点头部关闭
+      });
+      box.appendChild(b);
+    });
+  };
+
+  const collapse = () => {
+    panel.classList.remove('open');
+    if (active) tiles.get(active).classList.remove('open');
+    active = null;
+  };
+
+  for (const [g, tile] of tiles) {
+    tile.addEventListener('click', () => {
+      if (active === g) { collapse(); return; }
+      active = g;
+      for (const t of tiles.values()) t.classList.toggle('open', t === tile);
+      render(g);
+      panel.classList.add('open');
+    });
+  }
+
+  document.getElementById('clearGroup').addEventListener('click', () => {
+    if (active) { selected[active] = []; refreshBadges(); render(active); }
+  });
+
+  // 档位分段控制：单选互斥
+  document.querySelectorAll('#grades button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#grades button').forEach((x) => x.classList.toggle('on', x === b));
+    });
+  });
+
+  document.getElementById('reset').addEventListener('click', () => {
+    for (const g of Object.keys(selected)) selected[g] = [];
+    document.querySelectorAll('#grades button').forEach((x) => x.classList.toggle('on', x.textContent === '大婉'));
+    refreshBadges(); collapse();
+  });
+  refreshBadges();
+</script>
+</body>
+</html>

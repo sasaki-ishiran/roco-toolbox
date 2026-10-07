@@ -1,0 +1,33 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace "com.localdatatool.toolbox"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.localdatatool.toolbox"
+        minSdk 23
+        // 故意停在 34：安卓 15 只对 targetSdk 35+ 的应用强制全屏铺满（edge-to-edge），
+        // 那样网页会被铺到状态栏底下。停在 34 时系统会自动让窗口避开系统栏，不用自己算 insets。
+        // 这个壳只自己安装、不上架商店，不受商店 targetSdk 新规影响。
+        targetSdk 34
+        versionCode 9
+        versionName "1.1.5"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
+
+// FileProvider（网页「导出全部数据」分享出去用，1.1.4）
+dependencies {
+    implementation 'androidx.core:core:1.15.0'
+}

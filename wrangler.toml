@@ -1,0 +1,17 @@
+# Pages 项目配置：绑定 D1（Pages Functions 用 env.DB 访问）
+# 前端仍用原来的命令部署：npx wrangler pages deploy dist --project-name roco-toolbox --branch=main --commit-dirty=true
+name = "roco-toolbox"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-10-06"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "roco-toolbox-db"
+database_id = "4c876596-6284-4fc0-a7d0-897a8f877f15"
+
+[vars]
+# 允许的前端来源（同域部署其实用不到 CORS，留着给本地 dev / 预览域名）
+ALLOWED_ORIGINS = "https://roco-toolbox.pages.dev,http://localhost:5173,http://localhost:4173"
+# GET /api/stats 的只读令牌不写在这里（本文件会进公开仓库）。
+# 部署后执行一次：npx wrangler pages secret put STATS_TOKEN
+# 未配置时 /api/stats 一律 401（fail-closed），不会退回默认值。

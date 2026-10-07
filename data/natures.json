@@ -1,0 +1,217 @@
+{
+ "source": "https://wiki.biligame.com/nrc/",
+ "module": "Module:Pets/data/TrainingReference",
+ "count": 30,
+ "natures": [
+  {
+   "id": 1,
+   "name": "大胆",
+   "plus": "物攻",
+   "minus": "物防",
+   "detail": "物攻↑ / 物防↓"
+  },
+  {
+   "id": 2,
+   "name": "固执",
+   "plus": "物攻",
+   "minus": "魔攻",
+   "detail": "物攻↑ / 魔攻↓"
+  },
+  {
+   "id": 3,
+   "name": "调皮",
+   "plus": "物攻",
+   "minus": "魔防",
+   "detail": "物攻↑ / 魔防↓"
+  },
+  {
+   "id": 4,
+   "name": "勇敢",
+   "plus": "物攻",
+   "minus": "速度",
+   "detail": "物攻↑ / 速度↓"
+  },
+  {
+   "id": 5,
+   "name": "逞强",
+   "plus": "物攻",
+   "minus": "生命",
+   "detail": "物攻↑ / 生命↓"
+  },
+  {
+   "id": 6,
+   "name": "稳重",
+   "plus": "物防",
+   "minus": "物攻",
+   "detail": "物防↑ / 物攻↓"
+  },
+  {
+   "id": 7,
+   "name": "天真",
+   "plus": "物防",
+   "minus": "魔攻",
+   "detail": "物防↑ / 魔攻↓"
+  },
+  {
+   "id": 8,
+   "name": "懒散",
+   "plus": "物防",
+   "minus": "魔防",
+   "detail": "物防↑ / 魔防↓"
+  },
+  {
+   "id": 9,
+   "name": "悠闲",
+   "plus": "物防",
+   "minus": "速度",
+   "detail": "物防↑ / 速度↓"
+  },
+  {
+   "id": 10,
+   "name": "坦率",
+   "plus": "物防",
+   "minus": "生命",
+   "detail": "物防↑ / 生命↓"
+  },
+  {
+   "id": 11,
+   "name": "聪明",
+   "plus": "魔攻",
+   "minus": "物攻",
+   "detail": "魔攻↑ / 物攻↓"
+  },
+  {
+   "id": 12,
+   "name": "专注",
+   "plus": "魔攻",
+   "minus": "物防",
+   "detail": "魔攻↑ / 物防↓"
+  },
+  {
+   "id": 13,
+   "name": "偏执",
+   "plus": "魔攻",
+   "minus": "魔防",
+   "detail": "魔攻↑ / 魔防↓"
+  },
+  {
+   "id": 14,
+   "name": "冷静",
+   "plus": "魔攻",
+   "minus": "速度",
+   "detail": "魔攻↑ / 速度↓"
+  },
+  {
+   "id": 15,
+   "name": "理性",
+   "plus": "魔攻",
+   "minus": "生命",
+   "detail": "魔攻↑ / 生命↓"
+  },
+  {
+   "id": 16,
+   "name": "警惕",
+   "plus": "魔防",
+   "minus": "物攻",
+   "detail": "魔防↑ / 物攻↓"
+  },
+  {
+   "id": 17,
+   "name": "温顺",
+   "plus": "魔防",
+   "minus": "物防",
+   "detail": "魔防↑ / 物防↓"
+  },
+  {
+   "id": 18,
+   "name": "害羞",
+   "plus": "魔防",
+   "minus": "魔攻",
+   "detail": "魔防↑ / 魔攻↓"
+  },
+  {
+   "id": 19,
+   "name": "慎重",
+   "plus": "魔防",
+   "minus": "速度",
+   "detail": "魔防↑ / 速度↓"
+  },
+  {
+   "id": 20,
+   "name": "焦虑",
+   "plus": "魔防",
+   "minus": "生命",
+   "detail": "魔防↑ / 生命↓"
+  },
+  {
+   "id": 21,
+   "name": "胆小",
+   "plus": "速度",
+   "minus": "物攻",
+   "detail": "速度↑ / 物攻↓"
+  },
+  {
+   "id": 22,
+   "name": "急躁",
+   "plus": "速度",
+   "minus": "物防",
+   "detail": "速度↑ / 物防↓"
+  },
+  {
+   "id": 23,
+   "name": "开朗",
+   "plus": "速度",
+   "minus": "魔攻",
+   "detail": "速度↑ / 魔攻↓"
+  },
+  {
+   "id": 24,
+   "name": "莽撞",
+   "plus": "速度",
+   "minus": "魔防",
+   "detail": "速度↑ / 魔防↓"
+  },
+  {
+   "id": 25,
+   "name": "热情",
+   "plus": "速度",
+   "minus": "生命",
+   "detail": "速度↑ / 生命↓"
+  },
+  {
+   "id": 26,
+   "name": "沉默",
+   "plus": "生命",
+   "minus": "物攻",
+   "detail": "生命↑ / 物攻↓"
+  },
+  {
+   "id": 27,
+   "name": "忧郁",
+   "plus": "生命",
+   "minus": "物防",
+   "detail": "生命↑ / 物防↓"
+  },
+  {
+   "id": 28,
+   "name": "平和",
+   "plus": "生命",
+   "minus": "魔攻",
+   "detail": "生命↑ / 魔攻↓"
+  },
+  {
+   "id": 29,
+   "name": "粗心",
+   "plus": "生命",
+   "minus": "魔防",
+   "detail": "生命↑ / 魔防↓"
+  },
+  {
+   "id": 30,
+   "name": "踏实",
+   "plus": "生命",
+   "minus": "速度",
+   "detail": "生命↑ / 速度↓"
+  }
+ ]
+}

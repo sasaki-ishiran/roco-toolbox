@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * 移动端真机防护（Chromium 模拟器复现不出来的几个坑）：
+ * 1) Android Chrome 的"字号自动放大"（font boosting）会把移动端文字撑大，
+ *    导致按钮/文字看起来被压扁或只显示一半 —— 显式关掉。
+ * 2) iPhone 的底部横条 / 安卓手势条会盖住页面最后一行 —— 预留安全区。
+ */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+  overflow-wrap: break-word;
+}
+
+/* 长名字（精灵名 + 形态）在窄屏要能换行，不能溢出 */
+button,
+a,
+p,
+h1,
+h2,
+h3,
+span {
+  overflow-wrap: anywhere;
+}

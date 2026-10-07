@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "type": "hatch-backup",
+    "version": 9,
+    "exportedAt": "2026-09-26T00:00:00.000Z",
+    "gameId": 5550001,
+    "playerName": "配对测试",
+    "counts": { "petBackpackItems": 2, "matched": 2, "male": 1, "female": 1 }
+  },
+  "collections": {
+    "petBackpack": {
+      "items": [
+        {
+          "id": "capture_5550001_1",
+          "speciesPetId": 3003,
+          "name": "火花",
+          "gender": "母",
+          "nature": "胆小",
+          "natureId": 7,
+          "voiceDb": 100,
+          "medalBody": "大块头",
+          "weightPercent": 97.0,
+          "isShiny": false,
+          "boxNumber": 1,
+          "group": "盒子01",
+          "rawFields": {}
+        },
+        {
+          "id": "capture_5550001_2",
+          "speciesPetId": 3003,
+          "name": "火花",
+          "gender": "公",
+          "nature": "认真",
+          "natureId": 5,
+          "voiceDb": 100,
+          "medalBody": "大块头",
+          "weightPercent": 96.4,
+          "isShiny": false,
+          "boxNumber": 1,
+          "group": "盒子01",
+          "rawFields": {}
+        }
+      ]
+    },
+    "eggInventory": { "eggs": [] }
+  },
+  "rawProtocol": { "messages": ["should-be-dropped"] }
+}

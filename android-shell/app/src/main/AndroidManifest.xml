@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|smallestScreenSize|density"
+            android:exported="true"
+            android:launchMode="singleTask">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              采集器里点「分享」→ 系统分享面板里出现「洛克工具箱」。
+              采集器发分享时用的是宽泛的 */* 类型，这里必须也写 */* 才匹配得上；
+              换成 application/json 之类的具体类型，本应用就不会出现在分享面板里。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+
+            <!--
+              微信 / QQ 里点开文件 →「用其他应用打开」走的是 VIEW，文件挂在 intent.data 上
+              （不是 EXTRA_STREAM）。此前只注册了 SEND，这条路径的「打开方式」列表里不会出现
+              本应用——手机上同样找不到。
+              类型同样写 */*（理由同上面一条：分享方算出来的类型各式各样，写具体类型会漏），
+              scheme 只留 content / file，避免把网页链接（http/https）之类的 VIEW 也揽进来。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- 网页「导出全部数据」分享出去时，壳用 FileProvider 把缓存目录里的备份文件
+             转成 content:// 给 QQ / 微信等接收方读取（1.1.4）。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.localdatatool.toolbox.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>
