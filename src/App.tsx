@@ -167,7 +167,10 @@ export default function App() {
           onGoImport={() => setTab('import')}
         />
       ) : (
-        <Swap onGoImport={() => setTab('import')} />
+        <Swap
+          onGoImport={() => setTab('import')}
+          onGoAccount={() => setTab('import')}
+        />
       )}
       {changelog.length > 0 ? <ChangelogModal entries={changelog} onClose={closeChangelog} /> : null}
       {/* 教程与更新弹窗不同时弹：先看完更新内容再引导 */}

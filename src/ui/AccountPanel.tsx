@@ -207,7 +207,13 @@ export function AccountPanel({
 
   const handleDelete = () =>
     run('delete', async () => {
-      if (!window.confirm('注销会把云端数据全部删掉（本机数据保留），确定吗？')) return;
+      if (
+        !window.confirm(
+          '注销会把云端数据全部删掉（本机数据保留）；你创建的小组会解散，你在其他小组共享的母本会撤回。确定吗？',
+        )
+      ) {
+        return;
+      }
       await deleteAccount();
       setMe(null);
       setMessage('账号已注销，云端数据已清空。');

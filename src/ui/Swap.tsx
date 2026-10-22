@@ -10,6 +10,7 @@ import { FilterAccordion } from './FilterAccordion';
 import { SourceNotice } from './SourceNotice';
 import { SwapWishCard } from './SwapWishCard';
 import { SwapChecklist } from './SwapChecklist';
+import { MotherSharing } from './MotherSharing';
 import { useCoverageSlots } from './useCoverageSlots';
 import { useOwnedPets } from './useOwnedPets';
 import { useSwapWishes } from './useSwapWishes';
@@ -28,7 +29,10 @@ const toggleIn = (list: string[], value: string): string[] =>
  * （性格 = 该精灵自己能换到的性格，进化链最高形态推荐 / 种族值兜底），
  * 与看板同一口径，不再出现「性格与精灵不匹配」。
  */
-export function Swap({ onGoImport }: { onGoImport?: () => void } = {}) {
+export function Swap({
+  onGoImport,
+  onGoAccount,
+}: { onGoImport?: () => void; onGoAccount?: () => void } = {}) {
   const { loaded } = useSnapshots();
   const { owned, accounts } = useOwnedPets();
 
@@ -79,91 +83,105 @@ export function Swap({ onGoImport }: { onGoImport?: () => void } = {}) {
     });
   }, [recommendations, natureFilter, groupFilter, query]);
 
-  // 换什么页的两个视图：换蛋清单（原有算法）/ 互换清单（两人共享的母本分工）
-  const [view, setView] = useState<'eggs' | 'checklist'>('eggs');
+  // 顶部主分段：换蛋清单（原有算法）/ 母本共享（多人小组）。
+  // 旧版双人清单不再占主分段：本机有旧清单时，在母本共享底部给出兼容入口。
+  const [view, setView] = useState<'eggs' | 'sharing' | 'legacy'>('eggs');
 
   return (
     <main className="mx-auto max-w-md space-y-3 p-4">
-      <AccountFilterBar accounts={accounts} />
-      {!loaded ? (
-        <p className="text-sm text-slate-400">正在读取本地数据…</p>
-      ) : accounts.length === 0 ? (
-        <EmptyState onGoImport={onGoImport} />
+      <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="tablist">
+        {(
+          [
+            ['eggs', '换蛋清单'],
+            ['sharing', '母本共享'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={view === id}
+            onClick={() => setView(id)}
+            data-testid={`swap-view-${id}`}
+            className={`min-h-[34px] flex-1 rounded-lg text-xs ${
+              view === id ? 'bg-white font-medium text-slate-800 shadow-sm' : 'text-slate-500'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'legacy' ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setView('sharing')}
+            data-testid="swap-legacy-back"
+            className="text-xs text-slate-400 underline"
+          >
+            返回母本共享
+          </button>
+          <SwapChecklist />
+        </>
+      ) : view === 'sharing' ? (
+        <MotherSharing onGoAccount={onGoAccount} onOpenLegacy={() => setView('legacy')} />
       ) : (
         <>
-          <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="tablist">
-            {(
-              [
-                ['eggs', '换蛋清单'],
-                ['checklist', '互换清单'],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={view === id}
-                onClick={() => setView(id)}
-                data-testid={`swap-view-${id}`}
-                className={`min-h-[34px] flex-1 rounded-lg text-xs ${
-                  view === id ? 'bg-white font-medium text-slate-800 shadow-sm' : 'text-slate-500'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {view === 'checklist' ? (
-            <SwapChecklist />
+          {/* 账号筛选只影响换蛋清单；母本共享按明确选号，不能被顶部筛选偷偷改变 */}
+          <AccountFilterBar accounts={accounts} />
+          {!loaded ? (
+            <p className="text-sm text-slate-400">正在读取本地数据…</p>
+          ) : accounts.length === 0 ? (
+            <EmptyState onGoImport={onGoImport} />
           ) : (
             <>
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-medium text-slate-500">
-              换什么
-              <span className="ml-1 text-xs font-normal text-slate-400" data-testid="swap-mode">
-                · {TARGET_MODE_LABELS[mode]}
-              </span>
-            </h2>
-            <p className="mt-1 text-sm text-slate-600" data-testid="swap-total">
-              共 {recommendations.length} 条 · 其中 {dualCount} 条一只顶两组
-            </p>
-          </section>
+              <section className="rounded-2xl bg-white p-4 shadow-sm">
+                <h2 className="text-sm font-medium text-slate-500">
+                  换什么
+                  <span className="ml-1 text-xs font-normal text-slate-400" data-testid="swap-mode">
+                    · {TARGET_MODE_LABELS[mode]}
+                  </span>
+                </h2>
+                <p className="mt-1 text-sm text-slate-600" data-testid="swap-total">
+                  共 {recommendations.length} 条 · 其中 {dualCount} 条一只顶两组
+                </p>
+              </section>
 
-          {/* 搜索在最上，下面是筛选手风琴（性格 / 蛋组）——筛选放在清单卡外面，
-              清空筛选后也不会跟着空状态一起消失 */}
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setSwapFilters({ query: event.target.value })}
-            placeholder="搜性格 / 精灵名 / 蛋组"
-            data-testid="swap-search"
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-300 focus:border-emerald-400 focus:outline-none"
-          />
-          <section className="rounded-xl bg-white p-3 shadow-sm" data-testid="swap-filters">
-            <FilterAccordion
-              dimensions={[
-                {
-                  id: 'swapNature',
-                  label: '性格',
-                  options: natureOptions,
-                  selected: natureFilter,
-                  onToggle: (name) => setSwapFilters({ natureFilter: toggleIn(natureFilter, name) }),
-                  onClear: () => setSwapFilters({ natureFilter: [] }),
-                },
-                {
-                  id: 'swapGroup',
-                  label: '蛋组',
-                  options: groupOptions,
-                  selected: groupFilter,
-                  onToggle: (label) => setSwapFilters({ groupFilter: toggleIn(groupFilter, label) }),
-                  onClear: () => setSwapFilters({ groupFilter: [] }),
-                },
-              ]}
-            />
-          </section>
+              {/* 搜索在最上，下面是筛选手风琴（性格 / 蛋组）——筛选放在清单卡外面，
+                  清空筛选后也不会跟着空状态一起消失 */}
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setSwapFilters({ query: event.target.value })}
+                placeholder="搜性格 / 精灵名 / 蛋组"
+                data-testid="swap-search"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-300 focus:border-emerald-400 focus:outline-none"
+              />
+              <section className="rounded-xl bg-white p-3 shadow-sm" data-testid="swap-filters">
+                <FilterAccordion
+                  dimensions={[
+                    {
+                      id: 'swapNature',
+                      label: '性格',
+                      options: natureOptions,
+                      selected: natureFilter,
+                      onToggle: (name) => setSwapFilters({ natureFilter: toggleIn(natureFilter, name) }),
+                      onClear: () => setSwapFilters({ natureFilter: [] }),
+                    },
+                    {
+                      id: 'swapGroup',
+                      label: '蛋组',
+                      options: groupOptions,
+                      selected: groupFilter,
+                      onToggle: (label) => setSwapFilters({ groupFilter: toggleIn(groupFilter, label) }),
+                      onClear: () => setSwapFilters({ groupFilter: [] }),
+                    },
+                  ]}
+                />
+              </section>
 
-          <SwapWishCard recommendations={filtered} />
+              <SwapWishCard recommendations={filtered} />
             </>
           )}
         </>
