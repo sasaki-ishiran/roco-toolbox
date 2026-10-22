@@ -10,6 +10,8 @@ node_modules/
 # 你的账号数据（含个人游戏数据，默认不入版本库）
 补充数据/*.json
 补充数据/*.xls
+补充数据/*.xlsx
+补充数据/*.html
 
 # 构建产物
 dist/
@@ -27,3 +29,5 @@ playwright-report/
 
 # IDE 计划文档（.trae/documents 下的临时计划，不进版本库）
 .trae/
+# IDE 导出的 HTML 分享包（本地产物）
+.trae-html-share-packages/
