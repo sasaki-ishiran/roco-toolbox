@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { computeStudCoverage } from '../domain/studCoverage';
 import { TARGET_MODE_LABELS } from '../domain/petFilters';
 import { computeStudRecommendations } from '../domain/suggestions';
@@ -9,6 +9,7 @@ import { EmptyState } from './EmptyState';
 import { FilterAccordion } from './FilterAccordion';
 import { SourceNotice } from './SourceNotice';
 import { SwapWishCard } from './SwapWishCard';
+import { SwapChecklist } from './SwapChecklist';
 import { useCoverageSlots } from './useCoverageSlots';
 import { useOwnedPets } from './useOwnedPets';
 import { useSwapWishes } from './useSwapWishes';
@@ -78,6 +79,9 @@ export function Swap({ onGoImport }: { onGoImport?: () => void } = {}) {
     });
   }, [recommendations, natureFilter, groupFilter, query]);
 
+  // 换什么页的两个视图：换蛋清单（原有算法）/ 互换清单（两人共享的母本分工）
+  const [view, setView] = useState<'eggs' | 'checklist'>('eggs');
+
   return (
     <main className="mx-auto max-w-md space-y-3 p-4">
       <AccountFilterBar accounts={accounts} />
@@ -87,6 +91,33 @@ export function Swap({ onGoImport }: { onGoImport?: () => void } = {}) {
         <EmptyState onGoImport={onGoImport} />
       ) : (
         <>
+          <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="tablist">
+            {(
+              [
+                ['eggs', '换蛋清单'],
+                ['checklist', '互换清单'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={view === id}
+                onClick={() => setView(id)}
+                data-testid={`swap-view-${id}`}
+                className={`min-h-[34px] flex-1 rounded-lg text-xs ${
+                  view === id ? 'bg-white font-medium text-slate-800 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {view === 'checklist' ? (
+            <SwapChecklist />
+          ) : (
+            <>
           <section className="rounded-2xl bg-white p-4 shadow-sm">
             <h2 className="text-sm font-medium text-slate-500">
               换什么
@@ -133,6 +164,8 @@ export function Swap({ onGoImport }: { onGoImport?: () => void } = {}) {
           </section>
 
           <SwapWishCard recommendations={filtered} />
+            </>
+          )}
         </>
       )}
 

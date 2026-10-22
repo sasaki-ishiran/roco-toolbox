@@ -68,3 +68,13 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   window_start INTEGER NOT NULL,   -- 当前窗口起点（毫秒）
   count        INTEGER NOT NULL    -- 本窗口内已放行次数
 );
+
+-- 两人共享的「互换清单」：分享码即权限（随机 8 位，可重置）
+-- payload = JSON 字符串：{ lists, items, mineAccounts, catalogVersion }
+CREATE TABLE IF NOT EXISTS shared_lists (
+  code       TEXT PRIMARY KEY,
+  version    INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  payload    TEXT NOT NULL,
+  bytes      INTEGER NOT NULL
+);
