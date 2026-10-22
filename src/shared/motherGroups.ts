@@ -116,7 +116,8 @@ export type MotherApiErrorCode =
   | 'STALE_SOURCE'
   | 'SOURCE_MISMATCH'
   | 'GAME_ACCOUNT_ALREADY_SHARED'
-  | 'OWNER_MUST_DISSOLVE';
+  | 'OWNER_MUST_DISSOLVE'
+  | 'INTERNAL';
 
 export interface MotherApiError {
   ok: false;

@@ -23,6 +23,7 @@
 import { handleDeleteAccount, handleLogout, handleMe, handleRecover, handleRegister, handleRotate } from './auth';
 import { handleEvent, handleStats } from './events';
 import { handleListCreate, handleListGet, handleListPut } from './lists';
+import { handleMotherGroups } from './motherGroups';
 import { handleSyncGet, handleSyncPut } from './sync';
 import { type Env, corsHeaders, fail, json, resolveOrigin } from './util';
 
@@ -54,6 +55,11 @@ export async function route(request: Request, env: Env): Promise<Response> {
   if (pathname === '/api/list' && method === 'POST') return handleListCreate(request, env, origin);
   if (pathname === '/api/list' && method === 'GET') return handleListGet(request, env, origin);
   if (pathname === '/api/list' && method === 'PUT') return handleListPut(request, env, origin);
+
+  // 多人母本资源共享：全部需要登录，权限与子路由在 handleMotherGroups 内处理
+  if (pathname === '/api/mother-groups' || pathname.startsWith('/api/mother-groups/')) {
+    return handleMotherGroups(request, env, origin);
+  }
 
   return fail('没有这个接口', 404, origin);
 }
