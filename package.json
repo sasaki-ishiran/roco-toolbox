@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "test:mother-groups:api": "node tools/test/run-mother-groups-local.mjs",
     "trim:catalog": "node tools/data-pipeline/trim-catalog.mjs"
   },
   "dependencies": {
@@ -41,6 +42,7 @@
     "vite": "^5.4.8",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^2.1.2",
-    "workbox-precaching": "^7.4.1"
+    "workbox-precaching": "^7.4.1",
+    "wrangler": "4.151.3"
   }
 }
