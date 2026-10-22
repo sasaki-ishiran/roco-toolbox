@@ -24,6 +24,8 @@ const HOST = '127.0.0.1';
 const BASE = `http://${HOST}:${PORT}`;
 const SCHEMA = 'functions/schema.sql';
 const API_TEST = 'tools/test/mother-groups-api.test.mjs';
+/** `--live`：跑真实浏览器联调；默认只跑 API 集成测试。 */
+const suite = process.argv.includes('--live') ? 'live' : 'api';
 
 const isWindows = process.platform === 'win32';
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -142,8 +144,14 @@ try {
     throw new Error(`本地 Functions 未就绪。wrangler 输出：\n${lastServerLog}`);
   }
 
-  console.log(`[5/6] 运行 API 测试：node --test ${API_TEST}`);
-  run(`node --test ${API_TEST}`, '本地 API 测试', { ROCO_MOTHER_API_BASE: BASE });
+  console.log(`[5/6] 运行${suite === 'live' ? ' live 浏览器' : ' API'}测试`);
+  if (suite === 'live') {
+    run('npx playwright test --config playwright.mother-groups.config.ts --workers=1', 'live 浏览器测试', {
+      ROCO_MOTHER_API_BASE: BASE,
+    });
+  } else {
+    run(`node --test ${API_TEST}`, '本地 API 测试', { ROCO_MOTHER_API_BASE: BASE });
+  }
   console.log('[6/6] 通过');
 } finally {
   await cleanup();

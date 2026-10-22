@@ -21,6 +21,9 @@ const guideVersion: string = (() => {
 
 export default defineConfig({
   testDir: './e2e',
+  // 真实本地 Functions + D1 的联调用例由 playwright.mother-groups.config.ts 单独跑，
+  // 默认静态 preview 下没有后端，必须排除，否则会假装验证了后端。
+  testIgnore: '**/*-live.spec.ts',
   use: {
     baseURL: 'http://localhost:4173',
     viewport: { width: 390, height: 844 },

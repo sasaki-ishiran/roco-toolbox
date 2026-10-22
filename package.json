@@ -15,6 +15,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "test:mother-groups:api": "node tools/test/run-mother-groups-local.mjs",
+    "test:mother-groups:live": "node tools/test/run-mother-groups-local.mjs --live",
     "trim:catalog": "node tools/data-pipeline/trim-catalog.mjs"
   },
   "dependencies": {
