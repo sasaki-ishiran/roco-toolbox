@@ -1,0 +1,496 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  MotherGroupsApiError,
+  createMotherGroup,
+  dissolveMotherGroup,
+  getMotherGroup,
+  isMotherGroupsApiError,
+  joinMotherGroup,
+  leaveMotherGroup,
+  listMotherGroups,
+  publishMotherResources,
+  resetMotherGroupInvite,
+  updateMotherGroupProfile,
+} from '../api/motherGroups';
+import { readAccountId, subscribeSession } from '../api/session';
+import { motherResourceSignature, buildMotherResource, diffMotherResources } from '../domain/motherResource';
+import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
+import type { SpeciesEntry } from '../domain/types';
+import {
+  MOTHER_CRITERIA_ID,
+  MOTHER_RESOURCE_SCHEMA_VERSION,
+  type MotherGroupDetail,
+  type MotherGroupMember,
+  type MotherGroupSummary,
+  type MotherResourceDraft,
+} from '../shared/motherGroups';
+import {
+  readCurrentGroupId,
+  saveCurrentGroupId,
+  saveInviteCode,
+} from './motherGroupStore';
+
+/** 页面可见且打开着小组时，每 15 秒拉一次。 */
+export const POLL_INTERVAL_MS = 15_000;
+
+export interface UseMotherGroupsInput {
+  snapshots: AccountSnapshot[];
+  species: SpeciesEntry[];
+  catalogVersion: string;
+}
+
+export interface MotherPublishPreview {
+  /** null = 当前选号不是有效摘要（缺本地账号、导出时间无效或选择为空）。 */
+  resource: MotherResourceDraft | null;
+  diff: ReturnType<typeof diffMotherResources> | null;
+  /** 服务器记录过、但本机没有快照的账号键：发布按钮必须禁用。 */
+  missingAccountKeys: string[];
+  error: string;
+}
+
+export interface MotherGroupsHook {
+  accountId: string | null;
+  groups: MotherGroupSummary[];
+  currentGroupId: string | null;
+  currentGroup: MotherGroupDetail | null;
+  loading: boolean;
+  error: string;
+  offline: boolean;
+  nextPollAt: number | null;
+  draftSelection: string[];
+  draftDirty: boolean;
+  publishPreview: MotherPublishPreview;
+  myMember: MotherGroupMember | null;
+  selectGroup: (groupId: string | null) => void;
+  setDraftSelection: (accountKeys: string[]) => void;
+  refresh: () => Promise<void>;
+  createGroup: (name: string, displayName: string) => Promise<{ groupId: string; inviteCode: string }>;
+  joinGroup: (inviteCode: string, displayName: string) => Promise<string>;
+  publish: () => Promise<void>;
+  stopSharing: () => Promise<void>;
+  updateProfile: (displayName: string) => Promise<void>;
+  resetInvite: () => Promise<string>;
+  leave: () => Promise<void>;
+  dissolve: () => Promise<void>;
+  clearError: () => void;
+}
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : '操作失败，请稍后再试';
+
+const selectionOf = (detail: MotherGroupDetail | null, accountId: string | null): string[] => {
+  if (!detail || !accountId) return [];
+  const mine = detail.members.find((member) => member.accountId === accountId);
+  return mine?.resource?.accounts.map((account) => account.accountKey) ?? [];
+};
+
+const emptyDraft = (catalogVersion: string): MotherResourceDraft => ({
+  schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
+  criteriaId: MOTHER_CRITERIA_ID,
+  catalogVersion,
+  accounts: [],
+});
+
+/**
+ * 多人母本共享的会话作用域状态与轮询。
+ *
+ * 身份 → 组列表 → 当前组详情都从服务器取；退出/换身份会清掉全部内容与草稿，
+ * 晚到的旧请求按「身份代数 + 当前组」丢弃。草稿选号只在本机，发布前必须预览。
+ */
+export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
+  const [accountId, setAccountId] = useState<string | null>(() => readAccountId());
+  const [groups, setGroups] = useState<MotherGroupSummary[]>([]);
+  const [currentGroupId, setCurrentGroupId] = useState<string | null>(null);
+  const [currentGroup, setCurrentGroup] = useState<MotherGroupDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [offline, setOffline] = useState(false);
+  const [nextPollAt, setNextPollAt] = useState<number | null>(null);
+  const [draftSelection, setDraftSelectionState] = useState<string[]>([]);
+  const [draftDirty, setDraftDirty] = useState(false);
+
+  const accountRef = useRef(accountId);
+  const groupRef = useRef<string | null>(null);
+  const detailRef = useRef<MotherGroupDetail | null>(null);
+  const draftRef = useRef<string[]>([]);
+  const dirtyRef = useRef(false);
+  const generationRef = useRef(0);
+  const nextPollAtRef = useRef<number | null>(null);
+  const inputRef = useRef(input);
+
+  inputRef.current = input;
+  accountRef.current = accountId;
+
+  const applySelection = useCallback((detail: MotherGroupDetail | null) => {
+    const keys = selectionOf(detail, accountRef.current);
+    draftRef.current = keys;
+    setDraftSelectionState(keys);
+  }, []);
+
+  /* ---------- 会话切换：清掉上一个人的全部内容 ---------- */
+  useEffect(
+    () =>
+      subscribeSession(() => {
+        const next = readAccountId();
+        if (next === accountRef.current) return;
+        generationRef.current += 1;
+        accountRef.current = next;
+        groupRef.current = null;
+        detailRef.current = null;
+        draftRef.current = [];
+        dirtyRef.current = false;
+        nextPollAtRef.current = null;
+        setAccountId(next);
+        setGroups([]);
+        setCurrentGroupId(null);
+        setCurrentGroup(null);
+        setDraftSelectionState([]);
+        setDraftDirty(false);
+        setError('');
+        setOffline(false);
+        setNextPollAt(null);
+      }),
+    [],
+  );
+
+  /* ---------- 组列表 ---------- */
+  const refreshGroups = useCallback(async (): Promise<MotherGroupSummary[]> => {
+    if (!accountRef.current) return [];
+    const list = await listMotherGroups();
+    if (!accountRef.current) return [];
+    setGroups(list);
+    return list;
+  }, []);
+
+  useEffect(() => {
+    if (!accountId) {
+      setGroups([]);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const gen = generationRef.current;
+    setLoading(true);
+    void (async () => {
+      try {
+        const list = await listMotherGroups();
+        if (cancelled || gen !== generationRef.current) return;
+        setGroups(list);
+        const stored = readCurrentGroupId(accountId);
+        const target = list.find((group) => group.id === stored)?.id ?? list[0]?.id ?? null;
+        groupRef.current = target;
+        setCurrentGroupId(target);
+        if (target) saveCurrentGroupId(accountId, target);
+        setOffline(false);
+        setError('');
+      } catch (failure) {
+        if (cancelled || gen !== generationRef.current) return;
+        setGroups([]);
+        setCurrentGroupId(null);
+        setError(messageOf(failure));
+      } finally {
+        if (!cancelled && gen === generationRef.current) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId]);
+
+  /* ---------- 组详情：首次加载 + 可见时 15 秒轮询 ---------- */
+  const loadDetail = useCallback(
+    async (groupId: string, options: { showLoading: boolean; gen: number }) => {
+      if (options.showLoading) setLoading(true);
+      try {
+        const detail = await getMotherGroup(groupId);
+        if (options.gen !== generationRef.current || groupRef.current !== groupId) return;
+        detailRef.current = detail;
+        setCurrentGroup(detail);
+        setOffline(false);
+        setError('');
+        if (!dirtyRef.current) applySelection(detail);
+        nextPollAtRef.current = null;
+        setNextPollAt(null);
+      } catch (failure) {
+        if (options.gen !== generationRef.current || groupRef.current !== groupId) return;
+        if (isMotherGroupsApiError(failure) && (failure.status === 403 || failure.status === 404)) {
+          groupRef.current = null;
+          detailRef.current = null;
+          setCurrentGroupId(null);
+          setCurrentGroup(null);
+          saveCurrentGroupId(accountRef.current, null);
+          setError(failure.message);
+          void listMotherGroups()
+            .then((list) => {
+              if (groupRef.current === null) setGroups(list);
+            })
+            .catch(() => {});
+          return;
+        }
+        if (isMotherGroupsApiError(failure) && failure.status === 429) {
+          const at = Date.now() + Math.max(60, failure.retryAfterSeconds ?? 60) * 1000;
+          nextPollAtRef.current = at;
+          setNextPollAt(at);
+          setError(failure.message);
+          return;
+        }
+        if (detailRef.current) {
+          setOffline(true);
+          return;
+        }
+        setError(messageOf(failure));
+      } finally {
+        if (options.showLoading && options.gen === generationRef.current) setLoading(false);
+      }
+    },
+    [applySelection],
+  );
+
+  useEffect(() => {
+    dirtyRef.current = false;
+    setDraftDirty(false);
+  }, [currentGroupId]);
+
+  useEffect(() => {
+    if (!accountId || !currentGroupId) {
+      detailRef.current = null;
+      setCurrentGroup(null);
+      return;
+    }
+    const gen = generationRef.current;
+    let cancelled = false;
+    let inFlight = false;
+
+    const tick = async (showLoading: boolean) => {
+      if (cancelled || inFlight) return;
+      if (nextPollAtRef.current != null && Date.now() < nextPollAtRef.current) return;
+      inFlight = true;
+      try {
+        await loadDetail(currentGroupId, { showLoading, gen });
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void tick(true);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void tick(false);
+    }, POLL_INTERVAL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void tick(false);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [accountId, currentGroupId, loadDetail]);
+
+  const selectGroup = useCallback((groupId: string | null) => {
+    if (groupId === groupRef.current) return;
+    groupRef.current = groupId;
+    detailRef.current = null;
+    setCurrentGroupId(groupId);
+    setCurrentGroup(null);
+    saveCurrentGroupId(accountRef.current, groupId);
+    nextPollAtRef.current = null;
+    setNextPollAt(null);
+  }, []);
+
+  const setDraftSelection = useCallback((accountKeys: string[]) => {
+    draftRef.current = accountKeys;
+    dirtyRef.current = true;
+    setDraftSelectionState(accountKeys);
+    setDraftDirty(true);
+  }, []);
+
+  const reloadCurrent = useCallback(async () => {
+    const groupId = groupRef.current;
+    if (!groupId) return;
+    await loadDetail(groupId, { showLoading: false, gen: generationRef.current });
+  }, [loadDetail]);
+
+  const buildDraftFor = useCallback((keys: string[]): MotherResourceDraft => {
+    const { snapshots, species, catalogVersion } = inputRef.current;
+    return buildMotherResource({
+      snapshots,
+      selectedAccountKeys: keys,
+      species,
+      catalogVersion,
+    });
+  }, []);
+
+  const publishResource = useCallback(
+    async (resource: MotherResourceDraft) => {
+      const groupId = groupRef.current;
+      const account = accountRef.current;
+      const detail = detailRef.current;
+      if (!groupId || !account || !detail) throw new Error('还没有打开小组');
+      const mine = detail.members.find((member) => member.accountId === account);
+      if (!mine) throw new Error('不是该组成员');
+
+      await publishMotherResources(groupId, {
+        baseRevision: mine.resourceRevision,
+        resource,
+      });
+      await reloadCurrent();
+      dirtyRef.current = false;
+      setDraftDirty(false);
+    },
+    [reloadCurrent],
+  );
+
+  const publish = useCallback(async () => {
+    const resource = buildDraftFor(draftRef.current);
+    await publishResource(resource);
+  }, [buildDraftFor, publishResource]);
+
+  const stopSharing = useCallback(async () => {
+    const resource = emptyDraft(inputRef.current.catalogVersion);
+    await publishResource(resource);
+  }, [publishResource]);
+
+  const createGroup = useCallback(
+    async (name: string, displayName: string) => {
+      const account = accountRef.current;
+      if (!account) throw new Error('未登录');
+      const created = await createMotherGroup({ name, displayName });
+      saveInviteCode(account, created.group.id, created.inviteCode);
+      await refreshGroups();
+      selectGroup(created.group.id);
+      return { groupId: created.group.id, inviteCode: created.inviteCode };
+    },
+    [refreshGroups, selectGroup],
+  );
+
+  const joinGroup = useCallback(
+    async (inviteCode: string, displayName: string) => {
+      const groupId = await joinMotherGroup({ inviteCode, displayName });
+      await refreshGroups();
+      selectGroup(groupId);
+      return groupId;
+    },
+    [refreshGroups, selectGroup],
+  );
+
+  const updateProfile = useCallback(
+    async (displayName: string) => {
+      const groupId = groupRef.current;
+      if (!groupId) throw new Error('还没有打开小组');
+      await updateMotherGroupProfile(groupId, displayName);
+      await reloadCurrent();
+    },
+    [reloadCurrent],
+  );
+
+  const resetInvite = useCallback(async () => {
+    const groupId = groupRef.current;
+    const account = accountRef.current;
+    if (!groupId) throw new Error('还没有打开小组');
+    const code = await resetMotherGroupInvite(groupId);
+    if (account) saveInviteCode(account, groupId, code);
+    return code;
+  }, []);
+
+  const leave = useCallback(async () => {
+    const groupId = groupRef.current;
+    const account = accountRef.current;
+    if (!groupId) return;
+    await leaveMotherGroup(groupId);
+    if (account) saveCurrentGroupId(account, null);
+    selectGroup(null);
+    await refreshGroups().catch(() => {});
+  }, [refreshGroups, selectGroup]);
+
+  const dissolve = useCallback(async () => {
+    const groupId = groupRef.current;
+    const account = accountRef.current;
+    if (!groupId) return;
+    await dissolveMotherGroup(groupId);
+    if (account) saveCurrentGroupId(account, null);
+    selectGroup(null);
+    await refreshGroups().catch(() => {});
+  }, [refreshGroups, selectGroup]);
+
+  const myMember = useMemo(
+    () =>
+      currentGroup?.members.find((member) => member.accountId === accountId) ?? null,
+    [currentGroup, accountId],
+  );
+
+  const publishPreview = useMemo<MotherPublishPreview>(() => {
+    const { snapshots, species, catalogVersion } = input;
+    const localKeys = new Set(
+      snapshots.map((snapshot) => snapshot.accountKey ?? accountKeyOf(snapshot)),
+    );
+    const missingAccountKeys = draftSelection.filter((key) => !localKeys.has(key));
+
+    if (missingAccountKeys.length > 0) {
+      return {
+        resource: null,
+        diff: null,
+        missingAccountKeys,
+        error: '本机缺少这些账号的数据：先导入或云同步，或在选号里撤回',
+      };
+    }
+    if (draftSelection.length === 0) {
+      return { resource: null, diff: null, missingAccountKeys: [], error: '' };
+    }
+    try {
+      const resource = buildMotherResource({
+        snapshots,
+        selectedAccountKeys: draftSelection,
+        species,
+        catalogVersion,
+      });
+      const base = myMember?.resource ?? emptyDraft(catalogVersion);
+      return {
+        resource,
+        diff: diffMotherResources(base, resource),
+        missingAccountKeys: [],
+        error: '',
+      };
+    } catch (failure) {
+      return {
+        resource: null,
+        diff: null,
+        missingAccountKeys: [],
+        error: messageOf(failure),
+      };
+    }
+  }, [input, draftSelection, myMember]);
+
+  return {
+    accountId,
+    groups,
+    currentGroupId,
+    currentGroup,
+    loading,
+    error,
+    offline,
+    nextPollAt,
+    draftSelection,
+    draftDirty,
+    publishPreview,
+    myMember,
+    selectGroup,
+    setDraftSelection,
+    refresh: reloadCurrent,
+    createGroup,
+    joinGroup,
+    publish,
+    stopSharing,
+    updateProfile,
+    resetInvite,
+    leave,
+    dissolve,
+    clearError: () => setError(''),
+  };
+}
+
+/** 供 UI 判断「这份草稿和服务器上的摘要是否同一份覆盖」。 */
+export const sameCoverage = (a: MotherResourceDraft | null, b: MotherResourceDraft | null): boolean =>
+  a != null && b != null && motherResourceSignature(a) === motherResourceSignature(b);
+
+export { MotherGroupsApiError };
