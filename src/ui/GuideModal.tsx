@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ModalSurface } from './primitives/ModalSurface';
 
 /**
  * 使用教程弹窗：首启自动弹（见 App），也可从顶部「教程」随时打开。
@@ -61,36 +62,13 @@ export function GuideModal({ onClose, startAt = 0 }: { onClose: () => void; star
   const last = step === GUIDE_STEPS.length - 1;
 
   return (
-    <div
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="guide-title"
-      data-testid="guide-modal"
-    >
-      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h2 id="guide-title" className="text-base font-semibold text-slate-900">
-            使用教程
-          </h2>
-          <span className="text-xs text-slate-400" data-testid="guide-progress">
-            {step + 1} / {GUIDE_STEPS.length}
-          </span>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4" data-testid="guide-body">
-          <h3 className="text-sm font-semibold text-emerald-700">{current.title}</h3>
-          <ul className="mt-2 space-y-2">
-            {current.points.map((point) => (
-              <li key={point} className="flex gap-2 text-[13px] leading-relaxed text-slate-600">
-                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-                <span>{point}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="flex items-center gap-2 border-t border-slate-100 p-3">
+    <ModalSurface
+      open
+      title="使用教程"
+      onClose={onClose}
+      testId="guide-modal"
+      footer={
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
@@ -118,7 +96,24 @@ export function GuideModal({ onClose, startAt = 0 }: { onClose: () => void; star
             {last ? '开始用' : '下一步'}
           </button>
         </div>
+      }
+    >
+      <div className="px-4 py-4" data-testid="guide-body">
+        <div className="flex justify-end">
+          <span className="text-xs text-slate-400" data-testid="guide-progress">
+            {step + 1} / {GUIDE_STEPS.length}
+          </span>
+        </div>
+        <h3 className="text-sm font-semibold text-emerald-700">{current.title}</h3>
+        <ul className="mt-2 space-y-2">
+          {current.points.map((point) => (
+            <li key={point} className="flex gap-2 text-[13px] leading-relaxed text-slate-600">
+              <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+              <span>{point}</span>
+            </li>
+          ))}
+        </ul>
       </div>
-    </div>
+    </ModalSurface>
   );
 }

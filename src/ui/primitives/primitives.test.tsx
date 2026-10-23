@@ -1,12 +1,15 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 import { Button } from './Button';
 import { Field } from './Field';
 import { FilterPanel } from './FilterPanel';
 import { InlineSelect } from './InlineSelect';
+import { ModalSurface } from './ModalSurface';
 import { ScopeSummary } from './ScopeSummary';
 import { SearchField } from './SearchField';
 import { SegmentedControl } from './SegmentedControl';
+import { StateNotice } from './StateNotice';
 
 const OPTIONS = [
   { value: 'a', label: '选项甲' },
@@ -181,5 +184,78 @@ describe('ScopeSummary', () => {
     expect(root).toHaveTextContent('数据：10/24 12:00');
     fireEvent.click(screen.getByRole('button', { name: '调整' }));
     expect(onEdit).toHaveBeenCalled();
+  });
+});
+
+function ModalHarness({ onClose = () => {} }: { onClose?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const close = () => {
+    setOpen(false);
+    onClose();
+  };
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        打开弹层
+      </button>
+      <ModalSurface
+        open={open}
+        title="设置"
+        onClose={close}
+        testId="modal"
+        closeTestId="modal-close"
+        footer={<button type="button">保存</button>}
+      >
+        <button type="button">内容甲</button>
+        <button type="button">内容乙</button>
+      </ModalSurface>
+    </>
+  );
+}
+
+describe('ModalSurface', () => {
+  test('打开聚焦内部并锁滚动；Esc 关闭并返焦', async () => {
+    render(<ModalHarness />);
+    const trigger = screen.getByRole('button', { name: '打开弹层' });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole('dialog', { name: '设置' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    expect(document.body.style.overflow).toBe('hidden');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+    expect(document.body.style.overflow).toBe('');
+  });
+
+  test('Tab / Shift+Tab 在弹层内循环，不漏到背景', async () => {
+    render(<ModalHarness />);
+    fireEvent.click(screen.getByRole('button', { name: '打开弹层' }));
+    const dialog = screen.getByRole('dialog', { name: '设置' });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+
+    const closeButton = screen.getByRole('button', { name: '关闭' });
+    const save = screen.getByRole('button', { name: '保存' });
+
+    save.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(closeButton);
+
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(save);
+  });
+});
+
+describe('StateNotice', () => {
+  test('失败用 alert 播报，完成用 status，且都带文字', () => {
+    const { rerender } = render(<StateNotice kind="error" title="导入失败" description="网络异常" />);
+    expect(screen.getByRole('alert')).toHaveTextContent('导入失败');
+    expect(screen.getByRole('alert')).toHaveTextContent('网络异常');
+
+    rerender(<StateNotice kind="complete" title="已全部收集" />);
+    expect(screen.getByRole('status')).toHaveTextContent('已全部收集');
   });
 });

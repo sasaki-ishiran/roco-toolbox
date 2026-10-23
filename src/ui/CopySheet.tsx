@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ModalSurface } from './primitives/ModalSurface';
 
 export interface CopySheetProps {
   open: boolean;
@@ -44,37 +45,42 @@ export function CopySheet({ open, text, onConfirm, onCancel }: CopySheetProps) {
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end"
-      data-testid="copy-sheet"
-    >
-      {/* 遮罩 */}
-      <button
-        type="button"
-        aria-label="关闭预览"
-        onClick={onCancel}
-        className="absolute inset-0 bg-black/40"
-        data-testid="copy-sheet-backdrop"
-      />
-      <div className="relative w-full rounded-t-2xl bg-white p-4 shadow-xl">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-medium text-slate-900">复制预览</h3>
+    <ModalSurface
+      open
+      title="复制预览"
+      placement="sheet"
+      onClose={onCancel}
+      testId="copy-sheet"
+      backdropTestId="copy-sheet-backdrop"
+      footer={
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="min-h-[28px] text-xs text-slate-400"
+            className="min-h-[44px] rounded-xl px-3 text-sm text-slate-400"
             data-testid="copy-sheet-cancel"
           >
             取消
           </button>
+          <button
+            type="button"
+            onClick={confirm}
+            className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-medium text-white"
+            data-testid="copy-sheet-confirm"
+          >
+            复制
+          </button>
         </div>
+      }
+    >
+      <div className="p-4">
         <pre
-          className="mt-2 max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700"
+          className="max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700"
           data-testid="copy-sheet-preview"
         >
           {text}
         </pre>
-        <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+        <label className="mt-2 flex min-h-[44px] items-center gap-2 text-xs text-slate-500">
           <input
             type="checkbox"
             checked={noMore}
@@ -84,15 +90,7 @@ export function CopySheet({ open, text, onConfirm, onCancel }: CopySheetProps) {
           />
           不再提示，以后直接复制
         </label>
-        <button
-          type="button"
-          onClick={confirm}
-          className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-medium text-white"
-          data-testid="copy-sheet-confirm"
-        >
-          复制
-        </button>
       </div>
-    </div>
+    </ModalSurface>
   );
 }

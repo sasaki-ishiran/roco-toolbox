@@ -6,6 +6,7 @@ import type { MotherCoverageRow, MotherGroupDetail, MotherGroupMember } from '..
 import { InlineSelect } from './primitives/InlineSelect';
 import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
+import { StateNotice } from './primitives/StateNotice';
 
 type ViewId = 'missing' | 'help' | 'all';
 
@@ -143,9 +144,12 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
       />
 
       {currentRows === null ? (
-        <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700" data-testid="mother-view-unknown-self">
-          我的资源尚未发布，或者图鉴/口径与当前版本不一致 → 不能计算我的缺口。先在下面发布或更新我的资源。
-        </p>
+        <StateNotice
+          kind="incomparable"
+          title="不能计算我的缺口"
+          description="我的资源尚未发布，或图鉴/口径与当前版本不一致；发布或更新后再看这一页。"
+          testId="mother-view-unknown-self"
+        />
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -184,13 +188,16 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
         只看组内有人拥有
       </label>
 
-      <p className="text-[11px] text-slate-400" data-testid="mother-resource-count">
-        当前页 {filtered.length} 项
-      </p>
+      {/* 不可计算时不再叠一条「当前页 0 项 / 这一页没有条目」的普通空态：那是两种事实 */}
+      {currentRows !== null ? (
+        <>
+          <p className="text-[11px] text-slate-400" data-testid="mother-resource-count">
+            当前页 {filtered.length} 项
+          </p>
 
-      {filtered.length === 0 ? (
-        <p className="py-4 text-center text-xs text-slate-400">这一页没有条目</p>
-      ) : (
+          {filtered.length === 0 ? (
+            <p className="py-4 text-center text-xs text-slate-400">这一页没有条目</p>
+          ) : (
         <ul className="space-y-1">
           {filtered.map((row) => (
             <li key={row.eggGameId} className="rounded-xl bg-slate-50 px-3 py-2" data-testid="mother-resource-row">
@@ -218,7 +225,9 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
             </li>
           ))}
         </ul>
-      )}
+          )}
+        </>
+      ) : null}
     </section>
   );
 }

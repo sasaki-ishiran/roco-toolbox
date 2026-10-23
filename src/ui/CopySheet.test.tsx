@@ -1,8 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { CopySheet } from './CopySheet';
 
 const noop = () => {};
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 describe('CopySheet「不再提示」勾选', () => {
   test('取消关闭后再打开：勾选被复位（避免上次取消的意图被误存成偏好）', () => {
@@ -18,5 +22,23 @@ describe('CopySheet「不再提示」勾选', () => {
     rerender(<CopySheet open text="内容" onConfirm={noop} onCancel={noop} />);
 
     expect(screen.getByTestId('copy-sheet-no-more')).not.toBeChecked();
+  });
+
+  test('取消不保存「不再提示」，确认才保存', () => {
+    const onConfirm = vi.fn();
+    const { rerender } = render(
+      <CopySheet open text="内容" onConfirm={onConfirm} onCancel={noop} />,
+    );
+    fireEvent.click(screen.getByTestId('copy-sheet-no-more'));
+    fireEvent.click(screen.getByTestId('copy-sheet-cancel'));
+    expect(localStorage.getItem('roco.copyPreviewOff')).toBeNull();
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    rerender(<CopySheet open={false} text="内容" onConfirm={onConfirm} onCancel={noop} />);
+    rerender(<CopySheet open text="内容" onConfirm={onConfirm} onCancel={noop} />);
+    fireEvent.click(screen.getByTestId('copy-sheet-no-more'));
+    fireEvent.click(screen.getByTestId('copy-sheet-confirm'));
+    expect(localStorage.getItem('roco.copyPreviewOff')).toBe('1');
+    expect(onConfirm).toHaveBeenCalled();
   });
 });
