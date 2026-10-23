@@ -37,3 +37,29 @@ export function setSwapFilters(
 export function setSwapSelected(selected: ReadonlySet<string>): void {
   store.set({ ...store.get(), selected });
 }
+
+/* ---------- 主视图（换蛋清单 / 母本共享）跨重启保留 ---------- */
+
+export type SwapMainView = 'eggs' | 'sharing';
+
+const VIEW_KEY = 'roco.swapView';
+
+/**
+ * 记住上次看的是「换蛋清单」还是「母本共享」。
+ *
+ * 手机上关后台再回来常常是整页重载：如果每次都回到换蛋清单，
+ * 用户会以为自己加入的母本共享小组不见了。
+ */
+export function readSwapMainView(): SwapMainView {
+  if (typeof window === 'undefined') return 'eggs';
+  return window.localStorage.getItem(VIEW_KEY) === 'sharing' ? 'sharing' : 'eggs';
+}
+
+export function saveSwapMainView(view: SwapMainView): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // 隐私模式 / 配额满：记不住视图不影响功能
+  }
+}

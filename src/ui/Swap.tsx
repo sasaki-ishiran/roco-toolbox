@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { computeStudCoverage } from '../domain/studCoverage';
 import { TARGET_MODE_LABELS } from '../domain/petFilters';
 import { computeStudRecommendations } from '../domain/suggestions';
@@ -14,7 +14,7 @@ import { MotherSharing } from './MotherSharing';
 import { useCoverageSlots } from './useCoverageSlots';
 import { useOwnedPets } from './useOwnedPets';
 import { useSwapWishes } from './useSwapWishes';
-import { setSwapFilters, useSwapView } from './swapViewStore';
+import { setSwapFilters, readSwapMainView, saveSwapMainView, useSwapView } from './swapViewStore';
 import { useTargetMode } from './targetModeStore';
 
 /** 多选筛选的开关：点一下加进去，再点一下移出来（空 = 不限） */
@@ -85,7 +85,13 @@ export function Swap({
 
   // 顶部主分段：换蛋清单（原有算法）/ 母本共享（多人小组）。
   // 旧版双人清单不再占主分段：本机有旧清单时，在母本共享底部给出兼容入口。
-  const [view, setView] = useState<'eggs' | 'sharing' | 'legacy'>('eggs');
+  // 主视图跨重启保留（关后台回来还停在母本共享，不会以为小组没了）。
+  const [view, setView] = useState<'eggs' | 'sharing' | 'legacy'>(() => readSwapMainView());
+
+  useEffect(() => {
+    if (view === 'legacy') return; // 旧清单只是兼容入口，不记成默认视图
+    saveSwapMainView(view);
+  }, [view]);
 
   return (
     <main className="mx-auto max-w-md space-y-3 p-4">
