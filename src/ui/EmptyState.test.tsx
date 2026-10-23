@@ -5,7 +5,7 @@ import { EmptyState } from './EmptyState';
 describe('EmptyState', () => {
   test('指向「导入数据」页，而不是没有入口的「看板」', () => {
     render(<EmptyState onGoImport={() => {}} />);
-    expect(screen.getByTestId('empty-state')).toHaveTextContent('导入数据');
+    expect(screen.getByTestId('empty-state')).toHaveTextContent('游戏数据');
     expect(screen.getByTestId('empty-state')).not.toHaveTextContent('看板');
   });
 

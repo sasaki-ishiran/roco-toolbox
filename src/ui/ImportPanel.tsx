@@ -141,7 +141,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
         // 网络/服务端异常也要留一条提示：这是导入后自动触发的，用户没主动点过任何按钮
         .catch(() => {
           updateImportOutcome(operationId, { cloud: 'failed' });
-          setSyncNotice('自动同步没成功（网络异常），到下面「云同步」点一次「立即同步」重试。');
+          setSyncNotice('自动同步没成功（网络异常），到「我的 · 私有同步」点一次「立即同步」重试。');
         });
     }
   };

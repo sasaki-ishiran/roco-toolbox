@@ -18,12 +18,12 @@ export function EmptyState({ onGoImport }: EmptyStateProps = {}) {
     <StateNotice
       kind="empty-data"
       title="还没有数据"
-      description="到「导入数据」页导入一次抓包数据后，这里就有内容了。"
+      description="到「我的 · 游戏数据」导入一次抓包数据后，这里就有内容了。"
       testId="empty-state"
       action={
         onGoImport ? (
           <Button onClick={onGoImport} data-testid="empty-go-import">
-            去导入数据
+            去游戏数据导入
           </Button>
         ) : undefined
       }
