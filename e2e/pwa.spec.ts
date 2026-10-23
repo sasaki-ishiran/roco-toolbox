@@ -57,3 +57,23 @@ test('页面顶部显示版本标记', async ({ page }) => {
   await expect(version).toBeVisible();
   await expect(version).toContainText(/\d{4}-\d{2}-\d{2}/);
 });
+
+/**
+ * 卡在旧缓存里的用户（例如国产浏览器 / 应用内 WebView）自动更新可能一直不生效，
+ * 顶部「刷新」按钮负责硬刷新：注销 Service Worker、清预缓存、带时间戳重新加载。
+ */
+test('顶部「刷新」按钮会带时间戳重新加载（绕过旧缓存）', async ({ page }) => {
+  await page.goto('/');
+  // 等 SW 接管后再点，确保「注销 + 清缓存」这条路径真的跑到
+  await page.waitForFunction(
+    async () => Boolean(await navigator.serviceWorker.getRegistration()),
+    null,
+    { timeout: 15000 },
+  );
+
+  await Promise.all([
+    page.waitForURL(/[?&]v=\d+/, { timeout: 20000 }),
+    page.getByTestId('app-refresh').click(),
+  ]);
+  await expect(page.getByTestId('app-version')).toBeVisible();
+});

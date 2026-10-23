@@ -20,6 +20,11 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: '洛克工具箱' })).toBeDefined();
   });
 
+  test('顶部有手动刷新按钮（卡在旧缓存时的兜底）', () => {
+    render(<App />);
+    expect(screen.getByTestId('app-refresh')).toHaveTextContent('刷新');
+  });
+
   test('壳把分享内容注入时自动切到「导入数据」页（否则分享会被静默搁置）', async () => {
     // 有数据时应用会自动落到看板，而接收分享的监听在「导入数据」页里（只挂载当前页）
     await saveSnapshot(snapshot('账号甲'));

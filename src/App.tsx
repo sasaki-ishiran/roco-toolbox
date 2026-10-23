@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { installFlushOnHide, platform, track } from './api/analytics';
 import type { PetView } from './domain/petFilters';
 import { CHANGELOG, markChangelogSeen, pendingChangelog, readChangelogSeen } from './data/changelog';
+import { refreshApp } from './pwa/hardRefresh';
 import { ChangelogModal } from './ui/ChangelogModal';
 import { GuideModal } from './ui/GuideModal';
 import { guidePending, markGuideSeen } from './ui/guide';
@@ -16,6 +17,8 @@ import { useSnapshots } from './ui/useSnapshots';
 
 export default function App() {
   const [tab, setTab] = useState<TabId>('import');
+  /** 手动刷新按钮的忙碌态（真正刷新会让页面重载，这里只防连点） */
+  const [refreshing, setRefreshing] = useState(false);
   const { snapshots, loaded } = useSnapshots();
   // 壳（APK）把分享内容注入**当前页面**，而消费分享的监听挂在「导入数据」页里（只挂载当前页）：
   // 应用开着且停在别的页签时，分享会被静默搁置（看起来像「分享过来什么都没发生」）。
@@ -114,6 +117,20 @@ export default function App() {
         <header className="flex items-center justify-between gap-2 border-b border-slate-100 bg-white px-4 py-3">
           <h1 className="text-lg font-semibold text-slate-900">洛克工具箱</h1>
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (refreshing) return;
+                setRefreshing(true);
+                void refreshApp();
+              }}
+              data-testid="app-refresh"
+              title="刷新到最新版本（清掉旧缓存）"
+              className="min-h-[28px] rounded-full border border-slate-200 px-2.5 text-[11px] text-slate-500 disabled:opacity-50"
+              disabled={refreshing}
+            >
+              {refreshing ? '刷新中…' : '刷新'}
+            </button>
             <button
               type="button"
               onClick={() => setGuide(true)}
