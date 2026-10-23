@@ -78,8 +78,8 @@ test('优质种公推荐：勾选移入已换到折叠区，可展开还原', as
   // 取消勾选 → 还原回主列表
   await doneItems.first().getByTestId('recommend-item-check').click();
   await expect(page.getByTestId('recommend-done-toggle')).toHaveCount(0);
-  // 数量按钮仍是 5/15/全部
-  await expect(page.getByTestId('recommend-quantity-5')).toBeVisible();
+  // 数量按钮改为 3/15/全部（看板每类最多 3 条行动）
+  await expect(page.getByTestId('recommend-quantity-3')).toBeVisible();
   await expect(page.getByTestId('recommend-quantity-15')).toBeVisible();
   await expect(page.getByTestId('recommend-quantity-all')).toBeVisible();
 });
@@ -266,16 +266,19 @@ test('用「合并导入」选抓包文件时给出可读错误', async ({ page 
   await expect(page.getByText(/不是洛克工具箱的备份文件/)).toBeVisible();
 });
 
-test('母本全收集：四档分开计数，默认满分大婉，切换档位换列表', async ({ page }) => {
+test('母本按代表档位查看：四档分开计数，切换档位换列表', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 
-  // 档位是页内下拉栏（2026-10-05：不弹系统窗）：默认显示满分大婉（带计数）
+  // 2026-10-24：完整档位库存从看板迁到「收集 · 精灵库」的固定次入口
+  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByTestId('inventory-grade-toggle').click();
+
+  // 档位是页内下拉栏：默认显示满分大婉（带计数）
   const gradeSelect = page.getByTestId('mother-grade-select');
   await expect(gradeSelect).toContainText(/满分大婉 \(\d+\)/);
 
-  // 默认选中满分大婉；下拉 button 直接嵌在标题行里（「按代表档位查看 <下拉>」）
   await expect(page.getByTestId('mother-filter-title')).toContainText('按代表档位查看');
   // 点开下拉栏：4 个档位都在
   await gradeSelect.click();
@@ -313,7 +316,9 @@ test('当前模式：看板开关切到追双牌，全程序跟着换', async ({
 
   await page.getByTestId('target-mode-medal').click();
   await expect(page.getByTestId('target-mode-medal')).toHaveAttribute('aria-pressed', 'true');
-  // 下拉里的档位选项不再带「满分」前缀（点开下拉栏后直接断言选项文字）
+  // 档位库存已迁到「收集 · 精灵库」的次入口；选项不再带「满分」前缀
+  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByTestId('inventory-grade-toggle').click();
   await page.getByTestId('mother-grade-select').click();
   await expect(page.getByTestId('mother-grade-option-大婉')).toHaveText(/^大婉 \(\d+\)$/);
 

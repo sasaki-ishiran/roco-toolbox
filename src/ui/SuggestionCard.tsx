@@ -7,7 +7,7 @@ import {
   useSuggestionCard,
 } from './suggestionCardStore';
 
-const QUANTITY_OPTIONS = [5, 15, '全部'] as const;
+const QUANTITY_OPTIONS = [3, 15, '全部'] as const;
 
 export interface SuggestionCardProps {
   title: string;

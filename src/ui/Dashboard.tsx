@@ -1,16 +1,10 @@
 ﻿import { useMemo, useState } from 'react';
-import {
-  TARGET_MODE_LABELS,
-  gradeLabel,
-  type TargetMode,
-} from '../domain/petFilters';
-import { ALL_GRADES } from '../domain/coverageTargets';
+import { TARGET_MODE_LABELS, gradeLabel, type TargetMode } from '../domain/petFilters';
+import { effectiveMotherVoices, isChainCollected, type MotherCriteria } from '../domain/motherCriteria';
 import { findUncataloguedCount, studEmptyNote } from '../domain/suggestions';
 import { species } from '../data/catalog';
 import { AccountFilterBar } from './AccountFilterBar';
 import { ImportAdditionCard } from './ImportAdditionCard';
-import { MotherGradeInventory } from './MotherGradeInventory';
-import { NestPlanCard } from './NestPlanCard';
 import { ProgressCard } from './ProgressCard';
 import { SuggestionCard } from './SuggestionCard';
 import { SourceNotice } from './SourceNotice';
@@ -19,63 +13,59 @@ import { ScopeSummary } from './primitives/ScopeSummary';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { useOwnedPets } from './useOwnedPets';
 import { useCollectionSummary } from './useCollectionSummary';
-import { toggleFilterGrade, useCoverageFilter } from './coverageFilterStore';
+import { useCoverageFilter } from './coverageFilterStore';
+import { useMotherCriteria } from './motherCriteriaStore';
 import { setTargetMode } from './targetModeStore';
+import type { NavigationIntent } from './navigation';
 
 export interface DashboardProps {
-  /** 「种公全收集」卡上的快速入口：跳到「我的精灵 · 种公视角」 */
-  onOpenStuds?: () => void;
-  /** 「母本全收集」卡上的快速入口：跳到「我的精灵 · 母本视角（待补齐母本）」 */
-  onOpenMothers?: () => void;
-  /** 优质种公推荐「全部」：跳到「换什么」页看完整求蛋清单 */
-  onOpenSwap?: () => void;
-  /** 配窝汇总的入口：跳到「覆盖度」页看每个目标怎么迭代（带上第一个可迭代的蛋组，跳过去自动展开） */
-  onOpenCoverage?: (groupId?: number) => void;
+  /** 统一导航入口（2026-10-24）：看板只发意图，不直接改别页状态 */
+  onNavigate: (intent: NavigationIntent) => void;
 }
 
-export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCoverage }: DashboardProps = {}) {
-  // 唯一目标编辑器：种公 / 母本两个分区
+/**
+ * 看板（2026-10-24 重构任务 8）：回答「我收集到哪了，接下来做什么」。
+ *
+ * 顺序：账号范围 → 目标短摘要 → 并列进度 → 近期新增 → 少量具体行动。
+ * 完整配置（档位/蛋组/性格）与完整明细都在收集页，这里只保留入口。
+ */
+export function Dashboard({ onNavigate }: DashboardProps) {
   const [targetEditor, setTargetEditor] = useState<{
     open: boolean;
     section: 'studs' | 'mothers';
   }>({ open: false, section: 'studs' });
 
-  // 摘要全部来自 useCollectionSummary（与收集详情同一份领域计算）
-  const {
-    owned,
-    motherGroups,
-    mode,
-    mother,
-    stud,
-    plans: breedPlan,
-    recommendations: suggestions,
-  } = useCollectionSummary();
+  const { owned, motherGroups, mode, mother, stud, recommendations } = useCollectionSummary();
   const { accounts } = useOwnedPets();
   const coverageFilter = useCoverageFilter();
-  // 配窝汇总（明细在卡片里）：还差多少目标，以及分别属于哪种状态
+  const motherCriteria = useMotherCriteria();
+
+  const gradeText =
+    coverageFilter.grades.length > 0
+      ? coverageFilter.grades.map((grade) => gradeLabel(grade, mode)).join('、')
+      : '未选档位';
+
+  const effectiveCriteria: MotherCriteria = {
+    bodies: motherCriteria.bodies,
+    voices: effectiveMotherVoices(motherCriteria.voices, mode),
+  };
+  /** 母本缺口只报**个人事实**；小组未加载时不在看板声称某成员拥有 */
+  const missingMothers = useMemo(
+    () => motherGroups.filter((group) => !isChainCollected(group, owned, effectiveCriteria)),
+    [motherGroups, owned, effectiveCriteria],
+  );
+  const motherMissingPreview = missingMothers.slice(0, 3);
+
   const remainingTargets = stud.cells.filter((cell) => cell.state !== 'covered').length;
-  // 「可迭代」= 手里就有能孵出它的那对（学院小窝放带目标性格的那只），自己孵就行
   const iterableTargets = stud.cells.filter((cell) => cell.state === 'breedable').length;
-  // 「有母本·缺公」不再单列，和"完全没人"一起算未收集（都是得去弄一只）
   const missingTargets = remainingTargets - iterableTargets;
-  // 第一个「可迭代」的蛋组：点「去看怎么迭代」时把它带过去自动展开（不然用户得在 14 行里找）
   const firstIterableGroupId =
     stud.cells.find((cell) => cell.state === 'breedable')?.groupId ?? undefined;
-  /**
-   * 空清单提示语（2026-10-24 修）：以前卡片写死「导入抓包数据后给出建议」，
-   * 种公已收齐的人看到会以为数据没导进来；配窝也同样不能让他去「补缺口」。
-   */
   const suggestionEmptyNote = studEmptyNote({ hasData: owned.length > 0, stud });
-  const nestEmptyNote =
-    stud.groupCount === 0
-      ? suggestionEmptyNote
-      : remainingTargets === 0
-        ? '种公目标已全部收集，不用再配窝'
-        : undefined;
 
-  const speciesGameIds = useMemo(() => new Set(species.map((s) => s.gameId)), []);
+  const speciesGameIds = useMemo(() => new Set(species.map((entry) => entry.gameId)), []);
   const uncataloguedCount = useMemo(
-    () => findUncataloguedCount(owned.map((p) => p.gameId), speciesGameIds),
+    () => findUncataloguedCount(owned.map((pet) => pet.gameId), speciesGameIds),
     [owned, speciesGameIds],
   );
 
@@ -83,13 +73,10 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
     <main className="mx-auto max-w-md space-y-3 p-4">
       <AccountFilterBar accounts={accounts} />
 
-      {/* 本次新增：最新一次导入的明细，可收起；历史在「导入数据」页（2026-10-05 拍板） */}
-      <ImportAdditionCard />
-
       <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="target-mode">
         <ScopeSummary
           scope="个人种公目标"
-          criteria="看板 / 覆盖度 / 母本 / 配窝共用这一份"
+          criteria={`${TARGET_MODE_LABELS[mode]} · ${gradeText}`}
           onEdit={() => setTargetEditor({ open: true, section: 'studs' })}
         />
         <div className="mt-2 flex items-center justify-between gap-2">
@@ -106,33 +93,20 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
             className="w-[176px] shrink-0"
           />
         </div>
-        <p className="mt-1 text-[11px] text-slate-400">
-          追满分 = ±100dB 才算；追双牌 = 有体重+声音双牌就算。
-        </p>
-        {/* 目标档位是**全局口径**（2026-10-06 用户拍板）：看板 / 覆盖度 / 母本 / 配窝都按它算，
-            所以入口只在看板，覆盖度页只显示当前值 */}
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-slate-100 pt-2">
-          <span className="text-xs text-slate-400">目标档位</span>
-          {ALL_GRADES.map((grade) => (
-            <button
-              key={grade}
-              type="button"
-              aria-pressed={coverageFilter.grades.includes(grade)}
-              onClick={() => toggleFilterGrade(grade)}
-              data-testid={`target-grade-${grade}`}
-              className={`min-h-[30px] rounded-full border px-2.5 text-xs ${
-                coverageFilter.grades.includes(grade)
-                  ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
-                  : 'border-slate-200 bg-white text-slate-500'
-              }`}
-            >
-              {gradeLabel(grade, mode)}
-            </button>
-          ))}
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11px] text-slate-400">档位与蛋组在「调整目标」里改</span>
+          <button
+            type="button"
+            onClick={() => setTargetEditor({ open: true, section: 'mothers' })}
+            className="min-h-[44px] text-xs font-medium text-emerald-700"
+            data-testid="mother-criteria-edit"
+          >
+            调整母本达标条件 ›
+          </button>
         </div>
         {coverageFilter.grades.length === 0 ? (
           <p className="mt-1 text-[11px] text-amber-600" data-testid="target-grade-empty">
-            至少勾一个档位，否则种公覆盖度与配窝没有目标槽位；母本按自己的达标条件单独计算，不受影响。
+            未选目标档位：种公覆盖度与配窝没有槽位；母本按自己的达标条件单独计算，不受影响。
           </p>
         ) : null}
       </section>
@@ -143,7 +117,9 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
           numerator={stud.passedGroups}
           denominator={stud.groupCount}
           hint={`${coverageFilter.groupIds.length} 个蛋组 · 组内目标全达标才算通`}
-          onClick={onOpenStuds}
+          onClick={() =>
+            onNavigate({ type: 'open-collection', location: { kind: 'inventory', view: 'stud' } })
+          }
           action="看我的种公"
           actionTestId="progress-card-action-stud"
         />
@@ -151,42 +127,59 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
           title="母本全收集"
           numerator={mother.collected}
           denominator={mother.total}
-          hint="已收集 = 有达标母本的蛋；达标条件可自定义，下方清单可切档位"
-          onClick={onOpenMothers}
+          hint="已收集 = 有达标母本的蛋；达标条件可自定义"
+          onClick={() =>
+            onNavigate({ type: 'open-collection', location: { kind: 'mothers', status: 'missing' } })
+          }
           action="看我的待补齐母本"
           actionTestId="progress-card-action-mother"
         />
       </div>
 
-      {/* 按代表母本档位查看：完整库存迁到收集页，看板保留入口（任务 8 再精简） */}
-      <MotherGradeInventory motherGroups={motherGroups} owned={owned} mode={mode} />
-      <button
-        type="button"
-        onClick={() => setTargetEditor({ open: true, section: 'mothers' })}
-        className="min-h-[44px] text-xs font-medium text-emerald-700"
-        data-testid="mother-criteria-edit"
-      >
-        调整个人母本达标条件 ›
-      </button>
+      {/* 本次新增：最新一次导入的明细，可收起；历史在「我的 · 游戏数据」 */}
+      <ImportAdditionCard />
 
-      {uncataloguedCount > 0 ? (
-        <section className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-          <h2 className="font-medium text-slate-500">图鉴未收录</h2>
-          <p className="mt-1">
-            {uncataloguedCount} 只精灵的 game_id 暂不在图鉴中，已单独列出、不计入进度分母。
-          </p>
-        </section>
-      ) : null}
+      {/* 母本行动：只列个人缺口，最多 3 条 + 完整入口 */}
+      <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="mother-actions">
+        <h2 className="text-sm font-medium text-slate-500">母本缺口</h2>
+        {motherMissingPreview.length === 0 ? (
+          <p className="mt-1 text-sm text-emerald-700">个人母本目标已全部收集。</p>
+        ) : (
+          <ul className="mt-1 space-y-1">
+            {motherMissingPreview.map((group) => (
+              <li
+                key={group.chainKey}
+                className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                data-testid="mother-action-item"
+              >
+                {group.formLabel || '未知精灵'}
+                <span className="ml-1 text-[11px] text-slate-400">还没有达标母本</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button
+          type="button"
+          onClick={() =>
+            onNavigate({ type: 'open-collection', location: { kind: 'mothers', status: 'missing' } })
+          }
+          className="mt-2 min-h-[44px] text-xs font-medium text-emerald-700"
+          data-testid="mother-actions-more"
+        >
+          去收集看母本缺口 ›
+        </button>
+      </section>
 
       <SuggestionCard
         title="优质种公推荐"
-        items={suggestions}
+        items={recommendations}
         emptyNote={suggestionEmptyNote}
-        onOpenSwap={onOpenSwap}
+        onOpenSwap={() =>
+          onNavigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } })
+        }
       />
 
-      {/* 配窝：给「谁和谁配」的建议（不再列候选配对）。
-          缺什么/怎么迭代在「覆盖度」页看，要去弄什么在「换什么」页看。 */}
+      {/* 配窝：只留汇总与三个入口，完整摆位与配对在「收集 · 种公 · 自己孵」 */}
       {owned.length > 0 ? (
         <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="nest-summary">
           <h2 className="text-sm font-medium text-slate-500">配窝建议</h2>
@@ -201,26 +194,54 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
               </>
             )}
           </p>
-          {/* 两个入口跟在汇总行下面，不加大间距，按正常行距排（2026-10-06 用户拍板） */}
-          <div className="flex items-center gap-4">
+          {remainingTargets > 0 && iterableTargets === 0 ? (
+            <p className="mt-1 text-xs text-amber-700" data-testid="nest-no-plan">
+              没有能自己孵的方案：缺可配对的母本 / 公本，先去覆盖度看每个缺口的判定。
+            </p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-4">
             <button
               type="button"
-              onClick={() => onOpenCoverage?.(firstIterableGroupId)}
+              onClick={() =>
+                onNavigate({
+                  type: 'open-collection',
+                  location:
+                    firstIterableGroupId == null
+                      ? { kind: 'studs', view: 'coverage' }
+                      : { kind: 'studs', view: 'coverage', groupId: firstIterableGroupId },
+                })
+              }
               data-testid="nest-open-coverage"
-              className="text-xs font-medium text-emerald-700"
+              className="min-h-[44px] text-xs font-medium text-emerald-700"
             >
               去看怎么迭代 ›
             </button>
             <button
               type="button"
-              onClick={onOpenSwap}
+              onClick={() => onNavigate({ type: 'open-collection', location: { kind: 'studs', view: 'breed' } })}
+              data-testid="nest-open-breed"
+              className="min-h-[44px] text-xs font-medium text-emerald-700"
+            >
+              去配窝 ›
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } })}
               data-testid="nest-open-swap"
-              className="text-xs font-medium text-emerald-700"
+              className="min-h-[44px] text-xs font-medium text-emerald-700"
             >
               去看怎么快速收集 ›
             </button>
           </div>
-          <NestPlanCard plans={breedPlan} emptyNote={nestEmptyNote} />
+        </section>
+      ) : null}
+
+      {uncataloguedCount > 0 ? (
+        <section className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+          <h2 className="font-medium text-slate-500">图鉴未收录</h2>
+          <p className="mt-1">
+            {uncataloguedCount} 只精灵的 game_id 暂不在图鉴中，已单独列出、不计入进度分母。
+          </p>
         </section>
       ) : null}
 

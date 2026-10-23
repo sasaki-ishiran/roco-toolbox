@@ -16,7 +16,7 @@ export interface SuggestionCardState {
   quantity: number;
 }
 
-const INITIAL: SuggestionCardState = { doneAt: {}, doneOpen: false, quantity: 5 };
+const INITIAL: SuggestionCardState = { doneAt: {}, doneOpen: false, quantity: 3 };
 
 const isTimestampMap = (value: unknown): value is Record<string, number> =>
   typeof value === 'object' &&

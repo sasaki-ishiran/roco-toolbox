@@ -230,26 +230,7 @@ export default function App() {
           让 React 认为页面组件类型变了，把整个页面卸载重挂，页内状态全部丢失。
           改成条件渲染：组件引用稳定，只有切页签才挂/卸。 */}
       {navigation.page === 'dashboard' ? (
-        <Dashboard
-          onOpenStuds={() =>
-            navigate({ type: 'open-collection', location: { kind: 'inventory', view: 'stud' } })
-          }
-          onOpenMothers={() =>
-            navigate({ type: 'open-collection', location: { kind: 'mothers', status: 'missing' } })
-          }
-          onOpenSwap={() =>
-            navigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } })
-          }
-          onOpenCoverage={(groupId) =>
-            navigate({
-              type: 'open-collection',
-              location:
-                groupId == null
-                  ? { kind: 'studs', view: 'coverage' }
-                  : { kind: 'studs', view: 'coverage', groupId },
-            })
-          }
-        />
+        <Dashboard onNavigate={navigate} />
       ) : navigation.page === 'profile' ? (
         <Profile
           section={navigation.profileSection}
