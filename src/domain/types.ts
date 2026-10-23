@@ -26,6 +26,8 @@ export interface SpeciesEntry {
   catchable?: boolean;
   /** 能否出公（抓取建议用） */
   maleCapable?: boolean;
+  /** 成体体重的大小体型边界（kg），与 eggSize 的蛋重区分。 */
+  bodySize?: { small: number; big: number };
   /**
    * 蛋的重量区间（判定这枚蛋孵出来是不是大块头 / 小不点）。
    * 大块头 = 蛋重 >= hugeMin，小不点 = 蛋重 <= miniMax；

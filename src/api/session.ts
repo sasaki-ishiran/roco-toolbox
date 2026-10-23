@@ -70,6 +70,7 @@ export function clearSession(): void {
 /** 带令牌的请求；令牌失效（401）时清掉本地会话并抛出可读错误 */
 export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const token = readToken();
+  const account = readAccountId();
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
@@ -79,7 +80,7 @@ export async function authFetch(path: string, init: RequestInit = {}): Promise<R
     },
   });
   if (response.status === 401) {
-    clearSession();
+    if (readToken() === token && readAccountId() === account) clearSession();
     throw new Error('登录已失效，请重新用恢复码登录');
   }
   return response;
@@ -138,19 +139,23 @@ export async function rotateRecoveryCode(): Promise<string> {
 
 /** 退出登录：撤销令牌（本地数据保留） */
 export async function logoutAccount(): Promise<void> {
+  const token = readToken();
+  const account = readAccountId();
   try {
     await authFetch('/api/auth/logout', { method: 'POST' });
   } finally {
-    clearSession();
+    if (readToken() === token && readAccountId() === account) clearSession();
   }
 }
 
 /** 注销账号：云端数据全删（本地数据保留） */
 export async function deleteAccount(): Promise<void> {
+  const token = readToken();
+  const account = readAccountId();
   try {
     await authFetch('/api/account', { method: 'DELETE' });
   } finally {
-    clearSession();
+    if (readToken() === token && readAccountId() === account) clearSession();
   }
 }
 

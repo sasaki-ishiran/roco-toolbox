@@ -30,6 +30,33 @@ const renderResources = () =>
   );
 
 describe('MotherGroupResources 三视图', () => {
+  test('成员筛选在我缺的中只展示该成员拥有的资源，并使用页内下拉栏', () => {
+    render(<MotherGroupResources group={{ ...group, members: [member('A', resourceWith([])), member('B', resourceWith([101])), member('C', resourceWith([201]))] }} viewerAccountId="A" species={catalog} catalogVersion={FIXTURE_CATALOG_VERSION} />);
+    const filter = screen.getByTestId('mother-member-filter');
+    expect(filter.tagName).toBe('BUTTON');
+    fireEvent.click(filter);
+    fireEvent.click(screen.getByRole('button', { name: 'B' }));
+    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(1);
+    expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('火花');
+    expect(filter).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByTestId('mother-view-all'));
+    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(1);
+    fireEvent.click(filter);
+    fireEvent.click(screen.getByRole('button', { name: '全部成员' }));
+    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(3);
+  });
+
+  test('我能补谁按所选成员的真实缺口过滤，未发布成员不算缺', () => {
+    renderResources();
+    fireEvent.click(screen.getByTestId('mother-view-help'));
+    fireEvent.click(screen.getByTestId('mother-member-filter'));
+    fireEvent.click(screen.getByRole('button', { name: 'B' }));
+    expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('火花');
+    fireEvent.click(screen.getByTestId('mother-member-filter'));
+    fireEvent.click(screen.getByRole('button', { name: 'C' }));
+    expect(screen.queryAllByTestId('mother-resource-row')).toHaveLength(0);
+  });
+
   test('我缺的：已有人拥有的在前，无人拥有的要限定「已发布成员均无」', () => {
     renderResources();
     const rows = screen.getAllByTestId('mother-resource-row');

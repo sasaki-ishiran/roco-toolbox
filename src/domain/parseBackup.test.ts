@@ -7,6 +7,18 @@ const fixturePath = resolve(process.cwd(), 'src/domain/__fixtures__/backup-sampl
 const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
 
 describe('parseBackup', () => {
+  test('旧采集器 JSON 缺体型奖牌时，用精确成体体重恢复布灵母本；不使用舍入百分位猜判', () => {
+    const items = [
+      { speciesPetId: 3775, name: '布灵', gender: '母', voiceDb: 100, isShiny: true, medalBody: '', weightGrams: 2862 },
+      { speciesPetId: 3775, name: '布灵', medalBody: '', weightGrams: 2861, weightPercent: 98 },
+      { speciesPetId: 3775, name: '布灵', medalBody: '', weightKg: 1.038 },
+      { speciesPetId: 3775, name: '布灵', medalBody: '', weightPercent: 100 },
+      { speciesPetId: 3775, name: '布灵', medalBody: '小不点', weightGrams: 2862 },
+    ];
+    const parsed = parseBackup({ meta: { type: 'hatch-backup', gameId: 1001 }, collections: { petBackpack: { items } } }, 'now');
+    expect(parsed.pets.map((pet) => pet.medalBody)).toEqual(['大块头', '', '小不点', '', '小不点']);
+  });
+
   test('正常解析：账号名、精灵数、字段、蛋仓', () => {
     const snapshot = parseBackup(fixture, '2026-09-26T00:00:00.000Z');
     expect(snapshot.accountName).toBe('测试甲');

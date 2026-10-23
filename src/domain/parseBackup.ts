@@ -1,4 +1,8 @@
 import type { OwnedPet } from './types';
+import { species } from '../data/catalog';
+import { bodyMedalOf } from '../shared/bodySize.js';
+
+const bodySizeByGameId = new Map(species.map((entry) => [entry.gameId, entry.bodySize]));
 
 export interface BackupEgg {
   petName: string;
@@ -85,7 +89,12 @@ export function parseBackup(raw: unknown, importedAt: string): AccountSnapshot {
       gender,
       nature: asString(item.nature),
       voiceDb: asNumber(item.voiceDb),
-      medalBody: asString(item.medalBody),
+      medalBody: asString(item.medalBody) || bodyMedalOf(
+        bodySizeByGameId.get(asNumber(item.speciesPetId)),
+        typeof item.weightGrams === 'number' && Number.isFinite(item.weightGrams) && item.weightGrams > 0
+          ? item.weightGrams / 1000
+          : asOptionalNumber(item.weightKg),
+      ),
       weightPercent: asOptionalNumber(item.weightPercent),
       isShiny: asBoolean(item.isShiny),
       // 炫彩：直接从导入内容读（备份 JSON 里是平铺的 isColorful 字段）——用户拍板不依赖采集器新字段

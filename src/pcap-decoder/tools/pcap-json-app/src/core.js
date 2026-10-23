@@ -9,6 +9,7 @@ import eggProtocol from "../../../miniprogram/utils/eggProtocol";
 import eggPetFormMap from "../../../miniprogram/utils/eggPetFormMap";
 import petAdventureProtocol from "../../../scripts/lib/petAdventureProtocol";
 import { createFirstFieldProbe } from "./loose-probe";
+import { resolveBodySize, bodyMedalOf } from "../../../../shared/bodySize.js";
 
 const { decodeColorfulMutation } = colorfulProtocol;
 const { decodeSpeciality } = petSpeciality;
@@ -1764,12 +1765,12 @@ function weightPercent(entry, weightKg) {
 }
 
 function bodyMedal(entry, weightKg) {
-  if (!entry || !Number.isFinite(weightKg)) return { medal: "", resolved: false, sourceName: "" };
-  const small = entry.adultSmallWeight === null ? NaN : Number(entry.adultSmallWeight);
-  const big = entry.adultBigWeight === null ? NaN : Number(entry.adultBigWeight);
-  if (Number.isFinite(small) && weightKg <= small) return { medal: "小不点", resolved: true, sourceName: entry.sizeSourceName };
-  if (Number.isFinite(big) && weightKg >= big) return { medal: "大块头", resolved: true, sourceName: entry.sizeSourceName };
-  return { medal: "", resolved: Number.isFinite(small) || Number.isFinite(big), sourceName: entry.sizeSourceName };
+  const size = resolveBodySize(entry);
+  return {
+    medal: bodyMedalOf(size, weightKg),
+    resolved: size != null && Number.isFinite(weightKg) && weightKg > 0,
+    sourceName: size ? (entry.sizeSourceName || entry.name || "") : "",
+  };
 }
 
 function voiceMedal(voiceDb) {

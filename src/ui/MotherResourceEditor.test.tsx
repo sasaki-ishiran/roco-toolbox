@@ -13,6 +13,7 @@ import {
   snapshot,
 } from '../test/fixtures/motherSharing';
 import { MOTHER_CRITERIA_ID } from '../shared/motherGroups';
+import { diffMotherResources } from '../domain/motherResource';
 
 const resource: MotherResourceDraft = {
   schemaVersion: 1,
@@ -69,6 +70,60 @@ beforeEach(() => {
 });
 
 describe('MotherResourceEditor', () => {
+  test('旧小组面板卸载后，发布失败不得触发新小组的刷新', async () => {
+    let reject!: (error: Error) => void;
+    const publish = vi.fn(() => new Promise<void>((_resolve, rej) => { reject = rej; }));
+    const hook = hookOf({ publish });
+    const { unmount } = render(<MotherResourceEditor hook={hook} snapshots={snapshots} species={catalog} />);
+    fireEvent.click(screen.getByTestId('mother-publish'));
+    unmount();
+    reject(new Error('旧组发布失败'));
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    expect(hook.refresh).not.toHaveBeenCalled();
+  });
+
+  test('覆盖不变但图鉴版本升级时仍可更新资源', async () => {
+    const published = resourceWith([101], { catalogVersion: 'old', accounts: resource.accounts });
+    const hook = hookOf({ myMember: member('A', published), publishPreview: {
+      resource, diff: diffMotherResources(published, resource), missingAccountKeys: [], error: '',
+    } });
+    render(<MotherResourceEditor hook={hook} snapshots={snapshots} species={catalog} />);
+    expect(screen.getByTestId('mother-publish')).toBeEnabled();
+    expect(screen.queryByText('当前选号与线上一致，无需更新。')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('mother-publish'));
+    await waitFor(() => expect(hook.publish).toHaveBeenCalledOnce());
+  });
+
+  test('覆盖及版本都未变时仍不重复发布', () => {
+    const published = resourceWith([101], { accounts: resource.accounts });
+    render(<MotherResourceEditor hook={hookOf({ myMember: member('A', published), publishPreview: {
+      resource, diff: diffMotherResources(published, resource), missingAccountKeys: [], error: '',
+    } })} snapshots={snapshots} species={catalog} />);
+    expect(screen.getByTestId('mother-publish')).toBeDisabled();
+  });
+
+  test('缺本地快照的已共享账号可以取消，也可以在发布前重新选回', () => {
+    const published = resourceWith([101], { accounts: [sharedAccount(1001, [101]), sharedAccount(2002, [201])] });
+    const hook = hookOf({ myMember: member('A', published), draftSelection: ['uid:1001', 'uid:2002'], publishPreview: {
+      resource: null, diff: null, missingAccountKeys: ['uid:2002'], error: '缺少本地数据',
+    } });
+    const { rerender } = render(<MotherResourceEditor hook={hook} snapshots={snapshots} species={catalog} />);
+    const missing = screen.getByTestId('mother-account-uid:2002');
+    expect(missing).toHaveTextContent('本机无数据');
+    fireEvent.click(missing);
+    expect(hook.setDraftSelection).toHaveBeenLastCalledWith(['uid:1001']);
+    rerender(<MotherResourceEditor hook={{ ...hook, draftSelection: ['uid:1001'] }} snapshots={snapshots} species={catalog} />);
+    fireEvent.click(screen.getByTestId('mother-account-uid:2002'));
+    expect(hook.setDraftSelection).toHaveBeenLastCalledWith(['uid:1001', 'uid:2002']);
+  });
+
+  test('本机完全无数据时仍能明确撤回所有已共享账号', () => {
+    const hook = hookOf({ draftSelection: ['uid:1001'] });
+    render(<MotherResourceEditor hook={hook} snapshots={[]} species={catalog} />);
+    fireEvent.click(screen.getByTestId('mother-account-uid:1001'));
+    expect(hook.setDraftSelection).toHaveBeenCalledWith([]);
+  });
+
   test('勾选账号只改本地草稿；预览显示新增/移除', () => {
     const hook = hookOf({ draftSelection: [], publishPreview: { resource: null, diff: null, missingAccountKeys: [], error: '' } });
     render(<MotherResourceEditor hook={hook} snapshots={snapshots} species={catalog} />);

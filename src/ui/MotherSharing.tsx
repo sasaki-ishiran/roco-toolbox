@@ -68,6 +68,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
       ) : (
         <>
           <MotherGroupSetup
+            key={hook.accountId}
             groups={hook.groups}
             currentGroupId={hook.currentGroupId}
             onSelect={(groupId) => hook.selectGroup(groupId)}
@@ -135,6 +136,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
               </div>
 
               <MotherResourceEditor
+                key={`editor:${hook.currentGroup.group.id}:${hook.accountId}`}
                 hook={hook}
                 snapshots={snapshots}
                 species={species}
@@ -142,6 +144,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
               />
 
               <MotherGroupResources
+                key={`resources:${hook.currentGroup.group.id}:${hook.accountId}`}
                 group={hook.currentGroup}
                 viewerAccountId={hook.accountId}
                 species={species}

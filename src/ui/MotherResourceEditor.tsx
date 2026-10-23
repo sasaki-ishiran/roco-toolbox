@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { isBreedableGroup } from '../domain/eggs';
 import { isQualifiedMother } from '../domain/motherCriteria';
 import { SHARED_MOTHER_CRITERIA } from '../domain/motherResource';
@@ -26,6 +26,12 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const published = hook.myMember?.resource ?? null;
   const preview = hook.publishPreview;
@@ -79,13 +85,15 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
     setMessage('');
     try {
       await action();
+      if (!mounted.current) return;
       setMessage(success);
     } catch (failure) {
+      if (!mounted.current) return;
       setError(failure instanceof Error ? failure.message : '操作失败，请稍后再试');
       // 409/429 等冲突后重新取服务器版本；草稿保留，用户重新预览再发布
       await hook.refresh().catch(() => {});
     } finally {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   };
 
@@ -102,11 +110,16 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
     void run(() => hook.stopSharing(), '已停止共享，组员将看到你为「待发布」');
   };
 
-  const unchanged = published != null && preview.diff?.unchanged === true;
+  const unchanged = published != null && preview.diff?.unchanged === true &&
+    preview.resource?.catalogVersion === published.catalogVersion &&
+    preview.resource?.criteriaId === published.criteriaId &&
+    preview.resource?.schemaVersion === published.schemaVersion;
+  const localKeys = new Set(snapshots.map((snapshot) => snapshot.accountKey ?? accountKeyOf(snapshot)));
+  const missingAccounts = published?.accounts.filter((account) => !localKeys.has(account.accountKey)) ?? [];
   const canPublish =
     !busy &&
     preview.error === '' &&
-   (!published || !unchanged) &&
+    (!published || !unchanged) &&
     (selection.length === 0 ? published != null : preview.resource != null);
 
   const coverageTotal = preview.resource
@@ -175,6 +188,32 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
           })}
         </ul>
       )}
+
+      {missingAccounts.length > 0 ? (
+        <ul className="mt-2 space-y-1">
+          {missingAccounts.map((account) => (
+            <li key={account.accountKey}>
+              <button
+                type="button"
+                onClick={() => toggle(account.accountKey)}
+                aria-pressed={selection.includes(account.accountKey)}
+                data-testid={`mother-account-${account.accountKey}`}
+                className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${
+                  selection.includes(account.accountKey)
+                    ? 'border-emerald-400 bg-emerald-50 text-emerald-800'
+                    : 'border-slate-200 bg-white text-slate-600'
+                }`}
+              >
+                <span className="font-medium">{account.accountName}</span>
+                <span className="ml-1 text-[11px] text-slate-400">UID {account.accountKey.slice(4)} · 本机无数据</span>
+                <span className="mt-0.5 block text-[11px] text-slate-400">
+                  {selection.includes(account.accountKey) ? '点此从本次共享中撤回；发布后生效' : '已从本次选号撤回；可点此选回'}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {preview.missingAccountKeys.length > 0 ? (
         <p className="mt-2 text-xs text-rose-600" data-testid="mother-missing-accounts">

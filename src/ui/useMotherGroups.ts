@@ -126,11 +126,25 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
   const draftRef = useRef<string[]>([]);
   const dirtyRef = useRef(false);
   const generationRef = useRef(0);
+  const groupEpochRef = useRef(0);
+  const listRequestRef = useRef(0);
+  const detailRequestRef = useRef(0);
+  const draftRevisionRef = useRef(0);
   const nextPollAtRef = useRef<number | null>(null);
   const inputRef = useRef(input);
 
   inputRef.current = input;
   accountRef.current = accountId;
+
+  // 每个异步操作只可写回发起它的会话/小组；切走再切回来也不复用旧作用域。
+  const scope = useCallback((includeGroup = false) => {
+    const generation = generationRef.current;
+    const epoch = groupEpochRef.current;
+    return () => generation === generationRef.current &&
+      (!includeGroup || epoch === groupEpochRef.current);
+  }, []);
+
+  useEffect(() => () => { generationRef.current += 1; }, []);
 
   const applySelection = useCallback((detail: MotherGroupDetail | null) => {
     const keys = selectionOf(detail, accountRef.current);
@@ -145,6 +159,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
         const next = readAccountId();
         if (next === accountRef.current) return;
         generationRef.current += 1;
+        groupEpochRef.current += 1;
         accountRef.current = next;
         groupRef.current = null;
         detailRef.current = null;
@@ -166,19 +181,27 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
   );
 
   /* ---------- 组列表 ---------- */
-  const refreshGroups = useCallback(async (): Promise<MotherGroupSummary[]> => {
-    if (!accountRef.current) return [];
-    const list = await listMotherGroups();
-    if (!accountRef.current) return [];
-    setGroups(list);
-    setGroupsLoaded(true);
-    return list;
-  }, []);
+  const refreshGroups = useCallback(async (): Promise<MotherGroupSummary[] | null> => {
+    if (!accountRef.current) return null;
+    const active = scope();
+    const request = ++listRequestRef.current;
+    try {
+      const list = await listMotherGroups();
+      if (!active() || request !== listRequestRef.current) return null;
+      setGroups(list);
+      setGroupsLoaded(true);
+      return list;
+    } catch (failure) {
+      if (!active() || request !== listRequestRef.current) return null;
+      throw failure;
+    }
+  }, [scope]);
 
   /** 从「我加入的组」里挑当前组：优先本机记住的，其次第一个。 */
   const applyGroupList = useCallback((list: MotherGroupSummary[], account: string) => {
     const stored = readCurrentGroupId(account);
     const target = list.find((group) => group.id === stored)?.id ?? list[0]?.id ?? null;
+    if (groupRef.current !== target) groupEpochRef.current += 1;
     groupRef.current = target;
     setCurrentGroupId(target);
     if (target) saveCurrentGroupId(account, target);
@@ -193,26 +216,32 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
     }
     let cancelled = false;
     const gen = generationRef.current;
+    const epoch = groupEpochRef.current;
+    const request = ++listRequestRef.current;
+    const active = () => !cancelled && gen === generationRef.current && request === listRequestRef.current;
     setLoading(true);
     void (async () => {
       try {
         const list = await listMotherGroups();
-        if (cancelled || gen !== generationRef.current) return;
+        if (!active()) return;
         setGroups(list);
         setGroupsLoaded(true);
-        applyGroupList(list, accountId);
+        if (epoch === groupEpochRef.current) applyGroupList(list, accountId);
         setOffline(false);
         setError('');
       } catch (failure) {
-        if (cancelled || gen !== generationRef.current) return;
+        if (!active()) return;
         // 拉列表失败 ≠ 没有小组：别清掉本机记住的组，直接用记住的组去拉详情
         // （「关后台再回来」时网络常常还没恢复，这里最容易误报「小组不见了」）
         const stored = readCurrentGroupId(accountId);
-        groupRef.current = stored;
-        setCurrentGroupId(stored);
+        if (epoch === groupEpochRef.current) {
+          if (groupRef.current !== stored) groupEpochRef.current += 1;
+          groupRef.current = stored;
+          setCurrentGroupId(stored);
+        }
         setError(messageOf(failure));
       } finally {
-        if (!cancelled && gen === generationRef.current) setLoading(false);
+        if (active()) setLoading(false);
       }
     })();
     return () => {
@@ -223,10 +252,14 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
   /* ---------- 组详情：首次加载 + 可见时 15 秒轮询 ---------- */
   const loadDetail = useCallback(
     async (groupId: string, options: { showLoading: boolean; gen: number }) => {
+      const epoch = groupEpochRef.current;
+      const request = ++detailRequestRef.current;
+      const active = () => options.gen === generationRef.current &&
+        epoch === groupEpochRef.current && request === detailRequestRef.current && groupRef.current === groupId;
       if (options.showLoading) setLoading(true);
       try {
         const detail = await getMotherGroup(groupId);
-        if (options.gen !== generationRef.current || groupRef.current !== groupId) return;
+        if (!active()) return;
         detailRef.current = detail;
         setCurrentGroup(detail);
         setOffline(false);
@@ -235,19 +268,20 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
         nextPollAtRef.current = null;
         setNextPollAt(null);
       } catch (failure) {
-        if (options.gen !== generationRef.current || groupRef.current !== groupId) return;
+        if (!active()) return;
         if (isMotherGroupsApiError(failure) && (failure.status === 403 || failure.status === 404)) {
           groupRef.current = null;
+          groupEpochRef.current += 1;
           detailRef.current = null;
+          draftRef.current = [];
+          dirtyRef.current = false;
+          setDraftSelectionState([]);
+          setDraftDirty(false);
           setCurrentGroupId(null);
           setCurrentGroup(null);
           saveCurrentGroupId(accountRef.current, null);
           setError(failure.message);
-          void listMotherGroups()
-            .then((list) => {
-              if (groupRef.current === null) setGroups(list);
-            })
-            .catch(() => {});
+          void refreshGroups().catch(() => {});
           return;
         }
         if (isMotherGroupsApiError(failure) && failure.status === 429) {
@@ -263,10 +297,11 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
         }
         setError(messageOf(failure));
       } finally {
-        if (options.showLoading && options.gen === generationRef.current) setLoading(false);
+        if (options.showLoading && options.gen === generationRef.current &&
+          request === detailRequestRef.current) setLoading(false);
       }
     },
-    [applySelection],
+    [applySelection, refreshGroups],
   );
 
   useEffect(() => {
@@ -312,16 +347,25 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
 
   const selectGroup = useCallback((groupId: string | null) => {
     if (groupId === groupRef.current) return;
+    groupEpochRef.current += 1;
     groupRef.current = groupId;
     detailRef.current = null;
     setCurrentGroupId(groupId);
     setCurrentGroup(null);
+    draftRef.current = [];
+    dirtyRef.current = false;
+    setDraftSelectionState([]);
+    setDraftDirty(false);
+    setError('');
+    setOffline(false);
+    setLoading(false);
     saveCurrentGroupId(accountRef.current, groupId);
     nextPollAtRef.current = null;
     setNextPollAt(null);
   }, []);
 
   const setDraftSelection = useCallback((accountKeys: string[]) => {
+    draftRevisionRef.current += 1;
     draftRef.current = accountKeys;
     dirtyRef.current = true;
     setDraftSelectionState(accountKeys);
@@ -338,15 +382,18 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
   const refresh = useCallback(async () => {
     const account = accountRef.current;
     if (!account) return;
+    const active = scope(true);
     try {
       const list = await refreshGroups();
+      if (!active() || list === null) return;
       if (groupRef.current === null) applyGroupList(list, account);
       setError('');
     } catch (failure) {
+      if (!active()) return;
       setError(messageOf(failure));
     }
     await reloadCurrent();
-  }, [applyGroupList, refreshGroups, reloadCurrent]);
+  }, [applyGroupList, refreshGroups, reloadCurrent, scope]);
 
   const buildDraftFor = useCallback((keys: string[]): MotherResourceDraft => {
     const { snapshots, species, catalogVersion } = inputRef.current;
@@ -366,16 +413,23 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
       if (!groupId || !account || !detail) throw new Error('还没有打开小组');
       const mine = detail.members.find((member) => member.accountId === account);
       if (!mine) throw new Error('不是该组成员');
+      const active = scope(true);
+      const draftRevision = draftRevisionRef.current;
 
       await publishMotherResources(groupId, {
         baseRevision: mine.resourceRevision,
         resource,
       });
+      if (!active()) return;
+      if (draftRevision === draftRevisionRef.current) {
+        dirtyRef.current = false;
+        setDraftDirty(false);
+        draftRef.current = resource.accounts.map((entry) => entry.accountKey);
+        setDraftSelectionState(draftRef.current);
+      }
       await reloadCurrent();
-      dirtyRef.current = false;
-      setDraftDirty(false);
     },
-    [reloadCurrent],
+    [reloadCurrent, scope],
   );
 
   const publish = useCallback(async () => {
@@ -392,63 +446,77 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
     async (name: string, displayName: string) => {
       const account = accountRef.current;
       if (!account) throw new Error('未登录');
+      const active = scope(true);
       const created = await createMotherGroup({ name, displayName });
+      if (!active()) throw new Error('身份或小组已切换，请在原身份中查看操作结果');
       saveInviteCode(account, created.group.id, created.inviteCode);
       await refreshGroups();
+      if (!active()) throw new Error('身份或小组已切换，请在原身份中查看操作结果');
       selectGroup(created.group.id);
       return { groupId: created.group.id, inviteCode: created.inviteCode };
     },
-    [refreshGroups, selectGroup],
+    [refreshGroups, selectGroup, scope],
   );
 
   const joinGroup = useCallback(
     async (inviteCode: string, displayName: string) => {
+      const active = scope(true);
       const groupId = await joinMotherGroup({ inviteCode, displayName });
+      if (!active()) throw new Error('身份或小组已切换，请在原身份中查看操作结果');
       await refreshGroups();
+      if (!active()) throw new Error('身份或小组已切换，请在原身份中查看操作结果');
       selectGroup(groupId);
       return groupId;
     },
-    [refreshGroups, selectGroup],
+    [refreshGroups, selectGroup, scope],
   );
 
   const updateProfile = useCallback(
     async (displayName: string) => {
       const groupId = groupRef.current;
       if (!groupId) throw new Error('还没有打开小组');
+      const active = scope(true);
       await updateMotherGroupProfile(groupId, displayName);
+      if (!active()) return;
       await reloadCurrent();
     },
-    [reloadCurrent],
+    [reloadCurrent, scope],
   );
 
   const resetInvite = useCallback(async () => {
     const groupId = groupRef.current;
     const account = accountRef.current;
     if (!groupId) throw new Error('还没有打开小组');
+    const active = scope(true);
     const code = await resetMotherGroupInvite(groupId);
+    if (!active()) throw new Error('身份或小组已切换，请在原身份中查看操作结果');
     if (account) saveInviteCode(account, groupId, code);
     return code;
-  }, []);
+  }, [scope]);
 
   const leave = useCallback(async () => {
     const groupId = groupRef.current;
     const account = accountRef.current;
     if (!groupId) return;
+    const active = scope(true);
     await leaveMotherGroup(groupId);
+    if (!active()) return;
     if (account) saveCurrentGroupId(account, null);
     selectGroup(null);
     await refreshGroups().catch(() => {});
-  }, [refreshGroups, selectGroup]);
+  }, [refreshGroups, selectGroup, scope]);
 
   const dissolve = useCallback(async () => {
     const groupId = groupRef.current;
     const account = accountRef.current;
     if (!groupId) return;
+    const active = scope(true);
     await dissolveMotherGroup(groupId);
+    if (!active()) return;
     if (account) saveCurrentGroupId(account, null);
     selectGroup(null);
     await refreshGroups().catch(() => {});
-  }, [refreshGroups, selectGroup]);
+  }, [refreshGroups, selectGroup, scope]);
 
   const myMember = useMemo(
     () =>

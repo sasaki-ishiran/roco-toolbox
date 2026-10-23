@@ -54,6 +54,14 @@ beforeEach(() => {
 });
 
 describe('MotherSharing 入口与状态', () => {
+  test('切换身份时，新建加入表单不沿用旧身份的草稿', () => {
+    const { rerender } = render(<MotherSharing />);
+    fireEvent.change(screen.getByTestId('mother-setup-nickname'), { target: { value: '旧身份昵称' } });
+    vi.mocked(useMotherGroups).mockReturnValue(hookOf({ accountId: 'B' }));
+    rerender(<MotherSharing />);
+    expect(screen.getByTestId('mother-setup-nickname')).toHaveValue('');
+  });
+
   test('没有本地账号也能进入；未登录可跳到账号面板，待加入码保留', () => {
     vi.mocked(useMotherGroups).mockReturnValue(hookOf({ accountId: null, groups: [], currentGroupId: null, currentGroup: null }));
     const onGoAccount = vi.fn();

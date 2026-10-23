@@ -3,11 +3,14 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { pickRecommendedNatures } from './src/pvp-natures.mjs';
+import { resolveBodySize } from '../../src/shared/bodySize.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // 用脚本自身位置推导项目根，而不是 process.cwd()：换个工作目录运行也不会找不到 data/
 const root = path.join(here, '..', '..');
 const pets = JSON.parse(fs.readFileSync(path.join(root, 'data', 'pets.json'), 'utf8'));
+const decoderCatalog = JSON.parse(fs.readFileSync(path.join(root, 'src', 'pcap-decoder', 'tools', 'pcap-json-app', 'src', 'generated', 'catalog.json'), 'utf8'));
+const decoderByGameId = new Map(decoderCatalog.pets.filter((entry) => entry.petId > 0).map((entry) => [entry.petId, entry]));
 const natures = JSON.parse(fs.readFileSync(path.join(root, 'data', 'natures.json'), 'utf8'));
 const pvp = JSON.parse(fs.readFileSync(path.join(root, 'data', 'pvp-natures.json'), 'utf8'));
 
@@ -131,6 +134,8 @@ const species = pets.pets.map((p) => ({
       ? { male: p.gender_ratio.male, female: p.gender_ratio.female }
       : undefined,
   eggSize: toEggSize(p.egg_size),
+  // 与内置采集解析器共用成体体型规则；旧 JSON 缺奖牌时可由精确体重恢复。
+  bodySize: resolveBodySize({ ...decoderByGameId.get(p.game_id), weight: p.weight }) ?? undefined,
   // 游戏自己的叫法；没有就用 name + form 自己拼（见 loadOfficialNames 的说明）
   officialName: officialNames.get(p.game_id ?? 0),
   // 这个形态「对应哪颗蛋」：母本清单按它分组（见 loadEggMap）；
@@ -143,6 +148,12 @@ const species = pets.pets.map((p) => ({
   stats: p.stats ?? undefined,
   recommendedNatures: recommendedNaturesFor(p.game_id ?? 0),
 }));
+
+// 可孵物种缺体型数据时拒绝覆盖现有产物，避免上线后把真实母本静默算成缺失。
+const missingBodySizes = species.filter((entry) => entry.eggGameId != null && !entry.bodySize);
+if (missingBodySizes.length > 0) {
+  throw new Error(`可孵物种缺少成体体型阈值：${missingBodySizes.map((entry) => `${entry.name}(${entry.gameId})`).join('、')}`);
+}
 
 const targetNatures = Object.entries(pvp.targetNatures ?? {}).flatMap(([groupId, ids]) =>
   (ids ?? []).map((natureId) => ({
