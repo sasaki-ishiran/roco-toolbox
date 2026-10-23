@@ -1,7 +1,7 @@
 /**
  * 多人母本共享的本机轻量状态。
  *
- * **只保存**当前组 ID 与组主本机看到的邀请码明文，按 toolbox accountId 隔离；
+ * **只保存**当前组 ID 与组长本机看到的邀请码明文，按 toolbox accountId 隔离；
  * 不保存 token、不保存他人的资源正文（服务器才是真相来源）。
  * 换设备后从 `GET /api/mother-groups` 找回成员资格，不依赖这里。
  */
@@ -11,7 +11,7 @@ const PENDING_INVITE_KEY = 'roco.motherGroups.pendingInvite';
 
 export interface MotherGroupPrefs {
   currentGroupId: string | null;
-  /** groupId → 组主本机看到的邀请码明文；别的设备没有，只能让组主重置 */
+  /** groupId → 组长本机看到的邀请码明文；别的设备没有，只能让组长重置 */
   inviteCodes: Record<string, string>;
 }
 

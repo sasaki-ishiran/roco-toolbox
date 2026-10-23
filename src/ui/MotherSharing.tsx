@@ -4,7 +4,7 @@ import { useSnapshots } from './useSnapshots';
 import { useMotherGroups } from './useMotherGroups';
 import { MotherGroupMembers } from './MotherGroupMembers';
 import { MotherGroupResources } from './MotherGroupResources';
-import { MotherGroupSetup } from './MotherGroupSetup';
+import { MotherGroupSetup, MotherGroupSwitcher } from './MotherGroupSetup';
 import { MotherResourceEditor } from './MotherResourceEditor';
 import {
   readInviteCode,
@@ -31,7 +31,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
   const ownerName =
     hook.currentGroup?.members.find(
       (member) => member.accountId === hook.currentGroup?.group.ownerAccountId,
-    )?.displayName ?? '组主';
+    )?.displayName ?? '组长';
 
   return (
     <section className="space-y-3" data-testid="mother-sharing">
@@ -67,19 +67,10 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
         </div>
       ) : (
         <>
-          <MotherGroupSetup
-            key={hook.accountId}
+          <MotherGroupSwitcher
             groups={hook.groups}
             currentGroupId={hook.currentGroupId}
             onSelect={(groupId) => hook.selectGroup(groupId)}
-            onCreate={(name, displayName) => hook.createGroup(name, displayName)}
-            onJoin={async (inviteCode, displayName) => {
-              const groupId = await hook.joinGroup(inviteCode, displayName);
-              savePendingInviteCode('');
-              setPendingCode('');
-              return groupId;
-            }}
-            initialInviteCode={pendingCode}
           />
 
           {hook.error ? (
@@ -114,7 +105,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
                       {hook.currentGroup.group.name}
                     </h2>
                     <p className="mt-0.5 text-[11px] text-slate-400">
-                      {hook.currentGroup.members.length} 人 · 组主 {ownerName} · 按已共享账号汇总
+                      {hook.currentGroup.members.length} 人 · 组长 {ownerName} · 按已共享账号汇总
                     </p>
                   </div>
                   <button
@@ -191,6 +182,18 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
               还没有加入任何小组。新建一个小组，或输入组员给你的 8 位邀请码。
             </p>
           ) : null}
+
+          <MotherGroupSetup
+            key={hook.accountId}
+            onCreate={(name, displayName) => hook.createGroup(name, displayName)}
+            onJoin={async (inviteCode, displayName) => {
+              const groupId = await hook.joinGroup(inviteCode, displayName);
+              savePendingInviteCode('');
+              setPendingCode('');
+              return groupId;
+            }}
+            initialInviteCode={pendingCode}
+          />
         </>
       )}
     </section>

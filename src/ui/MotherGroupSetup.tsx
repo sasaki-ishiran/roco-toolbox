@@ -2,12 +2,43 @@ import { useState } from 'react';
 import type { MotherGroupSummary } from '../shared/motherGroups';
 
 export interface MotherGroupSetupProps {
-  groups: MotherGroupSummary[];
-  currentGroupId: string | null;
-  onSelect: (groupId: string) => void;
   onCreate: (name: string, displayName: string) => Promise<unknown>;
   onJoin: (inviteCode: string, displayName: string) => Promise<unknown>;
   initialInviteCode?: string;
+}
+
+export interface MotherGroupSwitcherProps {
+  groups: MotherGroupSummary[];
+  currentGroupId: string | null;
+  onSelect: (groupId: string) => void;
+}
+
+/** 已加入小组的日常切换入口，与低频的新建/加入表单分开摆放。 */
+export function MotherGroupSwitcher({ groups, currentGroupId, onSelect }: MotherGroupSwitcherProps) {
+  if (groups.length === 0) return null;
+  return (
+    <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-group-list">
+      <h2 className="text-xs font-medium text-slate-500">我加入的小组</h2>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {groups.map((group) => (
+          <button
+            key={group.id}
+            type="button"
+            onClick={() => onSelect(group.id)}
+            aria-pressed={group.id === currentGroupId}
+            data-testid={`mother-group-${group.id}`}
+            className={`min-h-[36px] rounded-full border px-3 text-xs ${
+              group.id === currentGroupId
+                ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
+                : 'border-slate-200 bg-white text-slate-500'
+            }`}
+          >
+            {group.name} · {group.memberCount} 人
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -17,9 +48,6 @@ export interface MotherGroupSetupProps {
  * 昵称可重复；重名时由成员列表补 ID 短尾码区分。
  */
 export function MotherGroupSetup({
-  groups,
-  currentGroupId,
-  onSelect,
   onCreate,
   onJoin,
   initialInviteCode = '',
@@ -49,30 +77,6 @@ export function MotherGroupSetup({
 
   return (
     <section className="space-y-3" data-testid="mother-group-setup">
-      {groups.length > 0 ? (
-        <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-group-list">
-          <h2 className="text-xs font-medium text-slate-500">我加入的小组</h2>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {groups.map((group) => (
-              <button
-                key={group.id}
-                type="button"
-                onClick={() => onSelect(group.id)}
-                aria-pressed={group.id === currentGroupId}
-                data-testid={`mother-group-${group.id}`}
-                className={`min-h-[36px] rounded-full border px-3 text-xs ${
-                  group.id === currentGroupId
-                    ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
-                    : 'border-slate-200 bg-white text-slate-500'
-                }`}
-              >
-                {group.name} · {group.memberCount} 人
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       <div className="rounded-2xl bg-white p-4 shadow-sm">
         <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="tablist">
           {(

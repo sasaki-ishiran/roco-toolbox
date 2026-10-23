@@ -301,7 +301,7 @@ async function handleResetInvite(
   const group = await findGroup(env.DB, groupId);
   if (!group) return failCode(origin, 404, 'GROUP_NOT_FOUND', '小组不存在');
   if (group.ownerAccountId !== accountId) {
-    return failCode(origin, 403, 'NOT_OWNER', '只有组主可以重置邀请码');
+    return failCode(origin, 403, 'NOT_OWNER', '只有组长可以重置邀请码');
   }
 
   const inviteCode = newInviteCode();
@@ -321,7 +321,7 @@ async function handleLeave(
   const group = await findGroup(env.DB, groupId);
   if (!group) return failCode(origin, 404, 'GROUP_NOT_FOUND', '小组不存在');
   if (group.ownerAccountId === accountId) {
-    return failCode(origin, 409, 'OWNER_MUST_DISSOLVE', '组主退出请使用解散小组');
+    return failCode(origin, 409, 'OWNER_MUST_DISSOLVE', '组长退出请使用解散小组');
   }
   await leaveGroup(env.DB, groupId, accountId);
   return okJson(origin, {});
@@ -339,7 +339,7 @@ async function handleDissolve(
   const group = await findGroup(env.DB, groupId);
   if (!group) return failCode(origin, 404, 'GROUP_NOT_FOUND', '小组不存在');
   if (group.ownerAccountId !== accountId) {
-    return failCode(origin, 403, 'NOT_OWNER', '只有组主可以解散小组');
+    return failCode(origin, 403, 'NOT_OWNER', '只有组长可以解散小组');
   }
   await dissolveGroup(env.DB, groupId, accountId);
   return okJson(origin, {});

@@ -219,7 +219,7 @@ export async function resetInvite(
     .bind(inviteHash, groupId, ownerAccountId)
     .run();
   if ((result.meta.changes ?? 0) === 0) {
-    throw new MotherStoreError('NOT_OWNER', '只有组主可以重置邀请码');
+    throw new MotherStoreError('NOT_OWNER', '只有组长可以重置邀请码');
   }
 }
 
@@ -247,7 +247,7 @@ export async function dissolveGroup(
     .bind(groupId, ownerAccountId)
     .run();
   if ((result.meta.changes ?? 0) === 0) {
-    throw new MotherStoreError('NOT_OWNER', '只有组主可以解散小组');
+    throw new MotherStoreError('NOT_OWNER', '只有组长可以解散小组');
   }
 }
 

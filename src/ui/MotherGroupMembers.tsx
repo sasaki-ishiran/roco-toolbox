@@ -17,7 +17,7 @@ export interface MotherGroupMembersProps {
 
 /**
  * 成员面板：谁发布了多少母本、来源账号是什么；组内昵称可改。
- * 组主可以重置邀请码 / 解散；普通成员可以退出（组主退出请用解散）。
+ * 组长可以重置邀请码 / 解散；普通成员可以退出（组长退出请用解散）。
  */
 export function MotherGroupMembers({
   group,
@@ -94,7 +94,7 @@ export function MotherGroupMembers({
                 <span className="text-sm text-slate-700">
                   {labels(member)}
                   {member.accountId === group.group.ownerAccountId ? (
-                    <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700">组主</span>
+                    <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700">组长</span>
                   ) : null}
                   {member.accountId === accountId ? (
                     <span className="ml-1 text-[10px] text-slate-400">我</span>

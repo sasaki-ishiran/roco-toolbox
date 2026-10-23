@@ -54,6 +54,23 @@ beforeEach(() => {
 });
 
 describe('MotherSharing 入口与状态', () => {
+  test('已加入小组时保留顶部切组，将新建加入表单放在资源和成员之后', () => {
+    render(<MotherSharing />);
+    const setup = screen.getByTestId('mother-group-setup');
+    const resources = screen.getByTestId('mother-resources');
+    const members = screen.getByTestId('mother-members');
+    expect(resources.compareDocumentPosition(setup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(members.compareDocumentPosition(setup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId('mother-group-list').compareDocumentPosition(screen.getByTestId('mother-group-card')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('当前小组摘要和成员角色统一称为组长', () => {
+    render(<MotherSharing />);
+    expect(screen.getByTestId('mother-group-card')).toHaveTextContent('组长 A');
+    expect(screen.getByTestId('mother-members')).toHaveTextContent('组长');
+    expect(screen.queryByText(/组主/)).not.toBeInTheDocument();
+  });
+
   test('切换身份时，新建加入表单不沿用旧身份的草稿', () => {
     const { rerender } = render(<MotherSharing />);
     fireEvent.change(screen.getByTestId('mother-setup-nickname'), { target: { value: '旧身份昵称' } });
