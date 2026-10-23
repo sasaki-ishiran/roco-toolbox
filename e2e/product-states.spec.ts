@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 
 /**
  * 「我的」页与导入三阶段反馈（2026-10-24 重构任务 6）。
@@ -30,7 +30,7 @@ test('导入成功：本机 / 私有云 / 小组三个阶段分别反馈，且�
 
   // 有数据后自动落看板；回「我的 · 游戏数据」看反馈
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await page.getByRole('button', { name: '我的', exact: true }).click();
 
   const outcome = page.getByTestId('import-outcome');
   await expect(outcome).toContainText('已保存到本机');

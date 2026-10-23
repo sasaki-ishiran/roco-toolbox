@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+﻿import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 const SAMPLE = readFileSync('src/domain/__fixtures__/backup-sample.json', 'utf8');
@@ -49,7 +49,7 @@ test('分享一份采集数据进来，页面自动导入并回到首页', async
   // 导入后默认落看板（有数据），data-message 在「导入数据」页
   await page.reload();
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await page.getByRole('button', { name: '我的', exact: true }).click();
   await expect(page.getByTestId('data-message')).toContainText('已导入分享进来的采集数据');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 
@@ -75,7 +75,7 @@ test('原生壳 APK 注入分享数据后自动导入（应用已经开着的情
 
   // 导入后默认落看板（有数据），data-message 在「导入数据」页
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await page.getByRole('button', { name: '我的', exact: true }).click();
   await expect(page.getByTestId('data-message')).toContainText('已导入分享进来的采集数据');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 });
@@ -143,11 +143,11 @@ test('采集器分享抓包进来：网页自动解码并导入', async ({ page 
 
   // 导入后默认落看板（有数据）；data-message 与「N 个账号」在「导入数据」页
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await page.getByRole('button', { name: '我的', exact: true }).click();
   await expect(page.getByTestId('data-message')).toContainText('已解析并导入分享进来的抓包数据');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
   await expect(page.getByText('1 个账号')).toBeVisible();
   // 解出来的账号与精灵要真的落到看板上（合成抓包里只有一只精灵，且不在我们图鉴里）
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByText('1 只精灵的 game_id 暂不在图鉴中')).toBeVisible();
 });

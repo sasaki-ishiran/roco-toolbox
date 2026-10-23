@@ -8,9 +8,9 @@ import { guidePending, markGuideSeen } from './ui/guide';
 import { hasPendingNativeShare } from './share/nativeShare';
 import { Dashboard } from './ui/Dashboard';
 import { Collection } from './ui/Collection';
+import { MotherSharing } from './ui/MotherSharing';
 import { Profile } from './ui/Profile';
-import { Swap } from './ui/Swap';
-import { TabNav, type TabId } from './ui/TabNav';
+import { TabNav } from './ui/TabNav';
 import {
   focusPending,
   initialNavigation,
@@ -24,17 +24,6 @@ import { readSwapMainView, saveSwapMainView } from './ui/swapViewStore';
 import { getImportOutcome, useImportOutcome } from './ui/importOutcomeStore';
 import { useSnapshots } from './ui/useSnapshots';
 
-/** 新导航状态 → 旧五页签里该高亮哪一个（兼容桥阶段用；任务 9 换四入口后删除）。 */
-const legacyTabOf = (navigation: AppNavigation): TabId => {
-  if (navigation.page === 'dashboard') return 'dashboard';
-  if (navigation.page === 'groups') return 'swap';
-  if (navigation.page === 'profile') return 'import';
-  if (navigation.collection.kind === 'studs') {
-    return navigation.collection.view === 'eggs' ? 'swap' : 'coverage';
-  }
-  return 'myPets';
-};
-
 export default function App() {
   const [navigation, setNavigation] = useState<AppNavigation>(() =>
     initialNavigation(readLastTab(), readSwapMainView()),
@@ -47,7 +36,7 @@ export default function App() {
     setNavigation((current) => resolveNavigation(current, intent));
   }, []);
   const importOutcome = useImportOutcome();
-  const activeTab = legacyTabOf(navigation);
+  const activeTab = navigation.page;
   /** 手动刷新按钮的忙碌态（真正刷新会让页面重载，这里只防连点） */
   const [refreshing, setRefreshing] = useState(false);
   const { snapshots, loaded } = useSnapshots();
@@ -98,14 +87,18 @@ export default function App() {
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [navigation.page, navigation.profileSection]);
+  // 首启（还没看过教程）：不自动叠阻断弹窗，只在「我的 · 游戏数据」给一张非阻断入门卡（2026-10-24）
+  const firstRun = useState(() => guidePending())[0];
   // 更新内容弹窗：启动时算一次「本机没看过的更新」，点「知道了」后记住已读（2026-10-05 起固定做法）
-  const [changelog, setChangelog] = useState(() => pendingChangelog(readChangelogSeen()));
+  const [changelog, setChangelog] = useState(() =>
+    firstRun ? [] : pendingChangelog(readChangelogSeen()),
+  );
   const closeChangelog = () => {
     if (CHANGELOG[0]) markChangelogSeen(CHANGELOG[0].id);
     setChangelog([]);
   };
-  // 使用教程：首启自动弹一次（见 guide.ts 的版本号机制），顶部「教程」按钮随时回看
-  const [guide, setGuide] = useState(() => guidePending());
+  // 使用教程：完整教程只由明确动作打开（首启给非阻断入门卡）；已读记 guide.ts 的版本号
+  const [guide, setGuide] = useState(false);
   const closeGuide = () => {
     markGuideSeen();
     setGuide(false);
@@ -154,40 +147,6 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [navigation, loaded, navigate]);
 
-  /** 旧五页签的点击 → 导航意图（兼容桥）。 */
-  const handleTabChange = (tab: TabId) => {
-    switch (tab) {
-      case 'dashboard':
-        navigate({ type: 'tab', page: 'dashboard' });
-        break;
-      case 'myPets':
-        // 旧页签「我的精灵」= 精灵库：从别的页面点进来时落到「全部」；
-        // 已经停在收集页时只切回主导航，不重置当前子视图。
-        if (navigation.page === 'collection') navigate({ type: 'tab', page: 'collection' });
-        else navigate({ type: 'open-collection', location: { kind: 'inventory', view: 'all' } });
-        break;
-      case 'coverage':
-        navigate({ type: 'open-collection', location: { kind: 'studs', view: 'coverage' } });
-        break;
-      case 'swap': {
-        // 手动点「换什么」恢复上次的换蛋清单 / 母本共享子视图（关后台回来不掉组）
-        const view = readSwapMainView();
-        if (view === 'sharing') navigate({ type: 'tab', page: 'groups' });
-        else navigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } });
-        break;
-      }
-      case 'import':
-        navigate({ type: 'open-profile', section: 'data' });
-        break;
-    }
-  };
-
-  /** Swap 内部主分段（兼容桥）：共享 = 小组页，换蛋 = 收集 · 求蛋。 */
-  const handleSwapViewChange = (view: 'eggs' | 'sharing') => {
-    if (view === 'sharing') navigate({ type: 'tab', page: 'groups' });
-    else navigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } });
-  };
-
   const collection = navigation.collection;
   return (
     <>
@@ -223,7 +182,7 @@ export default function App() {
             </span>
           </div>
         </header>
-        <TabNav active={activeTab} onChange={handleTabChange} />
+        <TabNav active={activeTab} onChange={(page) => navigate({ type: 'tab', page })} />
       </div>
       {/* 2026-10-06 修复（M3）：不要在渲染体里用「每次渲染都是新引用」的内联箭头组件
           拼 Record<TabId, ComponentType>——App 任何 state 变化（比如开关更新弹窗）都会
@@ -237,14 +196,16 @@ export default function App() {
           returnToGroups={navigation.returnToGroups}
           onNavigate={navigate}
           onShareImported={handleShareImported}
+          onOpenGuide={() => setGuide(true)}
         />
       ) : navigation.page === 'groups' ? (
-        <Swap
-          view="sharing"
-          onViewChange={handleSwapViewChange}
-          onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
-          onGoAccount={() => navigate({ type: 'open-profile', section: 'identity' })}
-        />
+        <main className="mx-auto max-w-md space-y-3 p-4">
+          <MotherSharing
+            onGoAccount={() =>
+              navigate({ type: 'open-profile', section: 'identity', returnToGroups: true })
+            }
+          />
+        </main>
       ) : (
         <Collection
           location={collection}
@@ -255,8 +216,8 @@ export default function App() {
         />
       )}
       {changelog.length > 0 ? <ChangelogModal entries={changelog} onClose={closeChangelog} /> : null}
-      {/* 教程与更新弹窗不同时弹：先看完更新内容再引导 */}
-      {changelog.length === 0 && guide ? <GuideModal onClose={closeGuide} /> : null}
+      {/* 完整教程不再首启自动弹：由顶部「教程」或「我的」入门卡明确打开 */}
+      {guide ? <GuideModal onClose={closeGuide} /> : null}
       {importOutcome.local === 'importing' ? (
         <div
           className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-900/85 px-4 py-2 text-xs text-white shadow-lg"

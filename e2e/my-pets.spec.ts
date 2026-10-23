@@ -6,7 +6,8 @@ test('我的精灵页：卡片展示与标签叠加筛选', async ({ page }) => 
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
 
   // 卡片展示：名称、盒子位置（2026-10-05 卡内不再显示账号与图鉴编号，账号由账号筛选条承担）
   await expect(page.getByText('机械方方')).toBeVisible();
@@ -43,7 +44,8 @@ test('种公视角：只列真正覆盖了目标的种公，支持四档筛选',
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
 
   // 种公视角：fixture 里只有「火花」是 大块头 + 100dB + 公 + 固执 → 覆盖魔力组/巨灵组的固执
   await page.getByRole('button', { name: '合格种公', exact: true }).click();
@@ -70,7 +72,8 @@ test('种公视角：非目标性格的合格公默认也在名单里，性格�
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-offtarget-stud.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
   await page.getByRole('button', { name: '合格种公', exact: true }).click();
 
   // 「满分小婉 · 懒散」的公：懒散不在任何目标性格池里，但必须出现（此前会凭空消失）
@@ -96,7 +99,8 @@ test('母本页：链清单一链一行（按蛋组分区），搜索即答已�
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
   await page.getByRole('button', { name: '母本', exact: true }).click();
 
   // 链清单：一链一行（按蛋组分区），顶部给整体进度；默认停在「未收集」
@@ -152,7 +156,8 @@ test('母本页：搜索支持进化链全员命中（搜同链其它形态名�
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
   await page.getByRole('button', { name: '母本', exact: true }).click();
 
   // 火花链里有 火神/焰火/烈火战神 等形态名；搜「火神」应命中「火花」那条链
@@ -191,7 +196,8 @@ test('分页：每页 20 只，不再整页渲染', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles(fixturePath);
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
 
   // 500 只 → 25 页，每页 20 张卡
   await expect(page.getByTestId('page-indicator')).toHaveText('共 500 只 · 第 1 / 25 页（每页 20 只）');
@@ -221,7 +227,8 @@ test('搜索按进化链全员命中：搜同链的其它形态名也能搜到�
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
 
   const search = page.getByTestId('pet-name-search');
   // fixture 里只有 stage1 的火花（3003），搜它同链的进化形态名也要命中
@@ -245,7 +252,8 @@ test('种公视角：搜索按进化链全员命中', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
   await page.getByRole('button', { name: '合格种公', exact: true }).click();
 
   // 火花是 fixture 里唯一的合格种公；搜它同链的进化形态名「烈火战神」也要命中
@@ -265,7 +273,8 @@ test('账号同类取并集；标签数量随选择动态更新且为 0 时置�
     'src/domain/__fixtures__/backup-sample-2.json',
   ]);
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
 
   // 账号筛选在页面顶部 AccountFilterBar（2026-10-05 起默认展开，排除制：点 chip = 取消该账号）；
   // 下方筛选面板不再有账号标签。

@@ -1,4 +1,5 @@
 import type { NavigationIntent, ProfileSection } from './navigation';
+import { guidePending } from './guide';
 import { AccountPanel } from './AccountPanel';
 import { ImportOutcomeNotice } from './ImportOutcomeNotice';
 import { ImportPanel } from './ImportPanel';
@@ -12,6 +13,8 @@ export interface ProfileProps {
   returnToGroups: boolean;
   onNavigate: (intent: NavigationIntent) => void;
   onShareImported: () => void;
+  /** 打开完整教程（首启入门卡 / 顶部按钮） */
+  onOpenGuide?: () => void;
 }
 
 const SECTIONS = [
@@ -26,7 +29,13 @@ const SECTIONS = [
  * AccountPanel 只挂载**一份**（数据分区用 CSS 隐藏，不是卸载）：
  * 切分区不会丢恢复码 / 同步提示，也不会重复挂认证与同步处理。
  */
-export function Profile({ section, returnToGroups, onNavigate, onShareImported }: ProfileProps) {
+export function Profile({
+  section,
+  returnToGroups,
+  onNavigate,
+  onShareImported,
+  onOpenGuide,
+}: ProfileProps) {
   // 导入后的自动上传冲突仍以 syncNoticeStore 为准，交给 AccountPanel 二选一
   const { conflict: autoConflict } = useSyncFeedback();
 
@@ -72,6 +81,24 @@ export function Profile({ section, returnToGroups, onNavigate, onShareImported }
 
       {section === 'data' ? (
         <>
+          {guidePending() ? (
+            <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="first-run-card">
+              <h2 className="text-base font-semibold text-slate-900">先导入一次，看看还缺什么</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                导入后这里会出现母本和种公的进度、缺口与下一步；不用先看教程。
+              </p>
+              {onOpenGuide ? (
+                <Button
+                  variant="secondary"
+                  className="mt-2"
+                  onClick={onOpenGuide}
+                  data-testid="first-run-guide"
+                >
+                  查看完整教程
+                </Button>
+              ) : null}
+            </section>
+          ) : null}
           <ImportOutcomeNotice onOpenGroups={() => onNavigate({ type: 'open-groups' })} />
           <ImportPanel onShareImported={onShareImported} />
         </>

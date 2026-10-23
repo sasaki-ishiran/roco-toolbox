@@ -3,13 +3,17 @@ import { expect, test } from '@playwright/test';
 // 覆盖 config 里「更新内容/教程已读」的预置，才能看到首启弹窗
 test.use({ storageState: { cookies: [], origins: [] } });
 
-test('首次打开：看完更新内容后弹使用教程，可跳过且不再打扰', async ({ page }) => {
+test('首次打开不阻断：入门卡可直达教程，可跳过且不再打扰', async ({ page }) => {
   await page.goto('/');
 
-  // 先关掉更新内容（两个弹窗不会同时出现）
-  await expect(page.getByTestId('changelog-modal')).toBeVisible();
-  await page.getByTestId('changelog-ok').click();
+  // 2026-10-24：首启不再自动叠更新 / 教程两层弹窗
+  await expect(page.getByTestId('changelog-modal')).toHaveCount(0);
+  await expect(page.getByTestId('guide-modal')).toHaveCount(0);
+  await expect(page.getByTestId('first-run-card')).toBeVisible();
+  // 不用先关任何弹窗就能导入
+  await expect(page.getByTestId('import-button')).toBeEnabled();
 
+  await page.getByTestId('first-run-guide').click();
   const guide = page.getByTestId('guide-modal');
   await expect(guide).toBeVisible();
   // 第 1 页是功能简介（先讲"能干什么"，再讲操作）
@@ -26,19 +30,19 @@ test('首次打开：看完更新内容后弹使用教程，可跳过且不再�
   // 跳过 → 消失，页面可用
   await page.getByTestId('guide-skip').click();
   await expect(guide).toHaveCount(0);
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
 
-  // 刷新：本机已记住 → 不再自动弹
+  // 刷新：本机已记住 → 不再自动弹，也不再出现入门卡
   await page.reload();
   await expect(page.getByTestId('guide-modal')).toHaveCount(0);
+  await expect(page.getByTestId('first-run-card')).toHaveCount(0);
 });
 
 test('顶部「教程」入口随时能回看，走到最后一步是「开始用」', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId('changelog-ok').click();
-  await page.getByTestId('guide-skip').click();
-
+  // 首启没有阻断弹窗，直接点顶部教程
+  await expect(page.getByTestId('guide-modal')).toHaveCount(0);
   await page.getByTestId('guide-open').click();
   const guide = page.getByTestId('guide-modal');
   await expect(guide).toBeVisible();

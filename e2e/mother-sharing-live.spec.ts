@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+﻿import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
@@ -79,7 +79,9 @@ async function contextFor(browser: Browser, identity: Identity) {
 
 const openSharing = async (page: Page) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '换什么' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-eggs').click();
   await page.getByTestId('swap-view-sharing').click();
   await expect(page.getByTestId('mother-sharing')).toBeVisible();
 };

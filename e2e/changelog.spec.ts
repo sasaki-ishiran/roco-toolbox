@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 import { GUIDE_VERSION } from '../src/ui/guide';
 
 // 覆盖 config 里「已读」的预置，才能看到首启弹窗。
@@ -28,7 +28,7 @@ test('首次打开弹出更新内容，点「知道了」后不再打扰', async
   // 关闭 → 消失，且不挡后续操作
   await page.getByTestId('changelog-ok').click();
   await expect(modal).toHaveCount(0);
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
 
   // 刷新：本机已记住 → 不再弹

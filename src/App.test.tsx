@@ -69,7 +69,7 @@ describe('App', () => {
 
     render(<App />);
     // 启动直接落回小组（旧子视图保留）
-    expect(screen.getByTestId('swap-view-sharing')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('mother-sharing')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '看板' }));
     fireEvent.click(screen.getByTestId('recommend-quantity-all'));
@@ -82,15 +82,15 @@ describe('App', () => {
   test('打开教程不会把当前页面卸载重挂（页内选择保留）', () => {
     presetFirstRunSeen();
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: '换什么' }));
-    fireEvent.click(screen.getByTestId('swap-nest-plain'));
-    expect(screen.getByTestId('swap-nest-plain')).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '收集' }));
+    fireEvent.click(screen.getByTestId('collection-kind-studs'));
+    expect(screen.getByTestId('collection-kind-studs')).toHaveAttribute('aria-pressed', 'true');
 
     fireEvent.click(screen.getByTestId('guide-open'));
     expect(screen.getByTestId('guide-modal')).toBeDefined();
     fireEvent.click(screen.getByTestId('guide-skip'));
 
-    expect(screen.getByTestId('swap-nest-plain')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('collection-kind-studs')).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('受限存储（读页签键抛错）不白屏', () => {

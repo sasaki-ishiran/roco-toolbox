@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 
 /**
  * 移动端布局守卫：真机上最容易出问题的是「横向溢出」和「主按钮被压扁/半截可见」。
@@ -16,8 +16,8 @@ for (const viewport of MOBILE_VIEWPORTS) {
     await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
     await expect(page.getByText('还没有数据')).toHaveCount(0);
 
-    for (const tab of ['看板', '我的精灵', '覆盖度', '换什么']) {
-      await page.getByRole('button', { name: tab }).click();
+    for (const tab of ['看板', '收集', '小组', '我的']) {
+      await page.getByRole('button', { name: tab, exact: true }).click();
       const overflow = await page.evaluate(() => {
         const doc = document.scrollingElement as HTMLElement;
         return doc.scrollWidth - doc.clientWidth;

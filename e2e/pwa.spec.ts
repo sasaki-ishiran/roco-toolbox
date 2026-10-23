@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 
 /** PWA 可安装的前提：manifest 可访问、图标齐全、Service Worker 注册成功 */
 test('PWA：manifest 可访问且 Service Worker 注册成功', async ({ page }) => {

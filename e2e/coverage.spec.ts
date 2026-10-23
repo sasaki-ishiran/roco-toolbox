@@ -1,10 +1,12 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 
 const importSample = async (page: import('@playwright/test').Page) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '覆盖度' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
 };
 
 test('覆盖度页：14 个蛋组行 + 四态图例 + 主数字是「已通 N / 14 组」', async ({ page }) => {
@@ -54,8 +56,10 @@ test('覆盖度页：第一次进来给极简说明，点「知道了」后不�
   await expect(intro).toHaveCount(0);
 
   // 切走再回来：不再出现（看过的记住）
-  await page.getByRole('button', { name: '看板' }).click();
-  await page.getByRole('button', { name: '覆盖度' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('coverage-intro')).toHaveCount(0);
 });
 
@@ -75,9 +79,11 @@ test('覆盖度页：蛋组行按状态色档从差到好排（未收集多的�
   // 展开第一行 → 切到看板 → 切回来，仍然是展开状态
   await page.getByTestId('coverage-group-toggle').first().click();
   await expect(page.getByTestId('coverage-nature-cell')).toHaveCount(3);
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByRole('heading', { name: '洛克工具箱' })).toBeVisible();
-  await page.getByRole('button', { name: '覆盖度' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('coverage-nature-cell')).toHaveCount(3);
 });
 
@@ -92,11 +98,13 @@ test('覆盖度页：分母只随蛋组变化（14 → 13），档位不再改�
   await expect(page.getByTestId('coverage-total')).toHaveText(/\/ 13 组/);
 
   // 档位是**全局口径**（2026-10-06 起入口只在看板的「当前模式」）：去看板从「调整目标」加一个档位
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await page.getByTestId('target-mode').getByRole('button', { name: '调整', exact: true }).click();
   await page.getByTestId('editor-target-grade-小婉').click();
   await page.getByTestId('target-editor').getByRole('button', { name: '完成' }).click();
-  await page.getByRole('button', { name: '覆盖度' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
   // 覆盖度页只显示当前档位（只读、不再自己控制）
   await expect(page.getByTestId('coverage-grade-readonly')).toContainText('满分小婉');
   await expect(page.getByTestId('coverage-total')).toHaveText(/\/ 13 组/);
@@ -112,7 +120,9 @@ test('覆盖度页：分母只随蛋组变化（14 → 13），档位不再改�
 
 test('覆盖度页：署名保留（CC BY-SA 4.0）', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '覆盖度' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
 
   await expect(page.getByText('CC BY-SA 4.0')).toBeVisible();
   await expect(page.getByRole('link', { name: '洛克王国：世界 Wiki' })).toBeVisible();
@@ -120,7 +130,9 @@ test('覆盖度页：署名保留（CC BY-SA 4.0）', async ({ page }) => {
 
 test('覆盖度页：空数据给出可读空状态且不出现 NaN', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '覆盖度' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
 
   await expect(page.getByText('还没有数据')).toBeVisible();
   await expect(page.getByText('NaN')).toHaveCount(0);

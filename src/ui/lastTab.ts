@@ -1,19 +1,20 @@
-import type { TabId } from './TabNav';
-
 /**
- * 记住上次停留的页签。
+ * 记住上次停留的页签（旧键 `roco.lastTab`）。
  *
- * 手机上「关后台再回来」常常是整页重载：如果每次都回到「导入数据」，
- * 用户会以为刚才看的母本共享小组没了。这里只记住主页签（换什么里的子视图不记）。
+ * 2026-10-24 四入口重构后，新页面不再直接写自己的 page 名，而是经
+ * `navigation.legacyLocation()` 换成旧版能理解的五个值——旧版安装升级 / 降级
+ * 都不会落到未知页签。读取时这些旧值再由 `initialNavigation()` 映射回新页面。
  */
-const KEY = 'roco.lastTab';
-const TABS: TabId[] = ['dashboard', 'myPets', 'coverage', 'swap', 'import'];
+export type LegacyTab = 'dashboard' | 'myPets' | 'coverage' | 'swap' | 'import';
 
-export function readLastTab(): TabId {
+const KEY = 'roco.lastTab';
+const TABS: LegacyTab[] = ['dashboard', 'myPets', 'coverage', 'swap', 'import'];
+
+export function readLastTab(): LegacyTab {
   if (typeof window === 'undefined') return 'import';
   try {
     const raw = window.localStorage.getItem(KEY);
-    return TABS.includes(raw as TabId) ? (raw as TabId) : 'import';
+    return TABS.includes(raw as LegacyTab) ? (raw as LegacyTab) : 'import';
   } catch {
     // 隐私模式 / 存储被禁用：退回默认页，不白屏（2026-10-24）
     return 'import';
@@ -30,7 +31,7 @@ export function hasSavedTab(): boolean {
   }
 }
 
-export function saveLastTab(tab: TabId): void {
+export function saveLastTab(tab: LegacyTab): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(KEY, tab);

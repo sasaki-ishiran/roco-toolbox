@@ -1,9 +1,8 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 import { loginAs, mockMotherGroups } from './helpers/motherGroupsMock';
 
 const openSharing = async (page: import('@playwright/test').Page) => {
-  await page.getByRole('button', { name: '换什么' }).click();
-  await page.getByTestId('swap-view-sharing').click();
+  await page.getByRole('button', { name: '小组', exact: true }).click();
   await expect(page.getByTestId('mother-sharing')).toBeVisible();
 };
 

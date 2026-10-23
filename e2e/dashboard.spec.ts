@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+﻿import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectProgressZero, progressOf } from './progress';
 
@@ -14,7 +14,7 @@ const openMoreData = async (page: Page) => {
 test('看板首页展示两块进度卡与署名', async ({ page }) => {
   await page.goto('/');
   // 无数据时默认落在「导入数据」页，这里切到看板看进度卡
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: '洛克工具箱' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
@@ -48,7 +48,7 @@ test('导入抓包数据后看板给出进度与建议', async ({ page }) => {
 test('母本进度：看板卡与点进去的母本页是同一口径（数字一致）', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
 
   const card = page.getByTestId('progress-card-action-mother');
   await expect(card).toBeVisible();
@@ -92,13 +92,13 @@ test('重置按钮一键清空已导入的数据', async ({ page }) => {
 
   // 导入后默认落看板，重置按钮在「导入数据」页，先切过去
   page.on('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await page.getByRole('button', { name: '我的', exact: true }).click();
   await openMoreData(page);
   await page.getByRole('button', { name: '重置导入数据' }).click();
 
   await expect(page.getByText('还没有数据')).toBeVisible();
   // 清空后回到看板：两块进度归零、署名仍在
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await expectProgressZero(page);
 });
 
@@ -108,8 +108,8 @@ test('切页签不再闪"正在读取本地数据"', async ({ page }) => {
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 
   // 四个页签来回切，加载文案都不应再出现（数据已在内存缓存里）
-  for (const tab of ['覆盖度', '换什么', '我的精灵', '看板', '覆盖度', '换什么']) {
-    await page.getByRole('button', { name: tab }).click();
+  for (const tab of ['收集', '小组', '我的', '看板', '收集', '小组']) {
+    await page.getByRole('button', { name: tab, exact: true }).click();
     await expect(page.getByText('正在读取本地数据')).toHaveCount(0);
   }
 });
@@ -119,7 +119,7 @@ test('导出全部数据 → 清空 → 导入备份，数据完整恢复（"共
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   // 有数据时导入后会回看板，等确认到看板再切去导入页（避免首跳未完成又被弹回）
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await page.getByRole('button', { name: '我的', exact: true }).click();
 
   await openMoreData(page);
   const [download] = await Promise.all([
@@ -141,7 +141,7 @@ test('导出全部数据 → 清空 → 导入备份，数据完整恢复（"共
   await expect(page.getByTestId('data-message')).toContainText('新增 1 个账号');
 
   // 恢复后回到看板：进度不再是 0
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByText('还没有数据')).toHaveCount(0);
   expect((await progressOf(page, 'progress-card-action-mother')).numerator).toBeGreaterThan(0);
 });
@@ -156,7 +156,7 @@ test('合并导入：两台设备的数据合到一起，谁的账号都不会�
   await pageA.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   // 导入后默认落看板，「N 个账号」与导出按钮都在「导入数据」页
   await expect(pageA.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await pageA.getByRole('button', { name: '导入数据', exact: true }).click();
+  await pageA.getByRole('button', { name: '我的', exact: true }).click();
   await expect(pageA.getByText('1 个账号')).toBeVisible();
   await openMoreData(pageA);
   const [downloadA] = await Promise.all([
@@ -175,7 +175,7 @@ test('合并导入：两台设备的数据合到一起，谁的账号都不会�
   await pageB.goto(BASE);
   await pageB.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample-2.json');
   await expect(pageB.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await pageB.getByRole('button', { name: '导入数据', exact: true }).click();
+  await pageB.getByRole('button', { name: '我的', exact: true }).click();
   await expect(pageB.getByText('1 个账号')).toBeVisible();
 
   pageB.on('dialog', (dialog) => dialog.accept());
@@ -220,7 +220,7 @@ test('合并导入：同账号取较新的一份，旧备份顶不回本地', as
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   // 导入后默认落看板，「N 个账号」「合并导入」等都在「导入数据」页
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await page.getByRole('button', { name: '我的', exact: true }).click();
   await expect(page.getByText('1 个账号')).toBeVisible();
 
   page.on('dialog', (dialog) => dialog.accept());
@@ -232,7 +232,8 @@ test('合并导入：同账号取较新的一份，旧备份顶不回本地', as
   await expect(message).toContainText('保留本地较新的 1 个');
 
   // 本地那份没被空数据顶掉：精灵还在（我的精灵里能看到 fixture 里的机械方方）
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
   await expect(page.getByText('机械方方')).toBeVisible();
 });
 
@@ -241,7 +242,7 @@ test('把备份文件从「导入抓包数据」入口塞进去，也能按合�
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   // 有数据时导入后会回看板，导出/导入入口都在「导入数据」页
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await page.getByRole('button', { name: '我的', exact: true }).click();
 
   // 导出一份真备份，模拟「微信收到备份 → 分享给洛克工具箱」：走的就是这条入口。
   // 以前这里会被当成抓包解析而报错，现在按合并导入处理。
@@ -272,7 +273,8 @@ test('母本按代表档位查看：四档分开计数，切换档位换列表',
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 
   // 2026-10-24：完整档位库存从看板迁到「收集 · 精灵库」的固定次入口
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
   await page.getByTestId('inventory-grade-toggle').click();
 
   // 档位是页内下拉栏：默认显示满分大婉（带计数）
@@ -317,13 +319,16 @@ test('当前模式：看板开关切到追双牌，全程序跟着换', async ({
   await page.getByTestId('target-mode-medal').click();
   await expect(page.getByTestId('target-mode-medal')).toHaveAttribute('aria-pressed', 'true');
   // 档位库存已迁到「收集 · 精灵库」的次入口；选项不再带「满分」前缀
-  await page.getByRole('button', { name: '我的精灵' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-inventory').click();
   await page.getByTestId('inventory-grade-toggle').click();
   await page.getByTestId('mother-grade-select').click();
   await expect(page.getByTestId('mother-grade-option-大婉')).toHaveText(/^大婉 \(\d+\)$/);
 
   // 覆盖度页显示当前模式
-  await page.getByRole('button', { name: '覆盖度' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('coverage-mode')).toContainText('追双牌');
 
   // 刷新后模式还在（持久化在本机）；页签也留在原处（关后台回来不丢位置）
@@ -359,10 +364,12 @@ test('账号筛选：三页共用一份，取消账号后看板进度跟着变',
   await expect(page.getByTestId('account-filter')).toContainText('账号（2/2）');
 
   // 覆盖度页是同一个 store：那边取消一个账号，看板这边也是 1/2
-  await page.getByRole('button', { name: '覆盖度' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('account-filter')).toContainText('账号（2/2）');
   await page.getByTestId('account-chip-测试乙').click();
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByTestId('account-filter')).toContainText('账号（1/2）');
 
   // 全不选 → 没有精灵可算，进度归零
@@ -396,7 +403,9 @@ test('跳转后落在目标页顶部：切页签会重置滚动位置', async ({
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
 
   // 切到覆盖度（目标页比视口高：不重置的话会沿用看板的旧偏移，跳转位置不准）
-  await page.getByRole('button', { name: '覆盖度' }).click();
+  await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('coverage-mode')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 });
@@ -409,7 +418,7 @@ test('一次导入两个文件后账号数显示为 2', async ({ page }) => {
   ]);
   // 导入后默认落看板，「N 个账号」在「导入数据」页
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await page.getByRole('button', { name: '我的', exact: true }).click();
   await expect(page.getByText('2 个账号')).toBeVisible();
 });
 
@@ -454,7 +463,7 @@ test.describe('本次导入新增', () => {
     await expect(page.getByTestId('import-result-stud').first()).toBeVisible();
 
     // 第二次导入的入口在「导入数据」页，导入完再回看板看结果
-    await page.getByRole('button', { name: '导入数据', exact: true }).click();
+    await page.getByRole('button', { name: '我的', exact: true }).click();
     await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
     await page.getByRole('button', { name: '看板', exact: true }).click();
     await expect(page.getByTestId('import-result-empty')).toBeVisible();
@@ -474,7 +483,9 @@ test.describe('本次导入新增', () => {
     await expect(page.getByTestId('import-result-stud')).toHaveCount(0);
 
     // 切到别的页签再回看板：仍保持收起（以前展开态在组件里，回来会自己弹开）
-    await page.getByRole('button', { name: '覆盖度' }).click();
+    await page.getByRole('button', { name: '收集', exact: true }).click();
+  await page.getByTestId('collection-kind-studs').click();
+  await page.getByTestId('stud-tool-coverage').click();
     await page.getByRole('button', { name: '看板', exact: true }).click();
     await expect(page.getByTestId('import-result-dismiss')).toHaveAttribute('aria-expanded', 'false');
     await expect(page.getByTestId('import-result-stud')).toHaveCount(0);
@@ -497,7 +508,7 @@ test.describe('本次导入新增', () => {
     await expect(page.getByTestId('import-result')).toHaveCount(0);
 
     // 历史入口在看「导入数据」页：卡片渲染，只提供历史，不重新展示最新内容
-    await page.getByRole('button', { name: '导入数据', exact: true }).click();
+    await page.getByRole('button', { name: '我的', exact: true }).click();
     const card = page.getByTestId('import-result');
     await expect(card).toBeVisible();
     await expect(card.getByRole('heading', { name: /导入历史/ })).toBeVisible();

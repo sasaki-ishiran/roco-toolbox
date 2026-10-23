@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 
 test('配窝：只给汇总 + 两个入口（怎么配在覆盖度、要去弄什么在换什么）', async ({ page }) => {
   await page.goto('/');
@@ -16,7 +16,7 @@ test('配窝：只给汇总 + 两个入口（怎么配在覆盖度、要去弄�
   await expect(page.getByTestId('coverage-group-row').first()).toBeVisible();
 
   // 入口②：换什么页（去弄哪颗蛋）
-  await page.getByRole('button', { name: '看板' }).click();
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await page.getByTestId('nest-open-swap').click();
   await expect(page.getByRole('heading', { name: '换什么' })).toBeVisible();
 });
