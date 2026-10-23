@@ -13,10 +13,11 @@ import { ImportPanel } from './ui/ImportPanel';
 import { MyPets } from './ui/MyPets';
 import { Swap } from './ui/Swap';
 import { TabNav, type TabId } from './ui/TabNav';
+import { readLastTab, saveLastTab, hasSavedTab } from './ui/lastTab';
 import { useSnapshots } from './ui/useSnapshots';
 
 export default function App() {
-  const [tab, setTab] = useState<TabId>('import');
+  const [tab, setTab] = useState<TabId>(() => readLastTab());
   /** 手动刷新按钮的忙碌态（真正刷新会让页面重载，这里只防连点） */
   const [refreshing, setRefreshing] = useState(false);
   const { snapshots, loaded } = useSnapshots();
@@ -43,8 +44,9 @@ export default function App() {
     return () => window.removeEventListener('roco-share', onShare);
   }, []);
   // 有数据时默认落看板：首帧仍停在「导入数据」，读到数据后只在「还没被用户手动切走过、
-  //  且仍停在导入页」时跳一次到看板，之后用户自由切换（回到导入数据页管理数据不再被打扰）
-  const autoRedirected = useRef(false);
+  //  且仍停在导入页」时跳一次到看板，之后用户自由切换（回到导入数据页管理数据不再被打扰）。
+  // 注意：本机已经记过页签（= 不是第一次打开）时不再自动跳，否则重开后点「导入数据」会被弹回看板。
+  const autoRedirected = useRef(hasSavedTab());
   useEffect(() => {
     if (
       loaded &&
@@ -90,6 +92,8 @@ export default function App() {
   }, []);
   useEffect(() => {
     track('tab_view', { tab });
+    // 记住停留的页签：关后台后重开不会莫名其妙回到「导入数据」
+    saveLastTab(tab);
   }, [tab]);
   // 覆盖度矩阵的展开态放在这里，切页签回来不会收起
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null);

@@ -90,9 +90,13 @@ export function MotherSharing({ onGoAccount, onOpenLegacy }: MotherSharingProps 
               {hook.error}
               <button
                 type="button"
-                onClick={hook.clearError}
+                onClick={() => void hook.refresh()}
+                data-testid="mother-error-retry"
                 className="ml-2 underline"
               >
+                重试
+              </button>
+              <button type="button" onClick={hook.clearError} className="ml-2 underline">
                 知道了
               </button>
             </p>
@@ -100,7 +104,7 @@ export function MotherSharing({ onGoAccount, onOpenLegacy }: MotherSharingProps 
 
           {hook.currentGroupId && !hook.currentGroup ? (
             <p className="text-sm text-slate-400" data-testid="mother-loading">
-              {hook.loading ? '正在读取小组资源…' : '小组内容暂时不可用'}
+              {hook.loading ? '正在读取小组资源…' : '小组内容暂时读不到，稍后会自动重试'}
             </p>
           ) : null}
 
@@ -168,7 +172,22 @@ export function MotherSharing({ onGoAccount, onOpenLegacy }: MotherSharingProps 
                 }}
               />
             </>
-          ) : hook.groups.length === 0 ? (
+          ) : !hook.currentGroupId && !hook.groupsLoaded ? (
+            <div
+              className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"
+              data-testid="mother-groups-unavailable"
+            >
+              暂时读不到你加入的小组（多半是网络问题）。小组还在，恢复网络后点重试即可。
+              <button
+                type="button"
+                onClick={() => void hook.refresh()}
+                data-testid="mother-groups-retry"
+                className="mt-2 block min-h-[36px] rounded-xl border border-amber-300 bg-white px-3 text-xs text-amber-800"
+              >
+                重试
+              </button>
+            </div>
+          ) : hook.groupsLoaded && hook.groups.length === 0 ? (
             <p className="rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-500" data-testid="mother-no-groups">
               还没有加入任何小组。新建一个小组，或输入组员给你的 8 位邀请码。
             </p>

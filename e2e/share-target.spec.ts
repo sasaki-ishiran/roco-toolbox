@@ -53,10 +53,9 @@ test('分享一份采集数据进来，页面自动导入并回到首页', async
   await expect(page.getByTestId('data-message')).toContainText('已导入分享进来的采集数据');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 
-  // 再刷新一次不会重复导入（暂存取走就删了；有数据时默认回看板）
+  // 再刷新一次不会重复导入（暂存取走就删了）；页签停在原处（导入数据页），数据仍在
   await page.reload();
-  await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '导入数据', exact: true }).click();
+  await expect(page.getByTestId('import-button')).toBeVisible();
   await expect(page.getByTestId('data-message')).toHaveCount(0);
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 });

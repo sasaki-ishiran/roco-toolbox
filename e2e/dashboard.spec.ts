@@ -320,8 +320,10 @@ test('当前模式：看板开关切到追双牌，全程序跟着换', async ({
   await page.getByRole('button', { name: '覆盖度' }).click();
   await expect(page.getByTestId('coverage-mode')).toContainText('追双牌');
 
-  // 刷新后模式还在（持久化在本机）
+  // 刷新后模式还在（持久化在本机）；页签也留在原处（关后台回来不丢位置）
   await page.reload();
+  await expect(page.getByTestId('coverage-mode')).toContainText('追双牌');
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByTestId('target-mode-medal')).toHaveAttribute('aria-pressed', 'true');
 });
 

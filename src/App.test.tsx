@@ -25,6 +25,13 @@ describe('App', () => {
     expect(screen.getByTestId('app-refresh')).toHaveTextContent('刷新');
   });
 
+  test('重开应用回到上次停留的页签（关后台不会掉回导入页）', () => {
+    window.localStorage.setItem('roco.lastTab', 'swap');
+    render(<App />);
+    expect(screen.getByTestId('swap-view-eggs')).toBeDefined();
+    window.localStorage.clear();
+  });
+
   test('壳把分享内容注入时自动切到「导入数据」页（否则分享会被静默搁置）', async () => {
     // 有数据时应用会自动落到看板，而接收分享的监听在「导入数据」页里（只挂载当前页）
     await saveSnapshot(snapshot('账号甲'));

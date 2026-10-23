@@ -24,6 +24,7 @@ const resource: MotherResourceDraft = {
 const hookOf = (overrides: Partial<MotherGroupsHook> = {}): MotherGroupsHook => ({
   accountId: 'A',
   groups: [],
+  groupsLoaded: true,
   currentGroupId: 'g1',
   currentGroup: null,
   loading: false,

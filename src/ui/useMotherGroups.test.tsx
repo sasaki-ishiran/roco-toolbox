@@ -191,12 +191,48 @@ describe('useMotherGroups：会话、轮询与草稿', () => {
   });
 
   test('首次读取失败时不计算缺口（currentGroup 为 null）', async () => {
-    vi.mocked(api.listMotherGroups).mockRejectedValueOnce(new Error('断网'));
+    vi.mocked(api.listMotherGroups).mockRejectedValueOnce(new TypeError('Failed to fetch'));
     const { result } = renderHook(() => useMotherGroups(input));
     await flush();
 
-    expect(result.current.error).toBe('断网');
+    expect(result.current.error).toBe('网络连接失败，请检查网络后重试');
     expect(result.current.currentGroup).toBeNull();
     expect(result.current.groups).toEqual([]);
+    expect(result.current.groupsLoaded).toBe(false);
+  });
+
+  test('业务错误文案原样透出（不把所有失败都说成网络问题）', async () => {
+    vi.mocked(api.listMotherGroups).mockRejectedValueOnce(new Error('太频繁了，稍后再试'));
+    const { result } = renderHook(() => useMotherGroups(input));
+    await flush();
+    expect(result.current.error).toBe('太频繁了，稍后再试');
+  });
+
+  test('冷启动拉不到组列表时，保留本机记住的组并继续拉详情', async () => {
+    saveCurrentGroupId('A', 'g1');
+    vi.mocked(api.listMotherGroups).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const { result } = renderHook(() => useMotherGroups(input));
+    await flush();
+
+    expect(result.current.groupsLoaded).toBe(false);
+    expect(result.current.currentGroupId).toBe('g1');
+    expect(result.current.currentGroup?.group.name).toBe('测试组');
+    expect(result.current.draftSelection).toEqual(['uid:1001']);
+  });
+
+  test('重试会重新拉组列表并补齐 groupsLoaded', async () => {
+    vi.mocked(api.listMotherGroups).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const { result } = renderHook(() => useMotherGroups(input));
+    await flush();
+    expect(result.current.groupsLoaded).toBe(false);
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+    await flush();
+
+    expect(result.current.groupsLoaded).toBe(true);
+    expect(result.current.groups).toHaveLength(1);
+    expect(result.current.currentGroupId).toBe('g1');
   });
 });

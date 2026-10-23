@@ -51,6 +51,8 @@ export interface MotherPublishPreview {
 export interface MotherGroupsHook {
   accountId: string | null;
   groups: MotherGroupSummary[];
+  /** 组列表是否成功拉取过；false + groups 为空 ≠ 没有小组（可能只是网络失败） */
+  groupsLoaded: boolean;
   currentGroupId: string | null;
   currentGroup: MotherGroupDetail | null;
   loading: boolean;
@@ -75,8 +77,16 @@ export interface MotherGroupsHook {
   clearError: () => void;
 }
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : '操作失败，请稍后再试';
+const messageOf = (error: unknown): string => {
+  if (error instanceof Error) {
+    // fetch 断网时浏览器抛的是英文 TypeError: Failed to fetch / Load failed
+    if (/failed to fetch|networkerror|load failed|network request failed/i.test(error.message)) {
+      return '网络连接失败，请检查网络后重试';
+    }
+    return error.message;
+  }
+  return '操作失败，请稍后再试';
+};
 
 const selectionOf = (detail: MotherGroupDetail | null, accountId: string | null): string[] => {
   if (!detail || !accountId) return [];
@@ -100,6 +110,7 @@ const emptyDraft = (catalogVersion: string): MotherResourceDraft => ({
 export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
   const [accountId, setAccountId] = useState<string | null>(() => readAccountId());
   const [groups, setGroups] = useState<MotherGroupSummary[]>([]);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [currentGroupId, setCurrentGroupId] = useState<string | null>(null);
   const [currentGroup, setCurrentGroup] = useState<MotherGroupDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -142,6 +153,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
         nextPollAtRef.current = null;
         setAccountId(next);
         setGroups([]);
+        setGroupsLoaded(false);
         setCurrentGroupId(null);
         setCurrentGroup(null);
         setDraftSelectionState([]);
@@ -159,12 +171,23 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
     const list = await listMotherGroups();
     if (!accountRef.current) return [];
     setGroups(list);
+    setGroupsLoaded(true);
     return list;
+  }, []);
+
+  /** 从「我加入的组」里挑当前组：优先本机记住的，其次第一个。 */
+  const applyGroupList = useCallback((list: MotherGroupSummary[], account: string) => {
+    const stored = readCurrentGroupId(account);
+    const target = list.find((group) => group.id === stored)?.id ?? list[0]?.id ?? null;
+    groupRef.current = target;
+    setCurrentGroupId(target);
+    if (target) saveCurrentGroupId(account, target);
   }, []);
 
   useEffect(() => {
     if (!accountId) {
       setGroups([]);
+      setGroupsLoaded(false);
       setLoading(false);
       return;
     }
@@ -176,17 +199,17 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
         const list = await listMotherGroups();
         if (cancelled || gen !== generationRef.current) return;
         setGroups(list);
-        const stored = readCurrentGroupId(accountId);
-        const target = list.find((group) => group.id === stored)?.id ?? list[0]?.id ?? null;
-        groupRef.current = target;
-        setCurrentGroupId(target);
-        if (target) saveCurrentGroupId(accountId, target);
+        setGroupsLoaded(true);
+        applyGroupList(list, accountId);
         setOffline(false);
         setError('');
       } catch (failure) {
         if (cancelled || gen !== generationRef.current) return;
-        setGroups([]);
-        setCurrentGroupId(null);
+        // 拉列表失败 ≠ 没有小组：别清掉本机记住的组，直接用记住的组去拉详情
+        // （「关后台再回来」时网络常常还没恢复，这里最容易误报「小组不见了」）
+        const stored = readCurrentGroupId(accountId);
+        groupRef.current = stored;
+        setCurrentGroupId(stored);
         setError(messageOf(failure));
       } finally {
         if (!cancelled && gen === generationRef.current) setLoading(false);
@@ -195,7 +218,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
     return () => {
       cancelled = true;
     };
-  }, [accountId]);
+  }, [accountId, applyGroupList]);
 
   /* ---------- 组详情：首次加载 + 可见时 15 秒轮询 ---------- */
   const loadDetail = useCallback(
@@ -310,6 +333,20 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
     if (!groupId) return;
     await loadDetail(groupId, { showLoading: false, gen: generationRef.current });
   }, [loadDetail]);
+
+  /** 「刷新 / 重试」：重新拉组列表（失败过就补上），再拉当前组详情。 */
+  const refresh = useCallback(async () => {
+    const account = accountRef.current;
+    if (!account) return;
+    try {
+      const list = await refreshGroups();
+      if (groupRef.current === null) applyGroupList(list, account);
+      setError('');
+    } catch (failure) {
+      setError(messageOf(failure));
+    }
+    await reloadCurrent();
+  }, [applyGroupList, refreshGroups, reloadCurrent]);
 
   const buildDraftFor = useCallback((keys: string[]): MotherResourceDraft => {
     const { snapshots, species, catalogVersion } = inputRef.current;
@@ -464,6 +501,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
   return {
     accountId,
     groups,
+    groupsLoaded,
     currentGroupId,
     currentGroup,
     loading,
@@ -476,7 +514,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
     myMember,
     selectGroup,
     setDraftSelection,
-    refresh: reloadCurrent,
+    refresh,
     createGroup,
     joinGroup,
     publish,

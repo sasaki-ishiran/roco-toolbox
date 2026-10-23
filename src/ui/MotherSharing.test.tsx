@@ -23,6 +23,7 @@ const detail: MotherGroupDetail = {
 const hookOf = (overrides: Partial<MotherGroupsHook> = {}): MotherGroupsHook => ({
   accountId: 'A',
   groups: [{ id: 'g1', name: '周末互换', ownerAccountId: 'A', memberCount: 2 }],
+  groupsLoaded: true,
   currentGroupId: 'g1',
   currentGroup: detail,
   loading: false,
@@ -95,5 +96,22 @@ describe('MotherSharing 入口与状态', () => {
     expect(screen.getByTestId('mother-no-groups')).toBeVisible();
     expect(screen.getByTestId('mother-group-setup')).toBeVisible();
     expect(screen.queryByTestId('mother-criteria')).not.toBeInTheDocument();
+  });
+
+  test('组列表拉取失败时不能说「还没有加入任何小组」，要能重试', () => {
+    const hook = hookOf({
+      groups: [],
+      groupsLoaded: false,
+      currentGroupId: null,
+      currentGroup: null,
+      error: '网络连接失败，请检查网络后重试',
+    });
+    vi.mocked(useMotherGroups).mockReturnValue(hook);
+    render(<MotherSharing onGoAccount={vi.fn()} />);
+
+    expect(screen.queryByTestId('mother-no-groups')).not.toBeInTheDocument();
+    expect(screen.getByTestId('mother-groups-unavailable')).toHaveTextContent('小组还在');
+    fireEvent.click(screen.getByTestId('mother-groups-retry'));
+    expect(hook.refresh).toHaveBeenCalledTimes(1);
   });
 });

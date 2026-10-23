@@ -59,6 +59,21 @@ test('小组资源：显示来源账号、缺口与未知人数；可切换视�
   await expect(page.getByTestId('mother-resource-row').filter({ hasText: '水蓝蓝' })).toContainText('有：阿乙（乙的号）');
 });
 
+test('组列表接口失败时不说「还没有加入任何小组」，并给出重试', async ({ page }) => {
+  await loginAs(page);
+  await mockMotherGroups(page);
+  // 冷启动（关后台再回来）网络没恢复：列表与详情都失败
+  await page.route('**/api/mother-groups**', (route) => route.abort('failed'));
+
+  await page.goto('/');
+  await openSharing(page);
+
+  await expect(page.getByTestId('mother-groups-unavailable')).toContainText('小组还在');
+  await expect(page.getByTestId('mother-no-groups')).toHaveCount(0);
+  await expect(page.getByTestId('mother-error')).toContainText('网络连接失败');
+  await expect(page.getByTestId('mother-groups-retry')).toBeVisible();
+});
+
 test('375 / 390 宽度下母本共享不横向溢出', async ({ page }) => {
   await loginAs(page);
   await mockMotherGroups(page);
