@@ -5,6 +5,7 @@ import { NEST_PREFIX, type NestKind } from '../domain/swapPlan';
 import { useTargetMode } from './targetModeStore';
 import { setSwapSelected, useSwapView } from './swapViewStore';
 import { CopySheet, isCopyPreviewOff } from './CopySheet';
+import { SegmentedControl } from './primitives/SegmentedControl';
 
 export interface SwapWishCardProps {
   /** 优质种公推荐算法的完整清单（换什么页与看板同一口径，2026-10-05 复用） */
@@ -146,22 +147,17 @@ export function SwapWishCard({ recommendations, emptyNote, pageSize = 20 }: Swap
     <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="swap-wish-list">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-500">求蛋清单（{recommendations.length}）</h2>
-        <div className="flex gap-1 rounded-full bg-slate-100 p-0.5" role="group" aria-label="窝类型">
-          {(Object.keys(NEST_LABEL) as NestKind[]).map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              aria-pressed={nest === kind}
-              onClick={() => setNest(kind)}
-              data-testid={`swap-nest-${kind}`}
-              className={`min-h-[28px] rounded-full px-2.5 text-xs ${
-                nest === kind ? 'bg-white font-medium text-emerald-700 shadow-sm' : 'text-slate-500'
-              }`}
-            >
-              {NEST_LABEL[kind]}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label="窝类型"
+          value={nest}
+          options={(Object.keys(NEST_LABEL) as NestKind[]).map((kind) => ({
+            value: kind,
+            label: NEST_LABEL[kind],
+          }))}
+          onValueChange={(next) => setNest(next as NestKind)}
+          optionTestId={(value) => `swap-nest-${value}`}
+          className="w-[132px] shrink-0"
+        />
       </div>
 
       {recommendations.length === 0 ? (

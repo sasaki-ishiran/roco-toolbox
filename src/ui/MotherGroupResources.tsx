@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { buildEggSearchIndex } from '../domain/petFilters';
 import { buildMotherCoverage, isMotherResourceComparable, selectMotherSharingViews } from '../domain/motherSharing';
 import type { SpeciesEntry } from '../domain/types';
 import type { MotherCoverageRow, MotherGroupDetail, MotherGroupMember } from '../shared/motherGroups';
+import { InlineSelect } from './primitives/InlineSelect';
+import { SearchField } from './primitives/SearchField';
+import { SegmentedControl } from './primitives/SegmentedControl';
 
 type ViewId = 'missing' | 'help' | 'all';
 
@@ -30,28 +33,7 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
   const [view, setView] = useState<ViewId>('missing');
   const [query, setQuery] = useState('');
   const [memberFilter, setMemberFilter] = useState('');
-  const [memberMenuOpen, setMemberMenuOpen] = useState(false);
-  const memberMenuRef = useRef<HTMLDivElement>(null);
   const [onlyOwned, setOnlyOwned] = useState(false);
-
-  useEffect(() => {
-    if (!memberMenuOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!memberMenuRef.current?.contains(event.target as Node)) setMemberMenuOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMemberMenuOpen(false);
-        memberMenuRef.current?.querySelector('button')?.focus();
-      }
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [memberMenuOpen]);
 
   useEffect(() => {
     if (memberFilter && !group.members.some((member) => member.accountId === memberFilter)) {
@@ -152,23 +134,13 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
       </div>
       <p className="text-[11px] text-slate-400">按已共享账号汇总。未知成员不会算成「缺」。</p>
 
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="tablist">
-        {VIEWS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={view === item.id}
-            onClick={() => setView(item.id)}
-            data-testid={`mother-view-${item.id}`}
-            className={`min-h-[34px] flex-1 rounded-lg text-[11px] ${
-              view === item.id ? 'bg-white font-medium text-slate-800 shadow-sm' : 'text-slate-500'
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        label="小组资源视图"
+        value={view}
+        options={VIEWS.map((item) => ({ value: item.id, label: item.label }))}
+        onValueChange={(next) => setView(next as ViewId)}
+        optionTestId={(value) => `mother-view-${value}`}
+      />
 
       {currentRows === null ? (
         <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700" data-testid="mother-view-unknown-self">
@@ -176,47 +148,31 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <input
-          type="search"
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchField
+          label="搜索小组资源"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onValueChange={setQuery}
           placeholder="搜母本 / 同血脉名称 / 图鉴号"
-          data-testid="mother-search"
-          className="min-h-[36px] min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder:text-slate-300"
+          testId="mother-search"
+          className="min-w-0 flex-1"
         />
-        <div className="relative min-w-0 max-w-full" ref={memberMenuRef}>
-          <button
-            type="button"
-            aria-expanded={memberMenuOpen}
-            aria-label={`筛选成员：${memberById.has(memberFilter) ? labelOf(memberById.get(memberFilter)!) : '全部成员'}`}
-            onClick={() => setMemberMenuOpen((open) => !open)}
-            data-testid="mother-member-filter"
-            className="flex min-h-[36px] max-w-full items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-normal text-slate-600"
-          >
-            <span className="truncate">{memberById.has(memberFilter) ? labelOf(memberById.get(memberFilter)!) : '全部成员'}</span>
-            <span aria-hidden="true">{memberMenuOpen ? '▲' : '▼'}</span>
-          </button>
-          {memberMenuOpen ? (
-            <div className="absolute right-0 top-full z-20 mt-1 max-h-64 w-max min-w-[128px] max-w-[calc(100vw-4rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg" data-testid="mother-member-options">
-              {[{ id: '', label: '全部成员' }, ...group.members.map((member) => ({ id: member.accountId, label: labelOf(member) }))].map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={memberFilter === option.id}
-                  onClick={() => {
-                    setMemberFilter(option.id);
-                    setMemberMenuOpen(false);
-                    memberMenuRef.current?.querySelector('button')?.focus();
-                  }}
-                  className={`block min-h-[36px] w-full truncate rounded-lg px-2 py-1.5 text-left text-xs ${memberFilter === option.id ? 'bg-emerald-50 font-medium text-emerald-700' : 'text-slate-600'}`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <InlineSelect
+          label="筛选成员"
+          value={memberFilter}
+          options={[
+            { value: '', label: '全部成员' },
+            ...group.members.map((member) => ({
+              value: member.accountId,
+              label: labelOf(member),
+            })),
+          ]}
+          onValueChange={setMemberFilter}
+          testId="mother-member-filter"
+          menuTestId="mother-member-options"
+          align="right"
+          className="min-w-[128px]"
+        />
       </div>
       <label className="flex items-center gap-2 text-xs text-slate-500">
         <input

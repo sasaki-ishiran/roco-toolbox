@@ -30,6 +30,9 @@ import { NestPlanCard } from './NestPlanCard';
 import { ProgressCard } from './ProgressCard';
 import { SuggestionCard } from './SuggestionCard';
 import { SourceNotice } from './SourceNotice';
+import { InlineSelect } from './primitives/InlineSelect';
+import { ScopeSummary } from './primitives/ScopeSummary';
+import { SegmentedControl } from './primitives/SegmentedControl';
 import { useOwnedPets } from './useOwnedPets';
 import { useSwapWishes } from './useSwapWishes';
 import { useCoverageSlots } from './useCoverageSlots';
@@ -55,8 +58,6 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
   const mode = useTargetMode();
   // 母本列表默认收起（2026-10-04 优化：方便同时看上面的收集进度和下面的建议）
   const [motherListOpen, setMotherListOpen] = useState(false);
-  // 档位下拉栏展开态（不用原生 <select>：手机上会弹系统选择器窗口，用户要的是页内展开的下拉栏）
-  const [gradeMenuOpen, setGradeMenuOpen] = useState(false);
 
   const { owned, accounts } = useOwnedPets();
   const speciesByGameId = useMemo(() => new Map(species.map((entry) => [entry.gameId, entry])), []);
@@ -181,26 +182,20 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
       <ImportAdditionCard />
 
       <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="target-mode">
-        <div className="flex items-center justify-between gap-2">
+        <ScopeSummary scope="个人种公目标" criteria="看板 / 覆盖度 / 母本 / 配窝共用这一份" />
+        <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-slate-500">当前模式</span>
-          <div className="flex gap-1 rounded-full bg-slate-100 p-0.5" role="group" aria-label="目标模式">
-            {(['perfect', 'medal'] as TargetMode[]).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={mode === value}
-                onClick={() => setTargetMode(value)}
-                data-testid={`target-mode-${value}`}
-                className={`min-h-[28px] rounded-full px-2.5 text-xs ${
-                  mode === value
-                    ? 'bg-white font-medium text-emerald-700 shadow-sm'
-                    : 'text-slate-500'
-                }`}
-              >
-                {TARGET_MODE_LABELS[value]}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="目标模式"
+            value={mode}
+            options={(['perfect', 'medal'] as TargetMode[]).map((value) => ({
+              value,
+              label: TARGET_MODE_LABELS[value],
+            }))}
+            onValueChange={(next) => setTargetMode(next as TargetMode)}
+            optionTestId={(value) => `target-mode-${value}`}
+            className="w-[176px] shrink-0"
+          />
         </div>
         <p className="mt-1 text-[11px] text-slate-400">
           追满分 = ±100dB 才算；追双牌 = 有体重+声音双牌就算。
@@ -260,44 +255,24 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
               页内展开的下拉栏，不是原生 select——手机原生弹出的是系统弹窗） */}
           <h2 className="flex min-w-0 items-center gap-1 text-sm font-medium text-slate-500" data-testid="mother-filter-title">
             <span className="shrink-0">母本全收集 </span>
-            <span className="relative">
-              <button
-                type="button"
-                aria-expanded={gradeMenuOpen}
-                onClick={() => setGradeMenuOpen((prev) => !prev)}
-                data-testid="mother-grade-select"
-                className="min-h-[30px] min-w-[96px] rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-normal text-slate-600"
-              >
-                {gradeLabel(motherGrade, mode)} ({motherClassCounts.get(motherGrade) ?? 0}){' '}
-                {gradeMenuOpen ? '▲' : '▼'}
-              </button>
-              {gradeMenuOpen ? (
-                <div
-                  className="absolute left-0 top-full z-20 mt-1 w-max min-w-[128px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
-                  data-testid="mother-grade-options"
-                >
-                  {MOTHER_CLASS_ORDER.filter((motherClass) => motherClass !== '其他').map((motherClass) => (
-                    <button
-                      key={motherClass}
-                      type="button"
-                      onClick={() => {
-                        setMotherGrade(motherClass as PetGrade);
-                        setMotherListOpen(true);
-                        setGradeMenuOpen(false);
-                      }}
-                      data-testid={`mother-grade-option-${motherClass}`}
-                      className={`block w-full rounded-lg px-2 py-1.5 text-left text-xs ${
-                        motherClass === motherGrade
-                          ? 'bg-emerald-50 font-medium text-emerald-700'
-                          : 'text-slate-600'
-                      }`}
-                    >
-                      {gradeLabel(motherClass as PetGrade, mode)} ({motherClassCounts.get(motherClass) ?? 0})
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </span>
+            <InlineSelect
+              label="母本档位"
+              value={motherGrade}
+              options={MOTHER_CLASS_ORDER.filter((motherClass) => motherClass !== '其他').map(
+                (motherClass) => ({
+                  value: motherClass,
+                  label: `${gradeLabel(motherClass as PetGrade, mode)} (${motherClassCounts.get(motherClass) ?? 0})`,
+                }),
+              )}
+              onValueChange={(next) => {
+                setMotherGrade(next as PetGrade);
+                setMotherListOpen(true);
+              }}
+              testId="mother-grade-select"
+              menuTestId="mother-grade-options"
+              optionTestId={(value) => `mother-grade-option-${value}`}
+              className="min-w-[96px]"
+            />
           </h2>
           <button
             type="button"

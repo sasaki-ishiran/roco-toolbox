@@ -12,6 +12,9 @@ import {
 } from '../domain/motherCriteria';
 import { AccountSection } from './AccountSection';
 import { FilterAccordion } from './FilterAccordion';
+import { FilterPanel } from './primitives/FilterPanel';
+import { SearchField } from './primitives/SearchField';
+import { SegmentedControl } from './primitives/SegmentedControl';
 import { GenderMark } from './GenderMark';
 import {
   getMotherCriteria,
@@ -205,6 +208,7 @@ export function MotherView({
   const [query, setQuery] = useState('');
   // 默认看「未收集」（待补齐才是主场景；看板「母本全收集」卡跳过来也是它）
   const [chainFilter, setChainFilter] = useState<ChainFilter>('uncollected');
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   /**
    * 声音选项随目标模式联动（2026-10-05 用户拍板）：
@@ -350,18 +354,25 @@ export function MotherView({
 
   return (
     <div className="space-y-2">
-      {/* 搜索在最上（用户拍板：对所有母本搜索，支持进化链全员命中） */}
-      <input
-        type="search"
+      {/* 搜索常显（用户拍板：对所有母本搜索，支持进化链全员命中） */}
+      <SearchField
+        label="搜索母本"
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
+        onValueChange={setQuery}
         placeholder="搜索母本名称或图鉴号（支持进化链）"
-        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-300 focus:border-emerald-400 focus:outline-none"
-        data-testid="mother-search"
+        testId="mother-search"
       />
 
       {/* 达标条件（决定「已收集 / 未收集」）+ 蛋组 */}
-      <section className="rounded-xl bg-white p-3 shadow-sm" data-testid="mother-filters">
+      <FilterPanel
+        title="达标条件与筛选"
+        summary={`${criteria.bodies.length > 0 ? criteria.bodies.join(' / ') : '体型不限'} · ${
+          activeVoices.length > 0 ? activeVoices.join(' / ') : '声音不限'
+        } · ${eggGroupFilter.length > 0 ? `${eggGroupFilter.length} 个蛋组` : '全部蛋组'}`}
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        testId="mother-filters"
+      >
         <FilterAccordion
           dimensions={[
             {
@@ -404,7 +415,7 @@ export function MotherView({
             },
           ]}
         />
-      </section>
+      </FilterPanel>
 
       {planGroups.length > 0 ? (
         <CollapsibleSection
@@ -437,28 +448,14 @@ export function MotherView({
           <span className="text-[11px] text-slate-400" data-testid="mother-chain-summary">
             共 {matchedGroups.length} 条链 · 已收集 {collectedChainCount}
           </span>
-          <div
-            className="flex gap-1 rounded-full bg-slate-100 p-0.5"
-            role="group"
-            aria-label="母本收集状态"
-          >
-            {CHAIN_FILTERS.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                aria-pressed={chainFilter === item.value}
-                onClick={() => setChainFilter(item.value)}
-                data-testid={`mother-chain-filter-${item.value}`}
-                className={`min-h-[28px] rounded-full px-2.5 text-[11px] ${
-                  chainFilter === item.value
-                    ? 'bg-white font-medium text-emerald-700 shadow-sm'
-                    : 'text-slate-500'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="母本收集状态"
+            value={chainFilter}
+            options={CHAIN_FILTERS.map((item) => ({ value: item.value, label: item.label }))}
+            onValueChange={(next) => setChainFilter(next as ChainFilter)}
+            optionTestId={(value) => `mother-chain-filter-${value}`}
+            className="w-[148px] shrink-0"
+          />
         </div>
         {chainSections.length === 0 ? (
           <p

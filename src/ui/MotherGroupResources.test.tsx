@@ -35,14 +35,14 @@ describe('MotherGroupResources 三视图', () => {
     const filter = screen.getByTestId('mother-member-filter');
     expect(filter.tagName).toBe('BUTTON');
     fireEvent.click(filter);
-    fireEvent.click(screen.getByRole('button', { name: 'B' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'B' }));
     expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(1);
     expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('火花');
     expect(filter).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(screen.getByTestId('mother-view-all'));
     expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(1);
     fireEvent.click(filter);
-    fireEvent.click(screen.getByRole('button', { name: '全部成员' }));
+    fireEvent.click(screen.getByRole('radio', { name: '全部成员' }));
     expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(3);
   });
 
@@ -50,10 +50,10 @@ describe('MotherGroupResources 三视图', () => {
     renderResources();
     fireEvent.click(screen.getByTestId('mother-view-help'));
     fireEvent.click(screen.getByTestId('mother-member-filter'));
-    fireEvent.click(screen.getByRole('button', { name: 'B' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'B' }));
     expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('火花');
     fireEvent.click(screen.getByTestId('mother-member-filter'));
-    fireEvent.click(screen.getByRole('button', { name: 'C' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'C' }));
     expect(screen.queryAllByTestId('mother-resource-row')).toHaveLength(0);
   });
 

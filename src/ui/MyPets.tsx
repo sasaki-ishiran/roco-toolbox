@@ -23,6 +23,9 @@ import { EmptyState } from './EmptyState';
 import { MotherView } from './MotherView';
 import { PetList } from './PetList';
 import { FilterAccordion } from './FilterAccordion';
+import { FilterPanel } from './primitives/FilterPanel';
+import { SearchField } from './primitives/SearchField';
+import { SegmentedControl } from './primitives/SegmentedControl';
 import { useCoverageSlots } from './useCoverageSlots';
 import { useOwnedPets } from './useOwnedPets';
 import { useTargetMode } from './targetModeStore';
@@ -222,20 +225,12 @@ export function MyPets({ view, onViewChange, onGoImport }: MyPetsProps) {
 
   return (
     <main className="mx-auto max-w-md space-y-3 p-4">
-      <div className="flex rounded-xl bg-slate-100 p-1">
-        {VIEW_LABELS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onViewChange(item.id)}
-            className={`min-h-[40px] flex-1 rounded-lg text-sm font-medium ${
-              view === item.id ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        label="精灵库视图"
+        value={view}
+        options={VIEW_LABELS.map((item) => ({ value: item.id, label: item.label }))}
+        onValueChange={(next) => onViewChange(next as PetView)}
+      />
 
       <p className="px-1 text-[11px] text-slate-400" data-testid="mypets-mode">
         当前模式 · {TARGET_MODE_LABELS[mode]}
@@ -253,14 +248,13 @@ export function MyPets({ view, onViewChange, onGoImport }: MyPetsProps) {
         />
       ) : view === 'stud' ? (
         <>
-          {/* 搜索在最上（2026-10-05 用户拍板：搜索框跑下面很奇怪），支持进化链全员命中 */}
-          <input
-            type="search"
+          {/* 搜索常显、独立于高级筛选（2026-10-24 统一控件）：支持进化链全员命中 */}
+          <SearchField
+            label="搜索种公名称"
             value={studQuery}
-            onChange={(event) => setStudQuery(event.target.value)}
+            onValueChange={setStudQuery}
             placeholder="搜索种公名称（支持进化链）"
-            data-testid="stud-search"
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-300 focus:border-emerald-400 focus:outline-none"
+            testId="stud-search"
           />
           {/* 档位 / 性格 / 蛋组 统一成与「全部」页一致的手风琴（白卡包一层，与其它筛选区统一） */}
           <section className="rounded-xl bg-white p-3 shadow-sm" data-testid="stud-filters">
@@ -323,75 +317,57 @@ export function MyPets({ view, onViewChange, onGoImport }: MyPetsProps) {
         </>
       ) : (
         <>
-          {/* 全部页筛选抽屉（2026-10-05 拍板：按参考图紧凑分组，默认展开，带搜索与重置） */}
-          <section className="rounded-xl bg-white p-3 shadow-sm" data-testid="pet-filters">
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                aria-expanded={filtersOpen}
-                onClick={() => setMyPetsFiltersOpen(!filtersOpen)}
-                className="min-h-[32px] text-xs font-medium text-emerald-700"
-                data-testid="pet-filters-toggle"
-              >
-                筛选{filtersOpen ? ' ▲' : ' ▼'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  clearMyPetsFilters();
-                  setNameQuery('');
-                }}
-                className="min-h-[32px] text-xs text-slate-500"
-                data-testid="pet-filters-reset"
-              >
-                重置{selected.size > 0 ? `（${selected.size}）` : ''}
-              </button>
-            </div>
-
-            {filtersOpen ? (
-              <div className="mt-2 space-y-2.5">
-                <input
-                  type="search"
-                  value={nameQuery}
-                  onChange={(event) => setNameQuery(event.target.value)}
-                  placeholder="搜索精灵名"
-                  data-testid="pet-name-search"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-300 focus:border-emerald-400 focus:outline-none"
-                />
-                <FilterAccordion
-                  dimensions={FILTER_DIMENSIONS.filter(({ kind }) =>
-                    displayTags.some((tag) => tag.kind === kind),
-                  ).map(({ kind, label }) => {
-                    const rowTags =
-                      kind === 'nature'
-                        ? sortNaturePoolFirst(displayTags.filter((tag) => tag.kind === kind))
-                        : displayTags.filter((tag) => tag.kind === kind);
-                    return {
-                      id: kind,
-                      label,
-                      options: rowTags.map((tag) => ({
-                        value: tag.id,
-                        label: `${tag.label} (${facetCounts[tag.id] ?? 0})`,
-                        disabled: (facetCounts[tag.id] ?? 0) === 0,
-                      })),
-                      selected: rowTags.filter((tag) => selected.has(tag.id)).map((tag) => tag.id),
-                      onToggle: (id) => toggle(id),
-                      onClear: () =>
-                        setMyPetsSelected(
-                          new Set([...selected].filter((id) => !id.startsWith(`${kind}:`))),
-                        ),
-                    };
-                  })}
-                />
-              </div>
-            ) : null}
-
-            {selectedLabels.length > 0 ? (
-              <p className="mt-1 text-xs text-slate-500" data-testid="pet-filters-selected">
-                已选：{selectedLabels.join('、')}
-              </p>
-            ) : null}
-          </section>
+          {/* 搜索常显、独立于高级筛选（2026-10-24 统一控件） */}
+          <SearchField
+            label="搜索精灵名"
+            value={nameQuery}
+            onValueChange={setNameQuery}
+            placeholder="搜索精灵名"
+            testId="pet-name-search"
+          />
+          <FilterPanel
+            title={`筛选${selected.size > 0 ? `（${selected.size}）` : ''}`}
+            open={filtersOpen}
+            onOpenChange={setMyPetsFiltersOpen}
+            onClear={() => {
+              clearMyPetsFilters();
+              setNameQuery('');
+            }}
+            clearLabel={`重置${selected.size > 0 ? `（${selected.size}）` : ''}`}
+            testId="pet-filters"
+            toggleTestId="pet-filters-toggle"
+            clearTestId="pet-filters-reset"
+            summary={
+              selectedLabels.length > 0 ? `已选：${selectedLabels.join('、')}` : undefined
+            }
+            summaryTestId="pet-filters-selected"
+          >
+            <FilterAccordion
+              dimensions={FILTER_DIMENSIONS.filter(({ kind }) =>
+                displayTags.some((tag) => tag.kind === kind),
+              ).map(({ kind, label }) => {
+                const rowTags =
+                  kind === 'nature'
+                    ? sortNaturePoolFirst(displayTags.filter((tag) => tag.kind === kind))
+                    : displayTags.filter((tag) => tag.kind === kind);
+                return {
+                  id: kind,
+                  label,
+                  options: rowTags.map((tag) => ({
+                    value: tag.id,
+                    label: `${tag.label} (${facetCounts[tag.id] ?? 0})`,
+                    disabled: (facetCounts[tag.id] ?? 0) === 0,
+                  })),
+                  selected: rowTags.filter((tag) => selected.has(tag.id)).map((tag) => tag.id),
+                  onToggle: (id) => toggle(id),
+                  onClear: () =>
+                    setMyPetsSelected(
+                      new Set([...selected].filter((id) => !id.startsWith(`${kind}:`))),
+                    ),
+                };
+              })}
+            />
+          </FilterPanel>
           {visiblePets.length === 0 ? (
             <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
               没有符合条件的精灵，试试取消部分标签。

@@ -7,6 +7,7 @@ import { useSnapshots } from './useSnapshots';
 import { AccountFilterBar } from './AccountFilterBar';
 import { EmptyState } from './EmptyState';
 import { FilterAccordion } from './FilterAccordion';
+import { SearchField } from './primitives/SearchField';
 import { SourceNotice } from './SourceNotice';
 import { SwapWishCard } from './SwapWishCard';
 import { MotherSharing } from './MotherSharing';
@@ -155,13 +156,12 @@ export function Swap({
 
               {/* 搜索在最上，下面是筛选手风琴（性格 / 蛋组）——筛选放在清单卡外面，
                   清空筛选后也不会跟着空状态一起消失 */}
-              <input
-                type="search"
+              <SearchField
+                label="搜索换蛋目标"
                 value={query}
-                onChange={(event) => setSwapFilters({ query: event.target.value })}
+                onValueChange={(value) => setSwapFilters({ query: value })}
                 placeholder="搜性格 / 精灵名 / 蛋组"
-                data-testid="swap-search"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-300 focus:border-emerald-400 focus:outline-none"
+                testId="swap-search"
               />
               <section className="rounded-xl bg-white p-3 shadow-sm" data-testid="swap-filters">
                 <FilterAccordion

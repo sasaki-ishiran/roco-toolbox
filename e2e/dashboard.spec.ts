@@ -281,7 +281,7 @@ test('母本全收集：四档分开计数，默认满分大婉，切换档位�
   await gradeSelect.click();
   const gradeOptions = page.getByTestId('mother-grade-options');
   await expect(gradeOptions).toBeVisible();
-  await expect(gradeOptions.getByRole('button')).toHaveCount(4);
+  await expect(gradeOptions.getByRole('radio')).toHaveCount(4);
 
   // 母本列表默认收起，先展开再断言内容（2026-10-04 优化）
   await page.getByTestId('mother-list-toggle').click();
@@ -295,7 +295,8 @@ test('母本全收集：四档分开计数，默认满分大婉，切换档位�
   await expect(page.getByTestId('account-section').first()).toBeVisible();
 
   // 切到满分小婉（fixture 里没有）→ 列表为空、下拉选中项跟着换（选择档位会自动展开列表）。
-  // 下拉栏在前面已打开且没人关它，这里直接点选项（不要再点触发按钮，点了反而收起）
+  // 展开母本列表那一下算「点外部」，下拉已收起（2026-10-24 统一单选：外点关闭），这里重新打开再选
+  await gradeSelect.click();
   await page.getByTestId('mother-grade-option-小婉').click();
   await expect(gradeSelect).toContainText(/满分小婉/);
   await expect(page.getByTestId('mother-filter-result')).toContainText('这个档位暂时没有合格的母本');

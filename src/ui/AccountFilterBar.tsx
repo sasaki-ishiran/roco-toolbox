@@ -26,7 +26,7 @@ export function AccountFilterBar({ accounts }: AccountFilterBarProps) {
         <button
           type="button"
           onClick={() => toggleAllAccounts(accounts)}
-          className="min-h-[28px] text-xs font-medium text-emerald-700"
+          className="min-h-[44px] text-xs font-medium text-emerald-700"
           data-testid="account-filter-toggle-all"
         >
           {allOn ? '全不选' : '全选'}
@@ -41,7 +41,7 @@ export function AccountFilterBar({ accounts }: AccountFilterBarProps) {
               type="button"
               aria-pressed={on}
               onClick={() => toggleAccount(account)}
-              className={`min-h-[32px] shrink-0 rounded-full border px-2.5 text-xs ${
+              className={`min-h-[44px] shrink-0 rounded-full border px-3 text-xs ${
                 on
                   ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
                   : 'border-slate-200 bg-white text-slate-400'
