@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { analyticsEnabled, setAnalyticsEnabled, track } from '../api/analytics';
 import { readAccountId } from '../api/session';
 import { syncNow } from '../api/sync';
-import { AccountPanel } from './AccountPanel';
 import { analyzeImport } from '../domain/importDiff';
 import { accountKeyOf, parseBackup, type AccountSnapshot } from '../domain/parseBackup';
 import { groupMothersByEgg, plannedAchievements } from '../domain/petFilters';
@@ -38,6 +37,7 @@ import {
 } from './targetModeStore';
 import { getMotherPlan, mergeMotherPlan } from './motherPlanStore';
 import { setImportMessage, useImportMessage } from './importMessageStore';
+import { beginImport, updateImportOutcome, useImportOutcome } from './importOutcomeStore';
 import { clearSyncFeedback, setSyncConflict, setSyncNotice, useSyncFeedback } from './syncNoticeStore';
 import { recordSyncedPets } from './syncAdditions';
 
@@ -55,8 +55,13 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
   const importHistory = useLastImportHistory();
   // 全局目标模式：追满分 / 追双牌，「本次新增」的分类口径读它
   const mode = useTargetMode();
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
+  // 导入的本机 / 私有云 / 小组三阶段反馈放模块级 store：切页或导入中离开本页也不丢（2026-10-24）
+  const outcome = useImportOutcome();
+  const importing = outcome.local === 'importing';
+  const importError = outcome.local === 'failed' ? outcome.message : null;
+  // 合并 / 导出 / 分享处理这类非导入动作的错误：留在本页即可（导入本体的反馈已进 store）
+  const [actionError, setActionError] = useState<string | null>(null);
+  const currentOp = useRef(0);
   const dataMessage = useImportMessage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
@@ -86,7 +91,11 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
   }, [lastImportedAt]);
 
   /** 导入后把"本次新增里符合看板分类的"记下来，给顶部那张卡片用 */
-  const reportNewPets = (previous: AccountSnapshot[], imported: AccountSnapshot[]) => {
+  const reportNewPets = (
+    previous: AccountSnapshot[],
+    imported: AccountSnapshot[],
+    operationId: number,
+  ) => {
     setLastImportResult(
       analyzeImport({
         previous,
@@ -108,12 +117,15 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
     // 原来的 `.catch(() => {})` 因此永远不触发 → 冲突被静默吞掉，用户以为同步好了。
     // 现在把冲突交给「云同步」面板展示（用户在那里二选一），并在顶部给一条提示。
     if (readAccountId()) {
+      updateImportOutcome(operationId, { cloud: 'syncing' });
       void syncNow()
         .then((result) => {
           if (!result.ok) {
+            updateImportOutcome(operationId, { cloud: 'conflict' });
             setSyncConflict(result.conflict);
             return;
           }
+          updateImportOutcome(operationId, { cloud: 'synced' });
           // 从云端补上了本机没有的设置键：这些键是模块级 store 启动时读的，刷新才生效。
           // 这里**不刷新**——分享导入后还要跳看板看「本次新增」，刷新会把它冲掉；
           // 所以只给一条提示，用户想立刻生效就自己刷新。
@@ -128,6 +140,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
         })
         // 网络/服务端异常也要留一条提示：这是导入后自动触发的，用户没主动点过任何按钮
         .catch(() => {
+          updateImportOutcome(operationId, { cloud: 'failed' });
           setSyncNotice('自动同步没成功（网络异常），到下面「云同步」点一次「立即同步」重试。');
         });
     }
@@ -182,8 +195,8 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
     files: File[],
     sourceLabel?: string,
   ): Promise<AccountSnapshot[] | null> => {
-    setImporting(true);
-    setImportError(null);
+    const operationId = beginImport();
+    currentOp.current = operationId;
     try {
       // 先记住导入前的数据，"本次新增"才有得比
       const previous = snapshots;
@@ -217,18 +230,25 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
       }
 
       await refreshSnapshots();
-      reportNewPets(previous, working);
+      reportNewPets(previous, working, operationId);
       // 抓包导入也可能让计划里的链达标
       messages.push(...achievementMessages(previous, working, planBefore));
       // 分享进来的来源说明放最前面，后面接合并/计划的说明（合并结果不在「本次新增」卡片里）
       const parts = sourceLabel ? [sourceLabel, ...messages] : messages;
-      if (parts.length > 0) setImportMessage(parts.join('；'));
+      const text = parts.length > 0 ? parts.join('；') : null;
+      if (text) setImportMessage(text);
+      updateImportOutcome(operationId, {
+        local: 'saved',
+        message: text,
+        cloud: readAccountId() ? 'syncing' : 'not-enabled',
+      });
       return imported;
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : '导入失败');
+      updateImportOutcome(operationId, {
+        local: 'failed',
+        message: error instanceof Error ? error.message : '导入失败',
+      });
       return null;
-    } finally {
-      setImporting(false);
     }
   };
 
@@ -286,14 +306,14 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
           if (result !== null) onShareImported?.();
         }
       } catch (error) {
-        setImportError(error instanceof Error ? error.message : '导入分享的数据失败');
+        setActionError(error instanceof Error ? error.message : '导入分享的数据失败');
       }
     };
 
     // 消费分享数据；失败也要给提示，不能让它变成未处理的 rejection（数据会静默丢掉）
     const runConsume = () => {
       void consume().catch((error) => {
-        setImportError(error instanceof Error ? error.message : '处理分享进来的数据失败');
+        setActionError(error instanceof Error ? error.message : '处理分享进来的数据失败');
       });
     };
     runConsume();
@@ -330,7 +350,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
     try {
       // 1) 壳 JS Bridge：调起系统分享面板（QQ/微信等）
       if (shareToNative(text, fileName)) {
-        setImportError(null);
+        setActionError(null);
         setImportMessage(`已发起分享 ${snapshots.length} 个账号的数据`);
         return;
       }
@@ -339,14 +359,14 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
         const file = new File([text], fileName, { type: 'application/json' });
         if (navigator.canShare?.({ files: [file] })) {
           await navigator.share({ files: [file], title: '洛克工具箱数据备份' });
-          setImportError(null);
+          setActionError(null);
           setImportMessage(`已分享 ${snapshots.length} 个账号的数据`);
           return;
         }
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        setImportError(null);
+        setActionError(null);
         return; // 用户取消分享，什么都不提示
       }
       // 分享失败（如权限）不打断，继续走下载兜底
@@ -360,7 +380,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
     link.download = fileName;
     link.click();
     URL.revokeObjectURL(url);
-    setImportError(null);
+    setActionError(null);
     setImportMessage(`已导出 ${snapshots.length} 个账号的数据`);
   };
 
@@ -378,21 +398,27 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
           `更新 ${merged.updated.length} · 保留本地较新 ${merged.kept.length}\n\n确定继续吗？`,
       );
       if (!confirmed) return;
+      const operationId = beginImport();
+      currentOp.current = operationId;
 
       await writeSnapshots(merged.snapshots);
       await refreshSnapshots();
-      reportNewPets(previous, merged.snapshots);
-      setImportError(null);
-      setImportMessage(
-        [
-          mergeMessage(file.name, merged),
-          ...applyBackupPlanning(backup),
-          ...achievementMessages(previous, merged.snapshots, planBefore),
-        ].join('；'),
-      );
+      reportNewPets(previous, merged.snapshots, operationId);
+      setActionError(null);
+      const text = [
+        mergeMessage(file.name, merged),
+        ...applyBackupPlanning(backup),
+        ...achievementMessages(previous, merged.snapshots, planBefore),
+      ].join('；');
+      setImportMessage(text);
+      updateImportOutcome(operationId, {
+        local: 'saved',
+        message: text,
+        cloud: readAccountId() ? 'syncing' : 'not-enabled',
+      });
     } catch (error) {
       // JSON.parse 的 SyntaxError 是英文原文（"Unexpected token..."），换成用户能看懂的提示
-      setImportError(
+      setActionError(
         error instanceof SyntaxError
           ? '备份文件不是有效的 JSON：请确认选的是工具箱导出的备份'
           : error instanceof Error
@@ -431,8 +457,10 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
       />
 
       {/* 导入结果 / 错误紧跟主按钮：导入失败、合并结果都在这里第一时间看到 */}
-      {importError ? (
-        <div className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-700">{importError}</div>
+      {importError || actionError ? (
+        <div className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-700">
+          {importError ?? actionError}
+        </div>
       ) : null}
       {dataMessage ? (
         <p className="-mt-1 text-xs text-emerald-700" data-testid="data-message">
@@ -514,12 +542,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
         </div>
       ) : null}
 
-      {/* 云同步（跨设备）已是核心能力（换设备全靠它）→ 从页面最底提到主按钮下面 */}
-      <AccountPanel
-        autoConflict={autoConflict}
-        onAutoConflictHandled={() => setSyncConflict(null)}
-      />
-
+      {/* 云同步面板已移到「我的 · 工具箱身份 / 私有同步」（2026-10-24）：这里不再重复挂载认证与同步 */}
       {/* 导入历史入口（「本次新增」明细在看板，2026-10-05 用户拍板） */}
       {importHistory.length > 0 ? <ImportResultCard /> : null}
 

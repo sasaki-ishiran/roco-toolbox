@@ -9,7 +9,7 @@ import { guidePending, markGuideSeen } from './ui/guide';
 import { hasPendingNativeShare } from './share/nativeShare';
 import { Coverage } from './ui/Coverage';
 import { Dashboard } from './ui/Dashboard';
-import { ImportPanel } from './ui/ImportPanel';
+import { Profile } from './ui/Profile';
 import { MyPets } from './ui/MyPets';
 import { Swap } from './ui/Swap';
 import { TabNav, type TabId } from './ui/TabNav';
@@ -23,6 +23,7 @@ import {
 } from './ui/navigation';
 import { readLastTab, saveLastTab, hasSavedTab } from './ui/lastTab';
 import { readSwapMainView, saveSwapMainView } from './ui/swapViewStore';
+import { getImportOutcome, useImportOutcome } from './ui/importOutcomeStore';
 import { useSnapshots } from './ui/useSnapshots';
 
 /** 新导航状态 → 旧五页签里该高亮哪一个（兼容桥阶段用；任务 9 换四入口后删除）。 */
@@ -42,8 +43,12 @@ export default function App() {
   );
   /** 统一入口：页面只发意图，状态变化全部走纯函数（见 ui/navigation.ts）。 */
   const navigate = useCallback((intent: NavigationIntent) => {
+    // 分享正在解析／保存期间不要卸载消费页面（否则这次分享会被静默搁置）；
+    // 普通私有同步不锁导航（2026-10-24）。
+    if (getImportOutcome().local === 'importing' && intent.type !== 'consume-focus') return;
     setNavigation((current) => resolveNavigation(current, intent));
   }, []);
+  const importOutcome = useImportOutcome();
   const activeTab = legacyTabOf(navigation);
   /** 手动刷新按钮的忙碌态（真正刷新会让页面重载，这里只防连点） */
   const [refreshing, setRefreshing] = useState(false);
@@ -174,7 +179,7 @@ export default function App() {
         break;
       }
       case 'import':
-        navigate({ type: 'tab', page: 'profile' });
+        navigate({ type: 'open-profile', section: 'data' });
         break;
     }
   };
@@ -264,37 +269,51 @@ export default function App() {
           }
         />
       ) : navigation.page === 'profile' ? (
-        <ImportPanel onShareImported={handleShareImported} />
+        <Profile
+          section={navigation.profileSection}
+          returnToGroups={navigation.returnToGroups}
+          onNavigate={navigate}
+          onShareImported={handleShareImported}
+        />
       ) : navigation.page === 'groups' ? (
         <Swap
           view="sharing"
           onViewChange={handleSwapViewChange}
-          onGoImport={() => navigate({ type: 'tab', page: 'profile' })}
-          onGoAccount={() => navigate({ type: 'tab', page: 'profile' })}
+          onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
+          onGoAccount={() => navigate({ type: 'open-profile', section: 'identity' })}
         />
       ) : collection.kind === 'inventory' || collection.kind === 'mothers' ? (
         <MyPets
           view={myPetsView}
           onViewChange={handleMyPetsViewChange}
-          onGoImport={() => navigate({ type: 'tab', page: 'profile' })}
+          onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
         />
       ) : collection.view === 'eggs' ? (
         <Swap
           view="eggs"
           onViewChange={handleSwapViewChange}
-          onGoImport={() => navigate({ type: 'tab', page: 'profile' })}
-          onGoAccount={() => navigate({ type: 'tab', page: 'profile' })}
+          onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
+          onGoAccount={() => navigate({ type: 'open-profile', section: 'identity' })}
         />
       ) : (
         <Coverage
           expandedGroupId={expandedGroupId}
           onToggleGroup={setExpandedGroupId}
-          onGoImport={() => navigate({ type: 'tab', page: 'profile' })}
+          onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
         />
       )}
       {changelog.length > 0 ? <ChangelogModal entries={changelog} onClose={closeChangelog} /> : null}
       {/* 教程与更新弹窗不同时弹：先看完更新内容再引导 */}
       {changelog.length === 0 && guide ? <GuideModal onClose={closeGuide} /> : null}
+      {importOutcome.local === 'importing' ? (
+        <div
+          className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-900/85 px-4 py-2 text-xs text-white shadow-lg"
+          role="status"
+          data-testid="import-busy"
+        >
+          正在保存导入的数据…
+        </div>
+      ) : null}
     </>
   );
 }

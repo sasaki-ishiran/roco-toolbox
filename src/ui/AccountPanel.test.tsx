@@ -184,10 +184,12 @@ describe('云同步面板（免密恢复码）', () => {
     });
     expect(screen.getByTestId('account-conflict')).toHaveTextContent('版本 7');
 
-    // 选「用本机（覆盖云端）」：认下云端版本后重传 → 成功 → 通知上层
+    // 选「用本机（覆盖云端）」：先确认（整份替换），认下云端版本后重传 → 成功 → 通知上层
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getByTestId('account-conflict-keep-local'));
     await waitFor(() => {
       expect(onHandled).toHaveBeenCalled();
     });
+    confirmSpy.mockRestore();
   });
 });

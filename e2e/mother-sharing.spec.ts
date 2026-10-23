@@ -17,7 +17,9 @@ test('没有本地账号也能进入母本共享；未登录可去登录，待�
   expect(pending).toBe('ABCD2345');
 
   await page.getByTestId('mother-login').click();
-  await expect(page.getByTestId('import-button')).toBeVisible();
+  // 新结构：去登录直达「我的 · 工具箱身份」（游戏数据与身份分开）
+  await expect(page.getByTestId('profile-identity-intro')).toBeVisible();
+  await expect(page.getByTestId('account-recover-input')).toBeVisible();
 });
 
 test('已登录且本机无数据：能浏览小组资源，不能发布自己的摘要', async ({ page }) => {

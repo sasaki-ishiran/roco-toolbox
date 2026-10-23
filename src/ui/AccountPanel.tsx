@@ -45,11 +45,17 @@ export interface AccountPanelProps {
   autoConflict?: CloudMeta | null;
   /** 冲突被处理（选云端 / 选本机）后通知上层清掉提示 */
   onAutoConflictHandled?: () => void;
+  /**
+   * 「我的」页分区（2026-10-24）：identity 只看身份动作、sync 只看私有同步。
+   * 组件本身仍只挂载一份，切分区不会丢恢复码 / 同步提示。
+   */
+  section?: 'identity' | 'sync';
 }
 
 export function AccountPanel({
   autoConflict = null,
   onAutoConflictHandled,
+  section,
 }: AccountPanelProps = {}) {
   const [accountId, setAccountId] = useState(() => readAccountId());
   const [me, setMe] = useState<MeResult | null>(null);
@@ -177,8 +183,16 @@ export function AccountPanel({
     });
 
   /** 逃生口：用本机数据整份覆盖云端（合并只增不减，本机删掉的账号得靠它推上去） */
-  const handleForcePush = () =>
-    run('force', async () => {
+  const handleForcePush = () => {
+    // 2026-10-24：这是不可逆的整份替换，先确认再发写请求
+    const confirmed = window.confirm(
+      `用本机数据整份覆盖云端？\n\n` +
+        `本机 ${snapshots.length} 个账号的数据会替换云端现有内容；` +
+        `云端独有的账号或更新可能被移除。\n\n` +
+        `拿不准就先到「游戏数据」导出备份。确定继续吗？`,
+    );
+    if (!confirmed) return;
+    void run('force', async () => {
       markSynced(conflict?.version ?? me?.snapshot?.version ?? 0);
       clearConflict();
       const result = await uploadSnapshot();
@@ -190,6 +204,7 @@ export function AccountPanel({
       setMessage(`已用本机数据覆盖云端（版本 ${result.version}）`);
       setMe(await fetchMe());
     });
+  };
 
   const handleRotate = () =>
     run('rotate', async () => {
@@ -222,7 +237,9 @@ export function AccountPanel({
   return (
     <section className="rounded-xl border border-slate-200 bg-white px-4 py-3" data-testid="account-panel">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-medium text-slate-700">云同步（跨设备）</h2>
+        <h2 className="text-sm font-medium text-slate-700">
+          {section === 'identity' ? '工具箱身份' : section === 'sync' ? '私有同步' : '云同步（跨设备）'}
+        </h2>
         {/* 文案避开「N 个账号」的写法：导入面板那行用的是那个格式，别让 e2e 的选择器撞车 */}
         <span className="text-[11px] text-slate-400">
           {size ? `本机数据 约 ${sizeText(size.bytes)} · 账号 ${size.accounts} 个` : '本机数据读取中…'}
@@ -236,53 +253,67 @@ export function AccountPanel({
             {me?.snapshot ? timeText(me.snapshot.updatedAt) : '—'}
           </p>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              data-testid="account-sync"
-              onClick={handleSync}
-              disabled={busy !== ''}
-              className="min-h-[40px] rounded-xl bg-emerald-600 px-3 text-xs font-medium text-white disabled:opacity-50"
-            >
-              {busy === 'sync' ? '同步中…' : '立即同步'}
-            </button>
-            <button
-              type="button"
-              data-testid="account-force-push"
-              onClick={handleForcePush}
-              disabled={busy !== ''}
-              className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
-            >
-              {busy === 'force' ? '上传中…' : '用本机覆盖云端'}
-            </button>
-            <button
-              type="button"
-              data-testid="account-rotate"
-              onClick={handleRotate}
-              disabled={busy !== ''}
-              className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-600 disabled:opacity-50"
-            >
-              重新生成恢复码
-            </button>
-            <button
-              type="button"
-              data-testid="account-logout"
-              onClick={handleLogout}
-              disabled={busy !== ''}
-              className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
-            >
-              退出登录
-            </button>
-            <button
-              type="button"
-              data-testid="account-delete"
-              onClick={handleDelete}
-              disabled={busy !== ''}
-              className="min-h-[40px] rounded-xl border border-red-100 px-3 text-xs text-red-500 disabled:opacity-50"
-            >
-              注销账号
-            </button>
+            {section !== 'identity' ? (
+              <button
+                type="button"
+                data-testid="account-sync"
+                onClick={handleSync}
+                disabled={busy !== ''}
+                className="min-h-[40px] rounded-xl bg-emerald-600 px-3 text-xs font-medium text-white disabled:opacity-50"
+              >
+                {busy === 'sync' ? '同步中…' : '立即同步'}
+              </button>
+            ) : null}
+            {section !== 'identity' ? (
+              <button
+                type="button"
+                data-testid="account-force-push"
+                onClick={handleForcePush}
+                disabled={busy !== ''}
+                className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
+              >
+                {busy === 'force' ? '上传中…' : '用本机覆盖云端'}
+              </button>
+            ) : null}
+            {section !== 'sync' ? (
+              <button
+                type="button"
+                data-testid="account-rotate"
+                onClick={handleRotate}
+                disabled={busy !== ''}
+                className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-600 disabled:opacity-50"
+              >
+                重新生成恢复码
+              </button>
+            ) : null}
+            {section !== 'sync' ? (
+              <button
+                type="button"
+                data-testid="account-logout"
+                onClick={handleLogout}
+                disabled={busy !== ''}
+                className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
+              >
+                退出登录
+              </button>
+            ) : null}
+            {section !== 'sync' ? (
+              <button
+                type="button"
+                data-testid="account-delete"
+                onClick={handleDelete}
+                disabled={busy !== ''}
+                className="min-h-[40px] rounded-xl border border-red-100 px-3 text-xs text-red-500 disabled:opacity-50"
+              >
+                注销账号
+              </button>
+            ) : null}
           </div>
         </div>
+      ) : section === 'sync' ? (
+        <p className="mt-2 text-xs text-slate-500" data-testid="account-sync-needs-identity">
+          还没有工具箱身份。先到「工具箱身份」开启云同步或输入恢复码。
+        </p>
       ) : (
         <div className="mt-2 space-y-2">
           <button
@@ -315,7 +346,7 @@ export function AccountPanel({
         </div>
       )}
 
-      {recoveryCode ? (
+      {recoveryCode && section !== 'sync' ? (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2" data-testid="account-recovery-block">
           <p className="text-[11px] text-amber-700">
             恢复码只显示这一次，建议复制或截图保存（换手机、重装都靠它）。万一丢了也没关系：在仍登录的设备上点「重新生成恢复码」就能换一张新的。
