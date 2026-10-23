@@ -16,13 +16,10 @@
  *   DELETE /api/account                 注销账号（清空该账号全部云端数据）
  *   GET  /api/sync[?full=1]             取云端快照（需登录）
  *   PUT  /api/sync                      写云端快照（需登录，带 baseVersion）
- *   POST /api/list                     创建「互换清单」→ 返回分享码
- *   GET  /api/list?code=XXXX           读取互换清单
- *   PUT  /api/list                     更新互换清单（带 baseVersion）
+ *   GET  /api/mother-groups             我加入的母本共享小组（需登录）
  */
 import { handleDeleteAccount, handleLogout, handleMe, handleRecover, handleRegister, handleRotate } from './auth';
 import { handleEvent, handleStats } from './events';
-import { handleListCreate, handleListGet, handleListPut } from './lists';
 import { handleMotherGroups } from './motherGroups';
 import { handleSyncGet, handleSyncPut } from './sync';
 import { type Env, corsHeaders, fail, json, resolveOrigin } from './util';
@@ -50,11 +47,6 @@ export async function route(request: Request, env: Env): Promise<Response> {
 
   if (pathname === '/api/sync' && method === 'GET') return handleSyncGet(request, env, origin);
   if (pathname === '/api/sync' && method === 'PUT') return handleSyncPut(request, env, origin);
-
-  // 互换清单：分享码即权限，不校验账号
-  if (pathname === '/api/list' && method === 'POST') return handleListCreate(request, env, origin);
-  if (pathname === '/api/list' && method === 'GET') return handleListGet(request, env, origin);
-  if (pathname === '/api/list' && method === 'PUT') return handleListPut(request, env, origin);
 
   // 多人母本资源共享：全部需要登录，权限与子路由在 handleMotherGroups 内处理
   if (pathname === '/api/mother-groups' || pathname.startsWith('/api/mother-groups/')) {

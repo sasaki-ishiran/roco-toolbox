@@ -9,7 +9,6 @@ import { EmptyState } from './EmptyState';
 import { FilterAccordion } from './FilterAccordion';
 import { SourceNotice } from './SourceNotice';
 import { SwapWishCard } from './SwapWishCard';
-import { SwapChecklist } from './SwapChecklist';
 import { MotherSharing } from './MotherSharing';
 import { useCoverageSlots } from './useCoverageSlots';
 import { useOwnedPets } from './useOwnedPets';
@@ -84,12 +83,10 @@ export function Swap({
   }, [recommendations, natureFilter, groupFilter, query]);
 
   // 顶部主分段：换蛋清单（原有算法）/ 母本共享（多人小组）。
-  // 旧版双人清单不再占主分段：本机有旧清单时，在母本共享底部给出兼容入口。
   // 主视图跨重启保留（关后台回来还停在母本共享，不会以为小组没了）。
-  const [view, setView] = useState<'eggs' | 'sharing' | 'legacy'>(() => readSwapMainView());
+  const [view, setView] = useState<'eggs' | 'sharing'>(() => readSwapMainView());
 
   useEffect(() => {
-    if (view === 'legacy') return; // 旧清单只是兼容入口，不记成默认视图
     saveSwapMainView(view);
   }, [view]);
 
@@ -118,20 +115,8 @@ export function Swap({
         ))}
       </div>
 
-      {view === 'legacy' ? (
-        <>
-          <button
-            type="button"
-            onClick={() => setView('sharing')}
-            data-testid="swap-legacy-back"
-            className="text-xs text-slate-400 underline"
-          >
-            返回母本共享
-          </button>
-          <SwapChecklist />
-        </>
-      ) : view === 'sharing' ? (
-        <MotherSharing onGoAccount={onGoAccount} onOpenLegacy={() => setView('legacy')} />
+      {view === 'sharing' ? (
+        <MotherSharing onGoAccount={onGoAccount} />
       ) : (
         <>
           {/* 账号筛选只影响换蛋清单；母本共享按明确选号，不能被顶部筛选偷偷改变 */}

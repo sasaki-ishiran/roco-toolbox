@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { CATALOG_VERSION, species } from '../data/catalog';
 import { useSnapshots } from './useSnapshots';
-import { useSwapChecklist } from './swapChecklistStore';
 import { useMotherGroups } from './useMotherGroups';
 import { MotherGroupMembers } from './MotherGroupMembers';
 import { MotherGroupResources } from './MotherGroupResources';
@@ -16,8 +15,6 @@ import {
 export interface MotherSharingProps {
   /** 去「导入数据」页的账号面板登录 / 开启云同步 */
   onGoAccount?: () => void;
-  /** 查看旧版双人互换清单（本机有旧清单时显示入口） */
-  onOpenLegacy?: () => void;
 }
 
 /**
@@ -26,9 +23,8 @@ export interface MotherSharingProps {
  * 没有本地导入数据也能进来：登录后可以浏览组里别人发布的资源；
  * 只有发布自己的资源时才要求本机有对应账号快照。
  */
-export function MotherSharing({ onGoAccount, onOpenLegacy }: MotherSharingProps = {}) {
+export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
   const { snapshots } = useSnapshots();
-  const legacy = useSwapChecklist();
   const [pendingCode, setPendingCode] = useState(() => readPendingInviteCode());
   const hook = useMotherGroups({ snapshots, species, catalogVersion: CATALOG_VERSION });
 
@@ -194,17 +190,6 @@ export function MotherSharing({ onGoAccount, onOpenLegacy }: MotherSharingProps 
           ) : null}
         </>
       )}
-
-      {legacy.code && onOpenLegacy ? (
-        <button
-          type="button"
-          onClick={onOpenLegacy}
-          data-testid="mother-legacy-link"
-          className="text-xs text-slate-400 underline"
-        >
-          查看旧版双人清单
-        </button>
-      ) : null}
     </section>
   );
 }

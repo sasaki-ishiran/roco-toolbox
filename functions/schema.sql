@@ -69,16 +69,6 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   count        INTEGER NOT NULL    -- 本窗口内已放行次数
 );
 
--- 两人共享的「互换清单」：分享码即权限（随机 8 位，可重置）
--- payload = JSON 字符串：{ lists, items, mineAccounts, catalogVersion }
-CREATE TABLE IF NOT EXISTS shared_lists (
-  code       TEXT PRIMARY KEY,
-  version    INTEGER NOT NULL DEFAULT 0,
-  updated_at INTEGER NOT NULL,
-  payload    TEXT NOT NULL,
-  bytes      INTEGER NOT NULL
-);
-
 -- >>> mother-groups (2026-10-23)
 -- 多人母本资源共享：小组 / 组成员 / 成员共享的游戏账号。
 -- 增量文件 functions/migrations/2026-10-23-mother-groups.sql 必须与本区块定义一致

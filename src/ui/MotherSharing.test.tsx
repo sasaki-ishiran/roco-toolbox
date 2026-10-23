@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { useSnapshots } from './useSnapshots';
-import { useSwapChecklist } from './swapChecklistStore';
 import { useMotherGroups, type MotherGroupsHook } from './useMotherGroups';
 import { MotherSharing } from './MotherSharing';
 import {
@@ -12,7 +11,6 @@ import {
 import type { MotherGroupDetail } from '../shared/motherGroups';
 
 vi.mock('./useSnapshots', () => ({ useSnapshots: vi.fn() }));
-vi.mock('./swapChecklistStore', () => ({ useSwapChecklist: vi.fn() }));
 vi.mock('./useMotherGroups', () => ({ useMotherGroups: vi.fn() }));
 
 const detail: MotherGroupDetail = {
@@ -52,7 +50,6 @@ const hookOf = (overrides: Partial<MotherGroupsHook> = {}): MotherGroupsHook => 
 beforeEach(() => {
   window.localStorage.clear();
   vi.mocked(useSnapshots).mockReturnValue({ snapshots: [], loaded: true });
-  vi.mocked(useSwapChecklist).mockReturnValue({ code: '' } as ReturnType<typeof useSwapChecklist>);
   vi.mocked(useMotherGroups).mockReturnValue(hookOf());
 });
 
@@ -78,14 +75,6 @@ describe('MotherSharing 入口与状态', () => {
     expect(screen.getByTestId('mother-resources')).toBeVisible();
     expect(screen.getByTestId('mother-members')).toBeVisible();
     expect(screen.getByTestId('mother-criteria')).toHaveTextContent('母 · 大块头 · +100dB');
-  });
-
-  test('本机有旧版双人清单时显示兼容入口', () => {
-    vi.mocked(useSwapChecklist).mockReturnValue({ code: 'OLD12345' } as ReturnType<typeof useSwapChecklist>);
-    const onOpenLegacy = vi.fn();
-    render(<MotherSharing onGoAccount={vi.fn()} onOpenLegacy={onOpenLegacy} />);
-    fireEvent.click(screen.getByTestId('mother-legacy-link'));
-    expect(onOpenLegacy).toHaveBeenCalledTimes(1);
   });
 
   test('登录后未加入任何组时给出新建/加入提示', () => {
