@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { buildEggSearchIndex } from '../domain/petFilters';
 import { buildMotherCoverage, isMotherResourceComparable, selectMotherSharingViews } from '../domain/motherSharing';
 import type { SpeciesEntry } from '../domain/types';
 import type { MotherCoverageRow, MotherGroupDetail, MotherGroupMember } from '../shared/motherGroups';
+import { ensureGroupSession, setGroupList, useGroupList, type GroupListState } from './listViewStore';
 import { InlineSelect } from './primitives/InlineSelect';
 import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
@@ -31,15 +32,21 @@ export interface MotherGroupResourcesProps {
  * 有未知成员时「小组都没有」必须改写成「已发布成员均无，另 N 人待发布/更新」。
  */
 export function MotherGroupResources({ group, viewerAccountId, species, catalogVersion }: MotherGroupResourcesProps) {
-  const [view, setView] = useState<ViewId>('missing');
-  const [query, setQuery] = useState('');
-  const [memberFilter, setMemberFilter] = useState('');
-  const [onlyOwned, setOnlyOwned] = useState(false);
+  // 临时查看状态按「身份 + 小组」隔离：换身份立即清空，切组不串条件（2026-10-24）
+  const list = useGroupList(viewerAccountId, group.group.id);
+  const setList = (patch: Partial<GroupListState>) =>
+    setGroupList(viewerAccountId, group.group.id, patch);
+  const { view, query, memberFilter, onlyOwned } = list;
+
+  useEffect(() => {
+    ensureGroupSession(viewerAccountId);
+  }, [viewerAccountId]);
 
   useEffect(() => {
     if (memberFilter && !group.members.some((member) => member.accountId === memberFilter)) {
-      setMemberFilter('');
+      setList({ memberFilter: '' });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group.members, memberFilter]);
 
   const rows = useMemo(
@@ -139,7 +146,7 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
         label="小组资源视图"
         value={view}
         options={VIEWS.map((item) => ({ value: item.id, label: item.label }))}
-        onValueChange={(next) => setView(next as ViewId)}
+        onValueChange={(next) => setList({ view: next as ViewId })}
         optionTestId={(value) => `mother-view-${value}`}
       />
 
@@ -156,7 +163,7 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
         <SearchField
           label="搜索小组资源"
           value={query}
-          onValueChange={setQuery}
+          onValueChange={(value) => setList({ query: value })}
           placeholder="搜母本 / 同血脉名称 / 图鉴号"
           testId="mother-search"
           className="min-w-0 flex-1"
@@ -171,7 +178,7 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
               label: labelOf(member),
             })),
           ]}
-          onValueChange={setMemberFilter}
+          onValueChange={(value) => setList({ memberFilter: value })}
           testId="mother-member-filter"
           menuTestId="mother-member-options"
           align="right"
@@ -182,7 +189,7 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
         <input
           type="checkbox"
           checked={onlyOwned}
-          onChange={(event) => setOnlyOwned(event.target.checked)}
+          onChange={(event) => setList({ onlyOwned: event.target.checked })}
           data-testid="mother-only-owned"
         />
         只看组内有人拥有

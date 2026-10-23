@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   buildChainSearchIndex,
   buildEggSearchIndex,
@@ -30,7 +30,7 @@ import { useCoverageSlots } from './useCoverageSlots';
 import { useOwnedPets } from './useOwnedPets';
 import { useTargetMode } from './targetModeStore';
 import {
-  clearMyPetsFilters,
+  clearInventoryFilters,
   setMyPetsFiltersOpen,
   setMyPetsSelected,
   toggleStudGrade,
@@ -38,6 +38,7 @@ import {
   toggleStudNature,
   useMyPetsFilters,
 } from './myPetsFilterStore';
+import { setPersonalQuery, usePersonalList } from './listViewStore';
 
 const VIEW_LABELS: Array<{ id: PetView; label: string }> = [
   { id: 'all', label: '全部' },
@@ -86,10 +87,12 @@ export function MyPets({ view, onViewChange, onGoImport }: MyPetsProps) {
   const mode = useTargetMode();
   // 筛选状态提升到模块级 store：切页签 / 切视角都不丢（2026-10-04 用户拍板）
   const { selected, filtersOpen, studGrades, studNatures, studGroups } = useMyPetsFilters();
-  // 全部页的名称搜索（本地过滤，不持久化）
-  const [nameQuery, setNameQuery] = useState('');
+  // 搜索是本次会话的临时查看条件（切页保留、重启清空），放 listViewStore
+  const nameQuery = usePersonalList('inventory-all').query;
+  const setNameQuery = (value: string) => setPersonalQuery('inventory-all', value);
   // 种公视角的名称搜索（2026-10-05 用户拍板加入）
-  const [studQuery, setStudQuery] = useState('');
+  const studQuery = usePersonalList('inventory-stud').query;
+  const setStudQuery = (value: string) => setPersonalQuery('inventory-stud', value);
 
   const speciesByGameId = useMemo(() => new Map(species.map((s) => [s.gameId, s])), []);
   // 进化链搜索索引：搜链上任一成员名/图鉴号 → 命中整条链（火花→焰火/火神）
@@ -330,7 +333,7 @@ export function MyPets({ view, onViewChange, onGoImport }: MyPetsProps) {
             open={filtersOpen}
             onOpenChange={setMyPetsFiltersOpen}
             onClear={() => {
-              clearMyPetsFilters();
+              clearInventoryFilters('all');
               setNameQuery('');
             }}
             clearLabel={`重置${selected.size > 0 ? `（${selected.size}）` : ''}`}

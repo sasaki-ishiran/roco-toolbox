@@ -137,6 +137,23 @@ export function clearMyPetsFilters(): void {
   commit();
 }
 
+/**
+ * 清除某一视角的本页筛选（2026-10-24 重构任务 4）。
+ *
+ * 以前全量复位会把另一个视角的条件一起清掉：在「全部」页点重置，
+ * 种公视角的档位 / 性格 / 蛋组也悄悄没了。本页按钮只清本页。
+ */
+export function clearInventoryFilters(view: 'all' | 'stud'): void {
+  if (view === 'all') {
+    selected = new Set();
+  } else {
+    studGrades = new Set();
+    studNatures = new Set();
+    studGroups = new Set();
+  }
+  commit();
+}
+
 export function useMyPetsFilters(): {
   selected: ReadonlySet<string>;
   filtersOpen: boolean;

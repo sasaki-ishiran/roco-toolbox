@@ -32,6 +32,11 @@ export function AccountFilterBar({ accounts }: AccountFilterBarProps) {
           {allOn ? '全不选' : '全选'}
         </button>
       </div>
+      {onCount === 0 ? (
+        <p className="mt-1 text-xs text-amber-700" data-testid="account-filter-empty">
+          未选择游戏账号：个人进度按 0 个账号计算，点「全选」可恢复。
+        </p>
+      ) : null}
       <div className="mt-1 flex gap-1.5 overflow-x-auto pb-0.5">
         {accounts.map((account) => {
           const on = !excluded.has(account);

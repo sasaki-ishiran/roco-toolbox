@@ -13,8 +13,10 @@ import {
 import { AccountSection } from './AccountSection';
 import { FilterAccordion } from './FilterAccordion';
 import { FilterPanel } from './primitives/FilterPanel';
+import { ScopeSummary } from './primitives/ScopeSummary';
 import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
+import { setPersonalQuery, usePersonalList } from './listViewStore';
 import { GenderMark } from './GenderMark';
 import {
   getMotherCriteria,
@@ -205,10 +207,13 @@ export function MotherView({
 }: MotherViewProps) {
   const plan = useMotherPlan();
   const criteria = useMotherCriteria();
-  const [query, setQuery] = useState('');
+  // 搜索是本次会话的临时查看条件（切页保留、重启清空）
+  const query = usePersonalList('mothers').query;
+  const setQuery = (value: string) => setPersonalQuery('mothers', value);
   // 默认看「未收集」（待补齐才是主场景；看板「母本全收集」卡跳过来也是它）
   const [chainFilter, setChainFilter] = useState<ChainFilter>('uncollected');
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [criteriaOpen, setCriteriaOpen] = useState(true);
 
   /**
    * 声音选项随目标模式联动（2026-10-05 用户拍板）：
@@ -363,16 +368,20 @@ export function MotherView({
         testId="mother-search"
       />
 
-      {/* 达标条件（决定「已收集 / 未收集」）+ 蛋组 */}
+      {/* 达标条件（决定「已收集 / 未收集」，与看板同口径）：体型 / 声音属于标准，不是本页筛选 */}
       <FilterPanel
-        title="达标条件与筛选"
+        title="我的母本达标条件"
         summary={`${criteria.bodies.length > 0 ? criteria.bodies.join(' / ') : '体型不限'} · ${
           activeVoices.length > 0 ? activeVoices.join(' / ') : '声音不限'
-        } · ${eggGroupFilter.length > 0 ? `${eggGroupFilter.length} 个蛋组` : '全部蛋组'}`}
-        open={filtersOpen}
-        onOpenChange={setFiltersOpen}
-        testId="mother-filters"
+        }`}
+        open={criteriaOpen}
+        onOpenChange={setCriteriaOpen}
+        testId="mother-criteria-panel"
       >
+        <ScopeSummary
+          scope="影响范围"
+          criteria="决定母本是否算已收集，也决定看板「母本全收集」的进度"
+        />
         <FilterAccordion
           dimensions={[
             {
@@ -402,6 +411,20 @@ export function MotherView({
                 }),
               onClear: () => setMotherCriteria({ ...criteria, bodies: [] }),
             },
+          ]}
+        />
+      </FilterPanel>
+
+      {/* 筛选清单：只影响本页显示，清除不会改上面的达标条件 */}
+      <FilterPanel
+        title="筛选清单"
+        summary={eggGroupFilter.length > 0 ? `${eggGroupFilter.length} 个蛋组` : '全部蛋组'}
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        testId="mother-filters"
+      >
+        <FilterAccordion
+          dimensions={[
             {
               id: 'motherGroup',
               label: '蛋组',

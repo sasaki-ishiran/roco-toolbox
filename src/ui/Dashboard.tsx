@@ -223,7 +223,7 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
         </div>
         {coverageFilter.grades.length === 0 ? (
           <p className="mt-1 text-[11px] text-amber-600" data-testid="target-grade-empty">
-            至少勾一个档位，否则没有目标槽位（覆盖度、母本、配窝都会是空的）。
+            至少勾一个档位，否则种公覆盖度与配窝没有目标槽位；母本按自己的达标条件单独计算，不受影响。
           </p>
         ) : null}
       </section>

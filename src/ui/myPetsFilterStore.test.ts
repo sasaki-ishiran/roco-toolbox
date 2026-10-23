@@ -56,3 +56,25 @@ describe('myPetsFilterStore 持久化读取', () => {
     expect([...store.getStudNatures()]).toEqual(['固执']);
   });
 });
+
+describe('本页筛选只清本页（2026-10-24）', () => {
+  test('清全部库存筛选不清种公条件', async () => {
+    localStorage.clear();
+    const s = await import('./myPetsFilterStore');
+    s.setMyPetsSelected(new Set(['body:大块头']));
+    s.toggleStudNature('加速度');
+    s.clearInventoryFilters('all');
+    expect([...s.getMyPetsSelected()]).toEqual([]);
+    expect([...s.getStudNatures()]).toEqual(['加速度']);
+  });
+
+  test('清种公筛选不清全部页标签', async () => {
+    localStorage.clear();
+    const s = await import('./myPetsFilterStore');
+    s.setMyPetsSelected(new Set(['body:大块头']));
+    s.toggleStudGrade('大婉');
+    s.clearInventoryFilters('stud');
+    expect([...s.getStudGrades()]).toEqual([]);
+    expect([...s.getMyPetsSelected()]).toEqual(['body:大块头']);
+  });
+});

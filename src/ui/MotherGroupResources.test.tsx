@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
+import { clearGroupListSession } from './listViewStore';
 import { MotherGroupResources } from './MotherGroupResources';
 import {
   FIXTURE_CATALOG_VERSION,
@@ -28,6 +29,10 @@ const renderResources = () =>
       catalogVersion={FIXTURE_CATALOG_VERSION}
     />,
   );
+
+beforeEach(() => {
+  clearGroupListSession();
+});
 
 describe('MotherGroupResources 三视图', () => {
   test('成员筛选在我缺的中只展示该成员拥有的资源，并使用页内下拉栏', () => {
