@@ -31,7 +31,15 @@ const toggleIn = (list: string[], value: string): string[] =>
 export function Swap({
   onGoImport,
   onGoAccount,
-}: { onGoImport?: () => void; onGoAccount?: () => void } = {}) {
+  view: controlledView,
+  onViewChange,
+}: {
+  onGoImport?: () => void;
+  onGoAccount?: () => void;
+  /** 兼容桥（任务 1）：主视图由 App 的导航状态驱动；不传时沿用页内状态 */
+  view?: 'eggs' | 'sharing';
+  onViewChange?: (view: 'eggs' | 'sharing') => void;
+} = {}) {
   const { loaded } = useSnapshots();
   const { owned, accounts } = useOwnedPets();
 
@@ -84,7 +92,13 @@ export function Swap({
 
   // 顶部主分段：换蛋清单（原有算法）/ 母本共享（多人小组）。
   // 主视图跨重启保留（关后台回来还停在母本共享，不会以为小组没了）。
-  const [view, setView] = useState<'eggs' | 'sharing'>(() => readSwapMainView());
+  const [internalView, setInternalView] = useState<'eggs' | 'sharing'>(() => readSwapMainView());
+  const view = controlledView ?? internalView;
+  const setView = (next: 'eggs' | 'sharing') => {
+    setInternalView(next);
+    saveSwapMainView(next);
+    onViewChange?.(next);
+  };
 
   useEffect(() => {
     saveSwapMainView(view);

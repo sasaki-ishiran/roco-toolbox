@@ -11,14 +11,23 @@ const TABS: TabId[] = ['dashboard', 'myPets', 'coverage', 'swap', 'import'];
 
 export function readLastTab(): TabId {
   if (typeof window === 'undefined') return 'import';
-  const raw = window.localStorage.getItem(KEY);
-  return TABS.includes(raw as TabId) ? (raw as TabId) : 'import';
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    return TABS.includes(raw as TabId) ? (raw as TabId) : 'import';
+  } catch {
+    // 隐私模式 / 存储被禁用：退回默认页，不白屏（2026-10-24）
+    return 'import';
+  }
 }
 
 /** 本机是否已经记过页签（= 不是第一次打开这个应用）。 */
 export function hasSavedTab(): boolean {
   if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem(KEY) !== null;
+  try {
+    return window.localStorage.getItem(KEY) !== null;
+  } catch {
+    return false;
+  }
 }
 
 export function saveLastTab(tab: TabId): void {

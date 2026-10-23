@@ -52,7 +52,12 @@ const VIEW_KEY = 'roco.swapView';
  */
 export function readSwapMainView(): SwapMainView {
   if (typeof window === 'undefined') return 'eggs';
-  return window.localStorage.getItem(VIEW_KEY) === 'sharing' ? 'sharing' : 'eggs';
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === 'sharing' ? 'sharing' : 'eggs';
+  } catch {
+    // 隐私模式 / 存储被禁用：退回换蛋清单，不白屏（2026-10-24）
+    return 'eggs';
+  }
 }
 
 export function saveSwapMainView(view: SwapMainView): void {

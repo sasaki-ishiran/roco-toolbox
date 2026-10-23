@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { installFlushOnHide, platform, track } from './api/analytics';
 import type { PetView } from './domain/petFilters';
 import { CHANGELOG, markChangelogSeen, pendingChangelog, readChangelogSeen } from './data/changelog';
@@ -13,11 +13,38 @@ import { ImportPanel } from './ui/ImportPanel';
 import { MyPets } from './ui/MyPets';
 import { Swap } from './ui/Swap';
 import { TabNav, type TabId } from './ui/TabNav';
+import {
+  focusPending,
+  initialNavigation,
+  legacyLocation,
+  resolveNavigation,
+  type AppNavigation,
+  type NavigationIntent,
+} from './ui/navigation';
 import { readLastTab, saveLastTab, hasSavedTab } from './ui/lastTab';
+import { readSwapMainView, saveSwapMainView } from './ui/swapViewStore';
 import { useSnapshots } from './ui/useSnapshots';
 
+/** 新导航状态 → 旧五页签里该高亮哪一个（兼容桥阶段用；任务 9 换四入口后删除）。 */
+const legacyTabOf = (navigation: AppNavigation): TabId => {
+  if (navigation.page === 'dashboard') return 'dashboard';
+  if (navigation.page === 'groups') return 'swap';
+  if (navigation.page === 'profile') return 'import';
+  if (navigation.collection.kind === 'studs') {
+    return navigation.collection.view === 'eggs' ? 'swap' : 'coverage';
+  }
+  return 'myPets';
+};
+
 export default function App() {
-  const [tab, setTab] = useState<TabId>(() => readLastTab());
+  const [navigation, setNavigation] = useState<AppNavigation>(() =>
+    initialNavigation(readLastTab(), readSwapMainView()),
+  );
+  /** 统一入口：页面只发意图，状态变化全部走纯函数（见 ui/navigation.ts）。 */
+  const navigate = useCallback((intent: NavigationIntent) => {
+    setNavigation((current) => resolveNavigation(current, intent));
+  }, []);
+  const activeTab = legacyTabOf(navigation);
   /** 手动刷新按钮的忙碌态（真正刷新会让页面重载，这里只防连点） */
   const [refreshing, setRefreshing] = useState(false);
   const { snapshots, loaded } = useSnapshots();
@@ -38,27 +65,22 @@ export default function App() {
       shareRedirect.current = false;
       // 先按住自动落看板：否则导入还没跑完、导入页就被切走卸载了
       setShareSeen(true);
-      setTab('import');
+      navigate({ type: 'open-profile', section: 'data' });
     };
     window.addEventListener('roco-share', onShare);
     return () => window.removeEventListener('roco-share', onShare);
-  }, []);
+  }, [navigate]);
   // 有数据时默认落看板：首帧仍停在「导入数据」，读到数据后只在「还没被用户手动切走过、
   //  且仍停在导入页」时跳一次到看板，之后用户自由切换（回到导入数据页管理数据不再被打扰）。
   // 注意：本机已经记过页签（= 不是第一次打开）时不再自动跳，否则重开后点「导入数据」会被弹回看板。
   const autoRedirected = useRef(hasSavedTab());
+  const onProfileDataPage = navigation.page === 'profile' && navigation.profileSection === 'data';
   useEffect(() => {
-    if (
-      loaded &&
-      !autoRedirected.current &&
-      !shareSeen &&
-      snapshots.length > 0 &&
-      tab === 'import'
-    ) {
+    if (loaded && !autoRedirected.current && !shareSeen && snapshots.length > 0 && onProfileDataPage) {
       autoRedirected.current = true;
-      setTab('dashboard');
+      navigate({ type: 'tab', page: 'dashboard' });
     }
-  }, [loaded, snapshots, tab, shareSeen]);
+  }, [loaded, snapshots, onProfileDataPage, shareSeen, navigate]);
   /** 分享数据导入成功后标记「待跳看板」；等快照真的更新了再跳（保证看板已能看到新数据） */
   const handleShareImported = () => {
     shareRedirect.current = true;
@@ -66,13 +88,13 @@ export default function App() {
   useEffect(() => {
     if (!shareRedirect.current || snapshots.length === 0) return;
     shareRedirect.current = false;
-    setTab('dashboard');
-  }, [snapshots]);
-  // 切页签（含看板卡片跳转）时回到页面顶部：否则新页面会沿用上一页的滚动偏移，
+    navigate({ type: 'tab', page: 'dashboard' });
+  }, [snapshots, navigate]);
+  // 切页面（含看板卡片跳转）时回到页面顶部：否则新页面会沿用上一页的滚动偏移，
   // 跳转落点不准（2026-10-05 修）。用 useLayoutEffect 在浏览器绘制前复位，避免闪现旧位置。
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-  }, [tab]);
+  }, [navigation.page, navigation.profileSection]);
   // 更新内容弹窗：启动时算一次「本机没看过的更新」，点「知道了」后记住已读（2026-10-05 起固定做法）
   const [changelog, setChangelog] = useState(() => pendingChangelog(readChangelogSeen()));
   const closeChangelog = () => {
@@ -91,29 +113,95 @@ export default function App() {
     return installFlushOnHide();
   }, []);
   useEffect(() => {
-    track('tab_view', { tab });
-    // 记住停留的页签：关后台后重开不会莫名其妙回到「导入数据」
-    saveLastTab(tab);
-  }, [tab]);
+    // 兼容桥阶段仍上报旧页签名（任务 9 再换新页面名，避免埋点口径提前断档）
+    track('tab_view', { tab: activeTab });
+    // 记住停留的页签：关后台后重开不会莫名其妙回到「导入数据」。
+    // **不把四个新 page 字符串直接写进旧键**：旧版安装升级 / 降级都要能理解。
+    const legacy = legacyLocation(navigation);
+    saveLastTab(legacy.lastTab);
+    if (legacy.lastTab === 'swap') saveSwapMainView(legacy.swapView);
+  }, [navigation, activeTab]);
   // 覆盖度矩阵的展开态放在这里，切页签回来不会收起
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null);
   /**
-   * 从看板「去看怎么迭代」跳过来时要聚焦的蛋组：展开它、并滚到视野中间
-   * （页面挺长，不滚过去用户还得自己找那行）。每次跳转都塞一个新对象 → 效应会重跑。
+   * 精准直达的聚焦（2026-10-24）：看板「去看怎么迭代」带着蛋组跳过来时，
+   * 展开它并滚到视野中间。等数据读完后才滚；成功后消费这次 revision，
+   * 用户手动离开再回来不会被旧聚焦重新改列表。
    */
-  const [coverageFocus, setCoverageFocus] = useState<{ groupId: number } | null>(null);
   useEffect(() => {
-    if (!coverageFocus) return;
+    if (!focusPending(navigation) || navigation.page !== 'collection') return;
+    const location = navigation.collection;
+    if (location.kind !== 'studs' || location.view !== 'coverage') return;
+    if (!loaded) return;
+    const revision = navigation.focusRevision;
+    if (location.groupId == null) {
+      navigate({ type: 'consume-focus', revision });
+      return;
+    }
+    setExpandedGroupId(location.groupId);
     // 等这次渲染提交完再滚（顶部栏是 sticky，所以用 center 而不是 start）
     const timer = window.setTimeout(() => {
       document
-        .querySelector(`[data-testid="coverage-group-row"][data-group-id="${coverageFocus.groupId}"]`)
+        .querySelector(
+          `[data-testid="coverage-group-row"][data-group-id="${location.groupId}"]`,
+        )
         ?.scrollIntoView({ block: 'center' });
+      navigate({ type: 'consume-focus', revision });
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [coverageFocus]);
-  // 「我的精灵」的视角也放这里：看板的「种公全收集」卡可以带着种公视角跳过去
-  const [myPetsView, setMyPetsView] = useState<PetView>('all');
+  }, [navigation, loaded, navigate]);
+
+  /** 旧五页签的点击 → 导航意图（兼容桥）。 */
+  const handleTabChange = (tab: TabId) => {
+    switch (tab) {
+      case 'dashboard':
+        navigate({ type: 'tab', page: 'dashboard' });
+        break;
+      case 'myPets':
+        // 旧页签「我的精灵」= 精灵库：从别的页面点进来时落到「全部」；
+        // 已经停在收集页时只切回主导航，不重置当前子视图。
+        if (navigation.page === 'collection') navigate({ type: 'tab', page: 'collection' });
+        else navigate({ type: 'open-collection', location: { kind: 'inventory', view: 'all' } });
+        break;
+      case 'coverage':
+        navigate({ type: 'open-collection', location: { kind: 'studs', view: 'coverage' } });
+        break;
+      case 'swap': {
+        // 手动点「换什么」恢复上次的换蛋清单 / 母本共享子视图（关后台回来不掉组）
+        const view = readSwapMainView();
+        if (view === 'sharing') navigate({ type: 'tab', page: 'groups' });
+        else navigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } });
+        break;
+      }
+      case 'import':
+        navigate({ type: 'tab', page: 'profile' });
+        break;
+    }
+  };
+
+  /** 「我的精灵」内部视角（兼容桥：母本归 collection.mothers，其余归 inventory）。 */
+  const myPetsView: PetView =
+    navigation.collection.kind === 'mothers'
+      ? 'mother'
+      : navigation.collection.kind === 'inventory'
+        ? navigation.collection.view
+        : 'all';
+
+  const handleMyPetsViewChange = (view: PetView) => {
+    if (view === 'mother') {
+      navigate({ type: 'open-collection', location: { kind: 'mothers', status: 'missing' } });
+      return;
+    }
+    navigate({ type: 'open-collection', location: { kind: 'inventory', view } });
+  };
+
+  /** Swap 内部主分段（兼容桥）：共享 = 小组页，换蛋 = 收集 · 求蛋。 */
+  const handleSwapViewChange = (view: 'eggs' | 'sharing') => {
+    if (view === 'sharing') navigate({ type: 'tab', page: 'groups' });
+    else navigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } });
+  };
+
+  const collection = navigation.collection;
   return (
     <>
       {/* 顶部标签常显：滚动页面时 header + 页签固定在视口顶部（2026-10-04 优化） */}
@@ -148,49 +236,60 @@ export default function App() {
             </span>
           </div>
         </header>
-        <TabNav active={tab} onChange={setTab} />
+        <TabNav active={activeTab} onChange={handleTabChange} />
       </div>
       {/* 2026-10-06 修复（M3）：不要在渲染体里用「每次渲染都是新引用」的内联箭头组件
           拼 Record<TabId, ComponentType>——App 任何 state 变化（比如开关更新弹窗）都会
           让 React 认为页面组件类型变了，把整个页面卸载重挂，页内状态全部丢失。
           改成条件渲染：组件引用稳定，只有切页签才挂/卸。 */}
-      {tab === 'dashboard' ? (
+      {navigation.page === 'dashboard' ? (
         <Dashboard
-          onOpenStuds={() => {
-            setMyPetsView('stud');
-            setTab('myPets');
-          }}
-          onOpenMothers={() => {
-            setMyPetsView('mother');
-            setTab('myPets');
-          }}
-          onOpenSwap={() => setTab('swap')}
-          onOpenCoverage={(groupId) => {
-            setTab('coverage');
-            if (groupId == null) return;
-            // 第一个「可迭代」的蛋组：跳过去直接展开并滚到它，省得用户在 14 行里找
-            setExpandedGroupId(groupId);
-            setCoverageFocus({ groupId });
-          }}
+          onOpenStuds={() =>
+            navigate({ type: 'open-collection', location: { kind: 'inventory', view: 'stud' } })
+          }
+          onOpenMothers={() =>
+            navigate({ type: 'open-collection', location: { kind: 'mothers', status: 'missing' } })
+          }
+          onOpenSwap={() =>
+            navigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } })
+          }
+          onOpenCoverage={(groupId) =>
+            navigate({
+              type: 'open-collection',
+              location:
+                groupId == null
+                  ? { kind: 'studs', view: 'coverage' }
+                  : { kind: 'studs', view: 'coverage', groupId },
+            })
+          }
         />
-      ) : tab === 'myPets' ? (
+      ) : navigation.page === 'profile' ? (
+        <ImportPanel onShareImported={handleShareImported} />
+      ) : navigation.page === 'groups' ? (
+        <Swap
+          view="sharing"
+          onViewChange={handleSwapViewChange}
+          onGoImport={() => navigate({ type: 'tab', page: 'profile' })}
+          onGoAccount={() => navigate({ type: 'tab', page: 'profile' })}
+        />
+      ) : collection.kind === 'inventory' || collection.kind === 'mothers' ? (
         <MyPets
           view={myPetsView}
-          onViewChange={setMyPetsView}
-          onGoImport={() => setTab('import')}
+          onViewChange={handleMyPetsViewChange}
+          onGoImport={() => navigate({ type: 'tab', page: 'profile' })}
         />
-      ) : tab === 'import' ? (
-        <ImportPanel onShareImported={handleShareImported} />
-      ) : tab === 'coverage' ? (
+      ) : collection.view === 'eggs' ? (
+        <Swap
+          view="eggs"
+          onViewChange={handleSwapViewChange}
+          onGoImport={() => navigate({ type: 'tab', page: 'profile' })}
+          onGoAccount={() => navigate({ type: 'tab', page: 'profile' })}
+        />
+      ) : (
         <Coverage
           expandedGroupId={expandedGroupId}
           onToggleGroup={setExpandedGroupId}
-          onGoImport={() => setTab('import')}
-        />
-      ) : (
-        <Swap
-          onGoImport={() => setTab('import')}
-          onGoAccount={() => setTab('import')}
+          onGoImport={() => navigate({ type: 'tab', page: 'profile' })}
         />
       )}
       {changelog.length > 0 ? <ChangelogModal entries={changelog} onClose={closeChangelog} /> : null}
