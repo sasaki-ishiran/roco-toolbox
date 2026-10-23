@@ -1,12 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { OwnedPet } from '../domain/types';
-import { buildNestPlans } from '../domain/nestPlan';
 import {
   MOTHER_CLASS_ORDER,
   TARGET_MODE_LABELS,
   classifyMother,
   gradeLabel,
-  groupMothersByEgg,
   type MotherGroup,
   type MotherClass,
   type PetGrade,
@@ -14,14 +12,9 @@ import {
 } from '../domain/petFilters';
 import { ALL_GRADES } from '../domain/coverageTargets';
 import { boxLabel } from '../domain/coverageDetail';
-import {
-  countQualifiedMotherChains,
-  effectiveMotherVoices,
-} from '../domain/motherCriteria';
-import { computeStudCoverage } from '../domain/studCoverage';
-import { computeStudRecommendations, findUncataloguedCount, studEmptyNote } from '../domain/suggestions';
+import { findUncataloguedCount, studEmptyNote } from '../domain/suggestions';
 import { speciesDisplayName } from '../domain/speciesName';
-import { eggGroupNames, species } from '../data/catalog';
+import { species } from '../data/catalog';
 import { AccountFilterBar } from './AccountFilterBar';
 import { AccountSection } from './AccountSection';
 import { GenderMark } from './GenderMark';
@@ -30,15 +23,14 @@ import { NestPlanCard } from './NestPlanCard';
 import { ProgressCard } from './ProgressCard';
 import { SuggestionCard } from './SuggestionCard';
 import { SourceNotice } from './SourceNotice';
+import { CollectionTargetEditor } from './CollectionTargetEditor';
 import { InlineSelect } from './primitives/InlineSelect';
 import { ScopeSummary } from './primitives/ScopeSummary';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { useOwnedPets } from './useOwnedPets';
-import { useSwapWishes } from './useSwapWishes';
-import { useCoverageSlots } from './useCoverageSlots';
+import { useCollectionSummary } from './useCollectionSummary';
 import { toggleFilterGrade, useCoverageFilter } from './coverageFilterStore';
-import { useMotherCriteria } from './motherCriteriaStore';
-import { setTargetMode, useTargetMode } from './targetModeStore';
+import { setTargetMode } from './targetModeStore';
 
 export interface DashboardProps {
   /** 「种公全收集」卡上的快速入口：跳到「我的精灵 · 种公视角」 */
@@ -54,20 +46,27 @@ export interface DashboardProps {
 export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCoverage }: DashboardProps = {}) {
   // 母本全收集按档位分开看，默认主流目标「大婉」（追满分时显示为「满分大婉」）
   const [motherGrade, setMotherGrade] = useState<PetGrade>('大婉');
-  // 全局目标模式：追满分 / 追双牌，看板上的开关写它，所有页面读它
-  const mode = useTargetMode();
   // 母本列表默认收起（2026-10-04 优化：方便同时看上面的收集进度和下面的建议）
   const [motherListOpen, setMotherListOpen] = useState(false);
+  // 唯一目标编辑器：种公 / 母本两个分区
+  const [targetEditor, setTargetEditor] = useState<{
+    open: boolean;
+    section: 'studs' | 'mothers';
+  }>({ open: false, section: 'studs' });
 
-  const { owned, accounts } = useOwnedPets();
+  // 摘要全部来自 useCollectionSummary（与收集详情同一份领域计算）
+  const {
+    owned,
+    motherGroups,
+    mode,
+    mother,
+    stud,
+    plans: breedPlan,
+    recommendations: suggestions,
+  } = useCollectionSummary();
+  const { accounts } = useOwnedPets();
+  const coverageFilter = useCoverageFilter();
   const speciesByGameId = useMemo(() => new Map(species.map((entry) => [entry.gameId, entry])), []);
-  // 母本清单的「蛋」全集。卡片的**分子与分母都从这里出**（2026-10-07 收敛）：
-  // 以前分母来自另一套实现（computeMotherCoverage），两套口径各算一遍、
-  // 只改一边就会让卡片分数与点进去的清单对不上。
-  const motherGroups = useMemo(
-    () => groupMothersByEgg(owned, speciesByGameId, species, mode),
-    [owned, speciesByGameId, mode],
-  );
   const motherClassCounts = useMemo(() => {
     const counts = new Map<MotherClass, number>();
     for (const group of motherGroups) {
@@ -79,20 +78,6 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
   const filteredMotherChains = useMemo(
     () => motherGroups.filter((group) => group.motherClass === motherGrade),
     [motherGroups, motherGrade],
-  );
-  const motherCriteria = useMotherCriteria();
-  /**
-   * 「已收集的蛋数」——与「我的精灵 · 母本」页**同一口径**（2026-10-06 修）：
-   * 以前这张卡按单一档位算（满分大婉 12/142），点进去母本页按达标条件算（已收集 60/142），
-   * 数字对不上，用户会以为工具算错。现在两处共用 `domain/motherCriteria`。
-   */
-  const collectedMotherChains = useMemo(
-    () =>
-      countQualifiedMotherChains(motherGroups, owned, {
-        bodies: motherCriteria.bodies,
-        voices: effectiveMotherVoices(motherCriteria.voices, mode),
-      }),
-    [motherGroups, owned, motherCriteria, mode],
   );
   /** 每条链的代表母本：优先取与该链档位一致的那只，否则取母的（2026-10-05 母本按账号聚拢） */
   const representativeMotherOf = (group: MotherGroup): OwnedPet | undefined => {
@@ -134,15 +119,6 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
       )}
     </li>
   );
-  const slots = useCoverageSlots();
-  const coverageFilter = useCoverageFilter();
-  const stud = useMemo(
-    () => computeStudCoverage(slots, species, owned, eggGroupNames, mode),
-    [owned, slots, mode],
-  );
-
-  const wishes = useSwapWishes(stud, owned);
-  const suggestions = useMemo(() => computeStudRecommendations(wishes), [wishes]);
   // 配窝汇总（明细在卡片里）：还差多少目标，以及分别属于哪种状态
   const remainingTargets = stud.cells.filter((cell) => cell.state !== 'covered').length;
   // 「可迭代」= 手里就有能孵出它的那对（学院小窝放带目标性格的那只），自己孵就行
@@ -152,10 +128,6 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
   // 第一个「可迭代」的蛋组：点「去看怎么迭代」时把它带过去自动展开（不然用户得在 14 行里找）
   const firstIterableGroupId =
     stud.cells.find((cell) => cell.state === 'breedable')?.groupId ?? undefined;
-  const breedPlan = useMemo(
-    () => buildNestPlans({ species, owned, coverage: stud, mode }),
-    [owned, stud, mode],
-  );
   /**
    * 空清单提示语（2026-10-24 修）：以前卡片写死「导入抓包数据后给出建议」，
    * 种公已收齐的人看到会以为数据没导进来；配窝也同样不能让他去「补缺口」。
@@ -182,7 +154,11 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
       <ImportAdditionCard />
 
       <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="target-mode">
-        <ScopeSummary scope="个人种公目标" criteria="看板 / 覆盖度 / 母本 / 配窝共用这一份" />
+        <ScopeSummary
+          scope="个人种公目标"
+          criteria="看板 / 覆盖度 / 母本 / 配窝共用这一份"
+          onEdit={() => setTargetEditor({ open: true, section: 'studs' })}
+        />
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-slate-500">当前模式</span>
           <SegmentedControl
@@ -240,8 +216,8 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
         />
         <ProgressCard
           title="母本全收集"
-          numerator={collectedMotherChains}
-          denominator={motherGroups.length}
+          numerator={mother.collected}
+          denominator={mother.total}
           hint="已收集 = 有达标母本的蛋；达标条件可自定义，下方清单可切档位"
           onClick={onOpenMothers}
           action="看我的待补齐母本"
@@ -284,6 +260,14 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
             {motherListOpen ? '收起' : '展开'}
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => setTargetEditor({ open: true, section: 'mothers' })}
+          className="mt-1 min-h-[44px] text-xs font-medium text-emerald-700"
+          data-testid="mother-criteria-edit"
+        >
+          调整个人母本达标条件 ›
+        </button>
 
         {motherListOpen ? (
           <div className="mt-2 space-y-2" data-testid="mother-filter-result">
@@ -354,6 +338,12 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
           <NestPlanCard plans={breedPlan} emptyNote={nestEmptyNote} />
         </section>
       ) : null}
+
+      <CollectionTargetEditor
+        open={targetEditor.open}
+        section={targetEditor.section}
+        onClose={() => setTargetEditor((state) => ({ ...state, open: false }))}
+      />
 
       <SourceNotice />
     </main>

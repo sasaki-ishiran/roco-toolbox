@@ -8,6 +8,8 @@ export interface CoverageFilterBarProps {
   filter: CoverageFilter;
   onToggleGroup: (groupId: number) => void;
   onReset: () => void;
+  /** 打开唯一目标编辑器（2026-10-24） */
+  onOpenTargetEditor?: () => void;
 }
 
 const CHIP_ON = 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700';
@@ -25,7 +27,7 @@ const chipClass = (active: boolean): string => `${CHIP_BASE} ${active ? CHIP_ON 
  * 性格不在这里——「每组推荐前 3」这个预设只在**组内**有意义（部分性格在部分组几乎没用），
  * 所以它下沉到蛋组展开区，由 CoverageMatrix 渲染，不再有「对所有组一起加减」的全局开关。
  */
-export function CoverageFilterBar({ filter, onToggleGroup, onReset }: CoverageFilterBarProps) {
+export function CoverageFilterBar({ filter, onToggleGroup, onReset, onOpenTargetEditor }: CoverageFilterBarProps) {
   const [groupsOpen, setGroupsOpen] = useState(false);
   const mode = useTargetMode();
   const groupCount = filter.groupIds.length;
@@ -40,14 +42,26 @@ export function CoverageFilterBar({ filter, onToggleGroup, onReset }: CoverageFi
     <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="coverage-filter">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-medium text-slate-500">筛选</h2>
-        <button
-          type="button"
-          onClick={onReset}
-          className="min-h-[28px] text-xs font-medium text-emerald-700"
-          data-testid="coverage-filter-reset"
-        >
-          恢复默认
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenTargetEditor ? (
+            <button
+              type="button"
+              onClick={onOpenTargetEditor}
+              className="min-h-[44px] text-xs font-medium text-emerald-700"
+              data-testid="coverage-open-target-editor"
+            >
+              调整目标
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onReset}
+            className="min-h-[44px] text-xs font-medium text-emerald-700"
+            data-testid="coverage-filter-reset"
+          >
+            恢复默认
+          </button>
+        </div>
       </div>
 
       <div className="mt-2 space-y-2">

@@ -1,13 +1,11 @@
-import { useMemo } from 'react';
-import { computeStudCoverage } from '../domain/studCoverage';
+import { useMemo, useState } from 'react';
 import { describeCoverageCells } from '../domain/coverageDetail';
 import { TARGET_MODE_LABELS } from '../domain/petFilters';
 import { eggGroupNames, species, targetNaturePool } from '../data/catalog';
-import { useSnapshots } from './useSnapshots';
 import { AccountFilterBar } from './AccountFilterBar';
-import { useCoverageSlots } from './useCoverageSlots';
+import { CollectionTargetEditor } from './CollectionTargetEditor';
 import { useOwnedPets } from './useOwnedPets';
-import { useTargetMode } from './targetModeStore';
+import { useCollectionSummary } from './useCollectionSummary';
 import {
   resetCoverageFilter,
   setNatureMode,
@@ -37,16 +35,12 @@ export interface CoverageProps {
 }
 
 export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: CoverageProps = {}) {
-  const { loaded } = useSnapshots();
-  const { owned, accounts } = useOwnedPets();
+  // 与看板同一份摘要（2026-10-24）：覆盖矩阵不再自己算一遍
+  const { loaded, owned, mode, stud } = useCollectionSummary();
+  const { accounts } = useOwnedPets();
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const filter = useCoverageFilter();
-  const slots = useCoverageSlots();
-  const mode = useTargetMode();
-  const stud = useMemo(
-    () => computeStudCoverage(slots, species, owned, eggGroupNames, mode),
-    [owned, slots, mode],
-  );
   const details = useMemo(
     () => describeCoverageCells({ cells: stud.cells, species, owned, mode }),
     [stud, owned, mode],
@@ -95,6 +89,7 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
             filter={filter}
             onToggleGroup={toggleFilterGroup}
             onReset={resetCoverageFilter}
+            onOpenTargetEditor={() => setEditorOpen(true)}
           />
 
           {/* 推荐性格 / 自选性格（2026-10-05 用户拍板：加回普通筛选模式） */}
@@ -182,6 +177,12 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
           <GenderRatioSpecies owned={owned} />
         </>
       )}
+
+      <CollectionTargetEditor
+        open={editorOpen}
+        section="studs"
+        onClose={() => setEditorOpen(false)}
+      />
 
       <SourceNotice />
     </main>

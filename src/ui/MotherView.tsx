@@ -11,6 +11,7 @@ import {
   type MotherCriteria,
 } from '../domain/motherCriteria';
 import { AccountSection } from './AccountSection';
+import { CollectionTargetEditor } from './CollectionTargetEditor';
 import { FilterAccordion } from './FilterAccordion';
 import { FilterPanel } from './primitives/FilterPanel';
 import { ScopeSummary } from './primitives/ScopeSummary';
@@ -214,6 +215,7 @@ export function MotherView({
   const [chainFilter, setChainFilter] = useState<ChainFilter>('uncollected');
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [criteriaOpen, setCriteriaOpen] = useState(true);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   /**
    * 声音选项随目标模式联动（2026-10-05 用户拍板）：
@@ -381,6 +383,7 @@ export function MotherView({
         <ScopeSummary
           scope="影响范围"
           criteria="决定母本是否算已收集，也决定看板「母本全收集」的进度"
+          onEdit={() => setEditorOpen(true)}
         />
         <FilterAccordion
           dimensions={[
@@ -519,6 +522,12 @@ export function MotherView({
           ))
         )}
       </section>
+
+      <CollectionTargetEditor
+        open={editorOpen}
+        section="mothers"
+        onClose={() => setEditorOpen(false)}
+      />
     </div>
   );
 }
