@@ -78,11 +78,13 @@ const sortNaturePoolFirst = <T extends { id: string; label: string }>(tags: T[])
 export interface MyPetsProps {
   view: PetView;
   onViewChange: (view: PetView) => void;
+  /** 外层（收集页）已有视图分段时不再重复显示（2026-10-24） */
+  hideViewTabs?: boolean;
   /** 空数据时「去导入数据」按钮的跳转 */
   onGoImport?: () => void;
 }
 
-export function MyPets({ view, onViewChange, onGoImport }: MyPetsProps) {
+export function MyPets({ view, onViewChange, hideViewTabs = false, onGoImport }: MyPetsProps) {
   const { owned, accounts } = useOwnedPets();
   const mode = useTargetMode();
   // 筛选状态提升到模块级 store：切页签 / 切视角都不丢（2026-10-04 用户拍板）
@@ -228,12 +230,14 @@ export function MyPets({ view, onViewChange, onGoImport }: MyPetsProps) {
 
   return (
     <main className="mx-auto max-w-md space-y-3 p-4">
-      <SegmentedControl
-        label="精灵库视图"
-        value={view}
-        options={VIEW_LABELS.map((item) => ({ value: item.id, label: item.label }))}
-        onValueChange={(next) => onViewChange(next as PetView)}
-      />
+      {hideViewTabs ? null : (
+        <SegmentedControl
+          label="精灵库视图"
+          value={view}
+          options={VIEW_LABELS.map((item) => ({ value: item.id, label: item.label }))}
+          onValueChange={(next) => onViewChange(next as PetView)}
+        />
+      )}
 
       <p className="px-1 text-[11px] text-slate-400" data-testid="mypets-mode">
         当前模式 · {TARGET_MODE_LABELS[mode]}

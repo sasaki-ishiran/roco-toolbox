@@ -38,6 +38,8 @@ export interface MotherViewProps {
   eggGroupNames: Record<number, string>;
   motherGroups: MotherGroup[];
   mode: TargetMode;
+  /** 从收集页直达的状态（未收集 / 已收集）；计划分区独立展示 */
+  status?: 'missing' | 'collected' | 'plan';
 }
 
 interface SectionProps {
@@ -205,6 +207,7 @@ export function MotherView({
   eggGroupNames,
   motherGroups,
   mode,
+  status,
 }: MotherViewProps) {
   const plan = useMotherPlan();
   const criteria = useMotherCriteria();
@@ -216,6 +219,12 @@ export function MotherView({
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [criteriaOpen, setCriteriaOpen] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
+
+  // 收集页的「未收集 / 已收集」直达：同步到本页的状态开关
+  useEffect(() => {
+    if (status === 'missing') setChainFilter('uncollected');
+    else if (status === 'collected') setChainFilter('collected');
+  }, [status]);
 
   /**
    * 声音选项随目标模式联动（2026-10-05 用户拍板）：

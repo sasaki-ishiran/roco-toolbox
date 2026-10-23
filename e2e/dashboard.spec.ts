@@ -275,8 +275,8 @@ test('母本全收集：四档分开计数，默认满分大婉，切换档位�
   const gradeSelect = page.getByTestId('mother-grade-select');
   await expect(gradeSelect).toContainText(/满分大婉 \(\d+\)/);
 
-  // 默认选中满分大婉；下拉button 直接嵌在标题行里（「母本全收集 <下拉>」）
-  await expect(page.getByTestId('mother-filter-title')).toContainText('母本全收集');
+  // 默认选中满分大婉；下拉 button 直接嵌在标题行里（「按代表档位查看 <下拉>」）
+  await expect(page.getByTestId('mother-filter-title')).toContainText('按代表档位查看');
   // 点开下拉栏：4 个档位都在
   await gradeSelect.click();
   const gradeOptions = page.getByTestId('mother-grade-options');

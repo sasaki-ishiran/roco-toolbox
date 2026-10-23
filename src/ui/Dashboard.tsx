@@ -1,30 +1,20 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import type { OwnedPet } from '../domain/types';
+﻿import { useMemo, useState } from 'react';
 import {
-  MOTHER_CLASS_ORDER,
   TARGET_MODE_LABELS,
-  classifyMother,
   gradeLabel,
-  type MotherGroup,
-  type MotherClass,
-  type PetGrade,
   type TargetMode,
 } from '../domain/petFilters';
 import { ALL_GRADES } from '../domain/coverageTargets';
-import { boxLabel } from '../domain/coverageDetail';
 import { findUncataloguedCount, studEmptyNote } from '../domain/suggestions';
-import { speciesDisplayName } from '../domain/speciesName';
 import { species } from '../data/catalog';
 import { AccountFilterBar } from './AccountFilterBar';
-import { AccountSection } from './AccountSection';
-import { GenderMark } from './GenderMark';
 import { ImportAdditionCard } from './ImportAdditionCard';
+import { MotherGradeInventory } from './MotherGradeInventory';
 import { NestPlanCard } from './NestPlanCard';
 import { ProgressCard } from './ProgressCard';
 import { SuggestionCard } from './SuggestionCard';
 import { SourceNotice } from './SourceNotice';
 import { CollectionTargetEditor } from './CollectionTargetEditor';
-import { InlineSelect } from './primitives/InlineSelect';
 import { ScopeSummary } from './primitives/ScopeSummary';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { useOwnedPets } from './useOwnedPets';
@@ -44,10 +34,6 @@ export interface DashboardProps {
 }
 
 export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCoverage }: DashboardProps = {}) {
-  // 母本全收集按档位分开看，默认主流目标「大婉」（追满分时显示为「满分大婉」）
-  const [motherGrade, setMotherGrade] = useState<PetGrade>('大婉');
-  // 母本列表默认收起（2026-10-04 优化：方便同时看上面的收集进度和下面的建议）
-  const [motherListOpen, setMotherListOpen] = useState(false);
   // 唯一目标编辑器：种公 / 母本两个分区
   const [targetEditor, setTargetEditor] = useState<{
     open: boolean;
@@ -66,59 +52,6 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
   } = useCollectionSummary();
   const { accounts } = useOwnedPets();
   const coverageFilter = useCoverageFilter();
-  const speciesByGameId = useMemo(() => new Map(species.map((entry) => [entry.gameId, entry])), []);
-  const motherClassCounts = useMemo(() => {
-    const counts = new Map<MotherClass, number>();
-    for (const group of motherGroups) {
-      if (!group.motherClass) continue;
-      counts.set(group.motherClass, (counts.get(group.motherClass) ?? 0) + 1);
-    }
-    return counts;
-  }, [motherGroups]);
-  const filteredMotherChains = useMemo(
-    () => motherGroups.filter((group) => group.motherClass === motherGrade),
-    [motherGroups, motherGrade],
-  );
-  /** 每条链的代表母本：优先取与该链档位一致的那只，否则取母的（2026-10-05 母本按账号聚拢） */
-  const representativeMotherOf = (group: MotherGroup): OwnedPet | undefined => {
-    const motherIndex =
-      group.memberIndexes.find((index) => classifyMother(owned[index], mode) === group.motherClass) ??
-      group.memberIndexes.find((index) => owned[index].gender === '母');
-    return motherIndex === undefined ? undefined : owned[motherIndex];
-  };
-  /** 母本列表按「代表母本所在账号」聚拢，账号名做分组标题（2026-10-05 拍板） */
-  const groupedMotherByAccount = useMemo(() => {
-    const map = new Map<string, { group: MotherGroup; mother: OwnedPet | undefined }[]>();
-    for (const group of filteredMotherChains) {
-      const account = representativeMotherOf(group)?.account ?? '未知账号';
-      const list = map.get(account) ?? [];
-      list.push({ group, mother: representativeMotherOf(group) });
-      map.set(account, list);
-    }
-    return [...map.entries()].map(([account, chains]) => ({ account, chains }));
-  }, [filteredMotherChains, owned, mode]);
-  const renderMotherRow = ({
-    group,
-    mother,
-  }: {
-    group: MotherGroup;
-    mother: OwnedPet | undefined;
-  }): ReactNode => (
-    <li
-      key={group.chainKey}
-      className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"
-      data-testid="mother-filter-row"
-    >
-      {mother ? (
-        <>
-          {speciesDisplayName(speciesByGameId.get(mother.gameId), mother.name)}{' '}
-          <GenderMark gender={mother.gender} />（{boxLabel(mother)}）
-        </>
-      ) : (
-        group.formLabel || '未知精灵'
-      )}
-    </li>
-  );
   // 配窝汇总（明细在卡片里）：还差多少目标，以及分别属于哪种状态
   const remainingTargets = stud.cells.filter((cell) => cell.state !== 'covered').length;
   // 「可迭代」= 手里就有能孵出它的那对（学院小窝放带目标性格的那只），自己孵就行
@@ -225,64 +158,16 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
         />
       </div>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="mother-filter">
-        <div className="flex items-center justify-between gap-2">
-          {/* 「按档位筛选」几个字的位置就是下拉栏本体的触发按钮（2026-10-05 用户拍板：
-              页内展开的下拉栏，不是原生 select——手机原生弹出的是系统弹窗） */}
-          <h2 className="flex min-w-0 items-center gap-1 text-sm font-medium text-slate-500" data-testid="mother-filter-title">
-            <span className="shrink-0">母本全收集 </span>
-            <InlineSelect
-              label="母本档位"
-              value={motherGrade}
-              options={MOTHER_CLASS_ORDER.filter((motherClass) => motherClass !== '其他').map(
-                (motherClass) => ({
-                  value: motherClass,
-                  label: `${gradeLabel(motherClass as PetGrade, mode)} (${motherClassCounts.get(motherClass) ?? 0})`,
-                }),
-              )}
-              onValueChange={(next) => {
-                setMotherGrade(next as PetGrade);
-                setMotherListOpen(true);
-              }}
-              testId="mother-grade-select"
-              menuTestId="mother-grade-options"
-              optionTestId={(value) => `mother-grade-option-${value}`}
-              className="min-w-[96px]"
-            />
-          </h2>
-          <button
-            type="button"
-            aria-expanded={motherListOpen}
-            onClick={() => setMotherListOpen((prev) => !prev)}
-            className="min-h-[24px] shrink-0 text-xs text-slate-400"
-            data-testid="mother-list-toggle"
-          >
-            {motherListOpen ? '收起' : '展开'}
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={() => setTargetEditor({ open: true, section: 'mothers' })}
-          className="mt-1 min-h-[44px] text-xs font-medium text-emerald-700"
-          data-testid="mother-criteria-edit"
-        >
-          调整个人母本达标条件 ›
-        </button>
-
-        {motherListOpen ? (
-          <div className="mt-2 space-y-2" data-testid="mother-filter-result">
-            {groupedMotherByAccount.length === 0 ? (
-              <p className="text-xs text-slate-400">这个档位暂时没有合格的母本。</p>
-            ) : (
-              groupedMotherByAccount.map(({ account, chains }) => (
-                <AccountSection key={account} account={account}>
-                  <ul className="space-y-1">{chains.map(renderMotherRow)}</ul>
-                </AccountSection>
-              ))
-            )}
-          </div>
-        ) : null}
-      </section>
+      {/* 按代表母本档位查看：完整库存迁到收集页，看板保留入口（任务 8 再精简） */}
+      <MotherGradeInventory motherGroups={motherGroups} owned={owned} mode={mode} />
+      <button
+        type="button"
+        onClick={() => setTargetEditor({ open: true, section: 'mothers' })}
+        className="min-h-[44px] text-xs font-medium text-emerald-700"
+        data-testid="mother-criteria-edit"
+      >
+        调整个人母本达标条件 ›
+      </button>
 
       {uncataloguedCount > 0 ? (
         <section className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">

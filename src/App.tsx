@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { installFlushOnHide, platform, track } from './api/analytics';
-import type { PetView } from './domain/petFilters';
 import { CHANGELOG, markChangelogSeen, pendingChangelog, readChangelogSeen } from './data/changelog';
 import { refreshApp } from './pwa/hardRefresh';
 import { ChangelogModal } from './ui/ChangelogModal';
 import { GuideModal } from './ui/GuideModal';
 import { guidePending, markGuideSeen } from './ui/guide';
 import { hasPendingNativeShare } from './share/nativeShare';
-import { Coverage } from './ui/Coverage';
 import { Dashboard } from './ui/Dashboard';
+import { Collection } from './ui/Collection';
 import { Profile } from './ui/Profile';
-import { MyPets } from './ui/MyPets';
 import { Swap } from './ui/Swap';
 import { TabNav, type TabId } from './ui/TabNav';
 import {
@@ -184,22 +182,6 @@ export default function App() {
     }
   };
 
-  /** 「我的精灵」内部视角（兼容桥：母本归 collection.mothers，其余归 inventory）。 */
-  const myPetsView: PetView =
-    navigation.collection.kind === 'mothers'
-      ? 'mother'
-      : navigation.collection.kind === 'inventory'
-        ? navigation.collection.view
-        : 'all';
-
-  const handleMyPetsViewChange = (view: PetView) => {
-    if (view === 'mother') {
-      navigate({ type: 'open-collection', location: { kind: 'mothers', status: 'missing' } });
-      return;
-    }
-    navigate({ type: 'open-collection', location: { kind: 'inventory', view } });
-  };
-
   /** Swap 内部主分段（兼容桥）：共享 = 小组页，换蛋 = 收集 · 求蛋。 */
   const handleSwapViewChange = (view: 'eggs' | 'sharing') => {
     if (view === 'sharing') navigate({ type: 'tab', page: 'groups' });
@@ -282,24 +264,13 @@ export default function App() {
           onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
           onGoAccount={() => navigate({ type: 'open-profile', section: 'identity' })}
         />
-      ) : collection.kind === 'inventory' || collection.kind === 'mothers' ? (
-        <MyPets
-          view={myPetsView}
-          onViewChange={handleMyPetsViewChange}
-          onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
-        />
-      ) : collection.view === 'eggs' ? (
-        <Swap
-          view="eggs"
-          onViewChange={handleSwapViewChange}
-          onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
-          onGoAccount={() => navigate({ type: 'open-profile', section: 'identity' })}
-        />
       ) : (
-        <Coverage
+        <Collection
+          location={collection}
+          focusRevision={navigation.focusRevision}
+          onNavigate={navigate}
           expandedGroupId={expandedGroupId}
           onToggleGroup={setExpandedGroupId}
-          onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
         />
       )}
       {changelog.length > 0 ? <ChangelogModal entries={changelog} onClose={closeChangelog} /> : null}

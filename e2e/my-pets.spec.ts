@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+﻿import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 test('我的精灵页：卡片展示与标签叠加筛选', async ({ page }) => {
@@ -46,7 +46,7 @@ test('种公视角：只列真正覆盖了目标的种公，支持四档筛选',
   await page.getByRole('button', { name: '我的精灵' }).click();
 
   // 种公视角：fixture 里只有「火花」是 大块头 + 100dB + 公 + 固执 → 覆盖魔力组/巨灵组的固执
-  await page.getByRole('button', { name: '种公', exact: true }).click();
+  await page.getByRole('button', { name: '合格种公', exact: true }).click();
   await expect(page.getByTestId('stud-view-hint')).toContainText('档位达标');
   await expect(page.getByText('火花')).toBeVisible();
   await expect(page.getByText('机械方方')).toHaveCount(0);
@@ -71,7 +71,7 @@ test('种公视角：非目标性格的合格公默认也在名单里，性格�
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-offtarget-stud.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
   await page.getByRole('button', { name: '我的精灵' }).click();
-  await page.getByRole('button', { name: '种公', exact: true }).click();
+  await page.getByRole('button', { name: '合格种公', exact: true }).click();
 
   // 「满分小婉 · 懒散」的公：懒散不在任何目标性格池里，但必须出现（此前会凭空消失）
   await expect(page.getByText('梦游_穿旧睡衣的样子')).toBeVisible();
@@ -246,7 +246,7 @@ test('种公视角：搜索按进化链全员命中', async ({ page }) => {
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
   await page.getByRole('button', { name: '我的精灵' }).click();
-  await page.getByRole('button', { name: '种公', exact: true }).click();
+  await page.getByRole('button', { name: '合格种公', exact: true }).click();
 
   // 火花是 fixture 里唯一的合格种公；搜它同链的进化形态名「烈火战神」也要命中
   const search = page.getByTestId('stud-search');
