@@ -12,6 +12,12 @@ const QUANTITY_OPTIONS = [5, 15, '全部'] as const;
 export interface SuggestionCardProps {
   title: string;
   items: StudRecommendation[];
+  /**
+   * 清单为空时的提示语：由页面按「有没有数据 / 目标是否全收齐」给出，
+   * 组件不自己猜（2026-10-24：以前写死「导入抓包数据后给出建议」，
+   * 种公已收齐的用户会被误导以为数据没导进来）。
+   */
+  emptyNote: string;
   /** 数量选项选「全部」时跳到「换什么」页看完整求蛋清单 */
   onOpenSwap?: () => void;
 }
@@ -25,7 +31,7 @@ export interface SuggestionCardProps {
  * - 待办是栈：按完成时间倒序，先完成的在折叠区底部（先入后出）。
  * - 数量（5 / 15 / 全部）只作用于主列表；折叠区是已完成的，不受数量限制。
  */
-export function SuggestionCard({ title, items, onOpenSwap }: SuggestionCardProps) {
+export function SuggestionCard({ title, items, emptyNote, onOpenSwap }: SuggestionCardProps) {
   // 完成时间戳 / 折叠态 / 数量都在模块级 store：切页签回来不丢（见 suggestionCardStore）
   const { doneAt, doneOpen, quantity } = useSuggestionCard();
 
@@ -97,7 +103,9 @@ export function SuggestionCard({ title, items, onOpenSwap }: SuggestionCardProps
       </div>
 
       {items.length === 0 ? (
-        <p className="mt-1 text-sm text-slate-400">导入抓包数据后给出建议</p>
+        <p className="mt-1 text-sm text-slate-400" data-testid="recommend-empty">
+          {emptyNote}
+        </p>
       ) : (
         <>
           {visiblePending.length > 0 && (

@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { computeStudRecommendations, emptyRecommendationsNote, findUncataloguedCount } from './suggestions';
+import {
+  computeStudRecommendations,
+  emptyRecommendationsNote,
+  findUncataloguedCount,
+  studEmptyNote,
+} from './suggestions';
 import { chainTopNaturesByGameId, species } from '../data/catalog';
 import type { CoverageCell, StudCoverageResult } from './studCoverage';
 import type { SwapWish } from './swapPlan';
@@ -102,6 +107,23 @@ describe('computeStudRecommendations（优质种公推荐的结构化待办）',
     expect(emptyRecommendationsNote(mkStud([], 14))).toBe(
       '种公网络已全通，没有要补的缺口',
     );
+  });
+
+  test('清单为空时：没导数据提示导入，不会误报「已全通」', () => {
+    expect(studEmptyNote({ hasData: false, stud: mkStud([], 14) })).toBe(
+      '导入抓包数据后给出建议',
+    );
+  });
+
+  test('清单为空时：种公已全收齐要说已收集，而不是让用户去导入', () => {
+    expect(studEmptyNote({ hasData: true, stud: mkStud([], 14) })).toBe(
+      '种公网络已全通，没有要补的缺口',
+    );
+  });
+
+  test('清单为空时：没设目标（0 个蛋组）提示先设目标', () => {
+    const stud = { ...mkStud([]), groupCount: 0, passedGroups: 0 };
+    expect(studEmptyNote({ hasData: true, stud })).toContain('还没设置有效的种公目标');
   });
 });
 

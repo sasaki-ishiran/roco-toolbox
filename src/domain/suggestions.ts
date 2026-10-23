@@ -63,6 +63,24 @@ export function emptyRecommendationsNote(
     : '当前没有要换的缺口';
 }
 
+/**
+ * 推荐 / 换蛋清单为空时的提示语（2026-10-24 修）。
+ *
+ * 以前界面一律写「导入抓包数据后给出建议」，种公已经全收齐的用户会以为数据没导进来。
+ * 这里按三层区分：没导数据 → 没设目标 → 目标全收齐 / 当前没有缺口。
+ * 看板「优质种公推荐」与「换什么」共用这份口径。
+ */
+export function studEmptyNote(input: {
+  hasData: boolean;
+  stud: { groupCount: number; passedGroups: number };
+}): string {
+  if (!input.hasData) return '导入抓包数据后给出建议';
+  if (input.stud.groupCount === 0) {
+    return '还没设置有效的种公目标：先在看板勾目标档位、覆盖度勾蛋组';
+  }
+  return emptyRecommendationsNote(input.stud);
+}
+
 export function findUncataloguedCount(
   ownedGameIds: number[],
   speciesGameIds: Set<number>,

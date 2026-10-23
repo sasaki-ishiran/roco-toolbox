@@ -316,13 +316,16 @@ function PairingCard({ view, testId }: { view: PairingView; testId: string }) {
 /**
  * 「一键配窝」卡片：按账号给出**哪只进哪个窝、和谁配、小窝怎么摆**。
  * 数据来自 `buildNestPlans`（第一期：可配建议）。候选配对默认收起，用户可自行替换。
+ *
+ * `emptyNote`：没有可排方案时的提示语。目标已全收齐时由页面改写成「已全部收集」，
+ * 不再让用户去覆盖度找不存在的缺口（2026-10-24）。
  */
-export function NestPlanCard({ plans }: { plans: NestPlan[] }) {
+export function NestPlanCard({ plans, emptyNote }: { plans: NestPlan[]; emptyNote?: string }) {
   const usable = plans.filter((plan) => plan.pairings.length > 0);
   if (usable.length === 0) {
     return (
       <p className="mt-1 text-sm text-slate-400" data-testid="breed-empty">
-        当前没有能排的配窝方案——先到「覆盖度」挑要补的缺口，或缺的配对方/母本还没到位。
+        {emptyNote ?? '当前没有能排的配窝方案——先到「覆盖度」挑要补的缺口，或缺的配对方/母本还没到位。'}
       </p>
     );
   }

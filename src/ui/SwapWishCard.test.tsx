@@ -100,3 +100,14 @@ describe('SwapWishCard 全选状态', () => {
     expect(screen.getByTestId('swap-wish-select-all')).toHaveTextContent('全选');
   });
 });
+
+describe('SwapWishCard 空清单提示', () => {
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  test('没有缺口时用页面给的提示语（不再说成「当前筛选下没有」）', () => {
+    render(<SwapWishCard recommendations={[]} emptyNote="种公网络已全通，没有要补的缺口" />);
+    expect(screen.getByTestId('swap-wish-empty')).toHaveTextContent('种公网络已全通');
+  });
+});

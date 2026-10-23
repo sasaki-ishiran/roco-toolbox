@@ -9,6 +9,8 @@ import { CopySheet, isCopyPreviewOff } from './CopySheet';
 export interface SwapWishCardProps {
   /** 优质种公推荐算法的完整清单（换什么页与看板同一口径，2026-10-05 复用） */
   recommendations: StudRecommendation[];
+  /** 清单为空时的提示语（目标已全收齐时由页面改写成「已全部收集」） */
+  emptyNote?: string;
   /** 分页每页条数 */
   pageSize?: number;
 }
@@ -77,7 +79,7 @@ function formatSwapWish(rec: StudRecommendation, mode: Parameters<typeof gradeLa
  * 每条 = 性格 + 精灵名，性格是该精灵进化链最高形态自己能换到的性格（PVP 推荐 / 种族值兜底），
  * 不再可能「性格与精灵不匹配」。支持勾选多条一起复制，复制文本按「窝 + 档位」分组。
  */
-export function SwapWishCard({ recommendations, pageSize = 20 }: SwapWishCardProps) {
+export function SwapWishCard({ recommendations, emptyNote, pageSize = 20 }: SwapWishCardProps) {
   const mode = useTargetMode();
   const [nest, setNest] = useState<NestKind>('green');
   // 勾选集合放模块级 store：用户常勾十几条再一起复制，切页签回来不能丢（见 swapViewStore）
@@ -164,7 +166,7 @@ export function SwapWishCard({ recommendations, pageSize = 20 }: SwapWishCardPro
 
       {recommendations.length === 0 ? (
         <p className="mt-2 text-sm text-slate-400" data-testid="swap-wish-empty">
-          当前筛选下没有要去换的缺口。
+          {emptyNote ?? '当前筛选下没有要去换的缺口。'}
         </p>
       ) : (
         <>

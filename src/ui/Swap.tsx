@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { computeStudCoverage } from '../domain/studCoverage';
 import { TARGET_MODE_LABELS } from '../domain/petFilters';
-import { computeStudRecommendations } from '../domain/suggestions';
+import { computeStudRecommendations, studEmptyNote } from '../domain/suggestions';
 import { eggGroupNames, species } from '../data/catalog';
 import { useSnapshots } from './useSnapshots';
 import { AccountFilterBar } from './AccountFilterBar';
@@ -172,7 +172,14 @@ export function Swap({
                 />
               </section>
 
-              <SwapWishCard recommendations={filtered} />
+              <SwapWishCard
+                recommendations={filtered}
+                emptyNote={
+                  recommendations.length === 0
+                    ? studEmptyNote({ hasData: accounts.length > 0, stud })
+                    : undefined
+                }
+              />
             </>
           )}
         </>

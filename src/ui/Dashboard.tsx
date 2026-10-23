@@ -19,7 +19,7 @@ import {
   effectiveMotherVoices,
 } from '../domain/motherCriteria';
 import { computeStudCoverage } from '../domain/studCoverage';
-import { computeStudRecommendations, findUncataloguedCount } from '../domain/suggestions';
+import { computeStudRecommendations, findUncataloguedCount, studEmptyNote } from '../domain/suggestions';
 import { speciesDisplayName } from '../domain/speciesName';
 import { eggGroupNames, species } from '../data/catalog';
 import { AccountFilterBar } from './AccountFilterBar';
@@ -155,6 +155,17 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
     () => buildNestPlans({ species, owned, coverage: stud, mode }),
     [owned, stud, mode],
   );
+  /**
+   * 空清单提示语（2026-10-24 修）：以前卡片写死「导入抓包数据后给出建议」，
+   * 种公已收齐的人看到会以为数据没导进来；配窝也同样不能让他去「补缺口」。
+   */
+  const suggestionEmptyNote = studEmptyNote({ hasData: owned.length > 0, stud });
+  const nestEmptyNote =
+    stud.groupCount === 0
+      ? suggestionEmptyNote
+      : remainingTargets === 0
+        ? '种公目标已全部收集，不用再配窝'
+        : undefined;
 
   const speciesGameIds = useMemo(() => new Set(species.map((s) => s.gameId)), []);
   const uncataloguedCount = useMemo(
@@ -323,7 +334,12 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
         </section>
       ) : null}
 
-      <SuggestionCard title="优质种公推荐" items={suggestions} onOpenSwap={onOpenSwap} />
+      <SuggestionCard
+        title="优质种公推荐"
+        items={suggestions}
+        emptyNote={suggestionEmptyNote}
+        onOpenSwap={onOpenSwap}
+      />
 
       {/* 配窝：给「谁和谁配」的建议（不再列候选配对）。
           缺什么/怎么迭代在「覆盖度」页看，要去弄什么在「换什么」页看。 */}
@@ -331,9 +347,15 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
         <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="nest-summary">
           <h2 className="text-sm font-medium text-slate-500">配窝建议</h2>
           <p className="mt-1 text-sm text-slate-600" data-testid="nest-summary-line">
-            还差 {remainingTargets} 个目标：
-            <br />
-            能自己迭代 {iterableTargets} · 未收集 {missingTargets}
+            {remainingTargets === 0 ? (
+              '种公目标已全部收集，没有要补的缺口。'
+            ) : (
+              <>
+                还差 {remainingTargets} 个目标：
+                <br />
+                能自己迭代 {iterableTargets} · 未收集 {missingTargets}
+              </>
+            )}
           </p>
           {/* 两个入口跟在汇总行下面，不加大间距，按正常行距排（2026-10-06 用户拍板） */}
           <div className="flex items-center gap-4">
@@ -354,7 +376,7 @@ export function Dashboard({ onOpenStuds, onOpenMothers, onOpenSwap, onOpenCovera
               去看怎么快速收集 ›
             </button>
           </div>
-          <NestPlanCard plans={breedPlan} />
+          <NestPlanCard plans={breedPlan} emptyNote={nestEmptyNote} />
         </section>
       ) : null}
 

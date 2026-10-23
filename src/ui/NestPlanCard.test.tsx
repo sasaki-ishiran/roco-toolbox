@@ -303,3 +303,15 @@ describe('NestPlanCard（配窝建议的行合并规则）', () => {
     expect(rows[2]).toHaveTextContent('普通 30%');
   });
 });
+
+describe('NestPlanCard 空方案提示', () => {
+  test('页面给了提示语时用页面文案（目标全收齐不再让用户去覆盖度找缺口）', () => {
+    render(<NestPlanCard plans={[planOf([])]} emptyNote="种公目标已全部收集，不用再配窝" />);
+    expect(screen.getByTestId('breed-empty')).toHaveTextContent('种公目标已全部收集');
+  });
+
+  test('没给提示语时保留原来的排查提示', () => {
+    render(<NestPlanCard plans={[planOf([])]} />);
+    expect(screen.getByTestId('breed-empty')).toHaveTextContent('先到「覆盖度」');
+  });
+});
