@@ -14,6 +14,20 @@ import { listSnapshots } from './snapshots';
 let cache: AccountSnapshot[] | null = null;
 let inFlight: Promise<AccountSnapshot[]> | null = null;
 const listeners = new Set<(snapshots: AccountSnapshot[]) => void>();
+export interface SnapshotRefreshState {
+  error: string | null;
+  refreshedAt: number | null;
+}
+
+let refreshState: SnapshotRefreshState = { error: null, refreshedAt: null };
+const refreshListeners = new Set<(state: SnapshotRefreshState) => void>();
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error && error.message ? error.message : '读取本机数据失败';
+
+const notifyRefreshState = () => {
+  for (const listener of refreshListeners) listener(refreshState);
+};
 
 export function getCachedSnapshots(): AccountSnapshot[] | null {
   return cache;
@@ -27,6 +41,17 @@ export function subscribeSnapshots(listener: (snapshots: AccountSnapshot[]) => v
   };
 }
 
+export function getSnapshotRefreshState(): SnapshotRefreshState {
+  return refreshState;
+}
+
+export function subscribeSnapshotRefresh(listener: (state: SnapshotRefreshState) => void): () => void {
+  refreshListeners.add(listener);
+  return () => {
+    refreshListeners.delete(listener);
+  };
+}
+
 /** 重新从 IndexedDB 读取（导入 / 重置后调用），并通知所有订阅者。 */
 export function refreshSnapshots(): Promise<AccountSnapshot[]> {
   if (inFlight) {
@@ -37,14 +62,19 @@ export function refreshSnapshots(): Promise<AccountSnapshot[]> {
   inFlight = listSnapshots()
     .then((snapshots) => {
       cache = snapshots;
+      refreshState = { error: null, refreshedAt: Date.now() };
       inFlight = null;
       for (const listener of listeners) listener(snapshots);
+      notifyRefreshState();
       return snapshots;
     })
     // 2026-10-06 修复（M5）：失败也要释放 in-flight，否则一次 IndexedDB 故障
     // 会让之后所有 refreshSnapshots() 永远复用这个 rejected promise（永久卡死）。
     .catch((error: unknown) => {
       inFlight = null;
+      // 保留上一次成功读取的 cache；页面可以继续展示旧内容，同时明确告诉用户刷新失败。
+      refreshState = { ...refreshState, error: messageOf(error) };
+      notifyRefreshState();
       throw error;
     });
   return inFlight;
@@ -54,5 +84,7 @@ export function refreshSnapshots(): Promise<AccountSnapshot[]> {
 export function resetSnapshotCacheForTest(): void {
   cache = null;
   inFlight = null;
+  refreshState = { error: null, refreshedAt: null };
   listeners.clear();
+  refreshListeners.clear();
 }

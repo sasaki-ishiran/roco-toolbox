@@ -73,11 +73,23 @@ describe('InlineSelect', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  test('点外部关闭', () => {
+  test('点不可聚焦的外部关闭并返焦', () => {
     renderSelect();
     fireEvent.click(screen.getByTestId('member-select'));
     fireEvent.pointerDown(document.body);
     expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByTestId('member-select'));
+  });
+
+  test('点外部按钮关闭时允许按钮接收焦点', () => {
+    render(<button type="button">外部操作</button>);
+    renderSelect();
+    fireEvent.click(screen.getByTestId('member-select'));
+    const outside = screen.getByRole('button', { name: '外部操作' });
+    fireEvent.pointerDown(outside);
+    outside.focus();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(document.activeElement).toBe(outside);
   });
 
   test('方向键移到下一项，且不关闭面板', () => {

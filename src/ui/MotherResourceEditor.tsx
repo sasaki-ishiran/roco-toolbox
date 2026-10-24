@@ -151,7 +151,7 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
             <button
               type="button"
               onClick={onGoAccount}
-              className="mt-2 block min-h-[36px] rounded-xl border border-emerald-500 px-3 text-xs text-emerald-700"
+              className="mt-2 block min-h-[44px] rounded-xl border border-emerald-500 px-3 text-xs text-emerald-700"
             >
               去导入数据
             </button>
@@ -263,7 +263,7 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
             onClick={handleStop}
             disabled={busy}
             data-testid="mother-stop-sharing"
-            className="min-h-[40px] flex-1 rounded-xl border border-rose-200 px-3 text-sm font-medium text-rose-600 disabled:opacity-50"
+            className="min-h-[44px] flex-1 rounded-xl border border-rose-200 px-3 text-sm font-medium text-rose-600 disabled:opacity-50"
           >
             {busy ? '处理中…' : '停止共享我的资源'}
           </button>
@@ -273,7 +273,7 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
             onClick={() => void handlePublish()}
             disabled={!canPublish}
             data-testid="mother-publish"
-            className="min-h-[40px] flex-1 rounded-xl bg-emerald-600 px-3 text-sm font-medium text-white disabled:opacity-50"
+            className="min-h-[44px] flex-1 rounded-xl bg-emerald-600 px-3 text-sm font-medium text-white disabled:opacity-50"
           >
             {busy ? '发布中…' : published ? '更新我的资源' : '发布我的资源'}
           </button>

@@ -26,7 +26,9 @@ const loadOwned = () => {
   return parseBackup(raw, 'test').pets;
 };
 
-vi.mock('./useSnapshots', () => ({ useSnapshots: () => ({ loaded: true, snapshots: [] }) }));
+vi.mock('./useSnapshots', () => ({
+  useSnapshots: () => ({ loaded: true, snapshots: [], refreshError: null, refreshedAt: null }),
+}));
 vi.mock('./useOwnedPets', () => {
   const raw = JSON.parse(
     readFileSync(resolve(process.cwd(), 'src/domain/__fixtures__/backup-sample.json'), 'utf8'),

@@ -6,13 +6,14 @@ export interface AccountFilterBarProps {
 
 /**
  * 账号筛选条。看板 / 覆盖度 / 换什么 / 我的精灵四页各放一份，共用同一个 store。
- * 只有一个账号时不显示。
+ * 只有一个且已选中账号时不显示；被取消选择时仍提供恢复入口。
  *
  * 2026-10-05：按用户拍板去掉「可收起」，账号列表**默认展开**（原样展示）。
  */
 export function AccountFilterBar({ accounts }: AccountFilterBarProps) {
   const { excluded, toggleAccount, toggleAllAccounts } = useAccountFilter();
-  if (accounts.length < 2) return null;
+  // 单账号默认不需要筛选条；但如果用户把它取消选中，必须保留恢复入口。
+  if (accounts.length < 2 && !(accounts.length === 1 && excluded.has(accounts[0]))) return null;
 
   const onCount = accounts.filter((account) => !excluded.has(account)).length;
   const allOn = excluded.size === 0;

@@ -71,7 +71,7 @@ export function PetList({ pets, speciesByGameId, eggGroupNames, resetKey = '' }:
             type="button"
             onClick={() => setPageSize(size)}
             aria-pressed={pageSize === size}
-            className={`min-h-[32px] rounded-lg border px-2.5 text-xs ${
+            className={`min-h-[44px] rounded-lg border px-2.5 text-xs ${
               pageSize === size
                 ? 'border-emerald-600 bg-emerald-600 text-white'
                 : 'border-slate-200 bg-white text-slate-600'

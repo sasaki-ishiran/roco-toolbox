@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { useSnapshots } from './useSnapshots';
 import { useMotherGroups, type MotherGroupsHook } from './useMotherGroups';
@@ -49,11 +49,27 @@ const hookOf = (overrides: Partial<MotherGroupsHook> = {}): MotherGroupsHook => 
 
 beforeEach(() => {
   window.localStorage.clear();
-  vi.mocked(useSnapshots).mockReturnValue({ snapshots: [], loaded: true });
+  vi.mocked(useSnapshots).mockReturnValue({ snapshots: [], loaded: true, refreshError: null, refreshedAt: null });
   vi.mocked(useMotherGroups).mockReturnValue(hookOf());
 });
 
 describe('MotherSharing 入口与状态', () => {
+  test('切组时可继续编辑草稿，也可明确放弃后切组', async () => {
+    const hook = hookOf({ draftDirty: true, groups: [
+      { id: 'g1', name: '周末互换', ownerAccountId: 'A', memberCount: 2 },
+      { id: 'g2', name: '另一组', ownerAccountId: 'A', memberCount: 1 },
+    ] });
+    vi.mocked(useMotherGroups).mockReturnValue(hook);
+    render(<MotherSharing />);
+    fireEvent.click(screen.getByTestId('mother-group-g2'));
+    expect(hook.selectGroup).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }));
+    expect(hook.selectGroup).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('mother-group-g2'));
+    fireEvent.click(screen.getByRole('button', { name: '放弃并离开' }));
+    await waitFor(() => expect(hook.selectGroup).toHaveBeenCalledWith('g2'));
+  });
+
   test('已加入小组时保留顶部切组，将新建加入表单放在资源和成员之后', () => {
     render(<MotherSharing />);
     const setup = screen.getByTestId('mother-group-setup');
@@ -96,10 +112,31 @@ describe('MotherSharing 入口与状态', () => {
     render(<MotherSharing onGoAccount={vi.fn()} />);
 
     expect(screen.getByTestId('mother-group-card')).toHaveTextContent('周末互换');
+    fireEvent.click(screen.getByTestId('mother-edit-resources'));
     expect(screen.getByTestId('mother-no-local-data')).toBeVisible();
     expect(screen.getByTestId('mother-resources')).toBeVisible();
     expect(screen.getByTestId('mother-members')).toBeVisible();
     expect(screen.getByTestId('mother-criteria')).toHaveTextContent('母 · 大块头 · +100dB');
+  });
+
+  test('日常浏览先显示发布状态，管理选号后才展开编辑器', () => {
+    render(<MotherSharing />);
+    expect(screen.getByTestId('mother-publication-status')).toHaveTextContent('已发布');
+    expect(screen.queryByTestId('mother-resource-editor')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('mother-edit-resources'));
+    expect(screen.getByTestId('mother-resource-editor')).toBeVisible();
+  });
+
+  test.each(['未发布', '需更新'])('%s状态能直接进入资源编辑', (status) => {
+    vi.mocked(useMotherGroups).mockReturnValue(hookOf({
+      myMember: status === '未发布' ? member('A', null) : member('A', {
+        ...detail.members[0].resource!, catalogVersion: 'old-version',
+      }),
+    }));
+    render(<MotherSharing />);
+    expect(screen.getByTestId('mother-publication-status')).toHaveTextContent(status);
+    fireEvent.click(screen.getByTestId('mother-edit-resources'));
+    expect(screen.getByTestId('mother-resource-editor')).toBeVisible();
   });
 
   test('登录后未加入任何组时给出新建/加入提示', () => {

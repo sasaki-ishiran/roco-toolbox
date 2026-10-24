@@ -23,23 +23,37 @@ import { readLastTab, saveLastTab, hasSavedTab } from './ui/lastTab';
 import { readSwapMainView, saveSwapMainView } from './ui/swapViewStore';
 import { getImportOutcome, useImportOutcome } from './ui/importOutcomeStore';
 import { useSnapshots } from './ui/useSnapshots';
+import { useDraftLeaveGuard } from './ui/useDraftLeaveGuard';
+import { SnapshotRefreshNotice } from './ui/SnapshotRefreshNotice';
 
 export default function App() {
   const [navigation, setNavigation] = useState<AppNavigation>(() =>
     initialNavigation(readLastTab(), readSwapMainView()),
   );
+  const navigationRef = useRef(navigation);
+  navigationRef.current = navigation;
+  const [groupsDraftDirty, setGroupsDraftDirty] = useState(false);
+  const { confirmLeave, leaveConfirmation } = useDraftLeaveGuard(groupsDraftDirty);
   /** 统一入口：页面只发意图，状态变化全部走纯函数（见 ui/navigation.ts）。 */
   const navigate = useCallback((intent: NavigationIntent) => {
     // 分享正在解析／保存期间不要卸载消费页面（否则这次分享会被静默搁置）；
     // 普通私有同步不锁导航（2026-10-24）。
     if (getImportOutcome().local === 'importing' && intent.type !== 'consume-focus') return;
-    setNavigation((current) => resolveNavigation(current, intent));
-  }, []);
+    const current = navigationRef.current;
+    const next = resolveNavigation(current, intent);
+    if (current.page === 'groups' && next.page !== 'groups' && groupsDraftDirty) {
+      void confirmLeave().then((leave) => {
+        if (leave) setNavigation((latest) => resolveNavigation(latest, intent));
+      });
+    } else {
+      setNavigation((latest) => resolveNavigation(latest, intent));
+    }
+  }, [confirmLeave, groupsDraftDirty]);
   const importOutcome = useImportOutcome();
   const activeTab = navigation.page;
   /** 手动刷新按钮的忙碌态（真正刷新会让页面重载，这里只防连点） */
   const [refreshing, setRefreshing] = useState(false);
-  const { snapshots, loaded } = useSnapshots();
+  const { snapshots, loaded, refreshError, refreshedAt } = useSnapshots();
   // 壳（APK）把分享内容注入**当前页面**，而消费分享的监听挂在「导入数据」页里（只挂载当前页）：
   // 应用开着且停在别的页签时，分享会被静默搁置（看起来像「分享过来什么都没发生」）。
   // 所以一收到分享事件就切到导入页、并先按住「自动落看板」；等这次分享**导入完成**后
@@ -164,7 +178,7 @@ export default function App() {
               }}
               data-testid="app-refresh"
               title="刷新到最新版本（清掉旧缓存）"
-              className="min-h-[28px] rounded-full border border-slate-200 px-2.5 text-[11px] text-slate-500 disabled:opacity-50"
+              className="min-h-[44px] min-w-[44px] rounded-full border border-slate-200 px-2.5 text-[11px] text-slate-500 disabled:opacity-50"
               disabled={refreshing}
             >
               {refreshing ? '刷新中…' : '刷新'}
@@ -173,7 +187,7 @@ export default function App() {
               type="button"
               onClick={() => setGuide(true)}
               data-testid="guide-open"
-              className="min-h-[28px] rounded-full border border-slate-200 px-2.5 text-[11px] text-slate-500"
+              className="min-h-[44px] min-w-[44px] rounded-full border border-slate-200 px-2.5 text-[11px] text-slate-500"
             >
               教程
             </button>
@@ -184,6 +198,7 @@ export default function App() {
         </header>
         <TabNav active={activeTab} onChange={(page) => navigate({ type: 'tab', page })} />
       </div>
+      <SnapshotRefreshNotice error={refreshError} refreshedAt={refreshedAt} />
       {/* 2026-10-06 修复（M3）：不要在渲染体里用「每次渲染都是新引用」的内联箭头组件
           拼 Record<TabId, ComponentType>——App 任何 state 变化（比如开关更新弹窗）都会
           让 React 认为页面组件类型变了，把整个页面卸载重挂，页内状态全部丢失。
@@ -201,6 +216,7 @@ export default function App() {
       ) : navigation.page === 'groups' ? (
         <main className="mx-auto max-w-md space-y-3 p-4">
           <MotherSharing
+            onDraftDirtyChange={setGroupsDraftDirty}
             onGoAccount={() =>
               navigate({ type: 'open-profile', section: 'identity', returnToGroups: true })
             }
@@ -218,6 +234,7 @@ export default function App() {
       {changelog.length > 0 ? <ChangelogModal entries={changelog} onClose={closeChangelog} /> : null}
       {/* 完整教程不再首启自动弹：由顶部「教程」或「我的」入门卡明确打开 */}
       {guide ? <GuideModal onClose={closeGuide} /> : null}
+      {leaveConfirmation}
       {importOutcome.local === 'importing' ? (
         <div
           className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-900/85 px-4 py-2 text-xs text-white shadow-lg"

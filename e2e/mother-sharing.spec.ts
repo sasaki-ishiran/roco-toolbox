@@ -30,6 +30,8 @@ test('已登录且本机无数据：能浏览小组资源，不能发布自己�
   await expect(page.getByTestId('mother-group-card')).toContainText('周末互换');
   await expect(page.getByTestId('mother-group-card')).toContainText('3 人');
   await expect(page.getByTestId('mother-criteria')).toContainText('母 · 大块头 · +100dB');
+  await expect(page.getByTestId('mother-resource-editor')).toHaveCount(0);
+  await page.getByTestId('mother-edit-resources').click();
   await expect(page.getByTestId('mother-no-local-data')).toBeVisible();
   await expect(page.getByTestId('mother-missing-accounts')).toContainText('uid:1001');
   await expect(page.getByTestId('mother-publish')).toBeDisabled();

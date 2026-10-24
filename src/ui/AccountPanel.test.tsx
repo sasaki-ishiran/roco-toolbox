@@ -192,4 +192,22 @@ describe('云同步面板（免密恢复码）', () => {
     });
     confirmSpy.mockRestore();
   });
+
+  test.each(['account-conflict-keep-local', 'account-force-push'])('覆盖云端取消时不发写请求：%s', async (buttonId) => {
+    window.localStorage.setItem('roco.deviceToken', 'token-1');
+    window.localStorage.setItem('roco.accountId', 'acc-1');
+    window.localStorage.setItem('roco.syncVersion', '3');
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const onHandled = vi.fn();
+    render(<AccountPanel autoConflict={{ version: 8, updatedAt: 1_700_000_000_000, bytes: 20 }} onAutoConflictHandled={onHandled} />);
+
+    fireEvent.click(await screen.findByTestId(buttonId));
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(calls.some((call) => call.path === '/api/sync' && call.method === 'PUT')).toBe(false);
+    expect(window.localStorage.getItem('roco.syncVersion')).toBe('3');
+    expect(screen.getByTestId('account-conflict')).toBeVisible();
+    expect(onHandled).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
 });

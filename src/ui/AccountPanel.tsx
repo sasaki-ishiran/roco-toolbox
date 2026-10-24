@@ -259,7 +259,7 @@ export function AccountPanel({
                 data-testid="account-sync"
                 onClick={handleSync}
                 disabled={busy !== ''}
-                className="min-h-[40px] rounded-xl bg-emerald-600 px-3 text-xs font-medium text-white disabled:opacity-50"
+                className="min-h-[44px] rounded-xl bg-emerald-600 px-3 text-xs font-medium text-white disabled:opacity-50"
               >
                 {busy === 'sync' ? '同步中…' : '立即同步'}
               </button>
@@ -270,7 +270,7 @@ export function AccountPanel({
                 data-testid="account-force-push"
                 onClick={handleForcePush}
                 disabled={busy !== ''}
-                className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
+                className="min-h-[44px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
               >
                 {busy === 'force' ? '上传中…' : '用本机覆盖云端'}
               </button>
@@ -281,7 +281,7 @@ export function AccountPanel({
                 data-testid="account-rotate"
                 onClick={handleRotate}
                 disabled={busy !== ''}
-                className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-600 disabled:opacity-50"
+                className="min-h-[44px] rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-600 disabled:opacity-50"
               >
                 重新生成恢复码
               </button>
@@ -292,7 +292,7 @@ export function AccountPanel({
                 data-testid="account-logout"
                 onClick={handleLogout}
                 disabled={busy !== ''}
-                className="min-h-[40px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
+                className="min-h-[44px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
               >
                 退出登录
               </button>
@@ -303,7 +303,7 @@ export function AccountPanel({
                 data-testid="account-delete"
                 onClick={handleDelete}
                 disabled={busy !== ''}
-                className="min-h-[40px] rounded-xl border border-red-100 px-3 text-xs text-red-500 disabled:opacity-50"
+                className="min-h-[44px] rounded-xl border border-red-100 px-3 text-xs text-red-500 disabled:opacity-50"
               >
                 注销账号
               </button>
@@ -362,14 +362,14 @@ export function AccountPanel({
                 void navigator.clipboard?.writeText(recoveryCode);
                 setMessage('已复制恢复码');
               }}
-              className="min-h-[32px] rounded-lg border border-amber-300 px-2 text-[11px] text-amber-800"
+              className="min-h-[44px] rounded-lg border border-amber-300 px-2 text-[11px] text-amber-800"
             >
               复制
             </button>
             <button
               type="button"
               onClick={() => setRecoveryCode(null)}
-              className="min-h-[32px] rounded-lg border border-amber-300 px-2 text-[11px] text-amber-800"
+              className="min-h-[44px] rounded-lg border border-amber-300 px-2 text-[11px] text-amber-800"
             >
               我已保存
             </button>
@@ -388,7 +388,7 @@ export function AccountPanel({
               type="button"
               data-testid="account-conflict-retry"
               onClick={handleSync}
-              className="min-h-[36px] rounded-lg border border-rose-300 bg-white px-3 text-[11px] font-medium text-rose-700"
+              className="min-h-[44px] rounded-lg border border-rose-300 bg-white px-3 text-[11px] font-medium text-rose-700"
             >
               再同步一次（合并）
             </button>
@@ -396,7 +396,7 @@ export function AccountPanel({
               type="button"
               data-testid="account-conflict-keep-local"
               onClick={handleForcePush}
-              className="min-h-[36px] rounded-lg border border-rose-300 bg-white px-3 text-[11px] font-medium text-rose-700"
+              className="min-h-[44px] rounded-lg border border-rose-300 bg-white px-3 text-[11px] font-medium text-rose-700"
             >
               用本机（覆盖云端）
             </button>

@@ -14,7 +14,7 @@ export interface CoverageFilterBarProps {
 
 const CHIP_ON = 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700';
 const CHIP_OFF = 'border-slate-200 bg-white text-slate-500';
-const CHIP_BASE = 'min-h-[32px] rounded-full border px-2.5 text-xs';
+const CHIP_BASE = 'min-h-[44px] rounded-full border px-2.5 text-xs';
 
 const chipClass = (active: boolean): string => `${CHIP_BASE} ${active ? CHIP_ON : CHIP_OFF}`;
 
@@ -76,7 +76,7 @@ export function CoverageFilterBar({ filter, onToggleGroup, onReset, onOpenTarget
             type="button"
             aria-expanded={groupsOpen}
             onClick={() => setGroupsOpen((open) => !open)}
-            className="flex min-h-[32px] w-full items-center justify-between text-xs text-slate-400"
+            className="flex min-h-[44px] w-full items-center justify-between text-xs text-slate-400"
             data-testid="coverage-groups-toggle"
           >
             <span>蛋组（{groupCount}/14）</span>

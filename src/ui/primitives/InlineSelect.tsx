@@ -55,7 +55,14 @@ export function InlineSelect({
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (rootRef.current?.contains(event.target as Node)) return;
+      setOpen(false);
+      const target = event.target instanceof Element ? event.target : null;
+      // 外部按钮/输入框仍可按正常鼠标行为接收焦点；点空白时返焦，避免焦点随选项卸载丢失。
+      if (!target?.closest('button, a[href], input, select, textarea, [tabindex], label')) {
+        event.preventDefault();
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);

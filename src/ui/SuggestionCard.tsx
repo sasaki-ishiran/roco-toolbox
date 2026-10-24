@@ -77,7 +77,7 @@ export function SuggestionCard({ title, items, emptyNote, onOpenSwap }: Suggesti
                 key={option}
                 type="button"
                 onClick={onOpenSwap}
-                className="min-h-[28px] rounded-full border px-2.5 text-xs text-emerald-700"
+                className="min-h-[44px] rounded-full border px-2.5 text-xs text-emerald-700"
                 data-testid="recommend-quantity-all"
               >
                 {option}
@@ -88,7 +88,7 @@ export function SuggestionCard({ title, items, emptyNote, onOpenSwap }: Suggesti
                 type="button"
                 aria-pressed={quantity === option}
                 onClick={() => setSuggestionQuantity(option)}
-                className={`min-h-[28px] rounded-full border px-2.5 text-xs ${
+                className={`min-h-[44px] rounded-full border px-2.5 text-xs ${
                   quantity === option
                     ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
                     : 'border-slate-200 bg-white text-slate-500'
@@ -140,7 +140,7 @@ export function SuggestionCard({ title, items, emptyNote, onOpenSwap }: Suggesti
                 type="button"
                 onClick={() => setSuggestionDoneOpen(!doneOpen)}
                 aria-expanded={doneOpen}
-                className="min-h-[32px] rounded-lg bg-slate-100 px-3 text-xs text-slate-500"
+                className="min-h-[44px] rounded-lg bg-slate-100 px-3 text-xs text-slate-500"
                 data-testid="recommend-done-toggle"
               >
                 已换到 {doneItems.length} 条{doneOpen ? ' · 收起' : ''}

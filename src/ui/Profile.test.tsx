@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { Profile } from './Profile';
 import { beginImport, resetImportOutcomeForTest, updateImportOutcome } from './importOutcomeStore';
 import { clearSyncFeedback } from './syncNoticeStore';
 
 afterEach(() => {
+  cleanup();
   resetImportOutcomeForTest();
   clearSyncFeedback();
   window.localStorage.clear();

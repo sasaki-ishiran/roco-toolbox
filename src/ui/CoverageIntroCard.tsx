@@ -64,7 +64,7 @@ export function CoverageIntroCard() {
             markCoverageIntroSeen();
             setOpen(false);
           }}
-          className="min-h-[32px] rounded-lg border border-emerald-200 bg-white/70 px-3 text-xs text-emerald-700"
+          className="min-h-[44px] rounded-lg border border-emerald-200 bg-white/70 px-3 text-xs text-emerald-700"
         >
           知道了
         </button>

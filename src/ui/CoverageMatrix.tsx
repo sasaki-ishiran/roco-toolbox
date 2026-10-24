@@ -262,7 +262,7 @@ export function CoverageMatrix({
                             type="button"
                             aria-pressed={on}
                             onClick={() => onToggleGroupNature(group.groupId, nature.name)}
-                            className={`min-h-[28px] rounded-full border px-2 text-xs ${
+                            className={`min-h-[44px] min-w-[44px] rounded-full border px-2 text-xs ${
                               on
                                 ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
                                 : 'border-slate-200 bg-white text-slate-400'

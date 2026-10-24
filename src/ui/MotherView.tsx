@@ -131,7 +131,7 @@ function CollapsibleSection({
                     type="button"
                     disabled={safePage === 1}
                     onClick={() => setPage(safePage - 1)}
-                    className="min-h-[36px] flex-1 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
+                    className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
                   >
                     上一页
                   </button>
@@ -142,7 +142,7 @@ function CollapsibleSection({
                     type="button"
                     disabled={safePage === totalPages}
                     onClick={() => setPage(safePage + 1)}
-                    className="min-h-[36px] flex-1 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
+                    className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
                   >
                     下一页
                   </button>
@@ -160,7 +160,7 @@ function CollapsibleSection({
                     type="button"
                     disabled={safePage === 1}
                     onClick={() => setPage(safePage - 1)}
-                    className="min-h-[36px] flex-1 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
+                    className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
                   >
                     上一页
                   </button>
@@ -171,7 +171,7 @@ function CollapsibleSection({
                     type="button"
                     disabled={safePage === totalPages}
                     onClick={() => setPage(safePage + 1)}
-                    className="min-h-[36px] flex-1 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
+                    className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
                   >
                     下一页
                   </button>
@@ -359,7 +359,7 @@ export function MotherView({
         <button
           type="button"
           onClick={() => toggleMotherPlan(group.chainKey)}
-          className="min-h-[28px] shrink-0 rounded-full border border-slate-200 bg-white px-2 text-[11px] text-slate-500"
+          className="min-h-[44px] shrink-0 rounded-full border border-slate-200 bg-white px-2 text-[11px] text-slate-500"
           data-testid="mother-plan-remove"
         >
           移除
@@ -467,7 +467,7 @@ export function MotherView({
                 onClick={() =>
                   removeManyFromMotherPlan(achievedGroups.map((group) => group.chainKey))
                 }
-                className="min-h-[32px] rounded-full border border-emerald-500 px-3 text-xs font-medium text-emerald-700"
+                className="min-h-[44px] rounded-full border border-emerald-500 px-3 text-xs font-medium text-emerald-700"
                 data-testid="mother-plan-clear-done"
               >
                 清除已达成（{achievedGroups.length}）

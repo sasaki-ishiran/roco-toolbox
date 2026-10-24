@@ -55,7 +55,7 @@ describe('App', () => {
     render(<App />);
     await waitFor(() => expect(screen.queryByTestId('import-input')).toBeNull());
 
-    window.dispatchEvent(new Event('roco-share'));
+    fireEvent(window, new Event('roco-share'));
 
     await waitFor(() => expect(screen.getByTestId('import-input')).toBeDefined());
   });

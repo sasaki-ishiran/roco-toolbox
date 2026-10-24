@@ -121,7 +121,7 @@ export function Swap({
             aria-selected={view === id}
             onClick={() => setView(id)}
             data-testid={`swap-view-${id}`}
-            className={`min-h-[34px] flex-1 rounded-lg text-xs ${
+            className={`min-h-[44px] flex-1 rounded-lg text-xs ${
               view === id ? 'bg-white font-medium text-slate-800 shadow-sm' : 'text-slate-500'
             }`}
           >

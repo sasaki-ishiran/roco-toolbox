@@ -2,14 +2,16 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { Dashboard } from './Dashboard';
 import type { CollectionSummary } from './useCollectionSummary';
+import { toggleAllAccounts } from './accountFilterStore';
 
 const h = vi.hoisted(() => ({
   summary: null as unknown as CollectionSummary,
+  accounts: ['测试甲'],
 }));
 
 vi.mock('./useCollectionSummary', () => ({ useCollectionSummary: () => h.summary }));
 vi.mock('./useOwnedPets', () => ({
-  useOwnedPets: () => ({ owned: [{ gameId: 3200, account: '测试甲' }], accounts: [] }),
+  useOwnedPets: () => ({ owned: h.summary.owned, accounts: h.accounts }),
 }));
 
 const motherGroup = (index: number) =>
@@ -23,6 +25,8 @@ const motherGroup = (index: number) =>
   }) as never;
 
 beforeEach(() => {
+  h.accounts = ['测试甲'];
+  toggleAllAccounts([]);
   h.summary = {
     loaded: true,
     owned: [{ gameId: 3200, account: '测试甲' } as never],
@@ -55,6 +59,34 @@ beforeEach(() => {
 });
 
 describe('Dashboard（看板）', () => {
+  test('有导入账号但全部被筛掉时不误报未导入', () => {
+    toggleAllAccounts(h.accounts);
+    h.summary = { ...h.summary, owned: [], recommendations: [] };
+    render(<Dashboard onNavigate={vi.fn()} />);
+    expect(screen.getByTestId('recommend-empty')).not.toHaveTextContent('导入抓包数据');
+    expect(screen.getByTestId('dashboard-empty-accounts')).toHaveTextContent('当前未选中任何账号');
+  });
+
+  test('单个账号被筛掉时仍保留恢复筛选入口', () => {
+    toggleAllAccounts(h.accounts);
+    h.summary = { ...h.summary, owned: [], recommendations: [] };
+    render(<Dashboard onNavigate={vi.fn()} />);
+    expect(screen.getByTestId('account-filter')).toBeTruthy();
+    expect(screen.getByTestId('account-filter-toggle-all')).toHaveTextContent('全选');
+    fireEvent.click(screen.getByTestId('account-filter-toggle-all'));
+    expect(screen.queryByTestId('dashboard-empty-accounts')).toBeNull();
+  });
+
+  test('未设置种公目标时配窝摘要不声称全部收集', () => {
+    h.summary = {
+      ...h.summary,
+      stud: { ...h.summary.stud, cells: [], groupCount: 0, passedGroups: 0, total: 0 },
+      recommendations: [],
+    };
+    render(<Dashboard onNavigate={vi.fn()} />);
+    expect(screen.getByTestId('nest-summary-line')).toHaveTextContent('未设置种公目标');
+    expect(screen.getByTestId('nest-summary-line')).not.toHaveTextContent('全部收集');
+  });
   test('结构与顺序：目标摘要 → 并列进度 → 母本缺口 → 种公推荐 → 配窝汇总', () => {
     const { container } = render(<Dashboard onNavigate={vi.fn()} />);
     const order = [

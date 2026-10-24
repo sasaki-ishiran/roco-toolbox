@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CATALOG_VERSION, species } from '../data/catalog';
+import { isMotherResourceComparable } from '../domain/motherSharing';
 import { useSnapshots } from './useSnapshots';
 import { useMotherGroups } from './useMotherGroups';
 import { MotherGroupMembers } from './MotherGroupMembers';
 import { MotherGroupResources } from './MotherGroupResources';
 import { MotherGroupSetup, MotherGroupSwitcher } from './MotherGroupSetup';
 import { MotherResourceEditor } from './MotherResourceEditor';
+import { useDraftLeaveGuard } from './useDraftLeaveGuard';
 import {
   readInviteCode,
   readPendingInviteCode,
@@ -15,6 +17,7 @@ import {
 export interface MotherSharingProps {
   /** 去「导入数据」页的账号面板登录 / 开启云同步 */
   onGoAccount?: () => void;
+  onDraftDirtyChange?: (dirty: boolean) => void;
 }
 
 /**
@@ -23,10 +26,29 @@ export interface MotherSharingProps {
  * 没有本地导入数据也能进来：登录后可以浏览组里别人发布的资源；
  * 只有发布自己的资源时才要求本机有对应账号快照。
  */
-export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
+export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharingProps = {}) {
   const { snapshots } = useSnapshots();
   const [pendingCode, setPendingCode] = useState(() => readPendingInviteCode());
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const hook = useMotherGroups({ snapshots, species, catalogVersion: CATALOG_VERSION });
+  const { confirmLeave, leaveConfirmation } = useDraftLeaveGuard(hook.draftDirty);
+  const published = hook.myMember?.resource;
+  const needsUpdate = published != null && (
+    !isMotherResourceComparable(published, CATALOG_VERSION) ||
+    (hook.publishPreview.diff != null && !hook.publishPreview.diff.unchanged)
+  );
+  const publicationStatus = !published ? '未发布' : needsUpdate ? '需更新' : '已发布';
+  const editing = hook.draftDirty || (hook.currentGroupId != null && editingGroupId === hook.currentGroupId);
+
+  useEffect(() => {
+    onDraftDirtyChange?.(hook.draftDirty);
+    return () => onDraftDirtyChange?.(false);
+  }, [hook.draftDirty, onDraftDirtyChange]);
+
+  const selectGroup = async (groupId: string) => {
+    if (groupId === hook.currentGroupId) return;
+    if (await confirmLeave()) hook.selectGroup(groupId);
+  };
 
   const ownerName =
     hook.currentGroup?.members.find(
@@ -45,7 +67,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
             type="button"
             onClick={onGoAccount}
             data-testid="mother-login"
-            className="mt-3 min-h-[40px] w-full rounded-xl bg-emerald-600 text-sm font-medium text-white"
+            className="mt-3 min-h-[44px] w-full rounded-xl bg-emerald-600 text-sm font-medium text-white"
           >
             去登录 / 开启云同步
           </button>
@@ -60,7 +82,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
               placeholder="已有邀请码？先记在这里"
               maxLength={8}
               data-testid="mother-pending-invite"
-              className="min-h-[40px] min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm uppercase tracking-widest text-slate-700"
+              className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm uppercase tracking-widest text-slate-700"
             />
           </div>
           <p className="mt-1 text-[11px] text-slate-400">登录后仍需你点「加入小组」，不会自动提交。</p>
@@ -70,7 +92,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
           <MotherGroupSwitcher
             groups={hook.groups}
             currentGroupId={hook.currentGroupId}
-            onSelect={(groupId) => hook.selectGroup(groupId)}
+            onSelect={(groupId) => void selectGroup(groupId)}
           />
 
           {hook.error ? (
@@ -111,7 +133,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
                   <button
                     type="button"
                     onClick={() => void hook.refresh()}
-                    className="min-h-[32px] shrink-0 rounded-full border border-slate-200 px-3 text-[11px] text-slate-500"
+                    className="min-h-[44px] shrink-0 rounded-full border border-slate-200 px-3 text-[11px] text-slate-500"
                     data-testid="mother-refresh"
                   >
                     刷新
@@ -126,13 +148,31 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
                 </p>
               </div>
 
-              <MotherResourceEditor
+              <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="mother-publication-status">
+                <h2 className="text-sm font-medium text-slate-700">我的共享资源 · {publicationStatus}</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {published
+                    ? `已发布 ${new Set(published.accounts.flatMap((account) => account.eggGameIds)).size} 种母本 · ${published.accounts.length} 个账号。${needsUpdate ? '发布更新后，组员才能看到最新资源。' : '导入和私有同步不会自动更新小组资源。'}`
+                    : '尚未向本小组发布资源，选号并预览后再手动发布。'}
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 min-h-[44px] text-sm font-medium text-emerald-700"
+                  data-testid="mother-edit-resources"
+                  aria-expanded={editing}
+                  onClick={() => setEditingGroupId(hook.currentGroupId)}
+                >
+                  {!published ? '选号并发布' : needsUpdate ? '查看并更新资源' : '管理选号'}
+                </button>
+              </section>
+
+              {editing ? <MotherResourceEditor
                 key={`editor:${hook.currentGroup.group.id}:${hook.accountId}`}
                 hook={hook}
                 snapshots={snapshots}
                 species={species}
                 onGoAccount={onGoAccount}
-              />
+              /> : null}
 
               <MotherGroupResources
                 key={`resources:${hook.currentGroup.group.id}:${hook.accountId}`}
@@ -172,7 +212,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
                 type="button"
                 onClick={() => void hook.refresh()}
                 data-testid="mother-groups-retry"
-                className="mt-2 block min-h-[36px] rounded-xl border border-amber-300 bg-white px-3 text-xs text-amber-800"
+                className="mt-2 block min-h-[44px] rounded-xl border border-amber-300 bg-white px-3 text-xs text-amber-800"
               >
                 重试
               </button>
@@ -185,8 +225,12 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
 
           <MotherGroupSetup
             key={hook.accountId}
-            onCreate={(name, displayName) => hook.createGroup(name, displayName)}
+            onCreate={async (name, displayName) => {
+              if (!await confirmLeave()) return false;
+              return hook.createGroup(name, displayName);
+            }}
             onJoin={async (inviteCode, displayName) => {
+              if (!await confirmLeave()) return false;
               const groupId = await hook.joinGroup(inviteCode, displayName);
               savePendingInviteCode('');
               setPendingCode('');
@@ -196,6 +240,7 @@ export function MotherSharing({ onGoAccount }: MotherSharingProps = {}) {
           />
         </>
       )}
+      {leaveConfirmation}
     </section>
   );
 }

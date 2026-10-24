@@ -16,6 +16,7 @@ import { useCollectionSummary } from './useCollectionSummary';
 import { useCoverageFilter } from './coverageFilterStore';
 import { useMotherCriteria } from './motherCriteriaStore';
 import { setTargetMode } from './targetModeStore';
+import { useAccountFilter } from './accountFilterStore';
 import type { NavigationIntent } from './navigation';
 
 export interface DashboardProps {
@@ -37,6 +38,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
   const { owned, motherGroups, mode, mother, stud, recommendations } = useCollectionSummary();
   const { accounts } = useOwnedPets();
+  const { excluded } = useAccountFilter();
+  const noSelectedAccounts = accounts.length > 0 && accounts.every((name) => excluded.has(name));
   const coverageFilter = useCoverageFilter();
   const motherCriteria = useMotherCriteria();
 
@@ -61,7 +64,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const missingTargets = remainingTargets - iterableTargets;
   const firstIterableGroupId =
     stud.cells.find((cell) => cell.state === 'breedable')?.groupId ?? undefined;
-  const suggestionEmptyNote = studEmptyNote({ hasData: owned.length > 0, stud });
+  const suggestionEmptyNote = noSelectedAccounts
+    ? '当前未选中任何账号，请在上方选择账号后查看建议。'
+    : studEmptyNote({ hasData: accounts.length > 0, stud });
 
   const speciesGameIds = useMemo(() => new Set(species.map((entry) => entry.gameId)), []);
   const uncataloguedCount = useMemo(
@@ -72,6 +77,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   return (
     <main className="mx-auto max-w-md space-y-3 p-4">
       <AccountFilterBar accounts={accounts} />
+      {noSelectedAccounts ? (
+        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800" data-testid="dashboard-empty-accounts">
+          当前未选中任何账号，请在上方选择账号后查看收集进度。
+        </p>
+      ) : null}
 
       <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="target-mode">
         <ScopeSummary
@@ -184,7 +194,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="nest-summary">
           <h2 className="text-sm font-medium text-slate-500">配窝建议</h2>
           <p className="mt-1 text-sm text-slate-600" data-testid="nest-summary-line">
-            {remainingTargets === 0 ? (
+            {stud.groupCount === 0 ? (
+              '未设置种公目标，请先调整目标档位、蛋组和性格。'
+            ) : remainingTargets === 0 ? (
               '种公目标已全部收集，没有要补的缺口。'
             ) : (
               <>

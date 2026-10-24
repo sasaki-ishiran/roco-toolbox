@@ -27,7 +27,7 @@ export function MotherGroupSwitcher({ groups, currentGroupId, onSelect }: Mother
             onClick={() => onSelect(group.id)}
             aria-pressed={group.id === currentGroupId}
             data-testid={`mother-group-${group.id}`}
-            className={`min-h-[36px] rounded-full border px-3 text-xs ${
+            className={`min-h-[44px] rounded-full border px-3 text-xs ${
               group.id === currentGroupId
                 ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
                 : 'border-slate-200 bg-white text-slate-500'
@@ -64,7 +64,7 @@ export function MotherGroupSetup({
     setBusy(kind);
     setError('');
     try {
-      await action();
+      if (await action() === false) return;
       setName('');
       setInviteCode('');
       setDisplayName('');
@@ -92,7 +92,7 @@ export function MotherGroupSetup({
               aria-selected={mode === id}
               onClick={() => setMode(id)}
               data-testid={`mother-setup-tab-${id}`}
-              className={`min-h-[34px] flex-1 rounded-lg text-xs ${
+              className={`min-h-[44px] flex-1 rounded-lg text-xs ${
                 mode === id ? 'bg-white font-medium text-slate-800 shadow-sm' : 'text-slate-500'
               }`}
             >
@@ -107,7 +107,7 @@ export function MotherGroupSetup({
           placeholder="我在组里的昵称"
           maxLength={20}
           data-testid="mother-setup-nickname"
-          className="mt-3 min-h-[40px] w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder:text-slate-300"
+          className="mt-3 min-h-[44px] w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder:text-slate-300"
         />
 
         {mode === 'create' ? (
@@ -117,7 +117,7 @@ export function MotherGroupSetup({
             placeholder="小组名称（如：周末互换）"
             maxLength={40}
             data-testid="mother-setup-group-name"
-            className="mt-2 min-h-[40px] w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder:text-slate-300"
+            className="mt-2 min-h-[44px] w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder:text-slate-300"
           />
         ) : (
           <input
@@ -126,7 +126,7 @@ export function MotherGroupSetup({
             placeholder="8 位邀请码"
             maxLength={8}
             data-testid="mother-setup-invite"
-            className="mt-2 min-h-[40px] w-full rounded-xl border border-slate-200 px-3 text-sm uppercase tracking-widest text-slate-700 placeholder:tracking-normal placeholder:text-slate-300"
+            className="mt-2 min-h-[44px] w-full rounded-xl border border-slate-200 px-3 text-sm uppercase tracking-widest text-slate-700 placeholder:tracking-normal placeholder:text-slate-300"
           />
         )}
 
@@ -139,7 +139,7 @@ export function MotherGroupSetup({
             )
           }
           data-testid={mode === 'create' ? 'mother-create-submit' : 'mother-join-submit'}
-          className="mt-3 min-h-[40px] w-full rounded-xl bg-emerald-600 text-sm font-medium text-white disabled:opacity-50"
+          className="mt-3 min-h-[44px] w-full rounded-xl bg-emerald-600 text-sm font-medium text-white disabled:opacity-50"
         >
           {busy === mode ? '处理中…' : mode === 'create' ? '创建小组' : '加入小组'}
         </button>

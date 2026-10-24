@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { analyticsEnabled, setAnalyticsEnabled, track } from '../api/analytics';
 import { readAccountId } from '../api/session';
 import { syncNow } from '../api/sync';
@@ -498,7 +498,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
           aria-expanded={guideOpen}
           onClick={() => setGuideOpen((open) => !open)}
           data-testid="import-guide-toggle"
-          className="flex min-h-[32px] w-full items-center justify-between text-left text-sm font-medium text-slate-500"
+          className="flex min-h-[44px] w-full items-center justify-between text-left text-sm font-medium text-slate-500"
         >
           <span>第一次用？3 步上手</span>
           <span className="text-xs text-slate-300" aria-hidden>
@@ -509,7 +509,12 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
           <ol className="mt-1 space-y-1.5 text-[13px] leading-relaxed text-slate-600">
             <li>
               <span className="font-medium text-slate-700">1. 装采集器</span>
-              ：在手机上装好配套的采集器 APK（安卓）。
+              ：<a
+                href="https://api.danking.cn:18443/miniapp/api/client-releases/android-collector-1.2.6-dab2ba9e50ee.apk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-[44px] items-center text-emerald-700 underline"
+              >下载安卓采集器 1.2.6（作者发布）</a>。工具箱支持导入它导出的 .pcap 文件。
             </li>
             <li>
               <span className="font-medium text-slate-700">2. 抓一次</span>
@@ -629,7 +634,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
             setAnalyticsEnabled(next);
             setAnalyticsOn(next);
           }}
-          className={`min-h-[36px] shrink-0 rounded-full border px-3 text-xs font-medium ${
+          className={`min-h-[44px] shrink-0 rounded-full border px-3 text-xs font-medium ${
             analyticsOn
               ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
               : 'border-slate-200 bg-white text-slate-400'

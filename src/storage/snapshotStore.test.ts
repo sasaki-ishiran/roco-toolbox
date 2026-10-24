@@ -1,7 +1,14 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { AccountSnapshot } from '../domain/parseBackup';
-import { getCachedSnapshots, refreshSnapshots, resetSnapshotCacheForTest, subscribeSnapshots } from './snapshotStore';
+import {
+  getCachedSnapshots,
+  getSnapshotRefreshState,
+  refreshSnapshots,
+  resetSnapshotCacheForTest,
+  subscribeSnapshots,
+  subscribeSnapshotRefresh,
+} from './snapshotStore';
 import { saveSnapshot } from './snapshots';
 
 // M5：只劫持 listSnapshots（saveSnapshot 等保持真实实现），默认委托给原实现
@@ -82,6 +89,23 @@ describe('snapshotStore', () => {
     const retried = await refreshSnapshots(); // inFlight 已清空 → 真正重读
     expect(retried).toHaveLength(1);
     expect(getCachedSnapshots()).toHaveLength(1);
+  });
+
+  test('已有缓存时刷新失败保留旧内容，并通知失败状态', async () => {
+    await saveSnapshot(makeSnapshot('账号A', 1));
+    await refreshSnapshots();
+    const seen: string[] = [];
+    const unsubscribe = subscribeSnapshotRefresh((state) => {
+      if (state.error) seen.push(state.error);
+    });
+    listSnapshotsMock.mockRejectedValueOnce(new Error('暂时读不到本机数据'));
+
+    await expect(refreshSnapshots()).rejects.toThrow('暂时读不到本机数据');
+
+    expect(getCachedSnapshots()?.[0].accountName).toBe('账号A');
+    expect(getSnapshotRefreshState().error).toBe('暂时读不到本机数据');
+    expect(seen).toEqual(['暂时读不到本机数据']);
+    unsubscribe();
   });
 
   test('读到一半又发生写入：第二次 refresh 必须读到写之后的数据（不复用旧读）', async () => {

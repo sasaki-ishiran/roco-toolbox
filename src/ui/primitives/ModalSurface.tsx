@@ -135,6 +135,7 @@ export function ModalSurface({
         aria-labelledby={titleId}
         tabIndex={-1}
         onKeyDown={onPanelKeyDown}
+        style={{ maxHeight: '85dvh' }}
         className={`relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden bg-white shadow-xl focus:outline-none ${
           placement === 'sheet' ? 'rounded-t-2xl' : 'rounded-2xl'
         }`}

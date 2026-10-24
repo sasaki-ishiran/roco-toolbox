@@ -109,7 +109,7 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
                     aria-pressed={filter.natureMode === item.value}
                     onClick={() => setNatureMode(item.value)}
                     data-testid={`nature-mode-${item.value}`}
-                    className={`min-h-[28px] rounded-full px-2.5 text-xs ${
+                    className={`min-h-[44px] rounded-full px-2.5 text-xs ${
                       filter.natureMode === item.value
                         ? 'bg-white font-medium text-emerald-700 shadow-sm'
                         : 'text-slate-500'
@@ -133,7 +133,7 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
                         aria-pressed={on}
                         onClick={() => toggleCustomNature(nature.name)}
                         data-testid={`custom-nature-${nature.name}`}
-                        className={`min-h-[28px] rounded-full border px-2 text-xs ${
+                        className={`min-h-[44px] min-w-[44px] rounded-full border px-2 text-xs ${
                           on
                             ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
                             : 'border-slate-200 bg-white text-slate-400'
@@ -147,7 +147,7 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
                 <button
                   type="button"
                   onClick={toggleAllCustomNatures}
-                  className="mt-1.5 min-h-[28px] rounded-full border border-slate-200 px-3 text-xs text-slate-600"
+                  className="mt-1.5 min-h-[44px] rounded-full border border-slate-200 px-3 text-xs text-slate-600"
                   data-testid="custom-nature-select-all"
                 >
                   {filter.customNatures.length === targetNaturePool.length ? '全部取消' : '全选'}
