@@ -21,7 +21,7 @@ export function ScopeSummary({ scope, criteria, sourceTime, onEdit }: ScopeSumma
         <button
           type="button"
           onClick={onEdit}
-          className="min-h-[44px] px-1 text-xs font-medium text-emerald-700"
+          className="min-h-[28px] px-1 text-xs font-medium text-emerald-700"
         >
           调整
         </button>

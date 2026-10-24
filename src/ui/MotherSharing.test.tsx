@@ -127,6 +127,18 @@ describe('MotherSharing 入口与状态', () => {
     expect(screen.getByTestId('mother-resource-editor')).toBeVisible();
   });
 
+  test('选号编辑器可以再次点击收起；有草稿时收起会提示继续编辑', () => {
+    vi.mocked(useMotherGroups).mockReturnValue(hookOf({ draftDirty: true }));
+    render(<MotherSharing />);
+
+    fireEvent.click(screen.getByTestId('mother-edit-resources'));
+    fireEvent.click(screen.getByTestId('mother-edit-resources'));
+    expect(screen.queryByTestId('mother-resource-editor')).not.toBeInTheDocument();
+    expect(screen.getByTestId('mother-draft-collapsed')).toHaveTextContent('有未发布的修改');
+    fireEvent.click(screen.getByTestId('mother-edit-resources'));
+    expect(screen.getByTestId('mother-resource-editor')).toBeVisible();
+  });
+
   test.each(['未发布', '需更新'])('%s状态能直接进入资源编辑', (status) => {
     vi.mocked(useMotherGroups).mockReturnValue(hookOf({
       myMember: status === '未发布' ? member('A', null) : member('A', {
@@ -147,6 +159,20 @@ describe('MotherSharing 入口与状态', () => {
     expect(screen.getByTestId('mother-no-groups')).toBeVisible();
     expect(screen.getByTestId('mother-group-setup')).toBeVisible();
     expect(screen.queryByTestId('mother-criteria')).not.toBeInTheDocument();
+  });
+
+  test('首次进入仍在读取时显示「正在读取」，不要立刻说读不到', () => {
+    vi.mocked(useMotherGroups).mockReturnValue(hookOf({
+      groups: [],
+      groupsLoaded: false,
+      currentGroupId: null,
+      currentGroup: null,
+      loading: true,
+    }));
+    render(<MotherSharing onGoAccount={vi.fn()} />);
+
+    expect(screen.getByTestId('mother-groups-loading')).toHaveTextContent('正在读取你加入的小组');
+    expect(screen.queryByTestId('mother-groups-unavailable')).not.toBeInTheDocument();
   });
 
   test('组列表拉取失败时不能说「还没有加入任何小组」，要能重试', () => {

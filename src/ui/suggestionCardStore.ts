@@ -56,3 +56,8 @@ export function setSuggestionDoneOpen(doneOpen: boolean): void {
 export function setSuggestionQuantity(quantity: number): void {
   store.set({ ...store.get(), quantity });
 }
+
+/** 重置导入数据时清空「已换到」与数量选择：它们都是基于上一次账号数据的成果。 */
+export function clearSuggestionCard(): void {
+  store.set(INITIAL);
+}

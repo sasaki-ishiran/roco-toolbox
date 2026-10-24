@@ -6,9 +6,10 @@
 
 - 来源：用户提供的 `android-collector-1.2.6-source/android-collector` 完整源码；原作者发布站点 <https://danking.cn/>。
 - 上游声明：GNU GPL v3；沿用工程现有 `GPL-3.0-only` 许可。完整 GPL 文本在根目录 `LICENSE` 和 APK `assets/licenses/GPL-3.0.txt`。
-- 引入 `app/src/main/cpp/collector_tunnel.c`、`CMakeLists.txt`、`NativeTunnel.java`、`GamePacketFilter.java`；`PcapWriter.java` 根据其 `PcapFile.java` 的以太网 PCAP 写法改编。
-- 修改：JNI/Java 包名改为 `com.localdatatool.toolbox.capture`；重写持久文件生命周期、写入上限与关闭同步；保留转发与 TCP/8195 过滤；重写服务、授权、通知和受限桥。仅保留采集所需代码，未引入其云端上传、令牌、更新、会员、悬浮窗或原生解析服务。
-- 保留的上游技术说明见 `UPSTREAM-THIRD-PARTY.md`。它描述原作者版本，不表示工具箱启用了其中的上传或更新功能。
+- 引入 `app/src/main/cpp/collector_tunnel.c`、`CMakeLists.txt`、`NativeTunnel.java`、`GamePacketFilter.java`；`PcapWriter.java` 根据其 `PcapFile.java` 的以太网 PCAP 写法改编；`CaptureUploader.java`、`CaptureUploadStore.java` 根据其 `CaptureUploadClient.java`、`CaptureUploadStore.java` 的 V3 原包上传与任务持久化逻辑改编（去掉本地解析 JSON 上传，只保留原始 PCAP）。
+- 修改：JNI/Java 包名改为 `com.localdatatool.toolbox.capture`；重写持久文件生命周期、写入上限与关闭同步；保留转发与 TCP/8195 过滤；重写服务、授权、通知和受限桥；上传改为单任务串行、由网页按钮触发、失败可见。未引入其更新、会员、悬浮窗或原生解析服务。
+- 上传使用原版公开 Android 客户端的应用身份、版本号与发布凭据；凭据不进源码，构建时由本机 `local.properties` 的 `capture.token` 注入。
+- 保留的上游技术说明见 `UPSTREAM-THIRD-PARTY.md`。它描述原作者版本，不表示工具箱启用了其中的更新、会员或悬浮窗功能（上传已按本文件第 9 条接入）。
 
 ## zdtun
 

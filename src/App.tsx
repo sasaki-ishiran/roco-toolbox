@@ -8,7 +8,7 @@ import { guidePending, markGuideSeen } from './ui/guide';
 import { hasPendingNativeShare } from './share/nativeShare';
 import { Dashboard } from './ui/Dashboard';
 import { Collection } from './ui/Collection';
-import { MotherSharing } from './ui/MotherSharing';
+import { CollectionGroups } from './ui/CollectionGroups';
 import { Profile } from './ui/Profile';
 import { TabNav } from './ui/TabNav';
 import {
@@ -166,9 +166,9 @@ export default function App() {
     <>
       {/* 顶部标签常显：滚动页面时 header + 页签固定在视口顶部（2026-10-04 优化） */}
       <div className="sticky top-0 z-50 bg-white">
-        <header className="flex items-center justify-between gap-2 border-b border-slate-100 bg-white px-4 py-3">
-          <h1 className="text-lg font-semibold text-slate-900">洛克工具箱</h1>
-          <div className="flex shrink-0 items-center gap-2">
+        <header className="flex items-center justify-between gap-2 border-b border-slate-100 bg-white px-4 py-2">
+          <h1 className="text-base font-semibold text-slate-900">洛克工具箱</h1>
+          <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
               onClick={() => {
@@ -178,7 +178,7 @@ export default function App() {
               }}
               data-testid="app-refresh"
               title="刷新到最新版本（清掉旧缓存）"
-              className="min-h-[44px] min-w-[44px] rounded-full border border-slate-200 px-2.5 text-[11px] text-slate-500 disabled:opacity-50"
+              className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500 disabled:opacity-50"
               disabled={refreshing}
             >
               {refreshing ? '刷新中…' : '刷新'}
@@ -187,7 +187,7 @@ export default function App() {
               type="button"
               onClick={() => setGuide(true)}
               data-testid="guide-open"
-              className="min-h-[44px] min-w-[44px] rounded-full border border-slate-200 px-2.5 text-[11px] text-slate-500"
+              className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500"
             >
               教程
             </button>
@@ -214,14 +214,13 @@ export default function App() {
           onOpenGuide={() => setGuide(true)}
         />
       ) : navigation.page === 'groups' ? (
-        <main className="mx-auto max-w-md space-y-3 p-4">
-          <MotherSharing
-            onDraftDirtyChange={setGroupsDraftDirty}
-            onGoAccount={() =>
-              navigate({ type: 'open-profile', section: 'identity', returnToGroups: true })
-            }
-          />
-        </main>
+        <CollectionGroups
+          onDraftDirtyChange={setGroupsDraftDirty}
+          focus={{ groupType: navigation.groupType, eggGameId: navigation.groupEggGameId }}
+          onGoAccount={() =>
+            navigate({ type: 'open-profile', section: 'identity', returnToGroups: true })
+          }
+        />
       ) : (
         <Collection
           location={collection}

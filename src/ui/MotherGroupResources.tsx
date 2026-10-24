@@ -22,6 +22,8 @@ export interface MotherGroupResourcesProps {
   viewerAccountId: string;
   species: SpeciesEntry[];
   catalogVersion: string;
+  /** 本组口径；旧组 / 不传时按一期固定口径。 */
+  criteriaId?: string;
 }
 
 /**
@@ -31,7 +33,7 @@ export interface MotherGroupResourcesProps {
  * 未发布 / 已停止共享 / 图鉴或口径不兼容的成员是**未知**，不能算成「缺」——
  * 有未知成员时「小组都没有」必须改写成「已发布成员均无，另 N 人待发布/更新」。
  */
-export function MotherGroupResources({ group, viewerAccountId, species, catalogVersion }: MotherGroupResourcesProps) {
+export function MotherGroupResources({ group, viewerAccountId, species, catalogVersion, criteriaId }: MotherGroupResourcesProps) {
   // 临时查看状态按「身份 + 小组」隔离：换身份立即清空，切组不串条件（2026-10-24）
   const list = useGroupList(viewerAccountId, group.group.id);
   const setList = (patch: Partial<GroupListState>) =>
@@ -50,15 +52,15 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
   }, [group.members, memberFilter]);
 
   const rows = useMemo(
-    () => buildMotherCoverage({ species, catalogVersion, members: group.members }),
-    [species, catalogVersion, group.members],
+    () => buildMotherCoverage({ species, catalogVersion, members: group.members, criteriaId }),
+    [species, catalogVersion, group.members, criteriaId],
   );
   const comparableIds = useMemo(
     () =>
       group.members
-        .filter((member) => isMotherResourceComparable(member.resource, catalogVersion))
+        .filter((member) => isMotherResourceComparable(member.resource, catalogVersion, criteriaId))
         .map((member) => member.accountId),
-    [group.members, catalogVersion],
+    [group.members, catalogVersion, criteriaId],
   );
   const views = useMemo(
     () => selectMotherSharingViews(rows, viewerAccountId, comparableIds),
@@ -133,14 +135,14 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
       .join('、');
 
   return (
-    <section className="space-y-2 rounded-2xl bg-white p-4 shadow-sm" data-testid="mother-resources">
+    <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-resources">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-500">小组资源</h2>
         <span className="text-[11px] text-slate-400" data-testid="mother-criteria">
-          一期口径：母 · 大块头 · +100dB
+          小组口径：母 · 大块头 · +100dB
         </span>
       </div>
-      <p className="text-[11px] text-slate-400">按已共享账号汇总。未知成员不会算成「缺」。</p>
+      <p className="text-[11px] text-slate-400">按已共享账号汇总，未知成员不计缺口。</p>
 
       <SegmentedControl
         label="小组资源视图"
@@ -159,15 +161,23 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
         />
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchField
-          label="搜索小组资源"
-          value={query}
-          onValueChange={(value) => setList({ query: value })}
-          placeholder="搜母本 / 同血脉名称 / 图鉴号"
-          testId="mother-search"
-          className="min-w-0 flex-1"
-        />
+      <SearchField
+        label="搜索小组资源"
+        value={query}
+        onValueChange={(value) => setList({ query: value })}
+        placeholder="搜母本 / 同血脉名称 / 图鉴号"
+        testId="mother-search"
+      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          <input
+            type="checkbox"
+            checked={onlyOwned}
+            onChange={(event) => setList({ onlyOwned: event.target.checked })}
+            data-testid="mother-only-owned"
+          />
+          只看组内有人拥有
+        </label>
         <InlineSelect
           label="筛选成员"
           value={memberFilter}
@@ -182,18 +192,9 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
           testId="mother-member-filter"
           menuTestId="mother-member-options"
           align="right"
-          className="min-w-[128px]"
+          className="max-w-[168px]"
         />
       </div>
-      <label className="flex items-center gap-2 text-xs text-slate-500">
-        <input
-          type="checkbox"
-          checked={onlyOwned}
-          onChange={(event) => setList({ onlyOwned: event.target.checked })}
-          data-testid="mother-only-owned"
-        />
-        只看组内有人拥有
-      </label>
 
       {/* 不可计算时不再叠一条「当前页 0 项 / 这一页没有条目」的普通空态：那是两种事实 */}
       {currentRows !== null ? (
@@ -205,9 +206,9 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
           {filtered.length === 0 ? (
             <p className="py-4 text-center text-xs text-slate-400">这一页没有条目</p>
           ) : (
-        <ul className="space-y-1">
+        <ul className="grid grid-cols-2 items-start gap-1.5">
           {filtered.map((row) => (
-            <li key={row.eggGameId} className="rounded-xl bg-slate-50 px-3 py-2" data-testid="mother-resource-row">
+            <li key={row.eggGameId} className="min-w-0 break-words rounded-xl bg-slate-50 px-2.5 py-2 only:col-span-2" data-testid="mother-resource-row">
               <p className="text-sm text-slate-700">{row.name}</p>
               {row.holders.length > 0 ? (
                 <p className="mt-0.5 text-[11px] text-emerald-700" data-testid="mother-resource-holders">

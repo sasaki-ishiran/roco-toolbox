@@ -7,7 +7,6 @@
 import {
   MOTHER_ACCOUNT_NAME_MAX,
   MOTHER_CATALOG_VERSION_MAX,
-  MOTHER_CRITERIA_ID,
   MOTHER_DISPLAY_NAME_MAX,
   MOTHER_GROUP_NAME_MAX,
   MOTHER_INVITE_CODE_LENGTH,
@@ -45,10 +44,13 @@ const asRecord = (value: unknown, field: string): Record<string, unknown> =>
 const codePoints = (text: string): number => [...text].length;
 
 /** 读请求体：先按 UTF-8 字节数限制（不信任 Content-Length），再严格解析 JSON。 */
-export async function readJsonBody(request: Request): Promise<unknown> {
+export async function readJsonBody(
+  request: Request,
+  maxBytes = MOTHER_RESOURCE_MAX_BODY_BYTES,
+): Promise<unknown> {
   const raw = await request.text();
-  if (new TextEncoder().encode(raw).length > MOTHER_RESOURCE_MAX_BODY_BYTES) {
-    throw new MotherInputError('PAYLOAD_TOO_LARGE', '请求体超过 128KiB');
+  if (new TextEncoder().encode(raw).length > maxBytes) {
+    throw new MotherInputError('PAYLOAD_TOO_LARGE', `请求体超过 ${Math.round(maxBytes / 1024)}KiB`);
   }
   if (raw.trim().length === 0) invalid('请求体为空');
   try {
@@ -111,7 +113,13 @@ export function parseMotherResource(value: unknown): MotherResourceDraft {
   if (record.schemaVersion !== MOTHER_RESOURCE_SCHEMA_VERSION) {
     invalid('schemaVersion 不受支持');
   }
-  if (record.criteriaId !== MOTHER_CRITERIA_ID) invalid('criteriaId 不受支持');
+  const criteriaId = record.criteriaId;
+  if (
+    typeof criteriaId !== 'string' ||
+    !/^(female-huge-voice100-v1|mother-v2-[0-9a-f]{8})$/.test(criteriaId)
+  ) {
+    invalid('criteriaId 不受支持');
+  }
 
   const catalogVersion = record.catalogVersion;
   if (
@@ -139,7 +147,7 @@ export function parseMotherResource(value: unknown): MotherResourceDraft {
 
   return {
     schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
-    criteriaId: MOTHER_CRITERIA_ID,
+    criteriaId,
     catalogVersion,
     accounts,
   };

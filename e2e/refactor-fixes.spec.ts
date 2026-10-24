@@ -1,15 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
-import { groupDetail, groupSummary, loginAs, mockMotherGroups } from './helpers/motherGroupsMock';
+import { enterGroup, groupDetail, groupSummary, loginAs, mockMotherGroups } from './helpers/motherGroupsMock';
 
 async function editSelection(page: Page) {
   await page.getByRole('button', { name: '小组', exact: true }).click();
-  await page.getByTestId('mother-edit-resources').click();
+  await page.getByTestId('group-edit-resources').click();
   await page.getByTestId('mother-account-uid:1001').click();
   await expect(page.getByTestId('mother-draft-dirty')).toBeVisible();
 }
 
 test('小组草稿离开主导航可取消、Esc 继续编辑、确认后才离开', async ({ page }) => {
   await loginAs(page);
+  await enterGroup(page);
   await mockMotherGroups(page);
   await page.goto('/');
   await editSelection(page);
@@ -28,30 +29,30 @@ test('小组草稿离开主导航可取消、Esc 继续编辑、确认后才离�
 
 test('切组取消保留原组草稿，确认后才切到另一组', async ({ page }) => {
   await loginAs(page);
+  await enterGroup(page);
   await mockMotherGroups(page);
-  await page.route('**/api/mother-groups', (route) => route.fulfill({ json: {
+  await page.route('**/api/collection-groups', (route) => route.fulfill({ json: {
     ok: true, groups: [groupSummary, { ...groupSummary, id: 'g2', name: '另一组' }],
   } }));
-  await page.route('**/api/mother-groups/g2', (route) => route.fulfill({ json: {
+  await page.route('**/api/collection-groups/g2', (route) => route.fulfill({ json: {
     ok: true, ...groupDetail, group: { ...groupDetail.group, id: 'g2', name: '另一组' },
   } }));
   await page.goto('/');
   await editSelection(page);
-  await page.getByTestId('mother-group-g2').click();
+  await page.getByTestId('group-chip-g2').click();
   await page.getByRole('button', { name: '继续编辑', exact: true }).click();
-  await expect(page.getByTestId('mother-group-card')).toContainText('周末互换');
+  await expect(page.getByTestId('group-card')).toContainText('周末互换');
   await expect(page.getByTestId('mother-draft-dirty')).toBeVisible();
-  await page.getByTestId('mother-group-g2').click();
+  await page.getByTestId('group-chip-g2').click();
   await page.getByRole('button', { name: '放弃并离开', exact: true }).click();
-  await expect(page.getByTestId('mother-group-card')).toContainText('另一组');
+  await expect(page.getByTestId('group-card')).toContainText('另一组');
   await expect(page.getByTestId('mother-draft-dirty')).toHaveCount(0);
 });
 
-test('导入指引有采集器作者的真实下载入口', async ({ page }) => {
+test('导入页不再显示旧的外部文件导入指引', async ({ page }) => {
   await page.goto('/');
-  const link = page.getByRole('link', { name: /下载安卓采集器/ });
-  await expect(link).toBeVisible();
-  await expect(link).toHaveAttribute('href', /^https:\/\/api\.danking\.cn:18443\/miniapp\/api\/client-releases\/.*\.apk$/);
+  await expect(page.getByTestId('import-guide')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /下载安卓采集器/ })).toHaveCount(0);
 });
 
 test('主导航键盘顺序、弹层焦点循环与 Esc 返焦', async ({ page }) => {
@@ -96,7 +97,7 @@ test('缩短视口后目标弹层正文可滚动，完成按钮留在视口内',
 });
 
 for (const width of [320, 375, 390, 1280]) {
-  test(`${width}px 覆盖度高频筛选触区至少 44px，所有主页面无横向溢出`, async ({ page }) => {
+  test(`${width}px 覆盖度筛选控件符合紧凑尺寸，所有主页面无横向溢出`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -109,12 +110,12 @@ for (const width of [320, 375, 390, 1280]) {
     }
     await page.getByRole('button', { name: '收集', exact: true }).click();
     await page.getByTestId('collection-kind-studs').click();
-    await page.getByTestId('stud-tool-coverage').click();
     await page.getByTestId('coverage-groups-toggle').click();
     await page.getByTestId('nature-mode-custom').click();
     const controls = page.locator('[data-testid="nature-mode"] button, [data-testid="coverage-filter"] button');
-    const small = await controls.evaluateAll((buttons) => buttons.filter((b) => b.getBoundingClientRect().height < 44).map((b) => b.getAttribute('data-testid')));
-    expect(small).toEqual([]);
+    // 2026-10-25 用户拍板：芯片 / 分段 / 文字动作统一 28px，不再一律 44px
+    const tooSmall = await controls.evaluateAll((buttons) => buttons.filter((b) => b.getBoundingClientRect().height < 28).map((b) => b.getAttribute('data-testid')));
+    expect(tooSmall).toEqual([]);
     expect(errors).toEqual([]);
   });
 }

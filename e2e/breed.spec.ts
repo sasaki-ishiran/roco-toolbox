@@ -1,6 +1,6 @@
-﻿import { expect, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-test('配窝：只给汇总 + 两个入口（怎么配在覆盖度、要去弄什么在换什么）', async ({ page }) => {
+test('配窝：看板直接给出完整摆位与配对，并保留覆盖度 / 换什么入口', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-breed-pair.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
@@ -9,6 +9,9 @@ test('配窝：只给汇总 + 两个入口（怎么配在覆盖度、要去弄�
   await expect(page.getByTestId('nest-summary-line')).toContainText('还差');
   // 说法与覆盖度对齐（2026-10-07）：看板这边也改用「迭代」（覆盖度里叫「可迭代」）
   await expect(page.getByTestId('nest-summary-line')).toContainText('能自己迭代');
+  // 2026-10-25 用户要求：配窝建议明细直接落在看板
+  await expect(page.getByTestId('breed-list')).toBeVisible();
+  await expect(page.getByTestId('nest-layout').first()).toBeVisible();
   await expect(page.getByTestId('nest-open-coverage')).toHaveText(/去看怎么迭代/);
 
   // 入口①：覆盖度页（那里每个目标都带「怎么迭代」的方案）

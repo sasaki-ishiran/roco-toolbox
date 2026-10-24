@@ -1,4 +1,5 @@
 import { useAccountFilter } from './accountFilterStore';
+import { ACTION, CHIP_BASE, CHIP_OFF, CHIP_ON } from './primitives/styles';
 
 export interface AccountFilterBarProps {
   accounts: string[];
@@ -9,6 +10,7 @@ export interface AccountFilterBarProps {
  * 只有一个且已选中账号时不显示；被取消选择时仍提供恢复入口。
  *
  * 2026-10-05：按用户拍板去掉「可收起」，账号列表**默认展开**（原样展示）。
+ * 2026-10-25：芯片收紧到 28px，与全站控件尺寸统一。
  */
 export function AccountFilterBar({ accounts }: AccountFilterBarProps) {
   const { excluded, toggleAccount, toggleAllAccounts } = useAccountFilter();
@@ -19,7 +21,7 @@ export function AccountFilterBar({ accounts }: AccountFilterBarProps) {
   const allOn = excluded.size === 0;
 
   return (
-    <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="account-filter">
+    <section className="rounded-xl bg-white p-2.5 shadow-sm" data-testid="account-filter">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-slate-500">
           账号（{onCount}/{accounts.length}）
@@ -27,7 +29,7 @@ export function AccountFilterBar({ accounts }: AccountFilterBarProps) {
         <button
           type="button"
           onClick={() => toggleAllAccounts(accounts)}
-          className="min-h-[44px] text-xs font-medium text-emerald-700"
+          className={ACTION}
           data-testid="account-filter-toggle-all"
         >
           {allOn ? '全不选' : '全选'}
@@ -38,7 +40,7 @@ export function AccountFilterBar({ accounts }: AccountFilterBarProps) {
           未选择游戏账号：个人进度按 0 个账号计算，点「全选」可恢复。
         </p>
       ) : null}
-      <div className="mt-1 flex gap-1.5 overflow-x-auto pb-0.5">
+      <div className="mt-1.5 flex flex-wrap gap-1">
         {accounts.map((account) => {
           const on = !excluded.has(account);
           return (
@@ -47,11 +49,7 @@ export function AccountFilterBar({ accounts }: AccountFilterBarProps) {
               type="button"
               aria-pressed={on}
               onClick={() => toggleAccount(account)}
-              className={`min-h-[44px] shrink-0 rounded-full border px-3 text-xs ${
-                on
-                  ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
-                  : 'border-slate-200 bg-white text-slate-400'
-              }`}
+              className={`${CHIP_BASE} ${on ? CHIP_ON : CHIP_OFF}`}
               data-testid={`account-chip-${account}`}
             >
               {account}

@@ -1,25 +1,36 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { NativeCollectorPanel } from './NativeCollectorPanel';
-import type { CollectorState } from '../collector/nativeCollector';
+import { CAPTURE_UPLOAD_MAX_BYTES, type CollectorState } from '../collector/nativeCollector';
 const file = { id: 'capture-123.pcap', name: 'capture-123.pcap', size: 1234, createdAt: 123, valid: true };
 afterEach(() => { delete window.RocoCapture; });
-function setup(overrides: Partial<CollectorState> = {}) {
+function setup(overrides: Partial<CollectorState> = {},
+  options: { onUpload?: (patch: (next: Partial<CollectorState>) => void) => void; withoutUpload?: boolean } = {}) {
   let state: CollectorState = { version: 1, supported: true, phase: 'idle', message: '准备采集', packets: 0, bytes: 0, files: [file], ...overrides };
+  const patch = (next: Partial<CollectorState>) => { state = { ...state, ...next }; };
   const bridge = {
     getState: () => JSON.stringify(state),
     startCapture: vi.fn(() => { state = { ...state, phase: 'capturing' }; return ''; }),
     stopCapture: vi.fn(() => { state = { ...state, phase: 'idle' }; return ''; }),
     openGame: vi.fn(() => ''), importCapture: vi.fn(() => ''), shareCapture: vi.fn(() => ''),
     deleteCapture: vi.fn(() => { state = { ...state, files: [] }; return ''; }),
+    ...(options.withoutUpload ? {} : { uploadCapture: vi.fn(() => { options.onUpload?.(patch); return ''; }) }),
   };
   window.RocoCapture = bridge;
   render(<NativeCollectorPanel />);
   return bridge;
 }
 describe('内置采集入口', () => {
-  test('网页及旧壳不伪造开始采集按钮', () => {
+  test('网页环境显示本机采集说明，不伪造开始采集按钮', async () => {
     render(<NativeCollectorPanel />);
+    await waitFor(() => expect(screen.getByTestId('native-collector-fallback')).toBeTruthy());
+    expect(screen.getByText(/只在安卓工具箱安装包内提供/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '开始采集' })).toBeNull();
+  });
+  test('有采集桥但状态未读完时先显示稳定骨架，不整块空白', () => {
+    window.RocoCapture = { getState: () => new Promise<string>(() => {}) };
+    render(<NativeCollectorPanel />);
+    expect(screen.getByTestId('native-collector-loading')).toBeTruthy();
     expect(screen.queryByTestId('native-collector')).toBeNull();
   });
   test('开始、打开游戏、停止分别调用原生；采集中禁止导入和删除', async () => {
@@ -75,5 +86,37 @@ describe('内置采集入口', () => {
     await act(async () => { fireEvent.click(button); fireEvent.click(button); });
     expect(bridge.importCapture).toHaveBeenCalledOnce();
     expect(screen.getByRole('button', { name: '删除' })).toBeDisabled();
+  });
+  test('上传蛋神助手显示云端 UID，成功后仍保留重新上传入口', async () => {
+    const bridge = setup({}, { onUpload: (patch) => patch({ files: [{ ...file, upload: { state: 'persisted', message: '角色数据已完整保存到云端', progress: 100, gameId: '293143' } }] }) });
+    await waitFor(() => expect(screen.getByRole('button', { name: '上传蛋神助手' })).toBeTruthy());
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '上传蛋神助手' })); });
+    expect(bridge.uploadCapture).toHaveBeenCalledWith(file.id);
+    await waitFor(() => expect(screen.getByText(/游戏 UID 293143/)).toBeTruthy());
+    expect(screen.getByRole('button', { name: '重新上传' })).toBeEnabled();
+  });
+  test('去重入库按成功展示，不报失败，并保留上传入口', async () => {
+    setup({ files: [{ ...file, upload: { state: 'persisted', message: '角色数据已完整保存到云端', progress: 100, gameId: '293143', deduplicated: true } }] });
+    await waitFor(() => expect(screen.getByText(/云端已有相同数据/)).toBeTruthy());
+    expect(screen.getByText(/游戏 UID 293143/)).toBeTruthy();
+    expect(screen.queryByText(/失败/)).toBeNull();
+    expect(screen.getByRole('button', { name: '重新上传' })).toBeEnabled();
+  });
+  test('超过 5 MiB 的文件禁止上传并说明原因', async () => {
+    setup({ files: [{ ...file, size: CAPTURE_UPLOAD_MAX_BYTES + 1 }] });
+    await waitFor(() => expect(screen.getByText(/超过蛋神助手云端 5 MiB 上限/)).toBeTruthy());
+    expect(screen.getByRole('button', { name: '上传蛋神助手' })).toBeDisabled();
+  });
+  test('上传进行中显示进度并锁住删除', async () => {
+    setup({ uploadBusy: true, files: [{ ...file, upload: { state: 'uploading', message: '正在上传原始抓包', progress: 42 } }] });
+    await waitFor(() => expect(screen.getByText('正在上传 42%')).toBeTruthy());
+    expect(screen.getByRole('button', { name: '处理中…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '删除' })).toBeDisabled();
+  });
+  test('旧壳没有上传动作时隐藏按钮并提示更新安装包', async () => {
+    setup({}, { withoutUpload: true });
+    await waitFor(() => expect(screen.getByRole('button', { name: '解析并导入' })).toBeTruthy());
+    expect(screen.queryByRole('button', { name: '上传蛋神助手' })).toBeNull();
+    expect(screen.getByText(/更新安卓安装包后可直接上传蛋神助手/)).toBeTruthy();
   });
 });

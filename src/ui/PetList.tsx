@@ -71,7 +71,7 @@ export function PetList({ pets, speciesByGameId, eggGroupNames, resetKey = '' }:
             type="button"
             onClick={() => setPageSize(size)}
             aria-pressed={pageSize === size}
-            className={`min-h-[44px] rounded-lg border px-2.5 text-xs ${
+            className={`min-h-[28px] rounded-md border px-2 text-xs ${
               pageSize === size
                 ? 'border-emerald-600 bg-emerald-600 text-white'
                 : 'border-slate-200 bg-white text-slate-600'
@@ -101,7 +101,7 @@ export function PetList({ pets, speciesByGameId, eggGroupNames, resetKey = '' }:
             type="button"
             disabled={safePage === 1}
             onClick={() => setPage(safePage - 1)}
-            className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 disabled:text-slate-300"
+            className="min-h-[32px] flex-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
           >
             上一页
           </button>
@@ -109,7 +109,7 @@ export function PetList({ pets, speciesByGameId, eggGroupNames, resetKey = '' }:
             type="button"
             disabled={safePage === totalPages}
             onClick={() => setPage(safePage + 1)}
-            className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 disabled:text-slate-300"
+            className="min-h-[32px] flex-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
           >
             下一页
           </button>

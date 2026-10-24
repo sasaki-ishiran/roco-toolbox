@@ -28,16 +28,19 @@ export interface BuildMotherCoverageInput {
   species: readonly SpeciesEntry[];
   catalogVersion: string;
   members: readonly MotherGroupMember[];
+  /** 本组口径；旧组 / 不传时按一期固定口径。 */
+  criteriaId?: string;
 }
 
 /** 摘要是否可用于比较：口径与图鉴版本都必须和当前客户端一致。 */
 export function isMotherResourceComparable(
   resource: PublishedMotherResource | null,
   catalogVersion: string,
+  criteriaId: string = MOTHER_CRITERIA_ID,
 ): boolean {
   return (
     resource != null &&
-    resource.criteriaId === MOTHER_CRITERIA_ID &&
+    resource.criteriaId === criteriaId &&
     resource.catalogVersion === catalogVersion
   );
 }
@@ -46,7 +49,7 @@ const compareAccountKey = (a: string, b: string): number =>
   Number(a.slice(4)) - Number(b.slice(4)) || a.localeCompare(b);
 
 export function buildMotherCoverage(input: BuildMotherCoverageInput): MotherCoverageRow[] {
-  const { species, catalogVersion, members } = input;
+  const { species, catalogVersion, members, criteriaId = MOTHER_CRITERIA_ID } = input;
 
   // 目标全集：`eggGameId === gameId` 且至少有一个可孵蛋组。图鉴未知的 eggGameId 不生成行。
   const eggById = new Map<number, SpeciesEntry>();
@@ -60,7 +63,7 @@ export function buildMotherCoverage(input: BuildMotherCoverageInput): MotherCove
   const coverage = new Map<string, Map<number, string[]>>();
   for (const member of members) {
     const byEgg = new Map<number, Set<string>>();
-    if (isMotherResourceComparable(member.resource, catalogVersion)) {
+    if (isMotherResourceComparable(member.resource, catalogVersion, criteriaId)) {
       for (const account of member.resource?.accounts ?? []) {
         for (const eggGameId of account.eggGameIds) {
           if (!eggById.has(eggGameId)) continue;
@@ -83,7 +86,7 @@ export function buildMotherCoverage(input: BuildMotherCoverageInput): MotherCove
     const unknownMemberIds: string[] = [];
 
     for (const member of members) {
-      if (!isMotherResourceComparable(member.resource, catalogVersion)) {
+      if (!isMotherResourceComparable(member.resource, catalogVersion, criteriaId)) {
         unknownMemberIds.push(member.accountId);
         continue;
       }

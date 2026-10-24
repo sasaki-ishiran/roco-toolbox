@@ -75,7 +75,7 @@ export function MotherGroupMembers({
   };
 
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="mother-members">
+    <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-members">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-500">成员</h2>
         <span className="text-[11px] text-slate-400">{group.members.length} 人</span>
@@ -132,14 +132,14 @@ export function MotherGroupMembers({
           maxLength={20}
           placeholder="我在组里的昵称"
           data-testid="mother-nickname-input"
-          className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-xs text-slate-600"
+          className="min-h-[32px] min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 text-xs text-slate-600"
         />
         <button
           type="button"
           disabled={busy !== '' || nickname.trim().length === 0}
           onClick={() => void run('rename', () => onRename(nickname.trim()), '昵称已更新')}
           data-testid="mother-rename"
-          className="min-h-[44px] shrink-0 rounded-xl border border-slate-200 px-3 text-xs text-slate-600 disabled:opacity-50"
+          className="min-h-[30px] shrink-0 rounded-lg border border-slate-200 px-2.5 text-xs text-slate-600 disabled:opacity-50"
         >
           改昵称
         </button>
@@ -161,7 +161,7 @@ export function MotherGroupMembers({
                   void navigator.clipboard?.writeText(shownCode);
                   setMessage('已复制邀请码');
                 }}
-                className="min-h-[44px] rounded-lg border border-slate-200 px-2 text-[11px] text-slate-500"
+                className="min-h-[28px] rounded-md border border-slate-200 px-2 text-xs text-slate-500"
               >
                 复制
               </button>
@@ -186,7 +186,7 @@ export function MotherGroupMembers({
                 )
               }
               data-testid="mother-reset-invite"
-              className="min-h-[44px] rounded-xl border border-slate-200 px-3 text-xs text-slate-600 disabled:opacity-50"
+              className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 text-xs text-slate-600 disabled:opacity-50"
             >
               {busy === 'reset' ? '重置中…' : '重置邀请码'}
             </button>
@@ -198,7 +198,7 @@ export function MotherGroupMembers({
                 void run('dissolve', onDissolve, '小组已解散');
               }}
               data-testid="mother-dissolve"
-              className="min-h-[44px] rounded-xl border border-rose-200 px-3 text-xs text-rose-600 disabled:opacity-50"
+              className="min-h-[30px] rounded-lg border border-rose-200 px-2.5 text-xs text-rose-600 disabled:opacity-50"
             >
               {busy === 'dissolve' ? '解散中…' : '解散小组'}
             </button>
@@ -213,7 +213,7 @@ export function MotherGroupMembers({
             void run('leave', onLeave, '已退出小组');
           }}
           data-testid="mother-leave"
-          className="mt-3 min-h-[44px] rounded-xl border border-rose-200 px-3 text-xs text-rose-600 disabled:opacity-50"
+          className="mt-2 min-h-[30px] rounded-lg border border-rose-200 px-2.5 text-xs text-rose-600 disabled:opacity-50"
         >
           {busy === 'leave' ? '退出中…' : '退出小组'}
         </button>

@@ -38,9 +38,9 @@ describe('Collection（收集）', () => {
     });
   });
 
-  test('种公三工具同级可达，切换发明确意图', () => {
+  test('种公只保留覆盖矩阵，求蛋入口已迁到小组', () => {
     const onNavigate = vi.fn();
-    const { rerender } = render(
+    render(
       <Collection
         location={{ kind: 'studs', view: 'coverage' }}
         focusRevision={0}
@@ -48,33 +48,8 @@ describe('Collection（收集）', () => {
       />,
     );
     expect(screen.getByTestId('stub-coverage')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('stud-tool-breed'));
-    expect(onNavigate).toHaveBeenCalledWith({
-      type: 'open-collection',
-      location: { kind: 'studs', view: 'breed' },
-    });
-    fireEvent.click(screen.getByTestId('stud-tool-eggs'));
-    expect(onNavigate).toHaveBeenCalledWith({
-      type: 'open-collection',
-      location: { kind: 'studs', view: 'eggs' },
-    });
-
-    rerender(
-      <Collection
-        location={{ kind: 'studs', view: 'breed' }}
-        focusRevision={1}
-        onNavigate={onNavigate}
-      />,
-    );
-    expect(screen.getByTestId('breeding')).toBeTruthy();
-    rerender(
-      <Collection
-        location={{ kind: 'studs', view: 'eggs' }}
-        focusRevision={1}
-        onNavigate={onNavigate}
-      />,
-    );
-    expect(screen.getByTestId('stub-swap')).toBeTruthy();
+    expect(screen.queryByTestId('stud-tool-eggs')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('stub-swap')).not.toBeInTheDocument();
   });
 
   test('精灵库固定入口：全部 / 合格种公，并有按代表档位查看的次入口', () => {

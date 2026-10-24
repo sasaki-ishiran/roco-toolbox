@@ -43,7 +43,7 @@ export function FilterPanel({
           aria-expanded={open}
           onClick={() => onOpenChange(!open)}
           data-testid={toggleTestId}
-          className="min-h-[44px] text-xs font-medium text-emerald-700"
+          className="min-h-[28px] text-xs font-medium text-emerald-700"
         >
           {title}
           <span aria-hidden="true" className="ml-1 text-[10px] text-slate-400">
@@ -55,7 +55,7 @@ export function FilterPanel({
             type="button"
             onClick={onClear}
             data-testid={clearTestId}
-            className="min-h-[44px] px-2 text-xs text-slate-500"
+            className="min-h-[28px] px-2 text-xs text-slate-500"
           >
             {clearLabel}
           </button>

@@ -6,7 +6,7 @@ import { analyzeImport } from '../domain/importDiff';
 import { accountKeyOf, parseBackup, type AccountSnapshot } from '../domain/parseBackup';
 import { groupMothersByEgg, plannedAchievements } from '../domain/petFilters';
 import { eggGroupNames, species } from '../data/catalog';
-import { clearAllSnapshots, saveSnapshot, writeSnapshots } from '../storage/snapshots';
+import { saveSnapshot, writeSnapshots } from '../storage/snapshots';
 import {
   backupFileName,
   buildBackup,
@@ -19,8 +19,6 @@ import {
 import { CATALOG_VERSION } from '../data/catalog';
 import { refreshSnapshots } from '../storage/snapshotStore';
 import {
-  clearLastImportResult,
-  clearLastImportHistory,
   setLastImportResult,
 } from '../storage/lastImportStore';
 import { ImportResultCard } from './ImportResultCard';
@@ -40,7 +38,8 @@ import {
 import { getMotherPlan, mergeMotherPlan } from './motherPlanStore';
 import { setImportMessage, useImportMessage } from './importMessageStore';
 import { beginImport, updateImportOutcome, useImportOutcome } from './importOutcomeStore';
-import { clearSyncFeedback, setSyncConflict, setSyncNotice, useSyncFeedback } from './syncNoticeStore';
+import { setSyncConflict, setSyncNotice, useSyncFeedback } from './syncNoticeStore';
+import { resetImportedData } from './resetImportedData';
 import { recordSyncedPets } from './syncAdditions';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -71,11 +70,6 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
   // 导入后自动云同步的反馈（409 冲突 / 设置已跟随云端）放模块级 store：
   // 分享导入后本组件会被卸载，放 useState 里这两条提示会永久丢失（见 syncNoticeStore）
   const { conflict: autoConflict, notice: syncNotice } = useSyncFeedback();
-  // 「第一次用？3 步上手」折叠指引：没数据时默认展开（新用户最需要），有数据时收起
-  const [guideOpen, setGuideOpen] = useState(false);
-  useEffect(() => {
-    if (loaded && snapshots.length === 0) setGuideOpen(true);
-  }, [loaded, snapshots.length]);
   // 底部「更多」折叠区（导出 / 合并导入 / 重置）：低频操作收起来，默认收起
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -333,15 +327,13 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
   }, [loaded]);
 
   const handleReset = async () => {
-    const confirmed = window.confirm('确定清空已导入的所有账号数据吗？此操作不可撤销（规划设置会保留）。');
+    const confirmed = window.confirm(
+      '确定清空本机已导入的所有账号数据吗？此操作不可撤销。\n\n' +
+        '会清空：导入的账号、导入历史、本次新增、种公推荐里勾选的「已换到」、母本计划、账号与清单筛选。\n' +
+        '会保留：目标档位与母本达标条件、工具箱身份、已发布的小组资源（要撤回请到小组页停止共享）。',
+    );
     if (!confirmed) return;
-    await clearAllSnapshots();
-    await refreshSnapshots();
-    clearLastImportResult();
-    // 历史也一并清掉：它是「导入过的数据」的一部分，留着会让「清空所有账号数据」名不副实
-    clearLastImportHistory();
-    // 同步反馈指向的正是刚被清掉的那批数据，留着会自相矛盾
-    clearSyncFeedback();
+    await resetImportedData();
   };
 
   /** 导出：把本机全部账号数据打包，优先「分享」出去（网页 navigator.share / 壳 JS Bridge），
@@ -445,7 +437,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
         type="button"
         data-testid="import-button"
         onClick={() => fileInputRef.current?.click()}
-        className="flex min-h-[52px] w-full items-center justify-center rounded-xl bg-emerald-600 px-4 text-base font-medium text-white"
+        className="flex min-h-[44px] w-full items-center justify-center rounded-lg bg-emerald-600 px-4 text-base font-medium text-white"
       >
         {importing ? '导入中…' : '导入游戏数据'}
       </button>
@@ -479,10 +471,13 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
       ) : null}
 
       {!loaded ? (
-        <p className="text-sm text-slate-400">正在读取本地数据…</p>
+        <div className="min-h-[44px] rounded-lg bg-slate-50 p-3" aria-busy="true" data-testid="import-loading">
+          <div className="h-3 w-24 animate-pulse rounded bg-slate-200" />
+          <div className="mt-1.5 h-3 w-3/4 animate-pulse rounded bg-slate-200" />
+        </div>
       ) : snapshots.length === 0 ? (
-        <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500" data-testid="import-empty">
-          还没有数据。先按下面的「3 步上手」导一次，看板会自动算出两块进度。
+        <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500" data-testid="import-empty">
+          还没有数据。用上面的「导入游戏数据」或本机采集导入一次，看板会自动算出两块进度。
         </div>
       ) : null}
 
@@ -499,45 +494,6 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
           数据已超过一周未更新，请重新导入抓包数据。
         </div>
       ) : null}
-
-      {/* 第一次用？3 步上手（2026-10-06）：此前导入页完全没说数据从哪来，
-          新用户不知道「抓包」是什么、采集器在哪拿 → 给一条最短路径 */}
-      <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="import-guide">
-        <button
-          type="button"
-          aria-expanded={guideOpen}
-          onClick={() => setGuideOpen((open) => !open)}
-          data-testid="import-guide-toggle"
-          className="flex min-h-[44px] w-full items-center justify-between text-left text-sm font-medium text-slate-500"
-        >
-          <span>外部文件导入 · 3 步上手</span>
-          <span className="text-xs text-slate-300" aria-hidden>
-            {guideOpen ? '▲' : '▼'}
-          </span>
-        </button>
-        {guideOpen ? (
-          <ol className="mt-1 space-y-1.5 text-[13px] leading-relaxed text-slate-600">
-            <li>
-              <span className="font-medium text-slate-700">1. 装采集器</span>
-              ：<a
-                href="https://api.danking.cn:18443/miniapp/api/client-releases/android-collector-1.2.6-dab2ba9e50ee.apk"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-[44px] items-center text-emerald-700 underline"
-              >下载安卓采集器 1.2.6（作者发布）</a>。工具箱支持导入它导出的 .pcap 文件。
-            </li>
-            <li>
-              <span className="font-medium text-slate-700">2. 抓一次</span>
-              ：按采集器的提示抓一遍，再在采集器里点「分享」、选「洛克工具箱」；也可以「导出
-              全部数据」，再把文件传过来。
-            </li>
-            <li>
-              <span className="font-medium text-slate-700">3. 导入</span>
-              ：分享过来的数据会自己进来；也可以点上面的「导入游戏数据」手动选文件。
-            </li>
-          </ol>
-        ) : null}
-      </section>
 
       {autoConflict ? (
         <div
@@ -569,7 +525,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen((open) => !open)}
           data-testid="import-more-toggle"
-          className="flex min-h-[44px] w-full items-center justify-between px-4 text-left text-sm font-medium text-slate-500"
+          className="flex min-h-[36px] w-full items-center justify-between px-3 text-left text-sm font-medium text-slate-500"
         >
           <span>更多（导出 / 合并导入 / 重置）</span>
           <span className="text-xs text-slate-300" aria-hidden>
@@ -577,14 +533,14 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
           </span>
         </button>
         {moreOpen ? (
-          <div className="px-4 pb-4" data-testid="import-more-body">
+          <div className="px-3 pb-3" data-testid="import-more-body">
             <div className="flex gap-2">
               <button
                 type="button"
                 data-testid="export-button"
                 disabled={snapshots.length === 0}
                 onClick={() => void handleExport()}
-                className="flex min-h-[48px] flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 disabled:text-slate-300"
+                className="flex min-h-[36px] flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 disabled:text-slate-300"
               >
                 导出全部数据
               </button>
@@ -592,7 +548,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
                 type="button"
                 data-testid="import-backup-button"
                 onClick={() => backupInputRef.current?.click()}
-                className="flex min-h-[48px] flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
+                className="flex min-h-[36px] flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
               >
                 合并导入
               </button>
@@ -617,7 +573,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
               <button
                 type="button"
                 onClick={() => void handleReset()}
-                className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600"
+                className="mt-2 flex min-h-[36px] w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600"
               >
                 重置导入数据
               </button>
@@ -627,7 +583,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
       </section>
 
       {/* 匿名统计开关（2026-10-06）：只报「设备 + 用了哪个功能」，可随时关掉 */}
-      <section className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <section className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-700">匿名使用统计</p>
           <p className="mt-0.5 text-xs text-slate-400">
@@ -644,7 +600,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
             setAnalyticsEnabled(next);
             setAnalyticsOn(next);
           }}
-          className={`min-h-[44px] shrink-0 rounded-full border px-3 text-xs font-medium ${
+          className={`min-h-[28px] shrink-0 rounded-md border px-2.5 text-xs font-medium ${
             analyticsOn
               ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
               : 'border-slate-200 bg-white text-slate-400'

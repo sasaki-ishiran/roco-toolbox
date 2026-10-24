@@ -32,6 +32,7 @@
     stopCapture: () => call('stopCapture'),
     openGame: () => call('openGame'),
     importCapture: (id) => call('importCapture', id),
+    uploadCapture: (id) => call('uploadCapture', id),
     shareCapture: (id) => call('shareCapture', id),
     deleteCapture: (id) => call('deleteCapture', id),
   };

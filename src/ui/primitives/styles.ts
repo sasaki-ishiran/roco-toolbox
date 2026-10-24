@@ -16,8 +16,27 @@ export const BODY = 'text-sm text-slate-700';
 /** 辅助说明：12px */
 export const HINT = 'text-xs text-slate-500';
 
+/**
+ * 统一控件尺寸（2026-10-25 用户拍板：全站收紧，不再一律 44px）。
+ *
+ * - md 36px：主按钮、表单输入、清单搜索
+ * - sm 32px：次按钮、页内下拉、紧凑输入
+ * - xs 28px：芯片、分段、数量、文字动作
+ * 导航与弹层主操作仍保留 40~44px 的独立触区。
+ */
+export const CONTROL_MD = 'min-h-[36px]';
+export const CONTROL_SM = 'min-h-[32px]';
+export const CONTROL_XS = 'min-h-[28px]';
+
+export const ACTION = `${CONTROL_XS} inline-flex items-center rounded-md px-1 text-xs font-medium text-emerald-700`;
+export const CHIP_BASE = `${CONTROL_XS} inline-flex items-center justify-center rounded-md border px-2 text-xs`;
+export const BUTTON_MD = `${CONTROL_MD} inline-flex items-center justify-center gap-1 rounded-lg px-3 text-sm font-medium`;
+export const BUTTON_SM = `${CONTROL_SM} inline-flex items-center justify-center gap-1 rounded-lg px-2.5 text-xs font-medium`;
+
 export const FIELD =
-  'min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 placeholder:text-slate-300 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-50 disabled:text-slate-400';
+  `${CONTROL_MD} w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-slate-700 placeholder:text-slate-300 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-50 disabled:text-slate-400`;
+export const FIELD_SM =
+  `${CONTROL_SM} w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-700 placeholder:text-slate-300 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-50 disabled:text-slate-400`;
 
 export const CHIP_ON = 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700';
 export const CHIP_OFF = 'border-slate-200 bg-white text-slate-500';

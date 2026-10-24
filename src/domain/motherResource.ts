@@ -52,6 +52,10 @@ export interface BuildMotherResourceInput {
   selectedAccountKeys: readonly string[];
   species: readonly SpeciesEntry[];
   catalogVersion: string;
+  /** 本组口径；不传时沿用一期的固定口径（母 · 大块头 · +100dB）。 */
+  criteria?: MotherCriteria;
+  /** 与 criteria 对应的稳定标识；不传时用一期的固定 id。 */
+  criteriaId?: string;
 }
 
 /**
@@ -60,6 +64,8 @@ export interface BuildMotherResourceInput {
  */
 export function buildMotherResource(input: BuildMotherResourceInput): MotherResourceDraft {
   const { snapshots, selectedAccountKeys, species, catalogVersion } = input;
+  const criteria = input.criteria ?? SHARED_MOTHER_CRITERIA;
+  const criteriaId = input.criteriaId ?? MOTHER_CRITERIA_ID;
 
   if (catalogVersion.trim().length === 0 || catalogVersion.length > MOTHER_CATALOG_VERSION_MAX) {
     throw new MotherResourceError('INVALID_CATALOG_VERSION', '图鉴版本无效');
@@ -106,7 +112,7 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
     for (const pet of snapshot.pets) {
       const eggGameId = byGameId.get(pet.gameId)?.eggGameId;
       if (eggGameId == null || !eggSpeciesIds.has(eggGameId)) continue;
-      if (!isQualifiedMother(pet, SHARED_MOTHER_CRITERIA)) continue;
+      if (!isQualifiedMother(pet, criteria)) continue;
       eggGameIds.add(eggGameId);
     }
     if (eggGameIds.size > MOTHER_RESOURCE_MAX_EGGS_PER_ACCOUNT) {
@@ -125,7 +131,7 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
 
   return {
     schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
-    criteriaId: MOTHER_CRITERIA_ID,
+    criteriaId: criteriaId as MotherResourceDraft['criteriaId'],
     catalogVersion,
     accounts,
   };

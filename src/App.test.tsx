@@ -43,7 +43,7 @@ describe('App', () => {
     presetFirstRunSeen();
     window.localStorage.setItem('roco.lastTab', 'swap');
     render(<App />);
-    expect(screen.getByTestId('swap-view-eggs')).toBeDefined();
+    expect(screen.getByTestId('personal-type-stud')).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('壳把分享内容注入时自动切到「导入数据」页（否则分享会被静默搁置）', async () => {
@@ -60,7 +60,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByTestId('import-input')).toBeDefined());
   });
 
-  test('已在小组时从看板点求蛋，直达换蛋清单而不是共享', async () => {
+  test('已在小组时从看板点求蛋，落到个人求种公而不是母本共享', async () => {
     presetFirstRunSeen();
     await saveSnapshot(snapshot('账号甲'));
     resetSnapshotCacheForTest();
@@ -68,14 +68,14 @@ describe('App', () => {
     window.localStorage.setItem('roco.swapView', 'sharing');
 
     render(<App />);
-    // 启动直接落回小组（旧子视图保留）
-    expect(screen.getByTestId('mother-sharing')).toBeTruthy();
+    // 启动落回小组页；没有登录时先给个人求蛋
+    expect(screen.getByTestId('personal-eggs')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '看板' }));
     fireEvent.click(screen.getByTestId('recommend-quantity-all'));
 
     await waitFor(() =>
-      expect(screen.getByTestId('swap-view-eggs')).toHaveAttribute('aria-selected', 'true'),
+      expect(screen.getByTestId('personal-type-stud')).toHaveAttribute('aria-pressed', 'true'),
     );
   });
 

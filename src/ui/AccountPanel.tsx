@@ -14,7 +14,7 @@ import {
   rotateRecoveryCode,
   subscribeSession,
 } from '../api/session';
-import { applySnapshot, downloadSnapshot, localSizeHint, syncNow, uploadSnapshot } from '../api/sync';
+import { applySnapshot, downloadSnapshot, syncNow, uploadSnapshot } from '../api/sync';
 import { recordSyncedPets } from './syncAdditions';
 import { useSnapshots } from './useSnapshots';
 
@@ -32,10 +32,13 @@ import { useSnapshots } from './useSnapshots';
  * 恢复码只显示一次（服务端只存哈希），文案要提醒保存；但也不用写得像「丢了就完了」——
  * 只要还有一台已登录的设备，点「重新生成恢复码」就能换一张新的（旧码同时失效）。
  */
-const sizeText = (bytes: number): string =>
-  bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
-
 const timeText = (ms: number): string => (ms ? new Date(ms).toLocaleString() : '—');
+
+/**
+ * 最近一次云端账号信息（进程内缓存）。
+ * 切到「我的」会重挂本组件：先显示上次结果，再后台刷新，不再先闪「云端版本 暂无」。
+ */
+let meCache: { accountId: string; me: MeResult } | null = null;
 
 export interface AccountPanelProps {
   /**
@@ -58,16 +61,25 @@ export function AccountPanel({
   section,
 }: AccountPanelProps = {}) {
   const [accountId, setAccountId] = useState(() => readAccountId());
-  const [me, setMe] = useState<MeResult | null>(null);
+  const [me, setMe] = useState<MeResult | null>(() => {
+    const id = readAccountId();
+    return id && meCache?.accountId === id ? meCache.me : null;
+  });
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [codeInput, setCodeInput] = useState('');
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState<CloudMeta | null>(null);
-  const [size, setSize] = useState<{ accounts: number; bytes: number } | null>(null);
   // 同步前的本机快照（同步后用来算「本次新增」）；订阅式读取，导入/同步后自动跟着更新
-  const { snapshots } = useSnapshots();
+  const { snapshots, loaded } = useSnapshots();
+
+  /** 写回 me 时同步进程内缓存；账号切换 / 退出时清掉。 */
+  const rememberMe = (next: MeResult | null) => {
+    const id = readAccountId();
+    meCache = next && id ? { accountId: id, me: next } : null;
+    setMe(next);
+  };
 
   // 上层转来的冲突 → 并进本面板的冲突态（用户在这里二选一）
   useEffect(() => {
@@ -83,20 +95,20 @@ export function AccountPanel({
   useEffect(() => subscribeSession(() => setAccountId(readAccountId())), []);
 
   useEffect(() => {
-    void localSizeHint()
-      .then(setSize)
-      .catch(() => setSize(null));
-  }, []);
-
-  useEffect(() => {
     if (!accountId) {
-      setMe(null);
+      meCache = null;
+      rememberMe(null);
       return;
     }
+    // 先显示上一次的云端状态，再后台刷新；只有换身份时才清空
+    const cached = meCache?.accountId === accountId ? meCache.me : null;
+    setMe(cached);
     let alive = true;
     void fetchMe()
       .then((result) => {
-        if (alive) setMe(result);
+        if (!alive) return;
+        meCache = { accountId, me: result };
+        setMe(result);
       })
       .catch((err: unknown) => {
         if (alive) setError(errorText(err));
@@ -128,7 +140,7 @@ export function AccountPanel({
       // 开号后立刻把本机数据传上去，免得用户以为「开了同步但云端还是空的」
       const result = await uploadSnapshot();
       if (!result.ok) setConflict(result.conflict);
-      else setMe(await fetchMe());
+      else rememberMe(await fetchMe());
     });
 
   const handleRecover = () =>
@@ -141,7 +153,7 @@ export function AccountPanel({
         setMessage('这个账号云端还没有数据。已把本机数据作为第一份上传。');
         const result = await uploadSnapshot();
         if (!result.ok) setConflict(result.conflict);
-        setMe(await fetchMe());
+        rememberMe(await fetchMe());
         return;
       }
       await applySnapshot(cloud.snapshot, cloud.meta);
@@ -174,7 +186,7 @@ export function AccountPanel({
       if (result.added.length > 0 || result.updated.length > 0) {
         await recordSyncedPets(before);
       }
-      setMe(await fetchMe());
+      rememberMe(await fetchMe());
       // 设置键是模块级 store 启动时读进内存的，补上的那些（如目标模式/母本达标标准）
       // 只有刷新页面才真正生效 —— 别试图就地刷新（2026-10-06 记录过的坑）
       if (result.prefsAdopted.length > 0) {
@@ -202,7 +214,7 @@ export function AccountPanel({
         return;
       }
       setMessage(`已用本机数据覆盖云端（版本 ${result.version}）`);
-      setMe(await fetchMe());
+      rememberMe(await fetchMe());
     });
   };
 
@@ -216,7 +228,7 @@ export function AccountPanel({
   const handleLogout = () =>
     run('logout', async () => {
       await logoutAccount();
-      setMe(null);
+      rememberMe(null);
       setMessage('已退出登录（本机数据保留）。');
     });
 
@@ -230,19 +242,20 @@ export function AccountPanel({
         return;
       }
       await deleteAccount();
-      setMe(null);
+      rememberMe(null);
       setMessage('账号已注销，云端数据已清空。');
     });
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white px-4 py-3" data-testid="account-panel">
+    <section className="rounded-xl border border-slate-200 bg-white p-3" data-testid="account-panel">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-700">
           {section === 'identity' ? '工具箱身份' : section === 'sync' ? '私有同步' : '云同步（跨设备）'}
         </h2>
-        {/* 文案避开「N 个账号」的写法：导入面板那行用的是那个格式，别让 e2e 的选择器撞车 */}
-        <span className="text-[11px] text-slate-400">
-          {size ? `本机数据 约 ${sizeText(size.bytes)} · 账号 ${size.accounts} 个` : '本机数据读取中…'}
+        {/* 文案避开「N 个账号」的写法：导入面板那行用的是那个格式，别让 e2e 的选择器撞车。
+            账号数直接读内存快照，避免异步算大小导致切页时文字先闪一下。 */}
+        <span className="text-[11px] text-slate-400" data-testid="account-local-size">
+          {loaded ? `本机数据 · 账号 ${snapshots.length} 个` : '本机数据读取中…'}
         </span>
       </div>
 
@@ -259,7 +272,7 @@ export function AccountPanel({
                 data-testid="account-sync"
                 onClick={handleSync}
                 disabled={busy !== ''}
-                className="min-h-[44px] rounded-xl bg-emerald-600 px-3 text-xs font-medium text-white disabled:opacity-50"
+                className="min-h-[30px] rounded-lg bg-emerald-600 px-2.5 text-xs font-medium text-white disabled:opacity-50"
               >
                 {busy === 'sync' ? '同步中…' : '立即同步'}
               </button>
@@ -270,7 +283,7 @@ export function AccountPanel({
                 data-testid="account-force-push"
                 onClick={handleForcePush}
                 disabled={busy !== ''}
-                className="min-h-[44px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
+                className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500 disabled:opacity-50"
               >
                 {busy === 'force' ? '上传中…' : '用本机覆盖云端'}
               </button>
@@ -281,7 +294,7 @@ export function AccountPanel({
                 data-testid="account-rotate"
                 onClick={handleRotate}
                 disabled={busy !== ''}
-                className="min-h-[44px] rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-600 disabled:opacity-50"
+                className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-600 disabled:opacity-50"
               >
                 重新生成恢复码
               </button>
@@ -292,7 +305,7 @@ export function AccountPanel({
                 data-testid="account-logout"
                 onClick={handleLogout}
                 disabled={busy !== ''}
-                className="min-h-[44px] rounded-xl border border-slate-200 px-3 text-xs text-slate-500 disabled:opacity-50"
+                className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500 disabled:opacity-50"
               >
                 退出登录
               </button>
@@ -303,7 +316,7 @@ export function AccountPanel({
                 data-testid="account-delete"
                 onClick={handleDelete}
                 disabled={busy !== ''}
-                className="min-h-[44px] rounded-xl border border-red-100 px-3 text-xs text-red-500 disabled:opacity-50"
+                className="min-h-[30px] rounded-lg border border-red-100 px-2.5 text-xs text-red-500 disabled:opacity-50"
               >
                 注销账号
               </button>
@@ -321,7 +334,7 @@ export function AccountPanel({
             data-testid="account-register"
             onClick={handleRegister}
             disabled={busy !== ''}
-            className="min-h-[44px] w-full rounded-xl bg-emerald-600 px-4 text-sm font-medium text-white disabled:opacity-50"
+            className="min-h-[36px] w-full rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white disabled:opacity-50"
           >
             {busy === 'register' ? '开启中…' : '开启云同步（生成恢复码）'}
           </button>
@@ -331,14 +344,14 @@ export function AccountPanel({
               onChange={(event) => setCodeInput(event.target.value)}
               placeholder="已有恢复码？输在这里"
               data-testid="account-recover-input"
-              className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm uppercase"
+              className="min-h-[36px] min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 text-sm uppercase"
             />
             <button
               type="button"
               data-testid="account-recover-submit"
               onClick={handleRecover}
               disabled={busy !== '' || codeInput.trim().length === 0}
-              className="min-h-[44px] shrink-0 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-600 disabled:opacity-50"
+              className="min-h-[36px] shrink-0 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 disabled:opacity-50"
             >
               登录
             </button>
@@ -362,14 +375,14 @@ export function AccountPanel({
                 void navigator.clipboard?.writeText(recoveryCode);
                 setMessage('已复制恢复码');
               }}
-              className="min-h-[44px] rounded-lg border border-amber-300 px-2 text-[11px] text-amber-800"
+              className="min-h-[28px] rounded-md border border-amber-300 px-2 text-xs text-amber-800"
             >
               复制
             </button>
             <button
               type="button"
               onClick={() => setRecoveryCode(null)}
-              className="min-h-[44px] rounded-lg border border-amber-300 px-2 text-[11px] text-amber-800"
+              className="min-h-[28px] rounded-md border border-amber-300 px-2 text-xs text-amber-800"
             >
               我已保存
             </button>
@@ -388,7 +401,7 @@ export function AccountPanel({
               type="button"
               data-testid="account-conflict-retry"
               onClick={handleSync}
-              className="min-h-[44px] rounded-lg border border-rose-300 bg-white px-3 text-[11px] font-medium text-rose-700"
+              className="min-h-[28px] rounded-md border border-rose-300 bg-white px-2.5 text-xs font-medium text-rose-700"
             >
               再同步一次（合并）
             </button>
@@ -396,7 +409,7 @@ export function AccountPanel({
               type="button"
               data-testid="account-conflict-keep-local"
               onClick={handleForcePush}
-              className="min-h-[44px] rounded-lg border border-rose-300 bg-white px-3 text-[11px] font-medium text-rose-700"
+              className="min-h-[28px] rounded-md border border-rose-300 bg-white px-2.5 text-xs font-medium text-rose-700"
             >
               用本机（覆盖云端）
             </button>

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { Dashboard } from './Dashboard';
 import type { CollectionSummary } from './useCollectionSummary';
+import type { NestPet, NestPlan } from '../domain/nestPlan';
 import { toggleAllAccounts } from './accountFilterStore';
 
 const h = vi.hoisted(() => ({
@@ -23,6 +24,48 @@ const motherGroup = (index: number) =>
     motherClass: null,
     eggGameId: 100 + index,
   }) as never;
+
+const nestPet = (key: string, name: string, gender: '公' | '母'): NestPet => ({
+  key,
+  name,
+  account: '测试甲',
+  gender,
+  nature: '固执',
+  voiceDb: 100,
+  medalBody: '大块头',
+  box: '盒子1 第1位',
+});
+
+/** 手写一份可展示的配窝方案，验证看板直接渲染摆位与配对 */
+const demoPlan: NestPlan = {
+  account: '测试甲',
+  pairings: [{
+    tier: 'normal60',
+    groupIds: [2],
+    natureName: '固执',
+    grade: '大婉',
+    account: '测试甲',
+    father: nestPet('f', '父兽', '公'),
+    mother: nestPet('m', '母兽', '母'),
+    academyParent: null,
+    partner: nestPet('f', '父兽', '公'),
+    natureChance: 0.6,
+    distance: 8,
+    fatherPosition: { x: 8, y: 0 },
+    motherPosition: { x: 0, y: 0 },
+    expected: { species: '母兽', nature: '固执', body: '大块头', voice: '100' },
+  }],
+  blockedLinks: [],
+  slots: [
+    { position: { x: 0, y: 0 }, pet: nestPet('m', '母兽', '母'), cluster: 0, academy: false },
+    { position: { x: 8, y: 0 }, pet: nestPet('f', '父兽', '公'), cluster: 0, academy: false },
+  ],
+  nestsUsed: 2,
+  nestsTotal: 11,
+  clusters: [[{ x: 0, y: 0 }, { x: 8, y: 0 }]],
+  unfilled: [],
+  alternatives: [],
+};
 
 beforeEach(() => {
   h.accounts = ['测试甲'];
@@ -102,8 +145,8 @@ describe('Dashboard（看板）', () => {
         order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
-    // 完整明细不落在看板
-    expect(container.querySelector('[data-testid="nest-layout"]')).toBeNull();
+    // 配窝明细现在直接落在看板（2026-10-25 用户要求）；母本档位明细仍在收集页
+    expect(screen.getByTestId('breed-empty')).toBeTruthy();
     expect(container.querySelector('[data-testid="mother-grade-inventory"]')).toBeNull();
   });
 
@@ -137,8 +180,8 @@ describe('Dashboard（看板）', () => {
 
     fireEvent.click(screen.getByTestId('recommend-quantity-all'));
     expect(onNavigate).toHaveBeenCalledWith({
-      type: 'open-collection',
-      location: { kind: 'studs', view: 'eggs' },
+      type: 'open-groups',
+      groupType: 'stud',
     });
 
     fireEvent.click(screen.getByTestId('nest-open-coverage'));
@@ -146,12 +189,15 @@ describe('Dashboard（看板）', () => {
       type: 'open-collection',
       location: { kind: 'studs', view: 'coverage', groupId: 3 },
     });
+  });
 
-    fireEvent.click(screen.getByTestId('nest-open-breed'));
-    expect(onNavigate).toHaveBeenCalledWith({
-      type: 'open-collection',
-      location: { kind: 'studs', view: 'breed' },
-    });
+  test('看板直接展示配窝建议的摆位图与配对', () => {
+    h.summary = { ...h.summary, plans: [demoPlan] };
+    render(<Dashboard onNavigate={vi.fn()} />);
+
+    expect(screen.getByTestId('breed-list')).toBeTruthy();
+    expect(screen.getByTestId('nest-layout')).toBeTruthy();
+    expect(screen.getAllByTestId('breed-suggestion').length).toBeGreaterThan(0);
   });
 
   test('没有可自己孵的方案时明确解释，不制造空推荐', () => {
@@ -163,7 +209,7 @@ describe('Dashboard（看板）', () => {
       },
     };
     render(<Dashboard onNavigate={vi.fn()} />);
-    expect(screen.getByTestId('nest-no-plan')).toHaveTextContent('没有能自己孵的方案');
+    expect(screen.getByTestId('breed-empty')).toHaveTextContent('没有能自己孵的方案');
   });
 
   test('目标全收齐时不写「还差」也不让用户去导入', () => {
@@ -174,6 +220,7 @@ describe('Dashboard（看板）', () => {
     };
     render(<Dashboard onNavigate={vi.fn()} />);
     expect(screen.getByTestId('nest-summary-line')).toHaveTextContent('已全部收集');
+    expect(screen.getByTestId('breed-empty')).toHaveTextContent('已全部收集');
     expect(screen.getByTestId('recommend-empty')).toHaveTextContent('没有要补的缺口');
   });
 });

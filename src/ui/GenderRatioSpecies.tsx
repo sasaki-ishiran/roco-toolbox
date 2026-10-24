@@ -154,7 +154,7 @@ export function GenderRatioSpecies({ owned }: { owned: OwnedPet[] }) {
                 )
               }
               data-testid={`gr-grade-${grade}`}
-              className={`min-h-[44px] rounded-full px-2.5 text-xs ${
+              className={`min-h-[30px] rounded-md px-2 text-xs ${
                 on
                   ? 'bg-emerald-500 font-semibold text-white shadow'
                   : 'bg-slate-100 font-medium text-slate-500'

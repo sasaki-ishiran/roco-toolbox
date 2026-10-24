@@ -1,12 +1,16 @@
-﻿import { expect, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
+const openPersonalStud = async (page: import('@playwright/test').Page) => {
+  await page.getByRole('button', { name: '小组', exact: true }).click();
+  await page.getByTestId('personal-type-stud').click();
+  await expect(page.getByTestId('personal-type-stud')).toHaveAttribute('aria-pressed', 'true');
+};
 
 const openSwap = async (page: import('@playwright/test').Page) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '收集', exact: true }).click();
-  await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-eggs').click();
+  await openPersonalStud(page);
 };
 
 test('换什么页：清单按「一只顶两组」优先排列，并给出建议物种', async ({ page }) => {
@@ -31,12 +35,10 @@ test('换什么页：清单按「一只顶两组」优先排列，并给出建�
 test('换什么页：切到追双牌后，档位行不再带「满分」前缀', async ({ page }) => {
   await openSwap(page);
 
-  // 回看板切换模式，再回「换什么」——全局模式对所有页面生效
+  // 回看板切换模式，再回个人求种公——全局模式对所有页面生效
   await page.getByRole('button', { name: '看板', exact: true }).click();
   await page.getByTestId('target-mode-medal').click();
-  await page.getByRole('button', { name: '收集', exact: true }).click();
-  await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-eggs').click();
+  await openPersonalStud(page);
 
   await expect(page.getByTestId('swap-mode')).toContainText('追双牌');
   const first = page.getByTestId('swap-wish-item').first();
@@ -98,9 +100,7 @@ test('换什么页：筛选与搜索只过滤展示，不改清单，清空后�
 
 test('换什么页：没有数据时给可读空状态', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '收集', exact: true }).click();
-  await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-eggs').click();
+  await openPersonalStud(page);
 
   await expect(page.getByText('还没有数据')).toBeVisible();
   await expect(page.getByText('NaN')).toHaveCount(0);
@@ -108,9 +108,7 @@ test('换什么页：没有数据时给可读空状态', async ({ page }) => {
 
 test('换什么页：署名保留（CC BY-SA 4.0）', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '收集', exact: true }).click();
-  await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-eggs').click();
+  await openPersonalStud(page);
 
   await expect(page.getByText('CC BY-SA 4.0')).toBeVisible();
 });

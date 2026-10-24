@@ -6,7 +6,6 @@ const importSample = async (page: import('@playwright/test').Page) => {
   await expect(page.getByText('还没有数据')).toHaveCount(0);
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
 };
 
 test('覆盖度页：14 个蛋组行 + 四态图例 + 主数字是「已通 N / 14 组」', async ({ page }) => {
@@ -59,7 +58,6 @@ test('覆盖度页：第一次进来给极简说明，点「知道了」后不�
   await page.getByRole('button', { name: '看板', exact: true }).click();
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('coverage-intro')).toHaveCount(0);
 });
 
@@ -83,7 +81,6 @@ test('覆盖度页：蛋组行按状态色档从差到好排（未收集多的�
   await expect(page.getByRole('heading', { name: '洛克工具箱' })).toBeVisible();
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('coverage-nature-cell')).toHaveCount(3);
 });
 
@@ -104,7 +101,6 @@ test('覆盖度页：分母只随蛋组变化（14 → 13），档位不再改�
   await page.getByTestId('target-editor').getByRole('button', { name: '完成' }).click();
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
   // 覆盖度页只显示当前档位（只读、不再自己控制）
   await expect(page.getByTestId('coverage-grade-readonly')).toContainText('满分小婉');
   await expect(page.getByTestId('coverage-total')).toHaveText(/\/ 13 组/);
@@ -122,7 +118,6 @@ test('覆盖度页：署名保留（CC BY-SA 4.0）', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
 
   await expect(page.getByText('CC BY-SA 4.0')).toBeVisible();
   await expect(page.getByRole('link', { name: '洛克王国：世界 Wiki' })).toBeVisible();
@@ -132,7 +127,6 @@ test('覆盖度页：空数据给出可读空状态且不出现 NaN', async ({ p
   await page.goto('/');
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
 
   await expect(page.getByText('还没有数据')).toBeVisible();
   await expect(page.getByText('NaN')).toHaveCount(0);

@@ -22,11 +22,11 @@ import {
   joinGroup,
   leaveGroup,
   listGroupsForAccount,
-  publishMemberResource,
   readMotherGroup,
   resetInvite,
   updateDisplayName,
 } from './motherGroupsStore';
+import { isMotherGroup, publishMotherResourceToGroup } from './collectionGroupsStore';
 import {
   type Env,
   authenticate,
@@ -54,6 +54,8 @@ const STORE_STATUS: Record<MotherStoreErrorCode, number> = {
   SOURCE_MISMATCH: 409,
   GAME_ACCOUNT_ALREADY_SHARED: 409,
   OWNER_MUST_DISSOLVE: 409,
+  TARGET_CHANGED: 409,
+  TARGET_NOT_READY: 409,
 };
 
 const failCode = (
@@ -124,6 +126,10 @@ export async function handleMotherGroups(
 
     const groupId = rest[0];
     if (!groupId || groupId.length > GROUP_ID_MAX) {
+      return failCode(origin, 404, 'GROUP_NOT_FOUND', '小组不存在');
+    }
+    // 旧接口是母本组的窄门：种公组对旧客户端一律当作不存在（不能读、不能写）
+    if (!(await isMotherGroup(env.DB, groupId))) {
       return failCode(origin, 404, 'GROUP_NOT_FOUND', '小组不存在');
     }
 
@@ -252,7 +258,7 @@ async function handlePublish(
   }
 
   const parsed = parsePublishBody(await readJsonBody(request));
-  const result = await publishMemberResource(env.DB, {
+  const result = await publishMotherResourceToGroup(env.DB, {
     groupId,
     accountId,
     baseRevision: parsed.baseRevision,

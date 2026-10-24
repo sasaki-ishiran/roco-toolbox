@@ -328,7 +328,6 @@ test('当前模式：看板开关切到追双牌，全程序跟着换', async ({
   // 覆盖度页显示当前模式
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('coverage-mode')).toContainText('追双牌');
 
   // 刷新后模式还在（持久化在本机）；页签也留在原处（关后台回来不丢位置）
@@ -366,7 +365,6 @@ test('账号筛选：三页共用一份，取消账号后看板进度跟着变',
   // 覆盖度页是同一个 store：那边取消一个账号，看板这边也是 1/2
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('account-filter')).toContainText('账号（2/2）');
   await page.getByTestId('account-chip-测试乙').click();
   await page.getByRole('button', { name: '看板', exact: true }).click();
@@ -405,7 +403,6 @@ test('跳转后落在目标页顶部：切页签会重置滚动位置', async ({
   // 切到覆盖度（目标页比视口高：不重置的话会沿用看板的旧偏移，跳转位置不准）
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
   await expect(page.getByTestId('coverage-mode')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 });
@@ -485,7 +482,6 @@ test.describe('本次导入新增', () => {
     // 切到别的页签再回看板：仍保持收起（以前展开态在组件里，回来会自己弹开）
     await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-coverage').click();
     await page.getByRole('button', { name: '看板', exact: true }).click();
     await expect(page.getByTestId('import-result-dismiss')).toHaveAttribute('aria-expanded', 'false');
     await expect(page.getByTestId('import-result-stud')).toHaveCount(0);

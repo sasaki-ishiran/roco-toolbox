@@ -66,6 +66,11 @@ export function useMotherPlan(): readonly string[] {
   return store.use();
 }
 
+/** 清空计划清单（重置导入数据时调用）。 */
+export function clearMotherPlan(): void {
+  commit([]);
+}
+
 /** 供单元测试复位。 */
 export function resetMotherPlanForTest(): void {
   store.set(read());

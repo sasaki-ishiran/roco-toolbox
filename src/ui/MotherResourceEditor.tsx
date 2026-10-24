@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isBreedableGroup } from '../domain/eggs';
-import { isQualifiedMother } from '../domain/motherCriteria';
+import { isQualifiedMother, type MotherCriteria } from '../domain/motherCriteria';
 import { SHARED_MOTHER_CRITERIA } from '../domain/motherResource';
 import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
 import type { SpeciesEntry } from '../domain/types';
@@ -14,6 +14,9 @@ export interface MotherResourceEditorProps {
   snapshots: AccountSnapshot[];
   species: SpeciesEntry[];
   onGoAccount?: () => void;
+  /** 本组口径；不传时按一期固定口径（母 · 大块头 · +100dB）。 */
+  criteria?: MotherCriteria;
+  criteriaLabel?: string;
 }
 
 /**
@@ -22,7 +25,14 @@ export interface MotherResourceEditorProps {
  * 选号只是本地草稿，不改变已经发布的内容；发布前必须预览。
  * 本机缺少已共享的账号时不允许发布（避免把服务器摘要静默缩小）。
  */
-export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: MotherResourceEditorProps) {
+export function MotherResourceEditor({
+  hook,
+  snapshots,
+  species,
+  onGoAccount,
+  criteria = SHARED_MOTHER_CRITERIA,
+  criteriaLabel = '母 · 大块头 · +100dB',
+}: MotherResourceEditorProps) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -51,13 +61,13 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
     return (snapshot: AccountSnapshot): number => {
       const ids = new Set<number>();
       for (const pet of snapshot.pets) {
-        if (!isQualifiedMother(pet, SHARED_MOTHER_CRITERIA)) continue;
+        if (!isQualifiedMother(pet, criteria)) continue;
         const eggGameId = byGameId.get(pet.gameId)?.eggGameId;
         if (eggGameId != null && eggIds.has(eggGameId)) ids.add(eggGameId);
       }
       return ids.size;
     };
-  }, [species]);
+  }, [species, criteria]);
 
   // 有未发布的选号修改时，关闭/刷新页面前提醒（发布成功或草稿回到服务器状态后自动解除）
   useEffect(() => {
@@ -130,7 +140,7 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
     : 0;
 
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="mother-resource-editor">
+    <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-resource-editor">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-500">我的共享资源</h2>
         <span className="text-[11px] text-slate-400" data-testid="mother-my-status">
@@ -140,7 +150,7 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
         </span>
       </div>
       <p className="mt-1 text-[11px] text-slate-400">
-        只统计「母 · 大块头 · +100dB」的达标母本；按人汇总，一个号有就算有。
+        只统计「{criteriaLabel}」的达标母本；按人汇总，一个号有就算有。
       </p>
 
       {snapshots.length === 0 ? (
@@ -151,7 +161,7 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
             <button
               type="button"
               onClick={onGoAccount}
-              className="mt-2 block min-h-[44px] rounded-xl border border-emerald-500 px-3 text-xs text-emerald-700"
+              className="mt-2 block min-h-[30px] rounded-lg border border-emerald-500 px-2.5 text-xs text-emerald-700"
             >
               去导入数据
             </button>
@@ -227,7 +237,7 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
         </p>
       ) : null}
 
-      <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2" data-testid="mother-preview">
+      <div className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5" data-testid="mother-preview">
         {selection.length === 0 ? (
           <p className="text-xs text-slate-500">
             {published
@@ -256,14 +266,14 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
         ) : null}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap gap-2">
         {selection.length === 0 && published ? (
           <button
             type="button"
             onClick={handleStop}
             disabled={busy}
             data-testid="mother-stop-sharing"
-            className="min-h-[44px] flex-1 rounded-xl border border-rose-200 px-3 text-sm font-medium text-rose-600 disabled:opacity-50"
+            className="min-h-[36px] flex-1 rounded-lg border border-rose-200 px-3 text-sm font-medium text-rose-600 disabled:opacity-50"
           >
             {busy ? '处理中…' : '停止共享我的资源'}
           </button>
@@ -273,7 +283,7 @@ export function MotherResourceEditor({ hook, snapshots, species, onGoAccount }: 
             onClick={() => void handlePublish()}
             disabled={!canPublish}
             data-testid="mother-publish"
-            className="min-h-[44px] flex-1 rounded-xl bg-emerald-600 px-3 text-sm font-medium text-white disabled:opacity-50"
+            className="min-h-[36px] flex-1 rounded-lg bg-emerald-600 px-3 text-sm font-medium text-white disabled:opacity-50"
           >
             {busy ? '发布中…' : published ? '更新我的资源' : '发布我的资源'}
           </button>

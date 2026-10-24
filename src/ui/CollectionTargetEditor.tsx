@@ -31,7 +31,7 @@ export interface CollectionTargetEditorProps {
   onClose: () => void;
 }
 
-const CHIP = 'min-h-[44px] rounded-full border px-3 text-xs';
+const CHIP = 'min-h-[28px] rounded-md border px-2 text-xs';
 const CHIP_ON = 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700';
 const CHIP_OFF = 'border-slate-200 bg-white text-slate-500';
 
@@ -132,7 +132,7 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
                     for (const groupId of ALL_EGG_GROUP_IDS) toggleFilterGroup(groupId);
                   }
                 }}
-                className="min-h-[44px] text-xs font-medium text-emerald-700"
+                className="min-h-[28px] text-xs font-medium text-emerald-700"
                 data-testid="editor-groups-toggle"
               >
                 蛋组（{filter.groupIds.length}/14）
@@ -188,7 +188,7 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
                   <button
                     type="button"
                     onClick={toggleAllCustomNatures}
-                    className="mt-1 min-h-[44px] text-xs text-slate-500"
+                    className="mt-1 min-h-[28px] text-xs text-slate-500"
                   >
                     {filter.customNatures.length === targetNaturePool.length ? '全部取消' : '全选'}
                   </button>
@@ -202,7 +202,7 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
               type="button"
               onClick={resetCoverageFilter}
               data-testid="editor-reset-studs"
-              className="min-h-[44px] text-xs font-medium text-emerald-700"
+              className="min-h-[28px] text-xs font-medium text-emerald-700"
             >
               恢复默认蛋组与性格（档位保留）
             </button>
@@ -273,7 +273,7 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
               type="button"
               onClick={() => setMotherCriteria({ ...DEFAULT_MOTHER_CRITERIA })}
               data-testid="editor-reset-mothers"
-              className="min-h-[44px] text-xs font-medium text-emerald-700"
+              className="min-h-[28px] text-xs font-medium text-emerald-700"
             >
               恢复默认（大块头+小不点 × +100/-100）
             </button>

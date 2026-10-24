@@ -1,4 +1,5 @@
 import type { PetGrade } from '../domain/petFilters';
+import type { CollectionGroupType } from '../shared/collectionGroups';
 
 /**
  * 全应用导航合同（2026-10-24 重构任务 1）。
@@ -14,7 +15,7 @@ export type AppPage = 'dashboard' | 'collection' | 'groups' | 'profile';
 
 export type CollectionLocation =
   | { kind: 'mothers'; status: 'missing' | 'collected' | 'plan'; eggGameId?: number }
-  | { kind: 'studs'; view: 'coverage' | 'breed' | 'eggs'; groupId?: number }
+  | { kind: 'studs'; view: 'coverage' | 'eggs'; groupId?: number }
   | { kind: 'inventory'; view: 'all' | 'stud'; motherGrade?: PetGrade };
 
 export type ProfileSection = 'identity' | 'data' | 'sync';
@@ -25,6 +26,8 @@ export interface AppNavigation {
   profileSection: ProfileSection;
   returnToGroups: boolean;
   groupEggGameId?: number;
+  /** 直达小组页时优先展示的收集类型（个人模式或兼容组）。 */
+  groupType?: CollectionGroupType;
   /** 每次「精准直达」递增；页面据此重新聚焦（同一目标重复进入也要再聚焦） */
   focusRevision: number;
   /**
@@ -38,7 +41,7 @@ export type NavigationIntent =
   | { type: 'tab'; page: AppPage }
   | { type: 'open-collection'; location: CollectionLocation }
   | { type: 'open-profile'; section: ProfileSection; returnToGroups?: boolean }
-  | { type: 'open-groups'; eggGameId?: number }
+  | { type: 'open-groups'; eggGameId?: number; groupType?: CollectionGroupType }
   | { type: 'consume-focus'; revision: number };
 
 /** 初始收集落点 = 母本「未收集」（新人最常问「还缺什么」）。 */
@@ -59,7 +62,8 @@ const BASE: AppNavigation = {
  * - `import` / 空 / 未知值 → 我的 · 游戏数据（首启默认）
  * - `myPets` → 收集 · 精灵库 · 全部
  * - `coverage` → 收集 · 种公 · 覆盖矩阵
- * - `swap` + `sharing` → 小组；`swap` + `eggs`/空 → 收集 · 种公 · 求蛋
+ * - `swap` + `sharing` → 小组；`swap` + `eggs`/空 → 小组 · 个人求种公
+ *   （旧求蛋子页已迁入小组，不再落到收集页的空视图）
  */
 export function initialNavigation(lastTab: string | null, swapView: string | null): AppNavigation {
   switch (lastTab) {
@@ -72,7 +76,7 @@ export function initialNavigation(lastTab: string | null, swapView: string | nul
     case 'swap':
       return swapView === 'sharing'
         ? { ...BASE, page: 'groups' }
-        : { ...BASE, page: 'collection', collection: { kind: 'studs', view: 'eggs' } };
+        : { ...BASE, page: 'groups', groupType: 'stud' };
     default:
       return { ...BASE, page: 'profile', profileSection: 'data' };
   }
@@ -91,6 +95,7 @@ export function resolveNavigation(
         page: intent.page,
         returnToGroups: false,
         groupEggGameId: undefined,
+        groupType: undefined,
       };
     case 'open-collection':
       return {
@@ -99,6 +104,7 @@ export function resolveNavigation(
         collection: intent.location,
         returnToGroups: false,
         groupEggGameId: undefined,
+        groupType: undefined,
         focusRevision: current.focusRevision + 1,
       };
     case 'open-profile':
@@ -113,6 +119,7 @@ export function resolveNavigation(
         ...current,
         page: 'groups',
         groupEggGameId: intent.eggGameId,
+        groupType: intent.groupType,
         returnToGroups: false,
         focusRevision: current.focusRevision + 1,
       };
@@ -139,7 +146,10 @@ export interface LegacyLocation {
  * 保证旧版安装升级、降级都不至于落到未知页签。
  */
 export function legacyLocation(state: AppNavigation): LegacyLocation {
-  if (state.page === 'groups') return { lastTab: 'swap', swapView: 'sharing' };
+  if (state.page === 'groups') {
+    // 旧版「交换蛋」页最接近个人求种公；母本组仍记成 sharing
+    return { lastTab: 'swap', swapView: state.groupType === 'stud' ? 'eggs' : 'sharing' };
+  }
   if (state.page === 'profile') return { lastTab: 'import', swapView: 'eggs' };
   if (state.page === 'dashboard') return { lastTab: 'dashboard', swapView: 'eggs' };
   if (state.collection.kind === 'studs') {

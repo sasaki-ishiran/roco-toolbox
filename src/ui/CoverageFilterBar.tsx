@@ -14,7 +14,7 @@ export interface CoverageFilterBarProps {
 
 const CHIP_ON = 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700';
 const CHIP_OFF = 'border-slate-200 bg-white text-slate-500';
-const CHIP_BASE = 'min-h-[44px] rounded-full border px-2.5 text-xs';
+const CHIP_BASE = 'min-h-[28px] rounded-md border px-2 text-xs';
 
 const chipClass = (active: boolean): string => `${CHIP_BASE} ${active ? CHIP_ON : CHIP_OFF}`;
 
@@ -47,7 +47,7 @@ export function CoverageFilterBar({ filter, onToggleGroup, onReset, onOpenTarget
             <button
               type="button"
               onClick={onOpenTargetEditor}
-              className="min-h-[44px] text-xs font-medium text-emerald-700"
+              className="min-h-[28px] text-xs font-medium text-emerald-700"
               data-testid="coverage-open-target-editor"
             >
               调整目标
@@ -56,7 +56,7 @@ export function CoverageFilterBar({ filter, onToggleGroup, onReset, onOpenTarget
           <button
             type="button"
             onClick={onReset}
-            className="min-h-[44px] text-xs font-medium text-emerald-700"
+            className="min-h-[28px] text-xs font-medium text-emerald-700"
             data-testid="coverage-filter-reset"
           >
             恢复默认
@@ -76,7 +76,7 @@ export function CoverageFilterBar({ filter, onToggleGroup, onReset, onOpenTarget
             type="button"
             aria-expanded={groupsOpen}
             onClick={() => setGroupsOpen((open) => !open)}
-            className="flex min-h-[44px] w-full items-center justify-between text-xs text-slate-400"
+            className="flex min-h-[28px] w-full items-center justify-between text-xs text-slate-400"
             data-testid="coverage-groups-toggle"
           >
             <span>蛋组（{groupCount}/14）</span>

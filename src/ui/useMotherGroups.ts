@@ -29,6 +29,12 @@ import {
   saveCurrentGroupId,
   saveInviteCode,
 } from './motherGroupStore';
+import {
+  clearMotherGroupCacheDetail,
+  readMotherGroupCache,
+  saveMotherGroupCacheDetail,
+  saveMotherGroupCacheGroups,
+} from './motherGroupCache';
 
 /** 页面可见且打开着小组时，每 15 秒拉一次。 */
 export const POLL_INTERVAL_MS = 15_000;
@@ -101,6 +107,36 @@ const emptyDraft = (catalogVersion: string): MotherResourceDraft => ({
   accounts: [],
 });
 
+interface MotherGroupsBoot {
+  accountId: string | null;
+  groups: MotherGroupSummary[];
+  groupsLoaded: boolean;
+  currentGroupId: string | null;
+  currentGroup: MotherGroupDetail | null;
+  loading: boolean;
+}
+
+/**
+ * 首屏先读本机缓存（2026-10-25 用户要求）：有上次成功拉到的组列表/详情就直接显示，
+ * 再让下面的 effect 后台刷新。没有缓存时才显示「正在读取」，不要立刻说「读不到」。
+ */
+const bootState = (): MotherGroupsBoot => {
+  const accountId = readAccountId();
+  const cache = readMotherGroupCache(accountId);
+  const stored = readCurrentGroupId(accountId);
+  const cachedDetail = cache?.detail && (stored == null || cache.detail.group.id === stored)
+    ? cache.detail
+    : null;
+  return {
+    accountId,
+    groups: cache?.groups ?? [],
+    groupsLoaded: cache != null,
+    currentGroupId: cachedDetail?.group.id ?? stored ?? cache?.groups[0]?.id ?? null,
+    currentGroup: cachedDetail,
+    loading: accountId != null && cachedDetail == null,
+  };
+};
+
 /**
  * 多人母本共享的会话作用域状态与轮询。
  *
@@ -108,22 +144,25 @@ const emptyDraft = (catalogVersion: string): MotherResourceDraft => ({
  * 晚到的旧请求按「身份代数 + 当前组」丢弃。草稿选号只在本机，发布前必须预览。
  */
 export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
-  const [accountId, setAccountId] = useState<string | null>(() => readAccountId());
-  const [groups, setGroups] = useState<MotherGroupSummary[]>([]);
-  const [groupsLoaded, setGroupsLoaded] = useState(false);
-  const [currentGroupId, setCurrentGroupId] = useState<string | null>(null);
-  const [currentGroup, setCurrentGroup] = useState<MotherGroupDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [boot] = useState(bootState);
+  const [accountId, setAccountId] = useState<string | null>(boot.accountId);
+  const [groups, setGroups] = useState<MotherGroupSummary[]>(boot.groups);
+  const [groupsLoaded, setGroupsLoaded] = useState(boot.groupsLoaded);
+  const [currentGroupId, setCurrentGroupId] = useState<string | null>(boot.currentGroupId);
+  const [currentGroup, setCurrentGroup] = useState<MotherGroupDetail | null>(boot.currentGroup);
+  const [loading, setLoading] = useState(boot.loading);
   const [error, setError] = useState('');
   const [offline, setOffline] = useState(false);
   const [nextPollAt, setNextPollAt] = useState<number | null>(null);
-  const [draftSelection, setDraftSelectionState] = useState<string[]>([]);
+  const [draftSelection, setDraftSelectionState] = useState<string[]>(
+    () => selectionOf(boot.currentGroup, boot.accountId),
+  );
   const [draftDirty, setDraftDirty] = useState(false);
 
   const accountRef = useRef(accountId);
-  const groupRef = useRef<string | null>(null);
-  const detailRef = useRef<MotherGroupDetail | null>(null);
-  const draftRef = useRef<string[]>([]);
+  const groupRef = useRef<string | null>(boot.currentGroupId);
+  const detailRef = useRef<MotherGroupDetail | null>(boot.currentGroup);
+  const draftRef = useRef<string[]>(selectionOf(boot.currentGroup, boot.accountId));
   const dirtyRef = useRef(false);
   const generationRef = useRef(0);
   const groupEpochRef = useRef(0);
@@ -161,21 +200,30 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
         generationRef.current += 1;
         groupEpochRef.current += 1;
         accountRef.current = next;
-        groupRef.current = null;
-        detailRef.current = null;
-        draftRef.current = [];
+        // 新身份也先读它自己的缓存；没有缓存才回到空态等网络
+        const cache = readMotherGroupCache(next);
+        const stored = readCurrentGroupId(next);
+        const cachedDetail = cache?.detail && (stored == null || cache.detail.group.id === stored)
+          ? cache.detail
+          : null;
+        const nextGroupId = cachedDetail?.group.id ?? stored ?? cache?.groups[0]?.id ?? null;
+        const nextSelection = selectionOf(cachedDetail, next);
+        groupRef.current = nextGroupId;
+        detailRef.current = cachedDetail;
+        draftRef.current = nextSelection;
         dirtyRef.current = false;
         nextPollAtRef.current = null;
         setAccountId(next);
-        setGroups([]);
-        setGroupsLoaded(false);
-        setCurrentGroupId(null);
-        setCurrentGroup(null);
-        setDraftSelectionState([]);
+        setGroups(cache?.groups ?? []);
+        setGroupsLoaded(cache != null);
+        setCurrentGroupId(nextGroupId);
+        setCurrentGroup(cachedDetail);
+        setDraftSelectionState(nextSelection);
         setDraftDirty(false);
         setError('');
         setOffline(false);
         setNextPollAt(null);
+        setLoading(next != null && cachedDetail == null);
       }),
     [],
   );
@@ -190,6 +238,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
       if (!active() || request !== listRequestRef.current) return null;
       setGroups(list);
       setGroupsLoaded(true);
+      saveMotherGroupCacheGroups(accountRef.current, list);
       return list;
     } catch (failure) {
       if (!active() || request !== listRequestRef.current) return null;
@@ -226,6 +275,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
         if (!active()) return;
         setGroups(list);
         setGroupsLoaded(true);
+        saveMotherGroupCacheGroups(accountId, list);
         if (epoch === groupEpochRef.current) applyGroupList(list, accountId);
         setOffline(false);
         setError('');
@@ -262,6 +312,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
         if (!active()) return;
         detailRef.current = detail;
         setCurrentGroup(detail);
+        saveMotherGroupCacheDetail(accountRef.current, detail);
         setOffline(false);
         setError('');
         if (!dirtyRef.current) applySelection(detail);
@@ -280,6 +331,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
           setCurrentGroupId(null);
           setCurrentGroup(null);
           saveCurrentGroupId(accountRef.current, null);
+          clearMotherGroupCacheDetail(accountRef.current, groupId);
           setError(failure.message);
           void refreshGroups().catch(() => {});
           return;
@@ -502,6 +554,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
     await leaveMotherGroup(groupId);
     if (!active()) return;
     if (account) saveCurrentGroupId(account, null);
+    clearMotherGroupCacheDetail(account, groupId);
     selectGroup(null);
     await refreshGroups().catch(() => {});
   }, [refreshGroups, selectGroup, scope]);
@@ -514,6 +567,7 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
     await dissolveMotherGroup(groupId);
     if (!active()) return;
     if (account) saveCurrentGroupId(account, null);
+    clearMotherGroupCacheDetail(account, groupId);
     selectGroup(null);
     await refreshGroups().catch(() => {});
   }, [refreshGroups, selectGroup, scope]);

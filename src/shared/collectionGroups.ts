@@ -1,0 +1,291 @@
+/**
+ * 小组收集二期：母本组 / 种公组的跨端类型、常量与纯校验。
+ *
+ * 与 `motherGroups.ts` 的关系：旧接口与旧类型保持不动，本文件只描述二期新增的
+ * 「组类型 + 组目标 + 种公摘要 + 认领任务」。Functions 会直接类型导入本文件，
+ * 因此**不能有 React / DOM / IndexedDB 依赖**，也不能 import `src/domain/*`
+ * （那里依赖图鉴与浏览器数据）。档位与模式的字面量在这里单独声明，领域层用结构化
+ * 兼容的同名字面量赋值。
+ *
+ * 设计见 `docs/superpowers/specs/2026-10-25-小组收集二期-母本组与种公组-design.md`。
+ */
+import { MOTHER_CRITERIA_ID, type PublishedMotherResource } from './motherGroups';
+
+export const COLLECTION_GROUP_SCHEMA_VERSION = 1 as const;
+
+/** 一个组只收一种目标；创建后不可修改。 */
+export const COLLECTION_GROUP_TYPES = ['mother', 'stud'] as const;
+export type CollectionGroupType = (typeof COLLECTION_GROUP_TYPES)[number];
+
+export const GROUP_TYPE_LABELS: Record<CollectionGroupType, string> = {
+  mother: '母本收集',
+  stud: '种公收集',
+};
+
+export const TARGET_MODES = ['perfect', 'medal'] as const;
+export type CollectionTargetMode = (typeof TARGET_MODES)[number];
+
+export const TARGET_GRADES = ['大婉', '小婉', '大粗', '小粗'] as const;
+export type CollectionTargetGrade = (typeof TARGET_GRADES)[number];
+
+export const TARGET_MODES_LABELS: Record<CollectionTargetMode, string> = {
+  perfect: '追满分',
+  medal: '追双牌',
+};
+
+/** 母本声音 / 体型选项（与领域层同名字面量一致）。 */
+export const MOTHER_TARGET_VOICES = ['婉转声', '+100', '-100', '粗嗓门'] as const;
+export const MOTHER_TARGET_BODIES = ['大块头', '小不点'] as const;
+
+/** 每个模式允许的母本声音：满分只看 ±100，双牌只看婉转/粗嗓。 */
+export const motherVoicesForTargetMode = (mode: CollectionTargetMode): string[] =>
+  mode === 'perfect' ? ['+100', '-100'] : ['婉转声', '粗嗓门'];
+
+/** 种公组目标槽位上限；超过显式报错，不截断。 */
+export const STUD_TARGET_MAX_SLOTS = 256;
+/** 种公摘要：单账号最多 512 个覆盖格（已覆盖 + 可迭代）。 */
+export const STUD_RESOURCE_MAX_SLOTS_PER_ACCOUNT = 512;
+/** 种公摘要：最多 50 个账号（与母本一致，便于共用选号界面）。 */
+export const STUD_RESOURCE_MAX_ACCOUNTS = 50;
+/** 种公摘要请求体上限 256KiB。 */
+export const STUD_RESOURCE_MAX_BODY_BYTES = 256 * 1024;
+/** 组目标摘要展示用：最多展示的性格数。 */
+export const STUD_TARGET_NATURE_MAX = 8;
+
+/** 母本自选口径的 criteriaId：默认沿用固定的 v1，自选时用稳定的 FNV 短哈希。 */
+export function motherCriteriaIdOf(input: {
+  mode: CollectionTargetMode;
+  bodies: readonly string[];
+  voices: readonly string[];
+}): string {
+  const bodies = [...new Set(input.bodies)].sort().join(',');
+  const voices = [...new Set(input.voices)].sort().join(',');
+  const isDefault =
+    input.mode === 'perfect' && bodies === '大块头' && voices === '+100';
+  if (isDefault) return MOTHER_CRITERIA_ID;
+  return `mother-v2-${fnv1a(`${input.mode}|${bodies}|${voices}`)}`;
+}
+
+/** 种公目标的可比性标识：模式 + 排序后的槽位集合。 */
+export function studSlotSetIdOf(target: {
+  mode: CollectionTargetMode;
+  slots: readonly Pick<StudTargetSlot, 'groupId' | 'natureId' | 'grade'>[];
+}): string {
+  const keys = target.slots.map(slotKeyOf).sort().join(',');
+  return `stud-${fnv1a(`${target.mode}|${keys}`)}`;
+}
+
+/** 槽位键：蛋组 × 性格 × 档位。性格用 id，图鉴改名不影响。 */
+export const slotKeyOf = (slot: Pick<StudTargetSlot, 'groupId' | 'natureId' | 'grade'>): string =>
+  `${slot.groupId}:${slot.natureId}:${slot.grade}`;
+
+/** 认领任务的目标键：母本按蛋血脉，种公按槽位。 */
+export const motherTargetKey = (eggGameId: number): string => `mother:${eggGameId}`;
+export const studTargetKey = (slot: Pick<StudTargetSlot, 'groupId' | 'natureId' | 'grade'>): string =>
+  `stud:${slotKeyOf(slot)}`;
+
+export interface MotherTargetConfig {
+  kind: 'mother';
+  criteriaId: string;
+  mode: CollectionTargetMode;
+  bodies: string[];
+  voices: string[];
+  catalogVersion: string;
+}
+
+export interface StudTargetSlot {
+  groupId: number;
+  natureId: number;
+  /** 性格显示名只用于展示；判定与比较都用 natureId。 */
+  natureName: string;
+  grade: CollectionTargetGrade;
+}
+
+export interface StudTargetConfig {
+  kind: 'stud';
+  mode: CollectionTargetMode;
+  catalogVersion: string;
+  slots: StudTargetSlot[];
+}
+
+export type GroupTargetConfig = MotherTargetConfig | StudTargetConfig;
+
+/** 旧组的默认目标：母 · 大块头 · +100dB，与一期固定口径一致。 */
+export function defaultMotherTarget(catalogVersion: string): MotherTargetConfig {
+  return {
+    kind: 'mother',
+    criteriaId: MOTHER_CRITERIA_ID,
+    mode: 'perfect',
+    bodies: ['大块头'],
+    voices: ['+100'],
+    catalogVersion,
+  };
+}
+
+/** 种公组尚未确认目标时的空目标（不计缺口，也不允许发布）。 */
+export function emptyStudTarget(catalogVersion: string): StudTargetConfig {
+  return { kind: 'stud', mode: 'perfect', catalogVersion, slots: [] };
+}
+
+export interface CollectionGroupConfig {
+  groupType: CollectionGroupType;
+  targetRevision: number;
+  resourceEpoch: number;
+  target: GroupTargetConfig | null;
+  updatedAt: number;
+}
+
+export interface CollectionGroupInfo {
+  id: string;
+  name: string;
+  ownerAccountId: string;
+  createdAt: number;
+  groupType: CollectionGroupType;
+  targetRevision: number;
+  resourceEpoch: number;
+  target: GroupTargetConfig | null;
+}
+
+export interface CollectionGroupSummary {
+  id: string;
+  name: string;
+  ownerAccountId: string;
+  memberCount: number;
+  groupType: CollectionGroupType;
+  targetRevision: number;
+  /** 种公组是否已确认目标；母本组恒为 true。 */
+  targetReady: boolean;
+}
+
+/** 种公摘要里的一格：覆盖或可迭代的槽位 + 来源物种。 */
+export interface StudSlotCoverage {
+  groupId: number;
+  natureId: number;
+  grade: CollectionTargetGrade;
+  /** 来源物种 gameId，仅用于回游戏里找；不传个体 ID / 声音数值 / 背包。 */
+  gameId: number;
+}
+
+export interface SharedStudAccount {
+  accountKey: string;
+  accountName: string;
+  sourceExportedAt: string;
+  /** 真实公精灵覆盖的槽位（去重、排序）。 */
+  covered: StudSlotCoverage[];
+  /** 同账号内可自己孵出的槽位（母方带目标性格 + 公方存在 + 母方物种能出公）。 */
+  breedable: StudSlotCoverage[];
+}
+
+export interface StudResourceDraft {
+  schemaVersion: typeof COLLECTION_GROUP_SCHEMA_VERSION;
+  kind: 'stud';
+  mode: CollectionTargetMode;
+  catalogVersion: string;
+  /** 目标槽位集合的稳定标识；与服务器目标不一致时拒绝。 */
+  targetId: string;
+  targetRevision: number;
+  accounts: SharedStudAccount[];
+}
+
+export interface PublishedStudResource extends StudResourceDraft {
+  revision: number;
+  publishedAt: number;
+}
+
+/** 组详情里的成员：母本组只有 `resource`，种公组只有 `studResource`。 */
+export interface CollectionGroupMember {
+  accountId: string;
+  displayName: string;
+  joinedAt: number;
+  resourceRevision: number;
+  resource: PublishedMotherResource | null;
+  studResource: PublishedStudResource | null;
+}
+
+export interface CollectionGroupDetail {
+  group: CollectionGroupInfo;
+  members: CollectionGroupMember[];
+}
+
+export const EMPTY_COLLECTION_TARGET = null;
+
+/* ---------- 认领任务 ---------- */
+
+export const TASK_STATUSES = ['open', 'claimed', 'closed'] as const;
+export type CollectionTaskStatus = (typeof TASK_STATUSES)[number];
+
+export interface CollectionTaskRecord {
+  groupId: string;
+  targetRevision: number;
+  targetKey: string;
+  round: number;
+  status: CollectionTaskStatus;
+  ownerAccountId: string | null;
+  /** 每次状态变化递增，用于客户端判断是否过期。 */
+  version: number;
+  updatedAt: number;
+  closedAt: number | null;
+}
+
+export interface CollectionTaskView extends CollectionTaskRecord {
+  /** 当前目标修订下、已发布成员是否都确认无来源。 */
+  confirmed: boolean;
+  /** 未确认时的原因：有人未发布 / 版本不兼容。 */
+  pendingMemberIds: string[];
+}
+
+/* ---------- 校验辅助（前后端共用） ---------- */
+
+export const isCollectionGroupType = (value: unknown): value is CollectionGroupType =>
+  value === 'mother' || value === 'stud';
+
+export const isTargetMode = (value: unknown): value is CollectionTargetMode =>
+  value === 'perfect' || value === 'medal';
+
+export const isTargetGrade = (value: unknown): value is CollectionTargetGrade =>
+  typeof value === 'string' && (TARGET_GRADES as readonly string[]).includes(value);
+
+/** 稳定短哈希（FNV-1a 32bit），只用于生成标识，不做安全用途。 */
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
+/** 组目标是否可以用于计算缺口 / 发布：种公组必须至少一个槽位。 */
+export function isTargetReady(
+  groupType: CollectionGroupType,
+  target: GroupTargetConfig | null,
+): boolean {
+  if (!target) return false;
+  if (groupType === 'mother') return target.kind === 'mother' && target.criteriaId.length > 0;
+  return target.kind === 'stud' && target.slots.length > 0;
+}
+
+/** 母本目标是否合法：模式与声音/体型必须匹配。 */
+export function isValidMotherTarget(target: MotherTargetConfig): boolean {
+  const allowedVoices = motherVoicesForTargetMode(target.mode);
+  if (target.voices.length === 0 || target.bodies.length === 0) return false;
+  if (target.voices.some((voice) => !allowedVoices.includes(voice))) return false;
+  return target.bodies.every((body) => (MOTHER_TARGET_BODIES as readonly string[]).includes(body));
+}
+
+/** 种公目标是否合法：槽位不重复、数量与取值在范围内。 */
+export function isValidStudTarget(target: StudTargetConfig): boolean {
+  if (!isTargetMode(target.mode)) return false;
+  if (target.slots.length === 0 || target.slots.length > STUD_TARGET_MAX_SLOTS) return false;
+  const seen = new Set<string>();
+  for (const slot of target.slots) {
+    if (!Number.isSafeInteger(slot.groupId) || slot.groupId <= 0) return false;
+    if (!Number.isSafeInteger(slot.natureId) || slot.natureId <= 0) return false;
+    if (!isTargetGrade(slot.grade)) return false;
+    if (typeof slot.natureName !== 'string' || slot.natureName.trim().length === 0) return false;
+    const key = slotKeyOf(slot);
+    if (seen.has(key)) return false;
+    seen.add(key);
+  }
+  return true;
+}

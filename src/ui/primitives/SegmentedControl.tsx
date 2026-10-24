@@ -28,7 +28,7 @@ export function SegmentedControl({
     <div
       role="group"
       aria-label={label}
-      className={`flex gap-1 rounded-xl bg-slate-100 p-1 ${className}`}
+      className={`flex gap-0.5 rounded-lg bg-slate-100 p-0.5 ${className}`}
     >
       {options.map((option) => {
         const on = option.value === value;
@@ -40,7 +40,7 @@ export function SegmentedControl({
             disabled={option.disabled}
             onClick={() => onValueChange(option.value)}
             data-testid={optionTestId?.(option.value)}
-            className={`min-h-[44px] flex-1 rounded-lg px-2 text-xs disabled:cursor-not-allowed disabled:text-slate-300 ${
+            className={`min-h-[30px] flex-1 rounded-md px-2 text-xs disabled:cursor-not-allowed disabled:text-slate-300 ${
               on ? 'bg-white font-medium text-emerald-700 shadow-sm' : 'text-slate-500'
             }`}
           >

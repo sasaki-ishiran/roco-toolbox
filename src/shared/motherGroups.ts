@@ -7,9 +7,10 @@
  * 设计见 `docs/superpowers/specs/2026-10-23-多人母本资源共享-design.md`。
  */
 
-/** 一期固定口径：母 + 大块头 + +100dB，不限制性格。二期自选口径会换新的 id。 */
+/** 一期固定口径：母 + 大块头 + +100dB，不限制性格。二期自选口径用 `mother-v2-<hash>`。 */
 export const MOTHER_CRITERIA_ID = 'female-huge-voice100-v1' as const;
-export type MotherCriteriaId = typeof MOTHER_CRITERIA_ID;
+/** 口径标识是稳定字符串：一期固定值 + 二期自选的 `mother-v2-<8hex>`。 */
+export type MotherCriteriaId = string;
 
 export const MOTHER_RESOURCE_SCHEMA_VERSION = 1 as const;
 

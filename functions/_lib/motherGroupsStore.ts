@@ -30,7 +30,11 @@ export type MotherStoreErrorCode =
   | 'STALE_SOURCE'
   | 'SOURCE_MISMATCH'
   | 'GAME_ACCOUNT_ALREADY_SHARED'
-  | 'OWNER_MUST_DISSOLVE';
+  | 'OWNER_MUST_DISSOLVE'
+  /** 组长改过目标，旧客户端不能继续按旧口径发布。 */
+  | 'TARGET_CHANGED'
+  /** 种公组还没确认目标，或目标槽位为空。 */
+  | 'TARGET_NOT_READY';
 
 export class MotherStoreError extends Error {
   readonly code: MotherStoreErrorCode;
@@ -84,7 +88,9 @@ export async function listGroupsForAccount(
       `SELECT g.id, g.name, g.owner_account_id, g.created_at,
               (SELECT COUNT(*) FROM mother_group_members m WHERE m.group_id = g.id) AS member_count
          FROM mother_groups g
+         LEFT JOIN collection_group_configs c ON c.group_id = g.id
          JOIN mother_group_members me ON me.group_id = g.id AND me.account_id = ?
+        WHERE COALESCE(c.group_type, 'mother') = 'mother'
         ORDER BY g.created_at ASC, g.id ASC`,
     )
     .bind(accountId)
@@ -158,7 +164,9 @@ export async function joinGroup(
       `INSERT INTO mother_group_members (group_id, account_id, display_name, joined_at)
        SELECT g.id, ?, ?, ?
          FROM mother_groups g
+         LEFT JOIN collection_group_configs c ON c.group_id = g.id
         WHERE g.invite_hash = ?
+          AND COALESCE(c.group_type, 'mother') = 'mother'
           AND (
             EXISTS (SELECT 1 FROM mother_group_members me
                      WHERE me.group_id = g.id AND me.account_id = ?)
@@ -177,14 +185,21 @@ export async function joinGroup(
       `SELECT m.group_id
          FROM mother_group_members m
          JOIN mother_groups g ON g.id = m.group_id
-        WHERE g.invite_hash = ? AND m.account_id = ?`,
+         LEFT JOIN collection_group_configs c ON c.group_id = g.id
+        WHERE g.invite_hash = ? AND m.account_id = ?
+          AND COALESCE(c.group_type, 'mother') = 'mother'`,
     )
     .bind(inviteHash, accountId)
     .first<{ group_id: string }>();
   if (member) return member.group_id;
 
   const group = await db
-    .prepare('SELECT id FROM mother_groups WHERE invite_hash = ?')
+    .prepare(
+      `SELECT g.id
+         FROM mother_groups g
+         LEFT JOIN collection_group_configs c ON c.group_id = g.id
+        WHERE g.invite_hash = ? AND COALESCE(c.group_type, 'mother') = 'mother'`,
+    )
     .bind(inviteHash)
     .first<{ id: string }>();
   if (!group) throw new MotherStoreError('GROUP_NOT_FOUND', '邀请码不对或小组已解散');
@@ -410,6 +425,16 @@ export async function publishMemberResource(
                          WHERE group_id = ? AND account_id = ? AND write_token = ?)`,
       )
       .bind(groupId, accountId, groupId, accountId, writeToken),
+    // 组级资源版本：认领任务与「他人补齐」判断都依赖它（旧组没有配置行时无操作）
+    db
+      .prepare(
+        `UPDATE collection_group_configs
+            SET resource_epoch = resource_epoch + 1, updated_at = ?
+          WHERE group_id = ?
+            AND EXISTS (SELECT 1 FROM mother_group_members
+                         WHERE group_id = ? AND account_id = ? AND write_token = ?)`,
+      )
+      .bind(now, groupId, groupId, accountId, writeToken),
     ...resource.accounts.map((account) =>
       db
         .prepare(

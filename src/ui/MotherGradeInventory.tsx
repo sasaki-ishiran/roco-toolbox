@@ -116,7 +116,7 @@ export function MotherGradeInventory({ motherGroups, owned, mode }: MotherGradeI
           type="button"
           aria-expanded={listOpen}
           onClick={() => setListOpen((prev) => !prev)}
-          className="min-h-[44px] shrink-0 text-xs text-slate-400"
+          className="min-h-[28px] shrink-0 text-xs text-slate-400"
           data-testid="mother-list-toggle"
         >
           {listOpen ? '收起' : '展开'}

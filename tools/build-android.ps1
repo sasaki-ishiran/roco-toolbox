@@ -14,7 +14,16 @@ if (-not (Test-Path -LiteralPath "$JdkDirectory\bin\java.exe")) { throw 'JDK is 
 New-Item -ItemType Directory -Force $stage | Out-Null
 & robocopy $source $stage /E /XD .gradle .cxx build /XF local.properties '*.log' /NFL /NDL /NJH /NJS /NP
 if ($LASTEXITCODE -ge 8) { throw "Copy failed: $LASTEXITCODE" }
-[IO.File]::WriteAllText("$stage\local.properties", "sdk.dir=$($SdkDirectory.Replace('\','/').Replace(':','\:'))`n", [Text.UTF8Encoding]::new($false))
+$captureToken = ''
+$sourceProperties = Join-Path $source 'local.properties'
+if (Test-Path -LiteralPath $sourceProperties) {
+    foreach ($line in Get-Content -LiteralPath $sourceProperties) {
+        if ($line -match '^\s*capture\.token\s*=\s*(.+)$') { $captureToken = $Matches[1].Trim() }
+    }
+}
+$localProperties = "sdk.dir=$($SdkDirectory.Replace('\','/').Replace(':','\:'))`n"
+if ($captureToken) { $localProperties += "capture.token=$captureToken`n" }
+[IO.File]::WriteAllText("$stage\local.properties", $localProperties, [Text.UTF8Encoding]::new($false))
 $javaBefore = $env:JAVA_HOME
 $optionsBefore = $env:JAVA_TOOL_OPTIONS
 $gradleBefore = $env:GRADLE_USER_HOME

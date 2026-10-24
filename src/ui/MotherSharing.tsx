@@ -38,7 +38,7 @@ export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharing
     (hook.publishPreview.diff != null && !hook.publishPreview.diff.unchanged)
   );
   const publicationStatus = !published ? '未发布' : needsUpdate ? '需更新' : '已发布';
-  const editing = hook.draftDirty || (hook.currentGroupId != null && editingGroupId === hook.currentGroupId);
+  const editing = hook.currentGroupId != null && editingGroupId === hook.currentGroupId;
 
   useEffect(() => {
     onDraftDirtyChange?.(hook.draftDirty);
@@ -56,9 +56,9 @@ export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharing
     )?.displayName ?? '组长';
 
   return (
-    <section className="space-y-3" data-testid="mother-sharing">
+    <section className="space-y-2" data-testid="mother-sharing">
       {!hook.accountId ? (
-        <div className="rounded-2xl bg-white p-4 shadow-sm" data-testid="mother-sharing-login">
+        <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-sharing-login">
           <h2 className="text-sm font-medium text-slate-500">母本共享 · 先登录</h2>
           <p className="mt-1 text-xs text-slate-500">
             登录只用来识别「同一个人」：同一身份的手机和电脑算同一位成员，不要求在这台设备上导入数据。
@@ -67,11 +67,11 @@ export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharing
             type="button"
             onClick={onGoAccount}
             data-testid="mother-login"
-            className="mt-3 min-h-[44px] w-full rounded-xl bg-emerald-600 text-sm font-medium text-white"
+            className="mt-2 min-h-[36px] w-full rounded-lg bg-emerald-600 text-sm font-medium text-white"
           >
             去登录 / 开启云同步
           </button>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-2 flex gap-2">
             <input
               value={pendingCode}
               onChange={(event) => {
@@ -82,7 +82,7 @@ export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharing
               placeholder="已有邀请码？先记在这里"
               maxLength={8}
               data-testid="mother-pending-invite"
-              className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm uppercase tracking-widest text-slate-700"
+              className="min-h-[32px] min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 text-sm uppercase tracking-widest text-slate-700"
             />
           </div>
           <p className="mt-1 text-[11px] text-slate-400">登录后仍需你点「加入小组」，不会自动提交。</p>
@@ -112,15 +112,15 @@ export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharing
             </p>
           ) : null}
 
-          {hook.currentGroupId && !hook.currentGroup ? (
-            <p className="text-sm text-slate-400" data-testid="mother-loading">
-              {hook.loading ? '正在读取小组资源…' : '小组内容暂时读不到，稍后会自动重试'}
+          {hook.currentGroupId && !hook.currentGroup && hook.loading ? (
+            <p className="px-1 text-xs text-slate-400" data-testid="mother-loading">
+              正在读取小组资源…
             </p>
           ) : null}
 
           {hook.currentGroup ? (
             <>
-              <div className="rounded-2xl bg-white p-4 shadow-sm" data-testid="mother-group-card">
+              <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-group-card">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h2 className="truncate text-base font-semibold text-slate-800">
@@ -133,22 +133,24 @@ export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharing
                   <button
                     type="button"
                     onClick={() => void hook.refresh()}
-                    className="min-h-[44px] shrink-0 rounded-full border border-slate-200 px-3 text-[11px] text-slate-500"
+                    className="min-h-[30px] shrink-0 rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500"
                     data-testid="mother-refresh"
                   >
                     刷新
                   </button>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400" data-testid="mother-sync-status">
+                <p className="mt-0.5 text-[11px] text-slate-400" data-testid="mother-sync-status">
                   {hook.offline
                     ? '离线，显示上次获取的数据'
                     : hook.nextPollAt
                       ? '已触发限流，稍后自动重试'
-                      : '每 15 秒自动更新 · 固定口径：母 · 大块头 · +100dB'}
+                      : hook.loading
+                        ? '正在更新小组数据…'
+                        : '每 15 秒自动更新'}
                 </p>
               </div>
 
-              <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="mother-publication-status">
+              <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-publication-status">
                 <h2 className="text-sm font-medium text-slate-700">我的共享资源 · {publicationStatus}</h2>
                 <p className="mt-1 text-xs text-slate-500">
                   {published
@@ -157,13 +159,24 @@ export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharing
                 </p>
                 <button
                   type="button"
-                  className="mt-2 min-h-[44px] text-sm font-medium text-emerald-700"
+                  className="mt-1 min-h-[28px] text-xs font-medium text-emerald-700"
                   data-testid="mother-edit-resources"
                   aria-expanded={editing}
-                  onClick={() => setEditingGroupId(hook.currentGroupId)}
+                  onClick={() => setEditingGroupId(editing ? null : hook.currentGroupId)}
                 >
-                  {!published ? '选号并发布' : needsUpdate ? '查看并更新资源' : '管理选号'}
+                  {editing
+                    ? '收起选号'
+                    : !published
+                      ? '选号并发布'
+                      : needsUpdate
+                        ? '查看并更新资源'
+                        : '管理选号'}
                 </button>
+                {hook.draftDirty && !editing ? (
+                  <p className="mt-1 text-[11px] text-amber-700" data-testid="mother-draft-collapsed">
+                    选号有未发布的修改，点上面的按钮继续编辑。
+                  </p>
+                ) : null}
               </section>
 
               {editing ? <MotherResourceEditor
@@ -203,22 +216,31 @@ export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharing
               />
             </>
           ) : !hook.currentGroupId && !hook.groupsLoaded ? (
-            <div
-              className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"
-              data-testid="mother-groups-unavailable"
-            >
-              暂时读不到你加入的小组（多半是网络问题）。小组还在，恢复网络后点重试即可。
-              <button
-                type="button"
-                onClick={() => void hook.refresh()}
-                data-testid="mother-groups-retry"
-                className="mt-2 block min-h-[44px] rounded-xl border border-amber-300 bg-white px-3 text-xs text-amber-800"
+            hook.loading ? (
+              <p
+                className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500"
+                data-testid="mother-groups-loading"
               >
-                重试
-              </button>
-            </div>
+                正在读取你加入的小组…
+              </p>
+            ) : (
+              <div
+                className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                data-testid="mother-groups-unavailable"
+              >
+                暂时读不到你加入的小组（多半是网络问题）。小组还在，恢复网络后点重试即可。
+                <button
+                  type="button"
+                  onClick={() => void hook.refresh()}
+                  data-testid="mother-groups-retry"
+                  className="mt-1.5 block min-h-[30px] rounded-lg border border-amber-300 bg-white px-2.5 text-xs text-amber-800"
+                >
+                  重试
+                </button>
+              </div>
+            )
           ) : hook.groupsLoaded && hook.groups.length === 0 ? (
-            <p className="rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-500" data-testid="mother-no-groups">
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500" data-testid="mother-no-groups">
               还没有加入任何小组。新建一个小组，或输入组员给你的 8 位邀请码。
             </p>
           ) : null}

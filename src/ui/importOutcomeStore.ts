@@ -60,3 +60,8 @@ export function resetImportOutcomeForTest(): void {
   counter = 0;
   store.set(INITIAL);
 }
+
+/** 重置导入数据时把三阶段反馈清回初始，避免页面还挂着上一次导入的成功提示。 */
+export function resetImportOutcome(): void {
+  store.set(INITIAL);
+}

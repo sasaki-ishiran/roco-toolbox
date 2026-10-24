@@ -170,7 +170,7 @@ export function SwapWishCard({ recommendations, emptyNote, pageSize = 20 }: Swap
             <button
               type="button"
               onClick={() => setSwapSelected(allSelected ? new Set() : new Set(recommendations.map(keyOf)))}
-              className="min-h-[44px] rounded-full border border-slate-200 px-3 text-xs text-slate-600"
+              className="min-h-[28px] rounded-md border border-slate-200 px-2 text-xs text-slate-600"
               data-testid="swap-wish-select-all"
             >
               {allSelected ? '取消选择' : '全选'}
@@ -178,7 +178,7 @@ export function SwapWishCard({ recommendations, emptyNote, pageSize = 20 }: Swap
             <button
               type="button"
               onClick={handleCopy}
-              className="min-h-[44px] rounded-full border border-emerald-500 px-3 text-xs font-medium text-emerald-700"
+              className="min-h-[28px] rounded-md border border-emerald-500 px-2 text-xs font-medium text-emerald-700"
               data-testid="swap-wish-copy"
             >
               {copied ? (copied.ok ? '已复制' : '复制失败') : `复制${selectedRecs.length > 0 ? `选中 ${selectedRecs.length}` : `全部 ${recommendations.length}`}`}
@@ -190,7 +190,7 @@ export function SwapWishCard({ recommendations, emptyNote, pageSize = 20 }: Swap
               const key = keyOf(rec);
               return (
                 <li key={key} data-testid="swap-wish-item">
-                  <label className="flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg bg-slate-50 px-2 py-1.5">
+                  <label className="flex min-h-[36px] cursor-pointer items-start gap-2 rounded-lg bg-slate-50 px-2 py-1.5">
                     <input
                       type="checkbox"
                       checked={selected.has(key)}
@@ -225,7 +225,7 @@ export function SwapWishCard({ recommendations, emptyNote, pageSize = 20 }: Swap
                 type="button"
                 disabled={safePage === 1}
                 onClick={() => setPage(safePage - 1)}
-                className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 disabled:text-slate-300"
+                className="min-h-[32px] flex-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
               >
                 上一页
               </button>
@@ -236,7 +236,7 @@ export function SwapWishCard({ recommendations, emptyNote, pageSize = 20 }: Swap
                 type="button"
                 disabled={safePage === totalPages}
                 onClick={() => setPage(safePage + 1)}
-                className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 disabled:text-slate-300"
+                className="min-h-[32px] flex-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
               >
                 下一页
               </button>

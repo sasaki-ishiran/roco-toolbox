@@ -96,7 +96,7 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
           <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="nature-mode">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-slate-500">性格</span>
-              <div className="flex gap-1 rounded-full bg-slate-100 p-0.5" role="group" aria-label="性格模式">
+              <div className="flex gap-0.5 rounded-lg bg-slate-100 p-0.5" role="group" aria-label="性格模式">
                 {(
                   [
                     { value: 'recommended', label: '推荐性格' },
@@ -109,7 +109,7 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
                     aria-pressed={filter.natureMode === item.value}
                     onClick={() => setNatureMode(item.value)}
                     data-testid={`nature-mode-${item.value}`}
-                    className={`min-h-[44px] rounded-full px-2.5 text-xs ${
+                    className={`min-h-[30px] rounded-md px-2 text-xs ${
                       filter.natureMode === item.value
                         ? 'bg-white font-medium text-emerald-700 shadow-sm'
                         : 'text-slate-500'
@@ -133,7 +133,7 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
                         aria-pressed={on}
                         onClick={() => toggleCustomNature(nature.name)}
                         data-testid={`custom-nature-${nature.name}`}
-                        className={`min-h-[44px] min-w-[44px] rounded-full border px-2 text-xs ${
+                        className={`min-h-[28px] min-w-[28px] rounded-md border px-1.5 text-xs ${
                           on
                             ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
                             : 'border-slate-200 bg-white text-slate-400'
@@ -147,7 +147,7 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
                 <button
                   type="button"
                   onClick={toggleAllCustomNatures}
-                  className="mt-1.5 min-h-[44px] rounded-full border border-slate-200 px-3 text-xs text-slate-600"
+                  className="mt-1.5 min-h-[28px] rounded-md border border-slate-200 px-2 text-xs text-slate-600"
                   data-testid="custom-nature-select-all"
                 >
                   {filter.customNatures.length === targetNaturePool.length ? '全部取消' : '全选'}

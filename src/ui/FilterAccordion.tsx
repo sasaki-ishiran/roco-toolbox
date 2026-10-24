@@ -46,7 +46,7 @@ export function FilterAccordion({
               aria-expanded={open}
               onClick={() => setActiveId(open ? null : d.id)}
               data-testid={`filter-tile-${d.id}`}
-              className={`relative flex min-h-[44px] items-center justify-between gap-1.5 rounded-xl border px-2.5 py-2 text-left transition ${
+              className={`relative flex min-h-[36px] items-center justify-between gap-1.5 rounded-lg border px-2.5 py-1.5 text-left transition ${
                 open
                   ? 'border-emerald-100 bg-emerald-50'
                   : 'border-transparent bg-slate-50 active:scale-[.97]'
@@ -103,7 +103,7 @@ export function FilterAccordion({
                   disabled={opt.disabled}
                   onClick={() => active.onToggle(opt.value)}
                   data-testid={`filter-opt-${active.id}-${opt.value}`}
-                  className={`rounded-full px-3 py-1.5 text-xs transition active:scale-95 disabled:cursor-not-allowed ${
+                  className={`min-h-[28px] rounded-md border px-2 py-1 text-xs transition active:scale-95 disabled:cursor-not-allowed ${
                     on
                       ? 'bg-emerald-500 font-semibold text-white shadow'
                       : 'bg-slate-100 font-medium text-slate-500 disabled:text-slate-300'

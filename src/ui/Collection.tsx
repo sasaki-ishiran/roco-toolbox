@@ -42,7 +42,7 @@ export function Collection({
   expandedGroupId,
   onToggleGroup,
 }: CollectionProps) {
-  const { owned, motherGroups, mode, plans } = useCollectionSummary();
+  const { owned, motherGroups, mode } = useCollectionSummary();
   const [showGradeInventory, setShowGradeInventory] = useState(false);
   const searchIndex = useMemo(() => buildEggSearchIndex(species), []);
 
@@ -99,8 +99,6 @@ export function Collection({
         </>
       ) : location.kind === 'studs' ? (
         <StudCollection
-          view={location.view}
-          plans={plans}
           expandedGroupId={expandedGroupId}
           onToggleGroup={onToggleGroup}
           onNavigate={onNavigate}
@@ -127,7 +125,7 @@ export function Collection({
               type="button"
               aria-expanded={showGradeInventory}
               onClick={() => setShowGradeInventory((open) => !open)}
-              className="min-h-[44px] text-xs font-medium text-emerald-700"
+              className="min-h-[28px] text-xs font-medium text-emerald-700"
               data-testid="inventory-grade-toggle"
             >
               按代表档位查看母本{showGradeInventory ? ' ▲' : ' ▼'}

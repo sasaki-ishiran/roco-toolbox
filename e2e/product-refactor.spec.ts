@@ -7,25 +7,25 @@ const importSample = async (page: Page) => {
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 };
 
-test('旧共享记忆不影响看板求蛋：点「全部」直达换蛋清单', async ({ page }) => {
+test('旧共享记忆不影响看板求蛋：点「全部」落到个人求种公', async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem('roco.lastTab', 'swap');
     window.localStorage.setItem('roco.swapView', 'sharing');
   });
   await page.goto('/');
 
-  // 启动落回小组（旧子视图保留）
-  await expect(page.getByTestId('mother-sharing')).toBeVisible();
+  // 启动落回小组页；没有兼容组时先给个人求蛋
+  await expect(page.getByTestId('personal-eggs')).toBeVisible();
 
   await page.getByRole('button', { name: '看板', exact: true }).click();
   await page.getByTestId('recommend-quantity-all').click();
 
-  await expect(page.getByTestId('swap-view-eggs')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('personal-type-stud')).toHaveAttribute('aria-pressed', 'true');
   // 没有本地数据时给可读空态（不再被上次的共享视图带偏）
   await expect(page.getByTestId('empty-state')).toBeVisible();
 });
 
-test('看板两类进度一步直达目标，种公三工具同级可达', async ({ page }) => {
+test('看板两类进度一步直达目标，种公求蛋已迁到小组', async ({ page }) => {
   await importSample(page);
 
   // 种公进度卡 → 精灵库 · 合格种公
@@ -39,11 +39,13 @@ test('看板两类进度一步直达目标，种公三工具同级可达', async
   await expect(page.getByTestId('mother-status-missing')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('mother-search')).toBeVisible();
 
-  // 种公三种工具并列
+  // 收集 · 种公只剩覆盖矩阵；求蛋入口在小组 · 个人求种公
   await page.getByTestId('collection-kind-studs').click();
-  await expect(page.getByTestId('stud-tool-coverage')).toBeVisible();
-  await expect(page.getByTestId('stud-tool-breed')).toBeVisible();
-  await expect(page.getByTestId('stud-tool-eggs')).toBeVisible();
+  await expect(page.getByTestId('coverage-groups-toggle')).toBeVisible();
+  await expect(page.getByTestId('stud-tool-eggs')).toHaveCount(0);
+  await page.getByRole('button', { name: '小组', exact: true }).click();
+  await page.getByTestId('personal-type-stud').click();
+  await expect(page.getByTestId('swap-search')).toBeVisible();
 });
 
 test('改本页筛选不改收集进度（看板数字保持）', async ({ page }) => {

@@ -18,8 +18,8 @@ describe('initialNavigation：旧页签 / 子视图映射', () => {
     ['dashboard', null, 'dashboard'],
     ['myPets', null, 'collection'],
     ['coverage', null, 'collection'],
-    ['swap', 'eggs', 'collection'],
-    ['swap', null, 'collection'],
+    ['swap', 'eggs', 'groups'],
+    ['swap', null, 'groups'],
     ['swap', 'sharing', 'groups'],
     ['import', null, 'profile'],
     [null, null, 'profile'],
@@ -42,8 +42,11 @@ describe('initialNavigation：旧页签 / 子视图映射', () => {
     });
   });
 
-  test('旧 swap + 损坏的 swapView 退回求蛋（不能被当成共享）', () => {
-    expect(initialNavigation('swap', 'nonsense').collection).toEqual(EGG_LOCATION);
+  test('旧 swap + 旧求蛋子视图落到小组 · 个人求种公', () => {
+    expect(initialNavigation('swap', 'nonsense').page).toBe('groups');
+    expect(initialNavigation('swap', 'nonsense').groupType).toBe('stud');
+    expect(initialNavigation('swap', 'eggs').groupType).toBe('stud');
+    expect(initialNavigation('swap', 'sharing').groupType).toBeUndefined();
   });
 
   test('默认（空存储）落在我的 · 游戏数据', () => {
@@ -61,15 +64,15 @@ describe('initialNavigation：旧页签 / 子视图映射', () => {
 });
 
 describe('resolveNavigation：意图', () => {
-  test('从共享恢复后，种公求蛋意图覆盖旧子视图', () => {
+  test('从共享恢复后，种公求蛋意图切回小组并带类型', () => {
     const restored = initialNavigation('swap', 'sharing');
     expect(restored.page).toBe('groups');
     const next = resolveNavigation(restored, {
-      type: 'open-collection',
-      location: EGG_LOCATION,
+      type: 'open-groups',
+      groupType: 'stud',
     });
-    expect(next.page).toBe('collection');
-    expect(next.collection).toEqual(EGG_LOCATION);
+    expect(next.page).toBe('groups');
+    expect(next.groupType).toBe('stud');
   });
 
   test('切普通主导航只改 page，保留同次会话子视图', () => {
@@ -157,26 +160,30 @@ describe('legacyLocation：新页面写回旧键', () => {
     });
   });
 
-  test('求蛋 → swap/eggs', () => {
+  test('种公组 → swap/eggs；母本组 → swap/sharing', () => {
+    expect(legacyLocation({ ...base, page: 'groups', groupType: 'stud' })).toEqual({
+      lastTab: 'swap',
+      swapView: 'eggs',
+    });
+    expect(legacyLocation({ ...base, page: 'groups', groupType: 'mother' })).toEqual({
+      lastTab: 'swap',
+      swapView: 'sharing',
+    });
+  });
+
+  test('收集页的种公求蛋视图仍可写回 swap/eggs（旧版可理解）', () => {
     expect(legacyLocation({ ...base, page: 'collection', collection: EGG_LOCATION })).toEqual({
       lastTab: 'swap',
       swapView: 'eggs',
     });
   });
 
-  test('其他种公任务 → coverage', () => {
+  test('覆盖矩阵 → coverage', () => {
     expect(
       legacyLocation({
         ...base,
         page: 'collection',
         collection: { kind: 'studs', view: 'coverage' },
-      }).lastTab,
-    ).toBe('coverage');
-    expect(
-      legacyLocation({
-        ...base,
-        page: 'collection',
-        collection: { kind: 'studs', view: 'breed' },
       }).lastTab,
     ).toBe('coverage');
   });

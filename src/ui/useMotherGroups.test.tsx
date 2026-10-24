@@ -14,6 +14,11 @@ import {
 } from '../test/fixtures/motherSharing';
 import type { MotherGroupDetail, SharedMotherAccount } from '../shared/motherGroups';
 import { saveCurrentGroupId } from './motherGroupStore';
+import {
+  readMotherGroupCache,
+  saveMotherGroupCacheDetail,
+  saveMotherGroupCacheGroups,
+} from './motherGroupCache';
 import { POLL_INTERVAL_MS, useMotherGroups } from './useMotherGroups';
 
 vi.mock('../api/motherGroups', async (importOriginal) => {
@@ -393,5 +398,50 @@ describe('useMotherGroups：会话、轮询与草稿', () => {
     expect(result.current.groupsLoaded).toBe(true);
     expect(result.current.groups).toHaveLength(1);
     expect(result.current.currentGroupId).toBe('g1');
+  });
+
+  test('有本地缓存时先显示上次的小组内容，网络还没回来也不空白', async () => {
+    saveCurrentGroupId('A', 'g1');
+    saveMotherGroupCacheGroups('A', [summary]);
+    saveMotherGroupCacheDetail('A', detailOf());
+    const pending = deferred<Awaited<ReturnType<typeof api.listMotherGroups>>>();
+    vi.mocked(api.listMotherGroups).mockReturnValueOnce(pending.promise);
+
+    const { result } = renderHook(() => useMotherGroups(input));
+
+    // 首帧就有缓存内容，不需要等网络
+    expect(result.current.currentGroup?.group.name).toBe('测试组');
+    expect(result.current.currentGroupId).toBe('g1');
+    expect(result.current.groups).toEqual([summary]);
+    expect(result.current.groupsLoaded).toBe(true);
+    expect(result.current.draftSelection).toEqual(['uid:1001']);
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => { pending.resolve([summary]); });
+    await flush();
+    expect(result.current.error).toBe('');
+    expect(result.current.currentGroup?.group.name).toBe('测试组');
+  });
+
+  test('详情刷新失败时保留缓存内容并标记离线', async () => {
+    vi.mocked(api.getMotherGroup).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    saveMotherGroupCacheDetail('A', detailOf());
+
+    const { result } = renderHook(() => useMotherGroups(input));
+    await flush();
+
+    expect(result.current.currentGroup?.group.name).toBe('测试组');
+    expect(result.current.offline).toBe(true);
+    expect(result.current.error).toBe('');
+  });
+
+  test('成功拉到列表和详情后写入本机缓存', async () => {
+    const { result } = renderHook(() => useMotherGroups(input));
+    await flush();
+
+    expect(result.current.currentGroup?.group.name).toBe('测试组');
+    const cache = readMotherGroupCache('A');
+    expect(cache?.groups).toEqual([summary]);
+    expect(cache?.detail?.group.id).toBe('g1');
   });
 });

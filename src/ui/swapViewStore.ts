@@ -38,6 +38,11 @@ export function setSwapSelected(selected: ReadonlySet<string>): void {
   store.set({ ...store.get(), selected });
 }
 
+/** 重置导入数据时清空筛选、搜索与勾选（都基于上一次账号数据）。 */
+export function resetSwapView(): void {
+  store.set(INITIAL);
+}
+
 /* ---------- 主视图（换蛋清单 / 母本共享）跨重启保留 ---------- */
 
 export type SwapMainView = 'eggs' | 'sharing';

@@ -39,4 +39,19 @@ describe('内置采集桥', () => {
       await expect(readCaptureSnapshot()).rejects.toThrow('快照');
     }
   });
+  test('上传状态与动作经过校验，拒绝伪造的任务编号和越界进度', async () => {
+    const upload = { state: 'persisted', message: '角色数据已完整保存到云端', progress: 100, gameId: '293143', deduplicated: true };
+    const file = { id: 'capture-123.pcap', name: 'capture-123.pcap', size: 1234, createdAt: 123, valid: true, upload };
+    const uploadCapture = vi.fn(() => '');
+    window.RocoCapture = { getState: () => JSON.stringify({ ...state, uploadBusy: false, files: [file] }), uploadCapture };
+    await expect(readCollectorState()).resolves.toMatchObject({ uploadBusy: false, files: [file] });
+    await collectorAction('uploadCapture', 'capture-123.pcap');
+    expect(uploadCapture).toHaveBeenCalledWith('capture-123.pcap');
+    window.RocoCapture.getState = () => JSON.stringify({ ...state, files: [{ ...file, upload: { ...upload, captureId: '../x' } }] });
+    await expect(readCollectorState()).rejects.toThrow('状态');
+    window.RocoCapture.getState = () => JSON.stringify({ ...state, files: [{ ...file, upload: { ...upload, progress: 101 } }] });
+    await expect(readCollectorState()).rejects.toThrow('状态');
+    window.RocoCapture.getState = () => JSON.stringify({ ...state, files: [{ ...file, upload: { ...upload, state: 'unknown' } }] });
+    await expect(readCollectorState()).rejects.toThrow('状态');
+  });
 });

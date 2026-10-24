@@ -1,5 +1,5 @@
 /**
- * 校验多人母本共享的三张表：建表、增量迁移、约束与级联。
+ * 校验多人母本共享 + 小组收集二期的表：建表、增量迁移、约束与级联。
  *
  * 只用本机内存 SQLite（`node:sqlite`，Node 23.4+ 已内置），**不连接远端、不读线上库**。
  * 这个脚本不经过 wrangler：它验证的是 SQL 定义本身；真实的 D1 行为由
@@ -15,19 +15,36 @@ import { DatabaseSync } from 'node:sqlite';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SCHEMA_FILE = path.join(root, 'functions/schema.sql');
-const MIGRATION_FILE = path.join(root, 'functions/migrations/2026-10-23-mother-groups.sql');
-const NEW_TABLES = ['mother_groups', 'mother_group_members', 'mother_group_accounts'];
-const START_MARK = '-- >>> mother-groups (2026-10-23)';
-const END_MARK = '-- <<< mother-groups (2026-10-23)';
+const MIGRATIONS = [
+  {
+    label: 'mother-groups',
+    file: path.join(root, 'functions/migrations/2026-10-23-mother-groups.sql'),
+    start: '-- >>> mother-groups (2026-10-23)',
+    end: '-- <<< mother-groups (2026-10-23)',
+    tables: ['mother_groups', 'mother_group_members', 'mother_group_accounts'],
+  },
+  {
+    label: 'collection-groups',
+    file: path.join(root, 'functions/migrations/2026-10-25-collection-groups.sql'),
+    start: '-- >>> collection-groups (2026-10-25)',
+    end: '-- <<< collection-groups (2026-10-25)',
+    tables: [
+      'collection_group_configs',
+      'collection_group_stud_accounts',
+      'collection_group_tasks',
+    ],
+  },
+];
+const NEW_TABLES = MIGRATIONS.flatMap((item) => item.tables);
 
-const [schemaSql, migrationSql] = await Promise.all([
+const [schemaSql, ...migrationSqls] = await Promise.all([
   readFile(SCHEMA_FILE, 'utf8'),
-  readFile(MIGRATION_FILE, 'utf8').catch((error) => {
-    if (error.code === 'ENOENT') {
-      throw new Error(`缺少增量迁移文件：${MIGRATION_FILE}`);
-    }
-    throw error;
-  }),
+  ...MIGRATIONS.map((item) =>
+    readFile(item.file, 'utf8').catch((error) => {
+      if (error.code === 'ENOENT') throw new Error(`缺少增量迁移文件：${item.file}`);
+      throw error;
+    }),
+  ),
 ]);
 
 const tableNames = (db) =>
@@ -52,7 +69,7 @@ function columnsOf(db, table) {
 
 function indexNamesOf(db) {
   return db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_mother%' ORDER BY name")
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name")
     .all()
     .map((row) => row.name);
 }
@@ -65,12 +82,17 @@ for (const table of NEW_TABLES) {
   assert.ok(tableNames(full).includes(table), `完整 schema 缺少 ${table}`);
 }
 
-/* ---------- 2. 旧 schema（去掉三张新表）+ 增量迁移两次 ---------- */
-const start = schemaSql.indexOf(START_MARK);
-const end = schemaSql.indexOf(END_MARK);
-assert.ok(start >= 0 && end > start, 'schema.sql 里缺少 mother-groups 区块标记');
-const legacySql = `${schemaSql.slice(0, start)}${schemaSql.slice(end + END_MARK.length)}`;
-assert.ok(!legacySql.includes('mother_groups'), '旧 schema 不应包含新表');
+/* ---------- 2. 旧 schema（去掉两期新表）+ 增量迁移两次 ---------- */
+let legacySql = schemaSql;
+for (const item of MIGRATIONS) {
+  const start = legacySql.indexOf(item.start);
+  const end = legacySql.indexOf(item.end);
+  assert.ok(start >= 0 && end > start, `schema.sql 里缺少 ${item.label} 区块标记`);
+  legacySql = `${legacySql.slice(0, start)}${legacySql.slice(end + item.end.length)}`;
+}
+for (const table of NEW_TABLES) {
+  assert.ok(!legacySql.includes(table), `旧 schema 不应包含新表 ${table}`);
+}
 
 const migrated = new DatabaseSync(':memory:');
 migrated.exec(legacySql);
@@ -78,8 +100,10 @@ requireLegacySchema(migrated, '旧 schema 初始化');
 for (const table of NEW_TABLES) {
   assert.ok(!tableNames(migrated).includes(table), `旧 schema 不应预先包含 ${table}`);
 }
-migrated.exec(migrationSql);
-migrated.exec(migrationSql); // 必须可重复执行
+for (const sql of migrationSqls) {
+  migrated.exec(sql);
+  migrated.exec(sql); // 必须可重复执行
+}
 
 for (const table of NEW_TABLES) {
   assert.deepEqual(
@@ -134,25 +158,68 @@ assert.throws(
 // 不同组可以各自共享同一个 UID
 insertShared.run('g2', 'uid:1001', 'acc-a', '甲', '2026-10-23T00:00:00.000Z', '[101]');
 
+// 组配置：一个组只有一行；不存在的组不能建配置
+const insertConfig = full.prepare(
+  `INSERT INTO collection_group_configs
+     (group_id, group_type, target_revision, resource_epoch, target_json, updated_at)
+   VALUES (?, ?, ?, ?, ?, ?)`,
+);
+insertConfig.run('g1', 'mother', 0, 0, '', now);
+assert.throws(() => insertConfig.run('g1', 'stud', 0, 0, '', now), /UNIQUE|constraint/i);
+assert.throws(() => insertConfig.run('missing', 'mother', 0, 0, '', now), /FOREIGN KEY|constraint/i);
+
+// 种公摘要：同组同游戏 UID 只能归一位成员
+const insertStud = full.prepare(
+  `INSERT INTO collection_group_stud_accounts
+     (group_id, game_account_key, member_account_id, account_name,
+      source_exported_at, target_revision, slots_json)
+   VALUES (?, ?, ?, ?, ?, ?, ?)`,
+);
+insertStud.run('g1', 'uid:3001', 'acc-a', '甲', '2026-10-23T00:00:00.000Z', 0, '{}');
+assert.throws(
+  () => insertStud.run('g1', 'uid:3001', 'acc-b', '乙', '2026-10-23T00:00:00.000Z', 0, '{}'),
+  /UNIQUE|constraint/i,
+);
+
+// 任务：同目标修订 + 目标键 + 轮次唯一；owner 注销时置空但任务保留
+const insertTask = full.prepare(
+  `INSERT INTO collection_group_tasks
+     (group_id, target_revision, target_key, round, status, owner_account_id,
+      version, created_at, updated_at, closed_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+);
+insertTask.run('g1', 0, 'mother:101', 0, 'claimed', 'acc-b', 1, now, now, null);
+assert.throws(
+  () => insertTask.run('g1', 0, 'mother:101', 0, 'open', null, 1, now, now, null),
+  /UNIQUE|constraint/i,
+);
+
 const count = (sql, ...params) => full.prepare(sql).get(...params).count;
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_accounts'), 3);
 
-// 删普通成员 → 其共享账号级联删除，别的成员不受影响
+// 删普通成员 → 其共享账号与种公摘要级联删除，别的成员不受影响
 full.prepare('DELETE FROM mother_group_members WHERE group_id = ? AND account_id = ?').run('g1', 'acc-b');
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_accounts WHERE member_account_id = ?', 'acc-b'), 0);
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_accounts WHERE member_account_id = ?', 'acc-a'), 2);
+assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_stud_accounts WHERE member_account_id = ?', 'acc-b'), 0);
 
-// 注销账号 → 自己创建的组、组成员、组内共享账号全部级联删除
+// 注销账号 → 自己创建的组、组成员、组内共享账号、组配置、任务 owner 全部处理
+full.prepare('DELETE FROM accounts WHERE id = ?').run('acc-b');
+assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_tasks WHERE owner_account_id IS NULL'), 1);
 full.prepare('DELETE FROM accounts WHERE id = ?').run('acc-a');
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_groups'), 0);
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_members'), 0);
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_accounts'), 0);
+assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_configs'), 0);
+assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_stud_accounts'), 0);
+assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_tasks'), 0);
 
 const fkCheck = full.prepare('PRAGMA foreign_key_check').all();
 assert.deepEqual(fkCheck, [], 'foreign_key_check 应无结果');
 
 console.log('schema 校验通过：');
-console.log('  - 完整 schema 与增量迁移的表/索引定义一致，迁移可重复执行');
+console.log('  - 完整 schema 与两期增量迁移的表/索引定义一致，迁移可重复执行');
 console.log('  - 空库迁移被拒绝（不依赖 SQLite 的外键报错）');
 console.log('  - 同组重复游戏 UID 被拒绝，不同组同 UID 允许');
+console.log('  - 组配置唯一、任务按「修订 + 目标键 + 轮次」唯一');
 console.log('  - 删成员 / 注销账号的级联行为正确，foreign_key_check 无结果');

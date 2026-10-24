@@ -1,5 +1,13 @@
 apply plugin: 'com.android.application'
 
+// 蛋神助手云端采集只接受其公开 Android 客户端身份。凭据不属于源码，构建时从本机
+// local.properties 的 capture.token 注入；未配置时上传入口会明确报错，其余功能不受影响。
+def localProperties = new java.util.Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) localPropertiesFile.withInputStream { localProperties.load(it) }
+def captureToken = (localProperties.getProperty('capture.token') ?: '').trim()
+    .replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+
 android {
     namespace "com.localdatatool.toolbox"
     compileSdk 35
@@ -12,16 +20,18 @@ android {
         // 那样网页会被铺到状态栏底下。停在 34 时系统会自动让窗口避开系统栏，不用自己算 insets。
         // 这个壳只自己安装、不上架商店，不受商店 targetSdk 新规影响。
         targetSdk 34
-        versionCode 12
-        versionName "1.2.1"
+        versionCode 13
+        versionName "1.2.2"
         ndk { abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64' }
         externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON' } }
+        buildConfigField 'String', 'CAPTURE_TOKEN', '"' + captureToken + '"'
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    buildFeatures { buildConfig true }
     externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
 
     buildTypes {
@@ -36,4 +46,5 @@ dependencies {
     implementation 'androidx.core:core:1.15.0'
     implementation 'androidx.webkit:webkit:1.12.1'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20250517'
 }

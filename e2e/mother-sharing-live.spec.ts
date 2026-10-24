@@ -1,4 +1,4 @@
-﻿import { readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
@@ -56,7 +56,7 @@ const resourceOf = (uid: number, eggGameId: number) => ({
   ],
 });
 
-async function contextFor(browser: Browser, identity: Identity) {
+async function contextFor(browser: Browser, identity: Identity, groupId: string) {
   return browser.newContext({
     baseURL: BASE,
     viewport: { width: 390, height: 844 },
@@ -70,6 +70,15 @@ async function contextFor(browser: Browser, identity: Identity) {
             { name: 'roco.deviceToken', value: identity.token },
             { name: 'roco.changelogSeen', value: changelogEntries[0]?.id ?? '' },
             { name: 'roco.guideSeen', value: GUIDE_VERSION as string },
+            {
+              name: `roco.collectionGroups:${identity.accountId}`,
+              value: JSON.stringify({
+                mode: 'group',
+                personalType: 'mother',
+                lastGroupIds: { mother: groupId },
+                inviteCodes: {},
+              }),
+            },
           ],
         },
       ],
@@ -79,11 +88,8 @@ async function contextFor(browser: Browser, identity: Identity) {
 
 const openSharing = async (page: Page) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '收集', exact: true }).click();
-  await page.getByTestId('collection-kind-studs').click();
-  await page.getByTestId('stud-tool-eggs').click();
-  await page.getByTestId('swap-view-sharing').click();
-  await expect(page.getByTestId('mother-sharing')).toBeVisible();
+  await page.getByRole('button', { name: '小组', exact: true }).click();
+  await expect(page.getByTestId('collection-groups')).toBeVisible();
 };
 
 test('真实 Functions + D1：三个身份、A 两设备共享同一成员与资源目录', async ({ browser }) => {
@@ -93,42 +99,46 @@ test('真实 Functions + D1：三个身份、A 两设备共享同一成员与资
   const recovered = await api(null, 'POST', '/api/auth/recover', { recoveryCode: a.recoveryCode });
   const aSecond = { ...a, token: recovered.token };
 
-  const created = await api(a.token, 'POST', '/api/mother-groups', {
+  const created = await api(a.token, 'POST', '/api/collection-groups', {
     name: '真实联调组',
     displayName: '阿甲',
+    groupType: 'mother',
   });
   const groupId = created.group.id;
   for (const [identity, displayName] of [
     [b, '阿乙'],
     [c, '阿丙'],
   ] as const) {
-    await api(identity.token, 'POST', '/api/mother-groups/join', {
+    await api(identity.token, 'POST', '/api/collection-groups/join', {
       inviteCode: created.inviteCode,
       displayName,
     });
   }
 
   // A 已发布火花、B 已发布水蓝蓝、C 未发布（未知）
-  const publishedA = await api(a.token, 'PUT', `/api/mother-groups/${groupId}/resources/me`, {
+  const publishedA = await api(a.token, 'PUT', `/api/collection-groups/${groupId}/resources/me`, {
     baseRevision: 0,
+    baseTargetRevision: 0,
     resource: resourceOf(1001, 3003),
   });
-  await api(b.token, 'PUT', `/api/mother-groups/${groupId}/resources/me`, {
+  await api(b.token, 'PUT', `/api/collection-groups/${groupId}/resources/me`, {
     baseRevision: 0,
+    baseTargetRevision: 0,
     resource: resourceOf(2001, 3002),
   });
   expect(publishedA.resourceRevision).toBe(1);
 
-  const contextA = await contextFor(browser, a);
-  const contextA2 = await contextFor(browser, aSecond);
-  const contextB = await contextFor(browser, b);
+  const contextA = await contextFor(browser, a, groupId);
+  const contextA2 = await contextFor(browser, aSecond, groupId);
+  const contextB = await contextFor(browser, b, groupId);
   const pageA = await contextA.newPage();
   const pageA2 = await contextA2.newPage();
   const pageB = await contextB.newPage();
 
   await openSharing(pageA);
-  await expect(pageA.getByTestId('mother-group-card')).toContainText('真实联调组');
-  await expect(pageA.getByTestId('mother-group-card')).toContainText('3 人');
+  await expect(pageA.getByTestId('group-card')).toContainText('真实联调组');
+  await expect(pageA.getByTestId('group-card')).toContainText('3 人');
+  await expect(pageA.getByTestId('group-type-label')).toContainText('母本收集');
 
   await pageA.getByTestId('mother-view-all').click();
   await expect(
@@ -143,7 +153,7 @@ test('真实 Functions + D1：三个身份、A 两设备共享同一成员与资
 
   // A 的第二台设备：没有本地导入数据，也能发现同一组并看到云端摘要
   await openSharing(pageA2);
-  await expect(pageA2.getByTestId('mother-group-card')).toContainText('3 人');
+  await expect(pageA2.getByTestId('group-card')).toContainText('3 人');
   await pageA2.getByTestId('mother-view-all').click();
   await expect(
     pageA2.getByTestId('mother-resource-row').filter({ hasText: '火花' }),

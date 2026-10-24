@@ -92,3 +92,13 @@ export function clearGroupListSession(): void {
   lastGroupAccountId = null;
   groupStore.set({});
 }
+
+/** 重置导入数据时清空个人清单搜索与小组临时筛选。 */
+export function resetListViews(): void {
+  personalStore.set({
+    'inventory-all': { query: '' },
+    'inventory-stud': { query: '' },
+    mothers: { query: '' },
+  });
+  clearGroupListSession();
+}

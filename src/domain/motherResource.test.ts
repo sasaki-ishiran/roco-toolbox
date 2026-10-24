@@ -116,6 +116,25 @@ describe('buildMotherResource：从原始账号快照提取固定口径母本', 
     );
   });
 
+  test('自选口径：按传入 criteria 过滤，并使用对应 criteriaId', () => {
+    const customId = 'mother-v2-deadbeef';
+    const resource = buildMotherResource({
+      snapshots: [
+        snapshot(1001, '甲', [
+          mother(101, { medalBody: '小不点', voiceDb: 98 }),
+          mother(102, { medalBody: '大块头', voiceDb: 100 }),
+        ]),
+      ],
+      selectedAccountKeys: ['uid:1001'],
+      species: catalog,
+      catalogVersion: FIXTURE_CATALOG_VERSION,
+      criteria: { bodies: ['小不点'], voices: ['婉转声'] },
+      criteriaId: customId,
+    });
+    expect(resource.criteriaId).toBe(customId);
+    expect(resource.accounts[0].eggGameIds).toEqual([101]);
+  });
+
   test('导出时间为空或非 ISO 时拒绝，不产出半份摘要', () => {
     expect(errorOf(() => build([snapshot(1001, '甲', [mother(101)], '')], ['uid:1001']))?.code).toBe(
       'INVALID_EXPORTED_AT',

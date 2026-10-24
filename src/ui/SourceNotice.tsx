@@ -6,7 +6,7 @@ export function SourceNotice() {
       <p>
         数据来源：{' '}
         <a
-          className="inline-flex min-h-[44px] items-center text-slate-500 underline"
+          className="inline-flex min-h-[28px] items-center text-slate-500 underline"
           href={CATALOG_SOURCE_URL}
           target="_blank"
           rel="noreferrer"
@@ -18,7 +18,7 @@ export function SourceNotice() {
       <p>
         内容以{' '}
         <a
-          className="inline-flex min-h-[44px] items-center text-slate-500 underline"
+          className="inline-flex min-h-[28px] items-center text-slate-500 underline"
           href="https://creativecommons.org/licenses/by-sa/4.0/"
           target="_blank"
           rel="noreferrer"

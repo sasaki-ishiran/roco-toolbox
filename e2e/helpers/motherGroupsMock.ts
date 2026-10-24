@@ -10,7 +10,7 @@ const CATALOG_VERSION = (
 ).dataVersion;
 
 /**
- * 静态 preview（没有 Functions）下的多人母本共享 mock。
+ * 静态 preview（没有 Functions）下的小组收集 mock。
  *
  * 用真实图鉴里的蛋 ID，保证覆盖行能真正渲染：
  * 3003 = 火花（同蛋还有火神 3006 / 焰火 3032）、3002 = 水蓝蓝、3001 = 喵喵。
@@ -33,7 +33,23 @@ const resource = (
 });
 
 export const groupDetail = {
-  group: { id: GROUP_ID, name: '周末互换', ownerAccountId: 'A', createdAt: 1_760_000_000_000 },
+  group: {
+    id: GROUP_ID,
+    name: '周末互换',
+    ownerAccountId: 'A',
+    createdAt: 1_760_000_000_000,
+    groupType: 'mother',
+    targetRevision: 0,
+    resourceEpoch: 1,
+    target: {
+      kind: 'mother',
+      criteriaId: 'female-huge-voice100-v1',
+      mode: 'perfect',
+      bodies: ['大块头'],
+      voices: ['+100'],
+      catalogVersion: CATALOG_VERSION,
+    },
+  },
   members: [
     {
       accountId: 'A',
@@ -41,6 +57,7 @@ export const groupDetail = {
       joinedAt: 1,
       resourceRevision: 1,
       resource: resource(1, [{ accountKey: 'uid:1001', accountName: '甲的大号', eggGameIds: [3003] }]),
+      studResource: null,
     },
     {
       accountId: 'B',
@@ -48,8 +65,16 @@ export const groupDetail = {
       joinedAt: 2,
       resourceRevision: 1,
       resource: resource(1, [{ accountKey: 'uid:2001', accountName: '乙的号', eggGameIds: [3002] }]),
+      studResource: null,
     },
-    { accountId: 'C', displayName: '阿丙', joinedAt: 3, resourceRevision: 0, resource: null },
+    {
+      accountId: 'C',
+      displayName: '阿丙',
+      joinedAt: 3,
+      resourceRevision: 0,
+      resource: null,
+      studResource: null,
+    },
   ],
 };
 
@@ -58,6 +83,9 @@ export const groupSummary = {
   name: '周末互换',
   ownerAccountId: 'A',
   memberCount: 3,
+  groupType: 'mother',
+  targetRevision: 0,
+  targetReady: true,
 };
 
 const fulfill = (route: Route, body: unknown, status = 200) =>
@@ -75,19 +103,19 @@ export interface MockOptions {
 
 export async function mockMotherGroups(page: Page, options: MockOptions = {}): Promise<void> {
   let revision = 2;
-  await page.route('**/api/mother-groups**', async (route) => {
+  await page.route('**/api/collection-groups**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
     const path = url.pathname;
 
-    if (method === 'GET' && path === '/api/mother-groups') {
+    if (method === 'GET' && path === '/api/collection-groups') {
       return fulfill(route, { ok: true, groups: [groupSummary] });
     }
-    if (method === 'GET' && path === `/api/mother-groups/${GROUP_ID}`) {
+    if (method === 'GET' && path === `/api/collection-groups/${GROUP_ID}`) {
       return fulfill(route, { ok: true, ...groupDetail });
     }
-    if (method === 'PUT' && path === `/api/mother-groups/${GROUP_ID}/resources/me`) {
+    if (method === 'PUT' && path === `/api/collection-groups/${GROUP_ID}/resources/me`) {
       if (options.publishConflict) {
         return fulfill(
           route,
@@ -97,6 +125,9 @@ export async function mockMotherGroups(page: Page, options: MockOptions = {}): P
       }
       revision += 1;
       return fulfill(route, { ok: true, resourceRevision: revision, publishedAt: Date.now() });
+    }
+    if (method === 'PUT' && path.endsWith('/target')) {
+      return fulfill(route, { ok: true, targetRevision: 1 });
     }
     if (method === 'PUT' && path.endsWith('/profile/me')) return fulfill(route, { ok: true });
     if (method === 'POST' && path.endsWith('/invite/reset')) {
@@ -115,5 +146,23 @@ export async function loginAs(page: Page, accountId = 'A', token = 'mock-token')
       window.localStorage.setItem('roco.deviceToken', value);
     },
     [accountId, token],
+  );
+}
+
+/** 直接进入某个组（否则二期默认落在个人求蛋）。 */
+export async function enterGroup(page: Page, accountId = 'A'): Promise<void> {
+  await page.addInitScript(
+    ([id, groupId]) => {
+      window.localStorage.setItem(
+        `roco.collectionGroups:${id}`,
+        JSON.stringify({
+          mode: 'group',
+          personalType: 'mother',
+          lastGroupIds: { mother: groupId },
+          inviteCodes: {},
+        }),
+      );
+    },
+    [accountId, GROUP_ID],
   );
 }

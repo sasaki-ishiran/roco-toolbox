@@ -34,6 +34,11 @@ export function toggleAllAccounts(accounts: string[]): void {
   store.set(current.size === 0 ? new Set(accounts) : new Set());
 }
 
+/** 清空账号排除项（重置导入数据时调用，避免旧账号名影响下次导入）。 */
+export function clearAccountFilter(): void {
+  store.set(new Set());
+}
+
 /** 按选中账号过滤精灵。排除集为空时原样返回。 */
 export function filterByAccounts<T extends { account: string }>(
   pets: T[],

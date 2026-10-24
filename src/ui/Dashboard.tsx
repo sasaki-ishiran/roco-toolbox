@@ -7,6 +7,7 @@ import { AccountFilterBar } from './AccountFilterBar';
 import { ImportAdditionCard } from './ImportAdditionCard';
 import { ProgressCard } from './ProgressCard';
 import { SuggestionCard } from './SuggestionCard';
+import { NestPlanCard } from './NestPlanCard';
 import { SourceNotice } from './SourceNotice';
 import { CollectionTargetEditor } from './CollectionTargetEditor';
 import { ScopeSummary } from './primitives/ScopeSummary';
@@ -36,7 +37,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     section: 'studs' | 'mothers';
   }>({ open: false, section: 'studs' });
 
-  const { owned, motherGroups, mode, mother, stud, recommendations } = useCollectionSummary();
+  const { owned, motherGroups, mode, mother, stud, plans, recommendations } = useCollectionSummary();
   const { accounts } = useOwnedPets();
   const { excluded } = useAccountFilter();
   const noSelectedAccounts = accounts.length > 0 && accounts.every((name) => excluded.has(name));
@@ -64,6 +65,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const missingTargets = remainingTargets - iterableTargets;
   const firstIterableGroupId =
     stud.cells.find((cell) => cell.state === 'breedable')?.groupId ?? undefined;
+  const nestEmptyNote =
+    stud.groupCount === 0
+      ? '未设置种公目标，请先调整目标档位、蛋组和性格。'
+      : remainingTargets === 0
+        ? '种公目标已全部收集，没有要补的缺口。'
+        : '没有能自己孵的方案：缺可配对的母本 / 公本，先去覆盖度看每个缺口的判定。';
   const suggestionEmptyNote = noSelectedAccounts
     ? '当前未选中任何账号，请在上方选择账号后查看建议。'
     : studEmptyNote({ hasData: accounts.length > 0, stud });
@@ -100,7 +107,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             }))}
             onValueChange={(next) => setTargetMode(next as TargetMode)}
             optionTestId={(value) => `target-mode-${value}`}
-            className="w-[176px] shrink-0"
+            className="w-[144px] shrink-0"
           />
         </div>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
@@ -108,7 +115,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           <button
             type="button"
             onClick={() => setTargetEditor({ open: true, section: 'mothers' })}
-            className="min-h-[44px] text-xs font-medium text-emerald-700"
+            className="min-h-[28px] text-xs font-medium text-emerald-700"
             data-testid="mother-criteria-edit"
           >
             调整母本达标条件 ›
@@ -173,7 +180,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           onClick={() =>
             onNavigate({ type: 'open-collection', location: { kind: 'mothers', status: 'missing' } })
           }
-          className="mt-2 min-h-[44px] text-xs font-medium text-emerald-700"
+          className="mt-2 min-h-[28px] text-xs font-medium text-emerald-700"
           data-testid="mother-actions-more"
         >
           去收集看母本缺口 ›
@@ -185,11 +192,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         items={recommendations}
         emptyNote={suggestionEmptyNote}
         onOpenSwap={() =>
-          onNavigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } })
+          onNavigate({ type: 'open-groups', groupType: 'stud' })
         }
       />
 
-      {/* 配窝：只留汇总与三个入口，完整摆位与配对在「收集 · 种公 · 自己孵」 */}
+      {/* 配窝建议是产品亮点（2026-10-25 用户要求放回看板）：直接展示完整摆位与配对，
+          不再只给一个「去配窝」入口；收集页的完整视图仍然保留。 */}
       {owned.length > 0 ? (
         <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="nest-summary">
           <h2 className="text-sm font-medium text-slate-500">配窝建议</h2>
@@ -206,12 +214,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               </>
             )}
           </p>
-          {remainingTargets > 0 && iterableTargets === 0 ? (
-            <p className="mt-1 text-xs text-amber-700" data-testid="nest-no-plan">
-              没有能自己孵的方案：缺可配对的母本 / 公本，先去覆盖度看每个缺口的判定。
-            </p>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={() =>
@@ -224,27 +227,20 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 })
               }
               data-testid="nest-open-coverage"
-              className="min-h-[44px] text-xs font-medium text-emerald-700"
+              className="min-h-[28px] text-xs font-medium text-emerald-700"
             >
               去看怎么迭代 ›
             </button>
             <button
               type="button"
-              onClick={() => onNavigate({ type: 'open-collection', location: { kind: 'studs', view: 'breed' } })}
-              data-testid="nest-open-breed"
-              className="min-h-[44px] text-xs font-medium text-emerald-700"
-            >
-              去配窝 ›
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } })}
+              onClick={() => onNavigate({ type: 'open-groups', groupType: 'stud' })}
               data-testid="nest-open-swap"
-              className="min-h-[44px] text-xs font-medium text-emerald-700"
+              className="min-h-[28px] text-xs font-medium text-emerald-700"
             >
-              去看怎么快速收集 ›
+              去看怎么收集 ›
             </button>
           </div>
+          <NestPlanCard plans={plans} emptyNote={nestEmptyNote} />
         </section>
       ) : null}
 

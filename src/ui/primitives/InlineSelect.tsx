@@ -114,7 +114,7 @@ export function InlineSelect({
         aria-label={`${label}：${current?.label ?? '未选择'}`}
         onClick={() => setOpen((value) => !value)}
         data-testid={testId}
-        className="flex min-h-[44px] max-w-full items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-normal text-slate-600"
+        className="flex min-h-[32px] max-w-full items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-normal text-slate-600"
       >
         <span className="truncate">{current?.label ?? '未选择'}</span>
         <span aria-hidden="true" className="text-[10px] text-slate-400">
@@ -140,7 +140,7 @@ export function InlineSelect({
                   // 点当前已选项不会触发 change，也要能收起
                   if (on) closeAndRefocus();
                 }}
-                className={`flex min-h-[44px] w-full cursor-pointer items-center gap-2 truncate rounded-lg px-2 text-left text-xs ${
+                className={`flex min-h-[36px] w-full cursor-pointer items-center gap-2 truncate rounded-md px-2 text-left text-xs ${
                   on ? 'bg-emerald-50 font-medium text-emerald-700' : 'text-slate-600'
                 } ${option.disabled ? 'cursor-not-allowed text-slate-300' : ''}`}
               >

@@ -281,6 +281,7 @@ public class MainActivity extends Activity {
                     else if ("stopCapture".equals(action)) result = collector.stopCapture();
                     else if ("openGame".equals(action)) result = collector.openGame();
                     else if ("importCapture".equals(action)) result = collector.importCapture(id);
+                    else if ("uploadCapture".equals(action)) result = collector.uploadCapture(id);
                     else if ("shareCapture".equals(action)) result = collector.shareCapture(id);
                     else if ("deleteCapture".equals(action)) result = collector.deleteCapture(id);
                     else throw new IllegalArgumentException("未知的采集操作");

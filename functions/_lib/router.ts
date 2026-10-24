@@ -16,9 +16,11 @@
  *   DELETE /api/account                 注销账号（清空该账号全部云端数据）
  *   GET  /api/sync[?full=1]             取云端快照（需登录）
  *   PUT  /api/sync                      写云端快照（需登录，带 baseVersion）
- *   GET  /api/mother-groups             我加入的母本共享小组（需登录）
+ *   GET  /api/mother-groups             我加入的母本共享小组（需登录，只含母本组）
+ *   GET  /api/collection-groups         我加入的小组（母本组 / 种公组，需登录）
  */
 import { handleDeleteAccount, handleLogout, handleMe, handleRecover, handleRegister, handleRotate } from './auth';
+import { handleCollectionGroups } from './collectionGroups';
 import { handleEvent, handleStats } from './events';
 import { handleMotherGroups } from './motherGroups';
 import { handleSyncGet, handleSyncPut } from './sync';
@@ -51,6 +53,11 @@ export async function route(request: Request, env: Env): Promise<Response> {
   // 多人母本资源共享：全部需要登录，权限与子路由在 handleMotherGroups 内处理
   if (pathname === '/api/mother-groups' || pathname.startsWith('/api/mother-groups/')) {
     return handleMotherGroups(request, env, origin);
+  }
+
+  // 小组收集二期：两类小组共用外壳；旧接口只读写母本组
+  if (pathname === '/api/collection-groups' || pathname.startsWith('/api/collection-groups/')) {
+    return handleCollectionGroups(request, env, origin);
   }
 
   return fail('没有这个接口', 404, origin);
