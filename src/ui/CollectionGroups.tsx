@@ -191,6 +191,13 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
               group={hook.currentGroup}
               viewerAccountId={hook.accountId ?? ''}
               catalogVersion={CATALOG_VERSION}
+              tasks={hook.tasks}
+              tasksConfirmed={hook.tasksConfirmed}
+              tasksPendingMemberIds={hook.tasksPendingMemberIds}
+              isOwner={hook.currentGroup.group.ownerAccountId === hook.accountId}
+              onClaimTask={hook.claimTask}
+              onReleaseTask={hook.releaseTask}
+              onTransferTask={hook.transferTask}
             />
           ) : (
             <MotherGroupResources
@@ -202,6 +209,13 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
               criteriaId={
                 hook.target?.kind === 'mother' ? hook.target.criteriaId : undefined
               }
+              tasks={hook.tasks}
+              tasksConfirmed={hook.tasksConfirmed}
+              tasksPendingMemberIds={hook.tasksPendingMemberIds}
+              isOwner={hook.currentGroup.group.ownerAccountId === hook.accountId}
+              onClaimTask={hook.claimTask}
+              onReleaseTask={hook.releaseTask}
+              onTransferTask={hook.transferTask}
             />
           )}
 

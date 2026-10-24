@@ -4,17 +4,22 @@ import {
   isMotherGroupsApiError,
 } from '../api/motherGroups';
 import {
+  claimCollectionTask as claimTaskApi,
   createCollectionGroup as createCollectionGroupApi,
   dissolveCollectionGroup,
   getCollectionGroup,
+  getCollectionTasks,
   joinCollectionGroup as joinCollectionGroupApi,
   leaveCollectionGroup,
   listCollectionGroups,
   previewCollectionInvite,
   publishCollectionResources,
+  releaseCollectionTask as releaseTaskApi,
   resetCollectionGroupInvite,
+  transferCollectionTask as transferTaskApi,
   updateCollectionGroupProfile,
   updateCollectionTarget as updateCollectionTargetApi,
+  type CollectionTasksResponse,
   type InvitePreview,
 } from '../api/collectionGroups';
 import { readAccountId, subscribeSession } from '../api/session';
@@ -35,6 +40,7 @@ import {
   type CollectionGroupMember,
   type CollectionGroupSummary,
   type CollectionGroupType,
+  type CollectionTaskRecord,
   type GroupTargetConfig,
   type StudResourceDraft,
 } from '../shared/collectionGroups';
@@ -110,6 +116,16 @@ export interface CollectionGroupsHook {
   draftDirty: boolean;
   publishPreview: CollectionPublishPreview;
   myMember: CollectionGroupMember | null;
+  /** 共同寻找：当前目标修订下的任务与「是否全员确认」。 */
+  tasks: CollectionTaskRecord[];
+  tasksConfirmed: boolean;
+  tasksPendingMemberIds: string[];
+  tasksLoading: boolean;
+  tasksError: string;
+  refreshTasks: () => Promise<void>;
+  claimTask: (targetKey: string) => Promise<void>;
+  releaseTask: (targetKey: string) => Promise<void>;
+  transferTask: (targetKey: string, toAccountId: string) => Promise<void>;
   selectGroup: (groupId: string) => void;
   selectPersonal: () => void;
   setPersonalType: (type: CollectionGroupType) => void;
@@ -158,6 +174,13 @@ const emptyMotherDraft = (
   catalogVersion,
   accounts: [],
 });
+
+const EMPTY_TASKS: CollectionTasksResponse = {
+  targetRevision: 0,
+  confirmed: false,
+  pendingMemberIds: [],
+  tasks: [],
+};
 
 interface Boot {
   accountId: string | null;
@@ -220,6 +243,9 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     () => selectionOf(boot.currentGroup, boot.accountId),
   );
   const [draftDirty, setDraftDirty] = useState(false);
+  const [tasksView, setTasksView] = useState<CollectionTasksResponse>(EMPTY_TASKS);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState('');
 
   const accountRef = useRef(accountId);
   const modeRef = useRef(pageMode);
@@ -232,6 +258,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
   const draftRevisionRef = useRef(0);
+  const tasksRequestRef = useRef(0);
   const nextPollAtRef = useRef<number | null>(null);
   const inputRef = useRef(input);
 
@@ -252,6 +279,30 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     const keys = selectionOf(detail, accountRef.current);
     draftRef.current = keys;
     setDraftSelectionState(keys);
+  }, []);
+
+  const loadTasks = useCallback(async (groupId: string) => {
+    const active = scope(true);
+    const request = ++tasksRequestRef.current;
+    setTasksLoading(true);
+    try {
+      const view = await getCollectionTasks(groupId);
+      if (!active() || request !== tasksRequestRef.current) return;
+      setTasksView(view);
+      setTasksError('');
+    } catch (failure) {
+      if (!active() || request !== tasksRequestRef.current) return;
+      setTasksError(messageOf(failure));
+    } finally {
+      if (active() && request === tasksRequestRef.current) setTasksLoading(false);
+    }
+  }, [scope]);
+
+  const clearTasks = useCallback(() => {
+    tasksRequestRef.current += 1;
+    setTasksView(EMPTY_TASKS);
+    setTasksError('');
+    setTasksLoading(false);
   }, []);
 
   /* ---------- 会话切换 ---------- */
@@ -288,8 +339,9 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         setOffline(false);
         setNextPollAt(null);
         setLoading(next != null && nextGroupId != null && detail == null);
+        clearTasks();
       }),
-    [],
+    [clearTasks],
   );
 
   /* ---------- 组列表 ---------- */
@@ -379,6 +431,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         if (!dirtyRef.current) applySelection(detail);
         nextPollAtRef.current = null;
         setNextPollAt(null);
+        void loadTasks(groupId);
       } catch (failure) {
         if (!active()) return;
         if (isMotherGroupsApiError(failure) && (failure.status === 403 || failure.status === 404)) {
@@ -393,6 +446,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
           setCurrentGroup(null);
           setPageMode('personal');
           savePageMode(accountRef.current, 'personal');
+          clearTasks();
           clearCollectionGroupCacheDetail(accountRef.current, groupId);
           setError(failure.message);
           void refreshGroups().catch(() => {});
@@ -415,7 +469,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
           request === detailRequestRef.current) setLoading(false);
       }
     },
-    [applySelection, refreshGroups],
+    [applySelection, clearTasks, loadTasks, refreshGroups],
   );
 
   useEffect(() => {
@@ -482,7 +536,8 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     setLoading(true);
     nextPollAtRef.current = null;
     setNextPollAt(null);
-  }, [groups]);
+    clearTasks();
+  }, [groups, clearTasks]);
 
   const selectPersonal = useCallback(() => {
     groupEpochRef.current += 1;
@@ -501,7 +556,8 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     setOffline(false);
     setLoading(false);
     setNextPollAt(null);
-  }, []);
+    clearTasks();
+  }, [clearTasks]);
 
   const setPersonalType = useCallback((type: CollectionGroupType) => {
     setPersonalTypeState(type);
@@ -717,6 +773,45 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     await publishResource(emptyMotherDraft(catalogVersion));
   }, [currentGroup, groupType, publishResource]);
 
+  const claimTask = useCallback(
+    async (targetKey: string) => {
+      const groupId = groupRef.current;
+      if (!groupId) throw new Error('还没有打开小组');
+      const current = tasksView.tasks.find((task) => task.targetKey === targetKey);
+      await claimTaskApi(groupId, { targetKey, version: current?.version });
+      await loadTasks(groupId);
+    },
+    [loadTasks, tasksView.tasks],
+  );
+
+  const releaseTask = useCallback(
+    async (targetKey: string) => {
+      const groupId = groupRef.current;
+      if (!groupId) throw new Error('还没有打开小组');
+      const current = tasksView.tasks.find((task) => task.targetKey === targetKey);
+      await releaseTaskApi(groupId, { targetKey, version: current?.version });
+      await loadTasks(groupId);
+    },
+    [loadTasks, tasksView.tasks],
+  );
+
+  const transferTask = useCallback(
+    async (targetKey: string, toAccountId: string) => {
+      const groupId = groupRef.current;
+      if (!groupId) throw new Error('还没有打开小组');
+      const current = tasksView.tasks.find((task) => task.targetKey === targetKey);
+      await transferTaskApi(groupId, { targetKey, toAccountId, version: current?.version });
+      await loadTasks(groupId);
+    },
+    [loadTasks, tasksView.tasks],
+  );
+
+  const refreshTasks = useCallback(async () => {
+    const groupId = groupRef.current;
+    if (!groupId) return;
+    await loadTasks(groupId);
+  }, [loadTasks]);
+
   const createGroup = useCallback(
     async (
       name: string,
@@ -849,6 +944,15 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     draftDirty,
     publishPreview,
     myMember,
+    tasks: tasksView.tasks,
+    tasksConfirmed: tasksView.confirmed,
+    tasksPendingMemberIds: tasksView.pendingMemberIds,
+    tasksLoading,
+    tasksError,
+    refreshTasks,
+    claimTask,
+    releaseTask,
+    transferTask,
     selectGroup,
     selectPersonal,
     setPersonalType,

@@ -46,7 +46,8 @@ export function resetPersonalListViewsForTest(): void {
 
 export interface GroupListState {
   query: string;
-  view: 'missing' | 'help' | 'all';
+  /** help 是一期遗留值：新界面不再提供入口，读到旧值时按 missing 处理。 */
+  view: 'missing' | 'seeking' | 'help' | 'all';
   memberFilter: string;
   onlyOwned: boolean;
 }

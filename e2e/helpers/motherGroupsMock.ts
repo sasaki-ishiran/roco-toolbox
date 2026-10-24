@@ -103,6 +103,7 @@ export interface MockOptions {
 
 export async function mockMotherGroups(page: Page, options: MockOptions = {}): Promise<void> {
   let revision = 2;
+  const tasks: Array<Record<string, unknown>> = [];
   await page.route('**/api/collection-groups**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -114,6 +115,44 @@ export async function mockMotherGroups(page: Page, options: MockOptions = {}): P
     }
     if (method === 'GET' && path === `/api/collection-groups/${GROUP_ID}`) {
       return fulfill(route, { ok: true, ...groupDetail });
+    }
+    if (method === 'GET' && path === `/api/collection-groups/${GROUP_ID}/tasks`) {
+      return fulfill(route, {
+        ok: true,
+        targetRevision: 0,
+        confirmed: true,
+        pendingMemberIds: [],
+        tasks,
+      });
+    }
+    if (method === 'POST' && path === `/api/collection-groups/${GROUP_ID}/tasks/claim`) {
+      const body = request.postDataJSON() as { targetKey: string };
+      const existing = tasks.find((task) => task.targetKey === body.targetKey);
+      const task = {
+        groupId: GROUP_ID,
+        targetRevision: 0,
+        targetKey: body.targetKey,
+        round: existing?.round ?? 0,
+        status: 'claimed',
+        ownerAccountId: 'A',
+        version: Number(existing?.version ?? 0) + 1,
+        updatedAt: Date.now(),
+        closedAt: null,
+      };
+      if (existing) Object.assign(existing, task);
+      else tasks.push(task);
+      return fulfill(route, { ok: true, task });
+    }
+    if (method === 'POST' && path === `/api/collection-groups/${GROUP_ID}/tasks/release`) {
+      const body = request.postDataJSON() as { targetKey: string };
+      const existing = tasks.find((task) => task.targetKey === body.targetKey);
+      if (!existing) {
+        return fulfill(route, { ok: false, code: 'TASK_NOT_FOUND', error: '没有进行中的认领' }, 404);
+      }
+      existing.status = 'open';
+      existing.ownerAccountId = null;
+      existing.version = Number(existing.version) + 1;
+      return fulfill(route, { ok: true, task: existing });
     }
     if (method === 'PUT' && path === `/api/collection-groups/${GROUP_ID}/resources/me`) {
       if (options.publishConflict) {

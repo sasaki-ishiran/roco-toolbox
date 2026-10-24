@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type {
   CollectionGroupDetail,
   CollectionGroupMember,
@@ -105,6 +105,36 @@ describe('StudGroupResources', () => {
     fireEvent.change(screen.getByTestId('stud-slot-search'), { target: { value: '固执' } });
     expect(screen.getAllByTestId('stud-slot-row')).toHaveLength(1);
     expect(screen.getByTestId('stud-slot-row')).toHaveTextContent('固执');
+  });
+
+  test('共同寻找：无人覆盖的槽位可认领，未全员确认时只提示待确认', () => {
+    const { rerender } = render(
+      <StudGroupResources
+        group={group}
+        viewerAccountId="A"
+        catalogVersion="v1"
+        tasksConfirmed
+        onClaimTask={vi.fn()}
+        onReleaseTask={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('stud-slot-view-seeking'));
+    expect(screen.getAllByTestId('stud-task-claim').length).toBeGreaterThan(0);
+
+    rerender(
+      <StudGroupResources
+        group={group}
+        viewerAccountId="A"
+        catalogVersion="v1"
+        tasksConfirmed={false}
+        tasksPendingMemberIds={['C']}
+        onClaimTask={vi.fn()}
+        onReleaseTask={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('stud-slot-view-seeking'));
+    expect(screen.queryAllByTestId('stud-task-claim')).toHaveLength(0);
+    expect(screen.getAllByText(/待确认/).length).toBeGreaterThan(0);
   });
 
   test('目标未确认时给出明确提示', () => {

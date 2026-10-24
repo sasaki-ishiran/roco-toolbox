@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { eggGroupNames } from '../data/catalog';
 import {
   buildStudCoverage,
@@ -8,17 +8,18 @@ import {
   type StudSlotRow,
 } from '../domain/studSharing';
 import { TARGET_MODE_LABELS } from '../domain/petFilters';
-import type { CollectionGroupDetail } from '../shared/collectionGroups';
+import type { CollectionGroupDetail, CollectionTaskRecord } from '../shared/collectionGroups';
 import { setGroupList, useGroupList } from './listViewStore';
 import { InlineSelect } from './primitives/InlineSelect';
 import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { StateNotice } from './primitives/StateNotice';
 
-type ViewId = 'missing' | 'all';
+type ViewId = 'missing' | 'seeking' | 'all';
 
 const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: 'missing', label: '我缺的' },
+  { id: 'seeking', label: '共同寻找' },
   { id: 'all', label: '小组槽位' },
 ];
 
@@ -26,6 +27,13 @@ export interface StudGroupResourcesProps {
   group: CollectionGroupDetail;
   viewerAccountId: string;
   catalogVersion: string;
+  tasks?: CollectionTaskRecord[];
+  tasksConfirmed?: boolean;
+  tasksPendingMemberIds?: string[];
+  isOwner?: boolean;
+  onClaimTask?: (targetKey: string) => Promise<void>;
+  onReleaseTask?: (targetKey: string) => Promise<void>;
+  onTransferTask?: (targetKey: string, toAccountId: string) => Promise<void>;
 }
 
 /**
@@ -34,11 +42,25 @@ export interface StudGroupResourcesProps {
  * 「我缺的」= 我没有真实公精灵覆盖的槽位；组内已有人覆盖的排前。
  * 可迭代单独一行展示，不算已覆盖；未知成员（未发布 / 目标修订或图鉴不一致）不计缺口。
  */
-export function StudGroupResources({ group, viewerAccountId, catalogVersion }: StudGroupResourcesProps) {
+export function StudGroupResources({
+  group,
+  viewerAccountId,
+  catalogVersion,
+  tasks = [],
+  tasksConfirmed = false,
+  tasksPendingMemberIds = [],
+  isOwner = false,
+  onClaimTask,
+  onReleaseTask,
+  onTransferTask,
+}: StudGroupResourcesProps) {
   const target = group.group.target;
   const list = useGroupList(viewerAccountId, group.group.id);
   const setList = (patch: Partial<typeof list>) => setGroupList(viewerAccountId, group.group.id, patch);
   const { view, query, memberFilter } = list;
+  const effectiveView: ViewId = view === 'help' ? 'missing' : view;
+  const [busyKey, setBusyKey] = useState('');
+  const [taskError, setTaskError] = useState('');
 
   const studTarget = target?.kind === 'stud' ? target : null;
   const rows = useMemo(
@@ -98,13 +120,21 @@ export function StudGroupResources({ group, viewerAccountId, catalogVersion }: S
     );
   }
 
-  const currentRows = view === 'missing' ? views.missingForMe : views.all;
+  const currentRows =
+    effectiveView === 'missing'
+      ? views.missingForMe
+      : effectiveView === 'seeking'
+        ? rows.filter((row) => row.holders.length === 0)
+        : views.all;
   const filtered = (currentRows ?? []).filter((row) => {
     if (memberFilter) {
       const related =
-        row.holders.some((holder) => holder.accountId === memberFilter) ||
-        row.missingMemberIds.includes(memberFilter) ||
-        row.breedableHolders.some((holder) => holder.accountId === memberFilter);
+        effectiveView === 'seeking'
+          ? row.holders.some((holder) => holder.accountId === memberFilter) ||
+            row.missingMemberIds.includes(memberFilter) ||
+            row.breedableHolders.some((holder) => holder.accountId === memberFilter) ||
+            row.unknownMemberIds.includes(memberFilter)
+          : row.holders.some((holder) => holder.accountId === memberFilter);
       if (!related) return false;
     }
     const keyword = query.trim().toLowerCase();
@@ -142,6 +172,38 @@ export function StudGroupResources({ group, viewerAccountId, catalogVersion }: S
       })
       .join('、');
 
+  const taskKeyOf = (row: StudSlotRow): string => `stud:${row.key}`;
+  const taskOf = (row: StudSlotRow): CollectionTaskRecord | undefined =>
+    tasks.find((task) => task.targetKey === taskKeyOf(row));
+  const runTask = async (row: StudSlotRow, action: 'claim' | 'release') => {
+    const handler = action === 'claim' ? onClaimTask : onReleaseTask;
+    if (!handler || busyKey) return;
+    const key = taskKeyOf(row);
+    setBusyKey(key);
+    setTaskError('');
+    try {
+      await handler(key);
+    } catch (failure) {
+      setTaskError(failure instanceof Error ? failure.message : '操作失败，请稍后再试');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  const transferTo = async (row: StudSlotRow, toAccountId: string) => {
+    if (!onTransferTask || busyKey || !toAccountId) return;
+    const key = taskKeyOf(row);
+    setBusyKey(key);
+    setTaskError('');
+    try {
+      await onTransferTask(key, toAccountId);
+    } catch (failure) {
+      setTaskError(failure instanceof Error ? failure.message : '操作失败，请稍后再试');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
   return (
     <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm" data-testid="stud-resources">
       <div className="flex items-baseline justify-between gap-2">
@@ -154,11 +216,15 @@ export function StudGroupResources({ group, viewerAccountId, catalogVersion }: S
 
       <SegmentedControl
         label="种公资源视图"
-        value={view}
+        value={effectiveView}
         options={VIEWS.map((item) => ({ value: item.id, label: item.label }))}
         onValueChange={(next) => setList({ view: next as ViewId })}
         optionTestId={(value) => `stud-slot-view-${value}`}
       />
+
+      {taskError ? (
+        <p className="text-xs text-rose-600" data-testid="stud-task-error">{taskError}</p>
+      ) : null}
 
       {currentRows === null ? (
         <StateNotice
@@ -243,6 +309,74 @@ export function StudGroupResources({ group, viewerAccountId, catalogVersion }: S
                               ? `，另 ${row.unknownMemberIds.length} 人待发布/更新`
                               : ''}
                           </p>
+                        ) : null}
+                        {effectiveView === 'seeking' ? (
+                          <div className="mt-1 border-t border-slate-200 pt-1 text-[11px]" data-testid="stud-task">
+                            {!tasksConfirmed ? (
+                              <span className="text-amber-700">
+                                待确认：{tasksPendingMemberIds.length} 人未发布/更新，暂不能认领
+                              </span>
+                            ) : taskOf(row)?.ownerAccountId ? (
+                              <span className="flex flex-wrap items-center gap-1">
+                                <span
+                                  className={
+                                    taskOf(row)?.ownerAccountId === viewerAccountId
+                                      ? 'text-emerald-700'
+                                      : 'text-slate-500'
+                                  }
+                                >
+                                  {taskOf(row)?.ownerAccountId === viewerAccountId
+                                    ? '我认领了'
+                                    : `负责人：${labelOf(taskOf(row)?.ownerAccountId ?? '')}`}
+                                </span>
+                                {taskOf(row)?.ownerAccountId === viewerAccountId || isOwner ? (
+                                  <button
+                                    type="button"
+                                    disabled={busyKey === taskKeyOf(row)}
+                                    onClick={() => void runTask(row, 'release')}
+                                    data-testid="stud-task-release"
+                                    className="min-h-[24px] rounded border border-slate-200 px-1.5 text-slate-500 disabled:opacity-50"
+                                  >
+                                    释放
+                                  </button>
+                                ) : null}
+                                {isOwner &&
+                                onTransferTask &&
+                                taskOf(row)?.ownerAccountId !== viewerAccountId ? (
+                                  <InlineSelect
+                                    label="转交任务"
+                                    value=""
+                                    options={[
+                                      { value: '', label: '转交…' },
+                                      ...group.members
+                                        .filter(
+                                          (member) =>
+                                            member.accountId !== taskOf(row)?.ownerAccountId,
+                                        )
+                                        .map((member) => ({
+                                          value: member.accountId,
+                                          label: labelOf(member.accountId),
+                                        })),
+                                    ]}
+                                    onValueChange={(to) => void transferTo(row, to)}
+                                    testId="stud-task-transfer"
+                                    menuTestId="stud-task-transfer-options"
+                                    className="max-w-[110px]"
+                                  />
+                                ) : null}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={busyKey === taskKeyOf(row)}
+                                onClick={() => void runTask(row, 'claim')}
+                                data-testid="stud-task-claim"
+                                className="min-h-[24px] rounded border border-emerald-500 px-1.5 font-medium text-emerald-700 disabled:opacity-50"
+                              >
+                                认领寻找
+                              </button>
+                            )}
+                          </div>
                         ) : null}
                       </li>
                     ))}

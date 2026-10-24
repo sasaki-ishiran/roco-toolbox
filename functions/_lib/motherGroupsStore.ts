@@ -34,7 +34,17 @@ export type MotherStoreErrorCode =
   /** 组长改过目标，旧客户端不能继续按旧口径发布。 */
   | 'TARGET_CHANGED'
   /** 种公组还没确认目标，或目标槽位为空。 */
-  | 'TARGET_NOT_READY';
+  | 'TARGET_NOT_READY'
+  /** 共同寻找：目标已被他人认领。 */
+  | 'TASK_TAKEN'
+  /** 共同寻找：目标已经由已发布资源覆盖。 */
+  | 'TASK_ALREADY_COVERED'
+  /** 共同寻找：还有成员未发布 / 目标或图鉴不一致，不能确认缺口。 */
+  | 'TASKS_NOT_CONFIRMED'
+  /** 共同寻找：任务不存在或已关闭。 */
+  | 'TASK_NOT_FOUND'
+  /** 共同寻找：只有负责人或组长可以释放 / 转交。 */
+  | 'TASK_NOT_YOURS';
 
 export class MotherStoreError extends Error {
   readonly code: MotherStoreErrorCode;

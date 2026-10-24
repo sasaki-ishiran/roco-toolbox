@@ -153,7 +153,7 @@ try {
       ROCO_MOTHER_API_BASE: BASE,
     });
   } else {
-    run(`node --test ${API_TESTS.join(' ')}`, '本地 API 测试', { ROCO_MOTHER_API_BASE: BASE });
+    run(`node --test --test-concurrency=1 ${API_TESTS.join(' ')}`, '本地 API 测试', { ROCO_MOTHER_API_BASE: BASE });
   }
   console.log('[6/6] 通过');
 } finally {

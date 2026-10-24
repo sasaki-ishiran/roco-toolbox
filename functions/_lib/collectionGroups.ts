@@ -17,15 +17,19 @@ import {
   parseTargetUpdateBody,
 } from './collectionGroupsValidation';
 import {
+  claimCollectionTask,
   createCollectionGroup,
   findCollectionGroup,
   joinCollectionGroup,
   leaveCollectionGroup,
   listCollectionGroups,
+  listCollectionTasks,
   previewInviteGroup,
   publishMotherResourceToGroup,
   publishStudResource,
   readCollectionGroupDetail,
+  releaseCollectionTask,
+  transferCollectionTask,
   updateCollectionTarget,
 } from './collectionGroupsStore';
 import {
@@ -58,6 +62,11 @@ const STORE_STATUS: Record<MotherStoreErrorCode, number> = {
   OWNER_MUST_DISSOLVE: 409,
   TARGET_CHANGED: 409,
   TARGET_NOT_READY: 409,
+  TASK_TAKEN: 409,
+  TASK_ALREADY_COVERED: 409,
+  TASKS_NOT_CONFIRMED: 409,
+  TASK_NOT_FOUND: 404,
+  TASK_NOT_YOURS: 403,
 };
 
 const failCode = (origin: string | null, status: number, code: string, error: string): Response => {
@@ -160,6 +169,17 @@ export async function handleCollectionGroups(
     }
     if (rest.length === 3 && rest[1] === 'members' && rest[2] === 'me' && method === 'DELETE') {
       return await handleLeave(env, origin, accountId, groupId);
+    }
+    if (rest.length === 2 && rest[1] === 'tasks' && method === 'GET') {
+      return await handleTasks(env, origin, accountId, groupId);
+    }
+    if (
+      rest.length === 3 &&
+      rest[1] === 'tasks' &&
+      ['claim', 'release', 'transfer'].includes(rest[2]) &&
+      method === 'POST'
+    ) {
+      return await handleTaskAction(request, env, origin, accountId, groupId, rest[2]);
     }
     return failCode(origin, 404, 'GROUP_NOT_FOUND', '没有这个接口');
   } catch (error) {
@@ -315,6 +335,94 @@ async function handleTargetUpdate(
     now: Date.now(),
   });
   return okJson(origin, result);
+}
+
+async function handleTasks(
+  env: Env,
+  origin: string | null,
+  accountId: string,
+  groupId: string,
+): Promise<Response> {
+  const readLimited = await limited(env, origin, `cg-read:${accountId}`, READ_LIMIT);
+  if (readLimited) return readLimited;
+  const group = await findCollectionGroup(env.DB, groupId);
+  if (!group) return failCode(origin, 404, 'GROUP_NOT_FOUND', '小组不存在');
+  if (!(await isMember(env.DB, groupId, accountId))) {
+    return failCode(origin, 403, 'NOT_MEMBER', '不是该组成员');
+  }
+  const view = await listCollectionTasks(env.DB, groupId);
+  return okJson(origin, { ...view });
+}
+
+const parseTaskKey = (body: Record<string, unknown>): string => {
+  const key = body.targetKey;
+  if (typeof key !== 'string' || key.trim().length === 0 || key.length > 120) {
+    throw new MotherInputError('INVALID_INPUT', 'targetKey 无效');
+  }
+  return key.trim();
+};
+
+const parseOptionalVersion = (body: Record<string, unknown>): number | undefined => {
+  const version = body.version;
+  if (version === undefined || version === null) return undefined;
+  if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) {
+    throw new MotherInputError('INVALID_INPUT', 'version 必须是非负整数');
+  }
+  return version;
+};
+
+async function handleTaskAction(
+  request: Request,
+  env: Env,
+  origin: string | null,
+  accountId: string,
+  groupId: string,
+  action: string,
+): Promise<Response> {
+  const writeLimited = await limited(env, origin, `cg-write:${accountId}`, WRITE_LIMIT);
+  if (writeLimited) return writeLimited;
+  const group = await findCollectionGroup(env.DB, groupId);
+  if (!group) return failCode(origin, 404, 'GROUP_NOT_FOUND', '小组不存在');
+  if (!(await isMember(env.DB, groupId, accountId))) {
+    return failCode(origin, 403, 'NOT_MEMBER', '不是该组成员');
+  }
+  const body = (await readJsonBody(request)) as Record<string, unknown>;
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new MotherInputError('INVALID_INPUT', '请求体必须是对象');
+  }
+  const targetKey = parseTaskKey(body);
+  const expectedVersion = parseOptionalVersion(body);
+
+  if (action === 'claim') {
+    const task = await claimCollectionTask(env.DB, {
+      groupId,
+      accountId,
+      targetKey,
+      expectedVersion,
+    });
+    return okJson(origin, { task });
+  }
+  if (action === 'release') {
+    const task = await releaseCollectionTask(env.DB, {
+      groupId,
+      accountId,
+      targetKey,
+      expectedVersion,
+    });
+    return okJson(origin, { task });
+  }
+  const toAccountId = body.toAccountId;
+  if (typeof toAccountId !== 'string' || toAccountId.length === 0 || toAccountId.length > 64) {
+    throw new MotherInputError('INVALID_INPUT', 'toAccountId 无效');
+  }
+  const task = await transferCollectionTask(env.DB, {
+    groupId,
+    actorAccountId: accountId,
+    targetKey,
+    toAccountId,
+    expectedVersion,
+  });
+  return okJson(origin, { task });
 }
 
 async function handleProfile(

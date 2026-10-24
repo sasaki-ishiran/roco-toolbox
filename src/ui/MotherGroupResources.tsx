@@ -1,19 +1,24 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { buildEggSearchIndex } from '../domain/petFilters';
 import { buildMotherCoverage, isMotherResourceComparable, selectMotherSharingViews } from '../domain/motherSharing';
 import type { SpeciesEntry } from '../domain/types';
-import type { MotherCoverageRow, MotherGroupDetail, MotherGroupMember } from '../shared/motherGroups';
+import type {
+  MotherCoverageRow,
+  MotherGroupDetail,
+  MotherGroupMember,
+} from '../shared/motherGroups';
+import type { CollectionTaskRecord } from '../shared/collectionGroups';
 import { ensureGroupSession, setGroupList, useGroupList, type GroupListState } from './listViewStore';
 import { InlineSelect } from './primitives/InlineSelect';
 import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { StateNotice } from './primitives/StateNotice';
 
-type ViewId = 'missing' | 'help' | 'all';
+type ViewId = 'missing' | 'seeking' | 'all';
 
 const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: 'missing', label: '我缺的' },
-  { id: 'help', label: '我能补谁' },
+  { id: 'seeking', label: '共同寻找' },
   { id: 'all', label: '小组资源' },
 ];
 
@@ -24,6 +29,14 @@ export interface MotherGroupResourcesProps {
   catalogVersion: string;
   /** 本组口径；旧组 / 不传时按一期固定口径。 */
   criteriaId?: string;
+  /** 共同寻找的任务与确认状态；不传时只看资源。 */
+  tasks?: CollectionTaskRecord[];
+  tasksConfirmed?: boolean;
+  tasksPendingMemberIds?: string[];
+  isOwner?: boolean;
+  onClaimTask?: (targetKey: string) => Promise<void>;
+  onReleaseTask?: (targetKey: string) => Promise<void>;
+  onTransferTask?: (targetKey: string, toAccountId: string) => Promise<void>;
 }
 
 /**
@@ -33,12 +46,28 @@ export interface MotherGroupResourcesProps {
  * 未发布 / 已停止共享 / 图鉴或口径不兼容的成员是**未知**，不能算成「缺」——
  * 有未知成员时「小组都没有」必须改写成「已发布成员均无，另 N 人待发布/更新」。
  */
-export function MotherGroupResources({ group, viewerAccountId, species, catalogVersion, criteriaId }: MotherGroupResourcesProps) {
+export function MotherGroupResources({
+  group,
+  viewerAccountId,
+  species,
+  catalogVersion,
+  criteriaId,
+  tasks = [],
+  tasksConfirmed = false,
+  tasksPendingMemberIds = [],
+  isOwner = false,
+  onClaimTask,
+  onReleaseTask,
+  onTransferTask,
+}: MotherGroupResourcesProps) {
   // 临时查看状态按「身份 + 小组」隔离：换身份立即清空，切组不串条件（2026-10-24）
   const list = useGroupList(viewerAccountId, group.group.id);
   const setList = (patch: Partial<GroupListState>) =>
     setGroupList(viewerAccountId, group.group.id, patch);
   const { view, query, memberFilter, onlyOwned } = list;
+  const effectiveView: ViewId = view === 'help' ? 'missing' : view;
+  const [busyKey, setBusyKey] = useState('');
+  const [taskError, setTaskError] = useState('');
 
   useEffect(() => {
     ensureGroupSession(viewerAccountId);
@@ -94,18 +123,21 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
   };
 
   const currentRows =
-    view === 'missing'
+    effectiveView === 'missing'
       ? views.missingForMe
-      : view === 'help'
-        ? views.mineForOthers
+      : effectiveView === 'seeking'
+        ? rows.filter((row) => row.holders.length === 0)
         : views.all;
 
   const filtered = (currentRows ?? []).filter((row) => {
     if (onlyOwned && row.holders.length === 0) return false;
     if (memberFilter) {
-      const related = view === 'help'
-        ? row.missingMemberIds.includes(memberFilter)
-        : row.holders.some((holder) => holder.accountId === memberFilter);
+      const related =
+        effectiveView === 'seeking'
+          ? row.holders.some((holder) => holder.accountId === memberFilter) ||
+            row.missingMemberIds.includes(memberFilter) ||
+            row.unknownMemberIds.includes(memberFilter)
+          : row.holders.some((holder) => holder.accountId === memberFilter);
       if (!related) return false;
     }
     const keyword = query.trim().toLowerCase();
@@ -134,6 +166,42 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
       })
       .join('、');
 
+  const taskKeyOf = (row: MotherCoverageRow): string => `mother:${row.eggGameId}`;
+  const taskOf = (row: MotherCoverageRow): CollectionTaskRecord | undefined =>
+    tasks.find((task) => task.targetKey === taskKeyOf(row));
+  const nameOf = (accountId: string): string => {
+    const member = memberById.get(accountId);
+    return member ? labelOf(member) : accountId.slice(0, 6);
+  };
+  const runTask = async (row: MotherCoverageRow, action: 'claim' | 'release') => {
+    const handler = action === 'claim' ? onClaimTask : onReleaseTask;
+    if (!handler || busyKey) return;
+    const key = taskKeyOf(row);
+    setBusyKey(key);
+    setTaskError('');
+    try {
+      await handler(key);
+    } catch (failure) {
+      setTaskError(failure instanceof Error ? failure.message : '操作失败，请稍后再试');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  const transferTo = async (row: MotherCoverageRow, toAccountId: string) => {
+    if (!onTransferTask || busyKey || !toAccountId) return;
+    const key = taskKeyOf(row);
+    setBusyKey(key);
+    setTaskError('');
+    try {
+      await onTransferTask(key, toAccountId);
+    } catch (failure) {
+      setTaskError(failure instanceof Error ? failure.message : '操作失败，请稍后再试');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
   return (
     <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-resources">
       <div className="flex items-baseline justify-between gap-2">
@@ -146,11 +214,15 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
 
       <SegmentedControl
         label="小组资源视图"
-        value={view}
+        value={effectiveView}
         options={VIEWS.map((item) => ({ value: item.id, label: item.label }))}
         onValueChange={(next) => setList({ view: next as ViewId })}
         optionTestId={(value) => `mother-view-${value}`}
       />
+
+      {taskError ? (
+        <p className="text-xs text-rose-600" data-testid="mother-task-error">{taskError}</p>
+      ) : null}
 
       {currentRows === null ? (
         <StateNotice
@@ -229,6 +301,71 @@ export function MotherGroupResources({ group, viewerAccountId, species, catalogV
                     ? `，另 ${row.unknownMemberIds.length} 人待发布/更新`
                     : ''}
                 </p>
+              ) : null}
+              {effectiveView === 'seeking' ? (
+                <div className="mt-1 border-t border-slate-200 pt-1 text-[11px]" data-testid="mother-task">
+                  {!tasksConfirmed ? (
+                    <span className="text-amber-700">
+                      待确认：{tasksPendingMemberIds.length} 人未发布/更新，暂不能认领
+                    </span>
+                  ) : taskOf(row)?.ownerAccountId ? (
+                    <span className="flex flex-wrap items-center gap-1">
+                      <span
+                        className={
+                          taskOf(row)?.ownerAccountId === viewerAccountId
+                            ? 'text-emerald-700'
+                            : 'text-slate-500'
+                        }
+                      >
+                        {taskOf(row)?.ownerAccountId === viewerAccountId
+                          ? '我认领了'
+                          : `负责人：${nameOf(taskOf(row)?.ownerAccountId ?? '')}`}
+                      </span>
+                      {taskOf(row)?.ownerAccountId === viewerAccountId || isOwner ? (
+                        <button
+                          type="button"
+                          disabled={busyKey === taskKeyOf(row)}
+                          onClick={() => void runTask(row, 'release')}
+                          data-testid="mother-task-release"
+                          className="min-h-[24px] rounded border border-slate-200 px-1.5 text-slate-500 disabled:opacity-50"
+                        >
+                          释放
+                        </button>
+                      ) : null}
+                      {isOwner &&
+                      onTransferTask &&
+                      taskOf(row)?.ownerAccountId !== viewerAccountId ? (
+                        <InlineSelect
+                          label="转交任务"
+                          value=""
+                          options={[
+                            { value: '', label: '转交…' },
+                            ...group.members
+                              .filter((member) => member.accountId !== taskOf(row)?.ownerAccountId)
+                              .map((member) => ({
+                                value: member.accountId,
+                                label: labelOf(member),
+                              })),
+                          ]}
+                          onValueChange={(to) => void transferTo(row, to)}
+                          testId="mother-task-transfer"
+                          menuTestId="mother-task-transfer-options"
+                          className="max-w-[110px]"
+                        />
+                      ) : null}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busyKey === taskKeyOf(row)}
+                      onClick={() => void runTask(row, 'claim')}
+                      data-testid="mother-task-claim"
+                      className="min-h-[24px] rounded border border-emerald-500 px-1.5 font-medium text-emerald-700 disabled:opacity-50"
+                    >
+                      认领寻找
+                    </button>
+                  )}
+                </div>
               ) : null}
             </li>
           ))}

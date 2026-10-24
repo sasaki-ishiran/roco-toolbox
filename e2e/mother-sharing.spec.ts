@@ -72,6 +72,24 @@ test('小组资源：显示来源账号、缺口与未知人数；可切换视�
   );
 });
 
+test('共同寻找：确认后可以认领与释放，状态来自服务器', async ({ page }) => {
+  await loginAs(page);
+  await enterGroup(page);
+  await mockMotherGroups(page);
+  await page.goto('/');
+  await openGroups(page);
+
+  await page.getByTestId('mother-view-seeking').click();
+  const claim = page.getByTestId('mother-task-claim').first();
+  await expect(claim).toBeVisible();
+  await claim.click();
+  await expect(page.getByTestId('mother-task-release').first()).toBeVisible();
+  await expect(page.getByText('我认领了').first()).toBeVisible();
+
+  await page.getByTestId('mother-task-release').first().click();
+  await expect(page.getByTestId('mother-task-claim').first()).toBeVisible();
+});
+
 test('组列表接口失败时不说「还没有加入任何小组」，并给出重试', async ({ page }) => {
   await loginAs(page);
   await enterGroup(page);

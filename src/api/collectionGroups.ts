@@ -23,6 +23,8 @@ import {
   type CollectionGroupType,
   type CollectionTargetGrade,
   type CollectionTargetMode,
+  type CollectionTaskRecord,
+  type CollectionTaskStatus,
   type GroupTargetConfig,
   type MotherTargetConfig,
   type PublishedStudResource,
@@ -349,6 +351,88 @@ export async function updateCollectionTarget(
   );
   return { targetRevision: asNumber(data.targetRevision, 'targetRevision') };
 }
+
+function parseTask(value: unknown): CollectionTaskRecord {
+  const record = asRecord(value, 'task');
+  const status = record.status;
+  if (status !== 'open' && status !== 'claimed' && status !== 'closed') {
+    bad('task.status 不受支持');
+  }
+  const owner = record.ownerAccountId;
+  return {
+    groupId: asString(record.groupId, 'groupId'),
+    targetRevision: asNumber(record.targetRevision, 'targetRevision'),
+    targetKey: asString(record.targetKey, 'targetKey'),
+    round: asNumber(record.round, 'round'),
+    status: status as CollectionTaskStatus,
+    ownerAccountId: owner === null || owner === undefined ? null : asString(owner, 'ownerAccountId'),
+    version: asNumber(record.version, 'version'),
+    updatedAt: asNumber(record.updatedAt, 'updatedAt'),
+    closedAt: record.closedAt === null ? null : asNumber(record.closedAt, 'closedAt'),
+  };
+}
+
+export interface CollectionTasksResponse {
+  targetRevision: number;
+  confirmed: boolean;
+  pendingMemberIds: string[];
+  tasks: CollectionTaskRecord[];
+}
+
+export async function getCollectionTasks(
+  groupId: string,
+  signal?: AbortSignal,
+): Promise<CollectionTasksResponse> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/tasks`,
+      jsonInit('GET', undefined, signal),
+    ),
+    '响应',
+  );
+  return {
+    targetRevision: asNumber(data.targetRevision, 'targetRevision'),
+    confirmed: data.confirmed === true,
+    pendingMemberIds: asArray(data.pendingMemberIds, 'pendingMemberIds').map((item, index) =>
+      asString(item, `pendingMemberIds[${index}]`),
+    ),
+    tasks: asArray(data.tasks, 'tasks').map(parseTask),
+  };
+}
+
+async function taskAction(
+  groupId: string,
+  action: 'claim' | 'release' | 'transfer',
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<CollectionTaskRecord> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/tasks/${action}`,
+      jsonInit('POST', body, signal),
+    ),
+    '响应',
+  );
+  return parseTask(data.task);
+}
+
+export const claimCollectionTask = (
+  groupId: string,
+  input: { targetKey: string; version?: number },
+  signal?: AbortSignal,
+) => taskAction(groupId, 'claim', input, signal);
+
+export const releaseCollectionTask = (
+  groupId: string,
+  input: { targetKey: string; version?: number },
+  signal?: AbortSignal,
+) => taskAction(groupId, 'release', input, signal);
+
+export const transferCollectionTask = (
+  groupId: string,
+  input: { targetKey: string; toAccountId: string; version?: number },
+  signal?: AbortSignal,
+) => taskAction(groupId, 'transfer', input, signal);
 
 export async function updateCollectionGroupProfile(
   groupId: string,

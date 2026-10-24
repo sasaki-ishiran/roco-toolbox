@@ -407,6 +407,124 @@ test('母本组自选口径：新口径可发布，旧固定口径被拒绝', as
   assert.equal(byOld.body.code, 'TARGET_CHANGED');
 });
 
+test('共同寻找：全员确认后才能认领，并发只有一个成功；发布补齐自动结束任务', async () => {
+  const created = await createGroup(A, {
+    name: '共同寻找组',
+    displayName: 'A',
+    groupType: 'mother',
+  });
+  assert.equal((await join(B, created.inviteCode)).status, 200);
+
+  const unconfirmed = await call(
+    A.token,
+    'POST',
+    `/api/collection-groups/${created.id}/tasks/claim`,
+    { targetKey: 'mother:999' },
+  );
+  assert.equal(unconfirmed.status, 409);
+  assert.equal(unconfirmed.body.code, 'TASKS_NOT_CONFIRMED');
+
+  const aPublish = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
+    baseRevision: 0,
+    baseTargetRevision: 0,
+    resource: motherDraft([motherAccount(1001, [101])]),
+  });
+  assert.equal(aPublish.status, 200);
+  const bPublish = await call(B.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
+    baseRevision: 0,
+    baseTargetRevision: 0,
+    resource: motherDraft([motherAccount(2001, [201])]),
+  });
+  assert.equal(bPublish.status, 200);
+
+  const confirmed = await call(A.token, 'GET', `/api/collection-groups/${created.id}/tasks`);
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.body.confirmed, true);
+  assert.deepEqual(confirmed.body.tasks, []);
+
+  // 并发认领同一目标：只能有一个成功
+  const [left, right] = await Promise.all([
+    call(A.token, 'POST', `/api/collection-groups/${created.id}/tasks/claim`, {
+      targetKey: 'mother:999',
+    }),
+    call(B.token, 'POST', `/api/collection-groups/${created.id}/tasks/claim`, {
+      targetKey: 'mother:999',
+    }),
+  ]);
+  const statuses = [left.status, right.status].sort((x, y) => x - y);
+  assert.deepEqual(statuses, [200, 409]);
+  const taken = left.status === 409 ? left : right;
+  assert.equal(taken.body.code, 'TASK_TAKEN');
+
+  const winnerToken = left.status === 200 ? A.token : B.token;
+  const winnerId = left.status === 200 ? A.accountId : B.accountId;
+  const loserToken = left.status === 200 ? B.token : A.token;
+  const tasksAfterClaim = await call(A.token, 'GET', `/api/collection-groups/${created.id}/tasks`);
+  const task = tasksAfterClaim.body.tasks.find((item) => item.targetKey === 'mother:999');
+  assert.equal(task.status, 'claimed');
+  assert.equal(task.ownerAccountId, winnerId);
+
+  // 组长可以释放（普通成员释放由单测覆盖）
+  const releasedByOwner = await call(A.token, 'POST', `/api/collection-groups/${created.id}/tasks/release`, {
+    targetKey: 'mother:999',
+    version: task.version,
+  });
+  assert.equal(releasedByOwner.status, 200);
+  assert.equal(releasedByOwner.body.task.status, 'open');
+  assert.equal(releasedByOwner.body.task.ownerAccountId, null);
+
+  // 重新认领后，发布补齐该蛋血脉 → 任务自动关闭
+  const reclaim = await call(winnerToken, 'POST', `/api/collection-groups/${created.id}/tasks/claim`, {
+    targetKey: 'mother:999',
+  });
+  assert.equal(reclaim.status, 200);
+  const covered = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
+    baseRevision: 1,
+    baseTargetRevision: 0,
+    resource: motherDraft([
+      {
+        accountKey: 'uid:1001',
+        accountName: '账号1001',
+        sourceExportedAt: LATER,
+        eggGameIds: [101, 999],
+      },
+    ]),
+  });
+  assert.equal(covered.status, 200);
+  const afterCover = await call(A.token, 'GET', `/api/collection-groups/${created.id}/tasks`);
+  assert.equal(afterCover.body.tasks.some((item) => item.targetKey === 'mother:999'), false);
+
+  const claimCovered = await call(B.token, 'POST', `/api/collection-groups/${created.id}/tasks/claim`, {
+    targetKey: 'mother:999',
+  });
+  assert.equal(claimCovered.status, 409);
+  assert.equal(claimCovered.body.code, 'TASK_ALREADY_COVERED');
+});
+
+test('共同寻找：目标不属于本组当前目标时拒绝；种公组目标修订后旧任务不再可认领', async () => {
+  const created = await createGroup(A, {
+    name: '种公任务组',
+    displayName: 'A',
+    groupType: 'stud',
+    target: studTarget(),
+  });
+  const outside = await call(A.token, 'POST', `/api/collection-groups/${created.id}/tasks/claim`, {
+    targetKey: 'stud:9:9:大婉',
+  });
+  assert.equal(outside.status, 404);
+  assert.equal(outside.body.code, 'TASK_NOT_FOUND');
+
+  const update = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/target`, {
+    baseTargetRevision: 0,
+    target: studTarget({ slots: [SLOT, { ...SLOT, natureId: 12, natureName: '固执' }] }),
+  });
+  assert.equal(update.status, 200);
+  const tasks = await call(A.token, 'GET', `/api/collection-groups/${created.id}/tasks`);
+  assert.equal(tasks.status, 200);
+  assert.equal(tasks.body.targetRevision, 1);
+  assert.deepEqual(tasks.body.tasks, []);
+});
+
 test('种公摘要同组 UID 被占用时整批回滚；旧源时间被拒绝', async () => {
   const created = await createGroup(A, {
     name: '冲突组',

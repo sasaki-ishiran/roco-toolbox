@@ -22,7 +22,9 @@ import {
   emptyStudTarget,
   isTargetReady,
   motherCriteriaIdOf,
+  motherTargetKey,
   studSlotSetIdOf,
+  studTargetKey,
   slotKeyOf,
   type CollectionGroupConfig,
   type CollectionGroupDetail,
@@ -32,6 +34,8 @@ import {
   type CollectionGroupType,
   type CollectionTargetGrade,
   type CollectionTargetMode,
+  type CollectionTaskRecord,
+  type CollectionTaskStatus,
   type GroupTargetConfig,
   type MotherTargetConfig,
   type PublishedStudResource,
@@ -41,7 +45,7 @@ import {
   type StudTargetConfig,
   type StudTargetSlot,
 } from '../../src/shared/collectionGroups';
-import { MotherStoreError, publishMemberResource } from './motherGroupsStore';
+import { MotherStoreError, isMember, publishMemberResource } from './motherGroupsStore';
 
 interface GroupRow {
   id: string;
@@ -706,6 +710,10 @@ export async function publishStudResource(
     throw error;
   }
 
+  const keys = new Set(
+    accounts.flatMap((account) => account.covered.map((slot) => studTargetKey(slot))),
+  );
+  await closeCoveredTasks(db, groupId, resource.targetRevision, keys);
   return { resourceRevision: baseRevision + 1, publishedAt: published ? now : null };
 }
 
@@ -878,7 +886,12 @@ export async function publishMotherResourceToGroup(
   ) {
     throw new MotherStoreError('TARGET_CHANGED', '图鉴已更新，请先更新本组目标');
   }
-  return publishMemberResource(db, input);
+  const result = await publishMemberResource(db, input);
+  const keys = new Set(
+    input.resource.accounts.flatMap((account) => account.eggGameIds.map(motherTargetKey)),
+  );
+  await closeCoveredTasks(db, input.groupId, config.targetRevision, keys);
+  return result;
 }
 
 /** 母本目标标准化：默认口径沿用一期 criteriaId。 */
@@ -923,4 +936,408 @@ export function groupSlotsByGroup(
   return [...map.entries()]
     .sort(([a], [b]) => a - b)
     .map(([groupId, slots]) => ({ groupId, slots }));
+}
+
+/* ---------- 共同寻找与认领 ---------- */
+
+interface TaskRow {
+  group_id: string;
+  target_revision: number;
+  target_key: string;
+  round: number;
+  status: string;
+  owner_account_id: string | null;
+  version: number;
+  updated_at: number;
+  closed_at: number | null;
+}
+
+export interface CollectionTasksView {
+  targetRevision: number;
+  /** 所有成员都已按当前目标发布 = 缺口可确认；否则只能展示、不能认领。 */
+  confirmed: boolean;
+  pendingMemberIds: string[];
+  tasks: CollectionTaskRecord[];
+}
+
+const expectedCriteriaOf = (config: CollectionGroupConfig): string => {
+  if (config.target?.kind === 'mother') return config.target.criteriaId;
+  if (config.target?.kind === 'stud') return studSlotSetIdOf(config.target);
+  return MOTHER_CRITERIA_ID;
+};
+
+const targetCatalogOf = (config: CollectionGroupConfig): string =>
+  config.target?.catalogVersion ?? '';
+
+const isMemberComparableForTarget = (row: MemberRow, config: CollectionGroupConfig): boolean => {
+  if (row.published_at == null || row.criteria_id == null || row.catalog_version == null) return false;
+  if (row.criteria_id !== expectedCriteriaOf(config)) return false;
+  const catalog = targetCatalogOf(config);
+  return catalog.length === 0 || row.catalog_version === catalog;
+};
+
+const toTaskRecord = (row: TaskRow): CollectionTaskRecord => ({
+  groupId: row.group_id,
+  targetRevision: row.target_revision,
+  targetKey: row.target_key,
+  round: row.round,
+  status: (row.status === 'claimed' || row.status === 'closed' ? row.status : 'open') as CollectionTaskStatus,
+  ownerAccountId: row.owner_account_id,
+  version: row.version,
+  updatedAt: row.updated_at,
+  closedAt: row.closed_at,
+});
+
+/** 当前目标修订下的任务与「是否全员确认」。 */
+export async function listCollectionTasks(
+  db: D1Database,
+  groupId: string,
+): Promise<CollectionTasksView> {
+  const config = await readGroupConfig(db, groupId);
+  const [memberResult, taskResult] = await db.batch([
+    db
+      .prepare(
+        `SELECT account_id, display_name, joined_at, resource_revision,
+                published_at, catalog_version, criteria_id
+           FROM mother_group_members WHERE group_id = ?
+          ORDER BY joined_at ASC, account_id ASC`,
+      )
+      .bind(groupId),
+    db
+      .prepare(
+        `SELECT group_id, target_revision, target_key, round, status,
+                owner_account_id, version, updated_at, closed_at
+           FROM collection_group_tasks
+          WHERE group_id = ? AND target_revision = ? AND status <> 'closed'
+          ORDER BY updated_at DESC`,
+      )
+      .bind(groupId, config.targetRevision),
+  ]);
+  const members = memberResult.results as MemberRow[];
+  const pendingMemberIds = members
+    .filter((row) => !isMemberComparableForTarget(row, config))
+    .map((row) => row.account_id);
+  return {
+    targetRevision: config.targetRevision,
+    confirmed: pendingMemberIds.length === 0,
+    pendingMemberIds,
+    tasks: (taskResult.results as TaskRow[]).map(toTaskRecord),
+  };
+}
+
+const taskKeyBelongsToTarget = (
+  config: CollectionGroupConfig,
+  targetKey: string,
+): boolean => {
+  if (config.groupType === 'mother') {
+    return /^mother:[1-9]\d*$/.test(targetKey);
+  }
+  if (config.groupType !== 'stud' || config.target?.kind !== 'stud') return false;
+  return config.target.slots.some((slot) => studTargetKey(slot) === targetKey);
+};
+
+async function findActiveTask(
+  db: D1Database,
+  groupId: string,
+  targetRevision: number,
+  targetKey: string,
+): Promise<TaskRow | null> {
+  return db
+    .prepare(
+      `SELECT group_id, target_revision, target_key, round, status,
+              owner_account_id, version, updated_at, closed_at
+         FROM collection_group_tasks
+        WHERE group_id = ? AND target_revision = ? AND target_key = ? AND status <> 'closed'
+        ORDER BY round DESC LIMIT 1`,
+    )
+    .bind(groupId, targetRevision, targetKey)
+    .first<TaskRow>();
+}
+
+async function coveredKeysOf(
+  db: D1Database,
+  groupId: string,
+  config: CollectionGroupConfig,
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+  if (config.groupType === 'mother') {
+    const { results } = await db
+      .prepare('SELECT egg_game_ids FROM mother_group_accounts WHERE group_id = ?')
+      .bind(groupId)
+      .all<{ egg_game_ids: string }>();
+    for (const row of results) {
+      for (const id of parseStoredIds(row.egg_game_ids)) keys.add(motherTargetKey(id));
+    }
+    return keys;
+  }
+  if (config.target?.kind !== 'stud') return keys;
+  const { results } = await db
+    .prepare(
+      `SELECT slots_json FROM collection_group_stud_accounts
+        WHERE group_id = ? AND target_revision = ?`,
+    )
+    .bind(groupId, config.targetRevision)
+    .all<{ slots_json: string }>();
+  for (const row of results) {
+    for (const slot of parseStoredStudSlots(row.slots_json).covered) {
+      keys.add(studTargetKey(slot));
+    }
+  }
+  return keys;
+}
+
+async function memberName(
+  db: D1Database,
+  groupId: string,
+  accountId: string,
+): Promise<string> {
+  const row = await db
+    .prepare('SELECT display_name FROM mother_group_members WHERE group_id = ? AND account_id = ?')
+    .bind(groupId, accountId)
+    .first<{ display_name: string }>();
+  return row?.display_name ?? '其他成员';
+}
+
+export interface ClaimTaskInput {
+  groupId: string;
+  accountId: string;
+  targetKey: string;
+  expectedVersion?: number;
+}
+
+/** 认领：只有全员确认的缺口可认领；同一目标并发时只有一个成功。 */
+export async function claimCollectionTask(
+  db: D1Database,
+  input: ClaimTaskInput,
+): Promise<CollectionTaskRecord> {
+  const { groupId, accountId, targetKey, expectedVersion } = input;
+  const config = await readGroupConfig(db, groupId);
+  if (!taskKeyBelongsToTarget(config, targetKey)) {
+    throw new MotherStoreError('TASK_NOT_FOUND', '这个目标不属于本组当前目标');
+  }
+  const view = await listCollectionTasks(db, groupId);
+  if (!view.confirmed) {
+    throw new MotherStoreError('TASKS_NOT_CONFIRMED', '还有成员未发布或目标不一致，暂时不能认领');
+  }
+  const covered = await coveredKeysOf(db, groupId, config);
+  if (covered.has(targetKey)) {
+    throw new MotherStoreError('TASK_ALREADY_COVERED', '这个目标已经被组内已发布资源补上了');
+  }
+
+  const claimExisting = async (row: TaskRow): Promise<CollectionTaskRecord> => {
+    if (row.owner_account_id === accountId) return toTaskRecord(row);
+    if (row.status === 'claimed' && row.owner_account_id) {
+      const name = await memberName(db, groupId, row.owner_account_id);
+      throw new MotherStoreError('TASK_TAKEN', `这个目标已由 ${name} 认领`);
+    }
+    if (expectedVersion != null && row.version !== expectedVersion) {
+      throw new MotherStoreError('TASK_TAKEN', '任务状态已更新，请刷新后再试');
+    }
+    const now = Date.now();
+    const updated = await db
+      .prepare(
+        `UPDATE collection_group_tasks
+            SET status = 'claimed', owner_account_id = ?,
+                version = version + 1, updated_at = ?
+          WHERE group_id = ? AND target_revision = ? AND target_key = ? AND round = ?
+            AND version = ? AND status <> 'closed'
+            AND (owner_account_id IS NULL OR owner_account_id = ?)`,
+      )
+      .bind(accountId, now, groupId, row.target_revision, targetKey, row.round, row.version, accountId)
+      .run();
+    if ((updated.meta.changes ?? 0) === 0) {
+      const latest = await findActiveTask(db, groupId, row.target_revision, targetKey);
+      if (latest?.owner_account_id && latest.owner_account_id !== accountId) {
+        const name = await memberName(db, groupId, latest.owner_account_id);
+        throw new MotherStoreError('TASK_TAKEN', `这个目标已由 ${name} 认领`);
+      }
+      throw new MotherStoreError('TASK_TAKEN', '任务状态已更新，请刷新后再试');
+    }
+    const latest = await findActiveTask(db, groupId, row.target_revision, targetKey);
+    if (!latest) throw new MotherStoreError('TASK_NOT_FOUND', '任务不存在');
+    return toTaskRecord(latest);
+  };
+
+  const active = await findActiveTask(db, groupId, config.targetRevision, targetKey);
+  if (active) return claimExisting(active);
+
+  const maxRow = await db
+    .prepare(
+      `SELECT MAX(round) AS max_round FROM collection_group_tasks
+        WHERE group_id = ? AND target_revision = ? AND target_key = ?`,
+    )
+    .bind(groupId, config.targetRevision, targetKey)
+    .first<{ max_round: number | null }>();
+  const round = (maxRow?.max_round ?? -1) + 1;
+  const now = Date.now();
+  const inserted = await db
+    .prepare(
+      `INSERT INTO collection_group_tasks
+         (group_id, target_revision, target_key, round, status, owner_account_id,
+          version, created_at, updated_at, closed_at)
+       SELECT ?, ?, ?, ?, 'claimed', ?, 1, ?, ?, NULL
+        WHERE NOT EXISTS (
+          SELECT 1 FROM collection_group_tasks
+           WHERE group_id = ? AND target_revision = ? AND target_key = ? AND status <> 'closed'
+        )`,
+    )
+    .bind(groupId, config.targetRevision, targetKey, round, accountId, now, now,
+      groupId, config.targetRevision, targetKey)
+    .run();
+  if ((inserted.meta.changes ?? 0) > 0) {
+    return {
+      groupId,
+      targetRevision: config.targetRevision,
+      targetKey,
+      round,
+      status: 'claimed',
+      ownerAccountId: accountId,
+      version: 1,
+      updatedAt: now,
+      closedAt: null,
+    };
+  }
+  const raced = await findActiveTask(db, groupId, config.targetRevision, targetKey);
+  if (!raced) throw new MotherStoreError('TASK_TAKEN', '任务状态已更新，请刷新后再试');
+  return claimExisting(raced);
+}
+
+export interface ReleaseTaskInput {
+  groupId: string;
+  accountId: string;
+  targetKey: string;
+  expectedVersion?: number;
+}
+
+/** 释放：负责人或组长可以把任务放回未认领。 */
+export async function releaseCollectionTask(
+  db: D1Database,
+  input: ReleaseTaskInput,
+): Promise<CollectionTaskRecord> {
+  const { groupId, accountId, targetKey, expectedVersion } = input;
+  const config = await readGroupConfig(db, groupId);
+  const active = await findActiveTask(db, groupId, config.targetRevision, targetKey);
+  if (!active) throw new MotherStoreError('TASK_NOT_FOUND', '这个目标没有进行中的认领');
+  const group = await db
+    .prepare('SELECT owner_account_id FROM mother_groups WHERE id = ?')
+    .bind(groupId)
+    .first<{ owner_account_id: string }>();
+  if (active.owner_account_id !== accountId && group?.owner_account_id !== accountId) {
+    throw new MotherStoreError('TASK_NOT_YOURS', '只有负责人或组长可以释放这个任务');
+  }
+  if (expectedVersion != null && active.version !== expectedVersion) {
+    throw new MotherStoreError('TASK_TAKEN', '任务状态已更新，请刷新后再试');
+  }
+  const now = Date.now();
+  const updated = await db
+    .prepare(
+      `UPDATE collection_group_tasks
+          SET status = 'open', owner_account_id = NULL,
+              version = version + 1, updated_at = ?
+        WHERE group_id = ? AND target_revision = ? AND target_key = ? AND round = ?
+          AND version = ? AND status <> 'closed'`,
+    )
+    .bind(now, groupId, active.target_revision, targetKey, active.round, active.version)
+    .run();
+  if ((updated.meta.changes ?? 0) === 0) {
+    throw new MotherStoreError('TASK_TAKEN', '任务状态已更新，请刷新后再试');
+  }
+  return {
+    ...toTaskRecord(active),
+    status: 'open',
+    ownerAccountId: null,
+    version: active.version + 1,
+    updatedAt: now,
+  };
+}
+
+export interface TransferTaskInput {
+  groupId: string;
+  actorAccountId: string;
+  targetKey: string;
+  toAccountId: string;
+  expectedVersion?: number;
+}
+
+/** 转交：只有组长可以转给现有成员。 */
+export async function transferCollectionTask(
+  db: D1Database,
+  input: TransferTaskInput,
+): Promise<CollectionTaskRecord> {
+  const { groupId, actorAccountId, targetKey, toAccountId, expectedVersion } = input;
+  const config = await readGroupConfig(db, groupId);
+  const group = await db
+    .prepare('SELECT owner_account_id FROM mother_groups WHERE id = ?')
+    .bind(groupId)
+    .first<{ owner_account_id: string }>();
+  if (!group) throw new MotherStoreError('GROUP_NOT_FOUND', '小组不存在');
+  if (group.owner_account_id !== actorAccountId) {
+    throw new MotherStoreError('NOT_OWNER', '只有组长可以转交任务');
+  }
+  if (!(await isMember(db, groupId, toAccountId))) {
+    throw new MotherStoreError('TASK_NOT_YOURS', '只能转交给本组成员');
+  }
+  const active = await findActiveTask(db, groupId, config.targetRevision, targetKey);
+  if (!active) throw new MotherStoreError('TASK_NOT_FOUND', '这个目标没有进行中的认领');
+  if (expectedVersion != null && active.version !== expectedVersion) {
+    throw new MotherStoreError('TASK_TAKEN', '任务状态已更新，请刷新后再试');
+  }
+  const now = Date.now();
+  const updated = await db
+    .prepare(
+      `UPDATE collection_group_tasks
+          SET status = 'claimed', owner_account_id = ?,
+              version = version + 1, updated_at = ?
+        WHERE group_id = ? AND target_revision = ? AND target_key = ? AND round = ?
+          AND version = ? AND status <> 'closed'`,
+    )
+    .bind(toAccountId, now, groupId, active.target_revision, targetKey, active.round, active.version)
+    .run();
+  if ((updated.meta.changes ?? 0) === 0) {
+    throw new MotherStoreError('TASK_TAKEN', '任务状态已更新，请刷新后再试');
+  }
+  return {
+    ...toTaskRecord(active),
+    status: 'claimed',
+    ownerAccountId: toAccountId,
+    version: active.version + 1,
+    updatedAt: now,
+  };
+}
+
+/**
+ * 发布后复核：被新摘要覆盖的目标自动结束任务。
+ * 只在当前目标修订内关闭；已关闭任务不会因为后来撤回而复活，下次认领会开新轮次。
+ */
+async function closeCoveredTasks(
+  db: D1Database,
+  groupId: string,
+  targetRevision: number,
+  keys: Set<string>,
+): Promise<void> {
+  if (keys.size === 0) return;
+  const { results } = await db
+    .prepare(
+      `SELECT target_key, round FROM collection_group_tasks
+        WHERE group_id = ? AND target_revision = ? AND status <> 'closed'`,
+    )
+    .bind(groupId, targetRevision)
+    .all<{ target_key: string; round: number }>();
+  const hits = results.filter((row) => keys.has(row.target_key));
+  const now = Date.now();
+  for (let index = 0; index < hits.length; index += 25) {
+    const chunk = hits.slice(index, index + 25);
+    await db.batch(
+      chunk.map((row) =>
+        db
+          .prepare(
+            `UPDATE collection_group_tasks
+                SET status = 'closed', closed_at = ?, updated_at = ?, version = version + 1
+              WHERE group_id = ? AND target_revision = ? AND target_key = ? AND round = ?
+                AND status <> 'closed'`,
+          )
+          .bind(now, now, groupId, targetRevision, row.target_key, row.round),
+      ),
+    );
+  }
 }
