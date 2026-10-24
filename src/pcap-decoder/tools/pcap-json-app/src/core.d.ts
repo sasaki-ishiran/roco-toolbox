@@ -37,3 +37,21 @@ export type ConvertedCapture = {
 };
 
 export function convertPcapBytes(bytes: Uint8Array, fileName?: string): ConvertedCapture;
+
+export interface ExtractedCapture {
+  profile?: Record<string, unknown> | null;
+  records: Array<Record<string, unknown>>;
+  boxes?: unknown[];
+  eggInventory?: { eggs: unknown[] } | null;
+  guluInventory?: { balls: unknown[] } | null;
+  fruits?: unknown[]; fashions?: unknown[]; topics?: Record<string, unknown>;
+  petMedals?: unknown[]; grassMedals?: unknown[]; grassTrials?: unknown[];
+}
+export interface CaptureDiagnostics {
+  hasGameTraffic: boolean; hasKey: boolean; profile: unknown; accountCount: number;
+  boxes: number; records: number; missingRecords: number; hasEggInventory: boolean;
+  eggInventoryComplete: boolean; eggRecords: number; completionCandidate: boolean;
+  truncated: boolean; flowErrors: number; stableWaitMs: number;
+}
+export function extractPcap(bytes: Uint8Array, options?: { allowTruncated?: boolean; retainRawProtocol?: boolean }): ExtractedCapture;
+export function inspectExtractedCapture(extracted: ExtractedCapture): CaptureDiagnostics;

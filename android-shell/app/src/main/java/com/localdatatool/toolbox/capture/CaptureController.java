@@ -21,7 +21,7 @@ public final class CaptureController {
     public interface ImportReady { void ready(String name, String url); }
     private final Activity activity;
     private final ImportReady imported;
-    private final Map<String, File> grants = new ConcurrentHashMap<>();
+    private final Map<String, CaptureSnapshot> grants = new ConcurrentHashMap<>();
     private volatile boolean trusted;
     private boolean permissionPending;
     private boolean awaitingLaunch;
@@ -47,7 +47,8 @@ public final class CaptureController {
                 .put("size", file.length()).put("createdAt", Long.parseLong(file.getName().substring(8, file.getName().length() - 5)))
                 .put("valid", files.valid(file)));
             return new JSONObject().put("version", 1).put("supported", Build.VERSION.SDK_INT >= 26)
-                .put("phase", state.phase).put("message", state.message).put("packets", state.packets).put("bytes", state.bytes).put("files", rows).toString();
+                .put("phase", state.phase).put("message", state.message).put("packets", state.packets).put("bytes", state.bytes).put("files", rows)
+                .put("progressVersion", 1).put("fileId", state.fileId).put("savedBytes", state.savedBytes).toString();
         } catch (Exception error) {
             return "{\"version\":1,\"supported\":" + (Build.VERSION.SDK_INT >= 26) + ",\"phase\":\"failed\",\"packets\":0,\"bytes\":0,\"files\":[],\"message\":"
                 + JSONObject.quote("无法读取本机采集文件：" + CaptureVpnService.friendly(error)) + "}";
@@ -135,12 +136,26 @@ public final class CaptureController {
         try {
             File file = requireFile(id, true);
             String token = UUID.randomUUID().toString();
-            grants.put(token, file);
+            grants.put(token, new CaptureSnapshot(file, file.length(), ""));
             // At most ten files are retained; expire old grants without retaining byte arrays.
-            if (grants.size() > 20) { grants.clear(); grants.put(token, file); }
+            if (grants.size() > 20) { grants.clear(); grants.put(token, new CaptureSnapshot(file, file.length(), "")); }
             activity.runOnUiThread(() -> { if (trusted) imported.ready(file.getName(), FILE_PREFIX + token); });
             return "";
         } catch (Exception error) { return CaptureVpnService.friendly(error); }
+    }
+    public String inspectCapture() throws Exception {
+        if (!trusted) throw new IOException("请在工具箱内查看采集进度");
+        CaptureState state = CaptureVpnService.STATE;
+        synchronized (state) {
+            if (!"capturing".equals(state.phase) || state.savedBytes <= 24 || state.fileId.isEmpty()) return "";
+            File file = CaptureVpnService.files(activity).require(state.fileId);
+            CaptureSnapshot snapshot = new CaptureSnapshot(file, state.savedBytes, state.fileId);
+            if (snapshot.size > file.length() || snapshot.size > CaptureFiles.MAX_BYTES) throw new IOException("采集快照尚未保存，请稍后重试");
+            String token = UUID.randomUUID().toString();
+            if (grants.size() > 20) grants.clear();
+            grants.put(token, snapshot);
+            return new JSONObject().put("id", file.getName()).put("size", snapshot.size).put("url", FILE_PREFIX + token).toString();
+        }
     }
     public String shareCapture(String id) {
         try {
@@ -166,13 +181,15 @@ public final class CaptureController {
         if (uri == null || !uri.toString().startsWith(FILE_PREFIX)) return null;
         try {
             String token = uri.toString().substring(FILE_PREFIX.length());
-            File file = trusted ? grants.get(token) : null;
-            if (file == null) throw new IOException("unknown capture grant");
-            file = requireFile(file.getName(), true);
+            CaptureSnapshot grant = trusted ? grants.get(token) : null;
+            if (grant == null) throw new IOException("unknown capture grant");
+            if (grant.session.isEmpty()) requireFile(grant.file.getName(), true);
+            else if (!grant.session.equals(CaptureVpnService.STATE.fileId)) throw new IOException("expired capture session");
+            CaptureVpnService.files(activity).require(grant.file.getName());
             Map<String, String> headers = new HashMap<>();
             headers.put("Access-Control-Allow-Origin", ORIGIN); headers.put("Cache-Control", "no-store");
-            headers.put("Content-Length", Long.toString(file.length()));
-            return new WebResourceResponse("application/octet-stream", null, 200, "OK", headers, new FileInputStream(file));
+            headers.put("Content-Length", Long.toString(grant.size));
+            return new WebResourceResponse("application/octet-stream", null, 200, "OK", headers, grant.open());
         } catch (Exception error) {
             return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", Collections.emptyMap(), new ByteArrayInputStream(new byte[0]));
         }

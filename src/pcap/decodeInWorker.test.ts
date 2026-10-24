@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { decodeInWorker, decodeUrlInWorker } from './decodeInWorker';
+import { decodeInWorker, decodeUrlInWorker, inspectUrlInWorker } from './decodeInWorker';
 
 function harness() {
   const worker = { onmessage: null as ((event: MessageEvent) => void) | null,
@@ -9,6 +9,14 @@ function harness() {
   return { worker, factory: () => worker as unknown as Worker };
 }
 describe('PCAP 后台解析', () => {
+  test('暂停进度检查立即释放 Worker，晚到结果不能复活旧会话', async () => {
+    const { worker, factory } = harness();
+    const controller = new AbortController();
+    const result = inspectUrlInWorker('https://roco-share.invalid/collector/12345678-1234-1234-1234-123456789abc', 'capture-1.pcap', controller.signal, factory);
+    controller.abort();
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    expect(worker.terminate).toHaveBeenCalledOnce();
+  });
   test('本机授权 URL 直接交给 Worker，主线程不读取原包', async () => {
     const { worker, factory } = harness();
     const url = 'https://roco-share.invalid/collector/12345678-1234-1234-1234-123456789abc';

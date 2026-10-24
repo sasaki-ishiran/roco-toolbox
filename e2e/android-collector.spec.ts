@@ -4,12 +4,15 @@ import { expect, test, type Page } from '@playwright/test';
 const url = 'https://roco-share.invalid/collector/12345678-1234-1234-1234-123456789abc';
 const fixture = readFileSync('src/pcap/__fixtures__/synthetic-capture.pcap');
 const bootstrap = readFileSync('android-shell/app/src/main/assets/capture-bridge.js', 'utf8');
-async function mockCollector(page: Page) {
-  await page.addInitScript((captureUrl) => {
+async function mockCollector(page: Page, progressSize?: number) {
+  await page.addInitScript(({ captureUrl, progressSize }) => {
+    localStorage.setItem('roco.analyticsOff', '1');
     const file = { id: 'capture-123.pcap', name: 'capture-123.pcap', size: 1234, createdAt: 1792800000000, valid: true };
-    const state = { version: 1, supported: true, phase: 'idle', message: '准备采集', packets: 0, bytes: 0, files: [file] };
+    const state = { version: 1, supported: true, phase: 'idle', message: '准备采集', packets: 0, bytes: 0, files: [file],
+      ...(progressSize ? { progressVersion: 1, fileId: file.id, savedBytes: progressSize } : {}) };
     const actions: Record<string, (id?: string) => string> = {
       getState: () => JSON.stringify(state),
+      inspectCapture: () => JSON.stringify({ id: file.id, size: progressSize, url: captureUrl }),
       startCapture: () => { state.phase = 'capturing'; state.message = '采集中'; return ''; },
       stopCapture: () => { state.phase = 'idle'; state.message = '已停止并保存'; return ''; },
       openGame: () => '', shareCapture: () => '',
@@ -26,7 +29,7 @@ async function mockCollector(page: Page) {
       queueMicrotask(() => port.onmessage?.({ data: JSON.stringify({ requestId: request.requestId, result }) }));
     } };
     (window as unknown as { RocoCaptureBridge: unknown }).RocoCaptureBridge = port;
-  }, url);
+  }, { captureUrl: url, progressSize });
   await page.addInitScript({ content: bootstrap });
 }
 
@@ -66,6 +69,45 @@ test('新版安卓入口从采集保存到真实 Worker 解析、账号持久化
   expect(stored).toHaveLength(1);
   expect(stored[0].gameId).toBe(151910);
   expect(stored[0].pets).toHaveLength(1);
+  expect(errors).toEqual([]);
+});
+
+test('实时进度通过真实 Worker 识别数据，缺少蛋仓时不因流量稳定而成功', async ({ page }) => {
+  await mockCollector(page, fixture.length);
+  await page.context().route(url, (route) => route.fulfill({ status: 200, contentType: 'application/octet-stream',
+    headers: { 'Access-Control-Allow-Origin': '*', 'Content-Length': String(fixture.length) }, body: fixture }));
+  await page.goto('/');
+  const card = page.getByTestId('native-collector');
+  await card.getByRole('button', { name: '开始采集', exact: true }).click();
+  await expect(card.getByText('角色：已识别')).toBeVisible();
+  await expect(card.getByText('等待蛋仓，请打开游戏中的蛋仓')).toBeVisible();
+  await expect(card.getByText('蛋仓：尚未识别')).toBeVisible();
+  await expect(card.getByText('已识别内容稳定，可以停止保存')).toHaveCount(0);
+  for (const width of [375, 390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
+  }
+  await card.getByRole('button', { name: '停止并保存', exact: true }).click();
+  await expect(page.getByTestId('capture-progress')).toHaveCount(0);
+});
+
+test('角色精灵和分页蛋仓收齐后，内容连续稳定才提示可停止', async ({ page }) => {
+  test.setTimeout(60000);
+  const complete = readFileSync('src/pcap/__fixtures__/paged-eggs-capture.pcap');
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  await mockCollector(page, complete.length);
+  await page.context().route(url, (route) => route.fulfill({ status: 200, contentType: 'application/octet-stream',
+    headers: { 'Access-Control-Allow-Origin': '*', 'Content-Length': String(complete.length) }, body: complete }));
+  await page.goto('/');
+  const card = page.getByTestId('native-collector');
+  await card.getByRole('button', { name: '开始采集', exact: true }).click();
+  await expect(card.getByText('蛋仓：已识别 300 条，分页已收齐')).toBeVisible();
+  await expect(card.getByRole('progressbar', { name: '内容稳定等待' })).toBeVisible();
+  await expect(card.getByText('已识别内容稳定，可以停止保存')).toBeVisible({ timeout: 35000 });
+  await card.getByRole('button', { name: '停止并保存', exact: true }).click();
+  await expect(page.getByTestId('capture-progress')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

@@ -1,8 +1,9 @@
 import { convertPcapBytes } from '../pcap-decoder/tools/pcap-json-app/src/core';
 import { isCollectorCaptureUrl, MAX_CAPTURE_BYTES } from './collectorUrl';
+import { inspectCaptureBytes } from '../collector/inspectCapture';
 
 // The decoder is shared with the existing import flow, not a second protocol model.
-self.onmessage = async (event: MessageEvent<{ bytes?: Uint8Array; url?: string; fileName: string }>) => {
+self.onmessage = async (event: MessageEvent<{ bytes?: Uint8Array; url?: string; fileName: string; mode?: 'inspect' }>) => {
   try {
     let bytes = event.data.bytes;
     if (event.data.url) {
@@ -14,7 +15,7 @@ self.onmessage = async (event: MessageEvent<{ bytes?: Uint8Array; url?: string; 
       bytes = new Uint8Array(await response.arrayBuffer());
     }
     if (!bytes || bytes.byteLength > MAX_CAPTURE_BYTES) throw new Error('抓包为空或超过 128MiB');
-    const value = convertPcapBytes(bytes, event.data.fileName);
+    const value = event.data.mode === 'inspect' ? await inspectCaptureBytes(bytes) : convertPcapBytes(bytes, event.data.fileName);
     self.postMessage({ ok: true, value });
   } catch (error) {
     self.postMessage({ ok: false, error: error instanceof Error ? error.message : '无法解析抓包文件' });

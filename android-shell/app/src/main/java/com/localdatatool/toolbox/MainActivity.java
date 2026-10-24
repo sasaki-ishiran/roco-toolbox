@@ -276,6 +276,7 @@ public class MainActivity extends Activity {
                     String id = request.has("id") ? request.optString("id", null) : null;
                     String result;
                     if ("getState".equals(action)) result = collector.getState();
+                    else if ("inspectCapture".equals(action)) result = collector.inspectCapture();
                     else if ("startCapture".equals(action)) result = collector.startCapture();
                     else if ("stopCapture".equals(action)) result = collector.stopCapture();
                     else if ("openGame".equals(action)) result = collector.openGame();

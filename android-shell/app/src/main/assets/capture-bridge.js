@@ -27,6 +27,7 @@
   };
   window.RocoCapture = {
     getState: () => call('getState'),
+    inspectCapture: () => call('inspectCapture'),
     startCapture: () => call('startCapture'),
     stopCapture: () => call('stopCapture'),
     openGame: () => call('openGame'),

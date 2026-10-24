@@ -1,20 +1,25 @@
 import type { DecodedCapture } from './decodeCapture';
 import { isCollectorCaptureUrl } from './collectorUrl';
+import type { CaptureAnalysis } from '../collector/captureProgress';
 const defaultWorker = () => new Worker(new URL('./decodeCapture.worker.ts', import.meta.url), { type: 'module' });
-type Input = { bytes: Uint8Array; fileName: string } | { url: string; fileName: string };
-function run(input: Input, createWorker: () => Worker): Promise<DecodedCapture> {
+type Input = ({ bytes: Uint8Array; fileName: string } | { url: string; fileName: string }) & { mode?: 'inspect' };
+function run<T>(input: Input, createWorker: () => Worker, signal?: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     const worker = createWorker();
     const timer = setTimeout(() => finish(new Error('解析用时过长，原始文件仍保留，请稍后重试')), 120_000);
     let finished = false;
-    const finish = (error: Error | null, value?: DecodedCapture) => {
+    const finish = (error: Error | null, value?: T) => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
       worker.terminate();
       if (error) reject(error); else resolve(value!);
     };
-    worker.onmessage = (event: MessageEvent<{ ok: boolean; value?: DecodedCapture; error?: string }>) => {
+    const abort = () => finish(new DOMException('采集进度检查已暂停', 'AbortError'));
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) { abort(); return; }
+    worker.onmessage = (event: MessageEvent<{ ok: boolean; value?: T; error?: string }>) => {
       if (event.data?.ok && event.data.value) finish(null, event.data.value);
       else finish(new Error(event.data?.error || '抓包解析失败，原始文件仍保留'));
     };
@@ -32,9 +37,13 @@ function run(input: Input, createWorker: () => Worker): Promise<DecodedCapture> 
   });
 }
 export function decodeInWorker(bytes: Uint8Array, fileName: string, createWorker = defaultWorker): Promise<DecodedCapture> {
-  return run({ bytes, fileName }, createWorker);
+  return run<DecodedCapture>({ bytes, fileName }, createWorker);
 }
 export async function decodeUrlInWorker(url: string, fileName: string, createWorker = defaultWorker): Promise<DecodedCapture> {
   if (!isCollectorCaptureUrl(url)) throw new Error('无效的本机采集授权链接');
-  return run({ url, fileName }, createWorker);
+  return run<DecodedCapture>({ url, fileName }, createWorker);
+}
+export async function inspectUrlInWorker(url: string, fileName: string, signal: AbortSignal, createWorker = defaultWorker): Promise<CaptureAnalysis> {
+  if (!isCollectorCaptureUrl(url)) throw new Error('无效的本机采集授权链接');
+  return run<CaptureAnalysis>({ url, fileName, mode: 'inspect' }, createWorker, signal);
 }

@@ -32,6 +32,7 @@ public final class PcapWriter implements Closeable {
         return true;
     }
     public synchronized void flush() throws IOException { if (!closed) output.flush(); }
+    public synchronized long flushSnapshot() throws IOException { flush(); return size; }
     @Override public synchronized void close() throws IOException {
         if (closed) return;
         closed = true;

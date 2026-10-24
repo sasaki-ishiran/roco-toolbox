@@ -57,6 +57,7 @@ public final class CaptureVpnService extends VpnService {
             else for (InetAddress address : dns) builder.addDnsServer(address);
             files = files(this);
             capture = files.create();
+            STATE.fileId = capture.getName();
             PcapWriter output = new PcapWriter(capture, CaptureFiles.MAX_BYTES);
             try {
                 tunnel = builder.establish();
@@ -117,7 +118,14 @@ public final class CaptureVpnService extends VpnService {
                 if (packet != null && writable && !output.append(packet.data, packet.time)) {
                     writable = false; requestStop("采集已达到 128MiB 上限，原文件已保留，请重新采集");
                 }
-                if (System.currentTimeMillis() - flushed > 1000) { output.flush(); flushed = System.currentTimeMillis(); }
+                if (System.currentTimeMillis() - flushed > 1000) {
+                    STATE.savedBytes = output.flushSnapshot();
+                    flushed = System.currentTimeMillis();
+                    String text = STATE.packets == 0 ? "等待游戏连接，请重新登录洛克王国"
+                        : "已接收 " + STATE.packets + " 包 · " + String.format(Locale.ROOT, "%.2f MiB", STATE.bytes / 1048576.0)
+                            + "，返回工具箱查看数据进度";
+                    getSystemService(NotificationManager.class).notify(NOTICE, notification(text));
+                }
             }
         } catch (Exception error) { requestStop("保存失败：" + friendly(error)); }
         finally { try { output.close(); } catch (IOException error) { failure = "保存失败：" + friendly(error); valid = false; } }
@@ -147,6 +155,7 @@ public final class CaptureVpnService extends VpnService {
         PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, CaptureVpnService.class).setAction(STOP), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_capture)
             .setContentTitle("洛克工具箱 · 本机采集").setContentText(message).setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(open).addAction(0, "停止并保存", stop).build();
     }
     public static String friendly(Throwable error) {

@@ -4,6 +4,7 @@ import { Button } from './primitives/Button';
 import { ModalSurface } from './primitives/ModalSurface';
 import { StateNotice } from './primitives/StateNotice';
 import { useImportOutcome } from './importOutcomeStore';
+import { CaptureProgressView } from './CaptureProgressView';
 
 const sizeLabel = (size: number) => `${(size / 1024 / 1024).toFixed(2)} MiB`;
 
@@ -78,7 +79,7 @@ export function NativeCollectorPanel() {
           <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-600">
             <li>关闭其他 VPN 或游戏加速器，开始采集并同意系统 VPN 授权。</li>
             <li>打开游戏，重新登录，依次查看精灵仓库、背包与蛋仓。</li>
-            <li>返回工具箱停止保存，再解析导入。未查看的内容可能未采到。</li>
+            <li>返回工具箱查看数据进度；内容稳定后停止保存，再解析导入。</li>
           </ol>
           <div className="flex flex-wrap gap-2">
             {busy ? <Button disabled={state.phase === 'stopping'} onClick={() => action('stopCapture')}>停止并保存</Button>
@@ -87,6 +88,7 @@ export function NativeCollectorPanel() {
           </div>
         </>}
         <StateNotice kind={state.phase === 'failed' ? 'error' : 'cached'} title={state.message || '准备采集'} />
+        <CaptureProgressView state={state} />
         {busy ? <p className="text-xs text-slate-500">已记录 {state.packets} 包 · {sizeLabel(state.bytes)}。数量不代表数据已收齐。</p> : null}
         <p className="text-xs text-slate-500">最多保留 10 个原包，每次上限 128 MiB；导入后仍保留，不会自动清理。</p>
         {state.files.length === 0 ? <p className="text-sm text-slate-500">还没有本机采集文件</p> : <ul className="space-y-2">

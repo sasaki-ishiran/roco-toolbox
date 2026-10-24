@@ -1,13 +1,17 @@
+import { isCollectorCaptureUrl, MAX_CAPTURE_BYTES } from '../pcap/collectorUrl';
+
 export type CapturePhase = 'idle' | 'starting' | 'capturing' | 'stopping' | 'failed';
 export interface CaptureFile { id: string; name: string; size: number; createdAt: number; valid: boolean }
 export interface CollectorState {
   version: 1; supported: boolean; phase: CapturePhase; message: string;
   packets: number; bytes: number; files: CaptureFile[];
+  progressVersion?: 1; fileId?: string; savedBytes?: number;
 }
+export interface CaptureSnapshot { id: string; size: number; url: string }
 export type CollectorAction = 'startCapture' | 'stopCapture' | 'openGame' | 'importCapture' | 'shareCapture' | 'deleteCapture';
 declare global {
   interface Window {
-    RocoCapture?: { getState: () => string | Promise<string> } & Partial<Record<CollectorAction, (id?: string) => string | Promise<string>>>;
+    RocoCapture?: { getState: () => string | Promise<string>; inspectCapture?: () => string | Promise<string> } & Partial<Record<CollectorAction, (id?: string) => string | Promise<string>>>;
   }
 }
 const nonnegative = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
@@ -19,12 +23,27 @@ export async function readCollectorState(): Promise<CollectorState | null> {
   if (value?.version !== 1) throw new Error('采集桥版本不兼容，请更新安卓工具箱');
   if (typeof value.supported !== 'boolean' || !['idle', 'starting', 'capturing', 'stopping', 'failed'].includes(value.phase)
     || typeof value.message !== 'string' || !nonnegative(value.packets) || !nonnegative(value.bytes)
+    || (value.progressVersion != null && (value.progressVersion !== 1 || typeof value.fileId !== 'string'
+      || (value.fileId !== '' && !/^capture-[0-9]+\.pcap$/.test(value.fileId)) || !Number.isSafeInteger(value.savedBytes)
+      || !nonnegative(value.savedBytes) || value.savedBytes > MAX_CAPTURE_BYTES))
     || !Array.isArray(value.files) || value.files.length > 10 || value.files.some((file) =>
       !file || !/^capture-[0-9]+\.pcap$/.test(file.id) || typeof file.name !== 'string'
       || !nonnegative(file.size) || !nonnegative(file.createdAt) || typeof file.valid !== 'boolean')) {
     throw new Error('本机采集状态无效，请重新打开工具箱');
   }
   return value;
+}
+export async function readCaptureSnapshot(): Promise<CaptureSnapshot | null> {
+  if (!window.RocoCapture?.inspectCapture) return null;
+  const text = await window.RocoCapture.inspectCapture();
+  if (!text) return null;
+  let snapshot: CaptureSnapshot;
+  try { snapshot = JSON.parse(text) as CaptureSnapshot; } catch { throw new Error('无法读取采集快照'); }
+  if (!snapshot || !/^capture-[0-9]+\.pcap$/.test(snapshot.id) || !Number.isSafeInteger(snapshot.size)
+    || snapshot.size <= 24 || snapshot.size > MAX_CAPTURE_BYTES || typeof snapshot.url !== 'string' || !isCollectorCaptureUrl(snapshot.url)) {
+    throw new Error('本机采集快照无效');
+  }
+  return snapshot;
 }
 export async function collectorAction(action: CollectorAction, id?: string): Promise<void> {
   const bridge = window.RocoCapture;

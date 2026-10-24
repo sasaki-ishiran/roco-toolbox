@@ -58,6 +58,16 @@ describe('内置采集入口', () => {
     expect(screen.getByText(/Android 8/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: '开始采集' })).toBeNull();
   });
+  test('新版壳等待真实解析时显示检查进度，旧壳明确提示升级', async () => {
+    setup({ phase: 'capturing', progressVersion: 1, fileId: file.id, savedBytes: 0 });
+    await waitFor(() => expect(screen.getByText('等待游戏数据')).toBeTruthy());
+    expect(screen.queryByText('已识别内容稳定，可以停止保存')).toBeNull();
+  });
+  test('旧壳采集中仍可停止保存，说明进度需要更新 APK', async () => {
+    setup({ phase: 'capturing' });
+    await waitFor(() => expect(screen.getByText(/更新安卓安装包可查看实时数据进度/)).toBeTruthy());
+    expect(screen.getByRole('button', { name: '停止并保存' })).not.toBeDisabled();
+  });
   test('原生交付导入事件前禁止重复导入和删除原包', async () => {
     const bridge = setup();
     await waitFor(() => expect(screen.getByRole('button', { name: '解析并导入' })).toBeTruthy());
