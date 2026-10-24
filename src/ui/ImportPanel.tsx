@@ -30,6 +30,8 @@ import { useLastImportHistory } from './useLastImportResult';
 import { takeSharedFile } from '../share/shareTarget';
 import { fetchShellCapture, shareToNative, takeNativeShare } from '../share/nativeShare';
 import { readCaptureFile } from '../pcap/readCaptureFile';
+import { isCollectorCaptureUrl } from '../pcap/collectorUrl';
+import { decodeUrlInWorker } from '../pcap/decodeInWorker';
 import {
   adoptBackupTargetMode,
   getTargetMode,
@@ -194,6 +196,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
   const handleImport = async (
     files: File[],
     sourceLabel?: string,
+    readFile: (file: File) => Promise<unknown> = readCaptureFile,
   ): Promise<AccountSnapshot[] | null> => {
     const operationId = beginImport();
     currentOp.current = operationId;
@@ -209,7 +212,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
 
       for (const file of files) {
         // 抓包文件（.pcap）会自动交给采集器那套解析器解成 JSON，其余按 JSON 读
-        const raw = await readCaptureFile(file);
+        const raw = await readFile(file);
 
         if (isToolboxBackup(raw)) {
           const backup = parseToolboxBackup(raw);
@@ -269,8 +272,8 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
     const consume = async () => {
       // 来源说明交给 handleImport 一起拼：这里再 setImportMessage 会把
       // 「已合并导入…新增/更新/保留」这句覆盖掉，用户就看不到这次到底动了什么
-      const importOne = async (file: File, done: string) => {
-        return importRef.current([file], done);
+      const importOne = async (file: File, done: string, readFile?: (file: File) => Promise<unknown>) => {
+        return importRef.current([file], done, readFile);
       };
 
       const fromBrowser = await takeSharedFile();
@@ -290,8 +293,15 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
       if (!fromShell) return;
       try {
         if (fromShell.kind === 'capture') {
-          const bytes = await fetchShellCapture(fromShell.url);
           const name = fromShell.name || 'capture.pcap';
+          if (isCollectorCaptureUrl(fromShell.url)) {
+            // Metadata only on the UI thread: Worker streams the native file and decodes there.
+            const result = await importOne(new File([], name), `已解析并导入本机采集数据（${name}）`,
+              async () => (await decodeUrlInWorker(fromShell.url, name)).payload);
+            if (result !== null) onShareImported?.();
+            return;
+          }
+          const bytes = await fetchShellCapture(fromShell.url);
           const result = await importOne(
             new File([bytes], name, { type: 'application/octet-stream' }),
             `已解析并导入分享进来的抓包数据（${name}）`,
@@ -500,7 +510,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
           data-testid="import-guide-toggle"
           className="flex min-h-[44px] w-full items-center justify-between text-left text-sm font-medium text-slate-500"
         >
-          <span>第一次用？3 步上手</span>
+          <span>外部文件导入 · 3 步上手</span>
           <span className="text-xs text-slate-300" aria-hidden>
             {guideOpen ? '▲' : '▼'}
           </span>

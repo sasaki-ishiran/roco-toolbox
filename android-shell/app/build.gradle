@@ -3,6 +3,7 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.localdatatool.toolbox"
     compileSdk 35
+    ndkVersion '28.2.13676358'
 
     defaultConfig {
         applicationId "com.localdatatool.toolbox"
@@ -11,14 +12,17 @@ android {
         // 那样网页会被铺到状态栏底下。停在 34 时系统会自动让窗口避开系统栏，不用自己算 insets。
         // 这个壳只自己安装、不上架商店，不受商店 targetSdk 新规影响。
         targetSdk 34
-        versionCode 10
-        versionName "1.1.6"
+        versionCode 11
+        versionName "1.2.0"
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64' }
+        externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON' } }
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
 
     buildTypes {
         release {
@@ -30,4 +34,6 @@ android {
 // FileProvider（网页「导出全部数据」分享出去用，1.1.4）
 dependencies {
     implementation 'androidx.core:core:1.15.0'
+    implementation 'androidx.webkit:webkit:1.12.1'
+    testImplementation 'junit:junit:4.13.2'
 }

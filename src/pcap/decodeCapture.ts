@@ -1,4 +1,5 @@
 import type { ConvertedPayload } from '../pcap-decoder/tools/pcap-json-app/src/core';
+import { decodeInWorker } from './decodeInWorker';
 
 /**
  * 把采集器的 PCAP 抓包解成 hatch-backup 格式的数据。
@@ -24,6 +25,8 @@ export type DecodedCapture = {
 };
 
 export async function decodeCapture(bytes: Uint8Array, fileName: string): Promise<DecodedCapture> {
+  if (bytes.byteLength > 128 * 1024 * 1024) throw new Error('抓包超过 128MiB，请缩短采集时长后重新采集；原始文件仍保留');
+  if (typeof Worker !== 'undefined') return decodeInWorker(bytes, fileName);
   const core = await import('../pcap-decoder/tools/pcap-json-app/src/core');
   return core.convertPcapBytes(bytes, fileName);
 }

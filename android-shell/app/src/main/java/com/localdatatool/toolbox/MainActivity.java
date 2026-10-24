@@ -34,6 +34,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 import androidx.core.content.FileProvider;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import java.util.Collections;
+import com.localdatatool.toolbox.capture.CaptureController;
+import com.localdatatool.toolbox.capture.CaptureBridgePolicy;
+import com.localdatatool.toolbox.capture.CaptureVpnService;
 
 /**
  * 「洛克工具箱」的原生壳。只做三件事：
@@ -85,6 +91,9 @@ public class MainActivity extends Activity {
     private static final int REQUEST_FILE_CHOOSER = 1001;
 
     private WebView webView;
+    private CaptureController collector;
+    private boolean captureBridgeInstalled;
+    private String collectedCaptureUrl;
     /** 等文件选择器回结果的回调；WebView 只认一次，回完必须置空 */
     private ValueCallback<Uri[]> filePathCallback;
     /** 分享进来的抓包字节，等网页来取 */
@@ -110,21 +119,34 @@ public class MainActivity extends Activity {
             WebView.setWebContentsDebuggingEnabled(true);
         }
         webView = new WebView(this);
+        collector = new CaptureController(this, (name, url) -> {
+            captureBytes = null; captureName = name; collectedCaptureUrl = url;
+            textPayload = null; textName = null; shareInjected = false;
+            injectPendingShare();
+        });
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         webView.setBackgroundColor(PAGE_BACKGROUND);
         // 网页「导出全部数据」改为分享：壳从这里把备份文本拿出去调起系统分享面板
         webView.addJavascriptInterface(new ShareBridge(), "RocoShare");
+        installCaptureWebMessageBridge();
         webView.setWebViewClient(new WebViewClient() {
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
+                pageReady = false;
+                collector.invalidatePage();
+            }
             @Override
             public void onPageFinished(WebView view, String url) {
+                collector.setPage(url);
                 pageReady = true;
                 injectPendingShare();
             }
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                WebResourceResponse localCapture = collector.intercept(request.getUrl());
+                if (localCapture != null) return localCapture;
                 // 网页来取分享进来的抓包：直接把字节给它，不让它真的去联网
                 if (captureBytes != null && CAPTURE_URL.equals(request.getUrl().toString())) {
                     Map<String, String> headers = new HashMap<>();
@@ -240,8 +262,45 @@ public class MainActivity extends Activity {
         webView.loadUrl(SITE_URL);
     }
 
+    private void installCaptureWebMessageBridge() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
+            || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
+        WebViewCompat.addWebMessageListener(webView, "RocoCaptureBridge",
+            Collections.singleton("https://" + SITE_HOST), (view, message, sourceOrigin, isMainFrame, reply) -> {
+                if (!CaptureBridgePolicy.allows(sourceOrigin.toString(), isMainFrame)) return;
+                String requestId = "";
+                try {
+                    JSONObject request = new JSONObject(message.getData());
+                    requestId = request.getString("requestId");
+                    String action = request.optString("action");
+                    String id = request.has("id") ? request.optString("id", null) : null;
+                    String result;
+                    if ("getState".equals(action)) result = collector.getState();
+                    else if ("startCapture".equals(action)) result = collector.startCapture();
+                    else if ("stopCapture".equals(action)) result = collector.stopCapture();
+                    else if ("openGame".equals(action)) result = collector.openGame();
+                    else if ("importCapture".equals(action)) result = collector.importCapture(id);
+                    else if ("shareCapture".equals(action)) result = collector.shareCapture(id);
+                    else if ("deleteCapture".equals(action)) result = collector.deleteCapture(id);
+                    else throw new IllegalArgumentException("未知的采集操作");
+                    reply.postMessage(new JSONObject().put("requestId", requestId).put("result", result).toString());
+                } catch (Exception error) {
+                    try { reply.postMessage(new JSONObject().put("requestId", requestId).put("error", CaptureVpnService.friendly(error)).toString()); }
+                    catch (Exception ignored) { }
+                }
+            });
+        captureBridgeInstalled = true;
+        try (InputStream input = getAssets().open("capture-bridge.js")) {
+            ByteArrayOutputStream text = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096]; int length;
+            while ((length = input.read(buffer)) != -1) text.write(buffer, 0, length);
+            WebViewCompat.addDocumentStartJavaScript(webView, text.toString("UTF-8"), Collections.singleton("https://" + SITE_HOST));
+        } catch (Exception error) { showMessage("无法加载本机采集入口：" + CaptureVpnService.friendly(error)); }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (collector != null && collector.activityResult(requestCode, resultCode)) return;
         if (requestCode != REQUEST_FILE_CHOOSER) {
             super.onActivityResult(requestCode, resultCode, data);
             return;
@@ -258,16 +317,23 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         cancelPendingFileChooser();
+        if (collector != null) collector.destroy();
         if (webView != null) {
             // WebView 持有 Activity 与 JS 引擎线程，不按标准序列销毁会一直泄漏。
             // 先摘掉注入的 JS 接口，再断开页面、销毁。
             webView.removeJavascriptInterface("RocoShare");
+            if (captureBridgeInstalled) WebViewCompat.removeWebMessageListener(webView, "RocoCaptureBridge");
             webView.loadUrl("about:blank");
             webView.removeAllViews();
             webView.destroy();
             webView = null;
         }
         super.onDestroy();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        if (collector != null && collector.permissionsResult(requestCode)) return;
+        super.onRequestPermissionsResult(requestCode, permissions, results);
     }
 
     /** 把等待中的文件选择回调作废（回 null），避免 WebView 一直等它。 */
@@ -333,6 +399,7 @@ public class MainActivity extends Activity {
                 return;
             }
             String name = displayName(stream);
+            collectedCaptureUrl = null;
             if (looksLikeCapture(bytes)) {
                 captureBytes = bytes;
                 captureName = name;
@@ -350,6 +417,7 @@ public class MainActivity extends Activity {
             textPayload = text;
             textName = null;
             captureBytes = null;
+            collectedCaptureUrl = null;
             captureName = null;
         } else {
             // VIEW 但没有文件（理论上不会有）：没东西可导入，正常打开网页就行
@@ -363,9 +431,10 @@ public class MainActivity extends Activity {
     private void injectPendingShare() {
         if (!pageReady || shareInjected) return;
         String script;
-        if (captureBytes != null) {
+        if (captureBytes != null || collectedCaptureUrl != null) {
             String name = (captureName == null || captureName.isEmpty()) ? "capture.pcap" : captureName;
             script = "(function(){window.__rocoPendingShare={kind:'capture',name:" + JSONObject.quote(name)
+                + ",url:" + JSONObject.quote(collectedCaptureUrl == null ? CAPTURE_URL : collectedCaptureUrl)
                 + "};window.dispatchEvent(new Event('roco-share'));})()";
         } else if (textPayload != null) {
             script = "(function(){window.__rocoPendingShare={kind:'text',name:"

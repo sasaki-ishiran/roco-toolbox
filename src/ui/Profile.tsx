@@ -3,6 +3,7 @@ import { guidePending } from './guide';
 import { AccountPanel } from './AccountPanel';
 import { ImportOutcomeNotice } from './ImportOutcomeNotice';
 import { ImportPanel } from './ImportPanel';
+import { NativeCollectorPanel } from './NativeCollectorPanel';
 import { Button } from './primitives/Button';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { StateNotice } from './primitives/StateNotice';
@@ -100,6 +101,7 @@ export function Profile({
             </section>
           ) : null}
           <ImportOutcomeNotice onOpenGroups={() => onNavigate({ type: 'open-groups' })} />
+          <NativeCollectorPanel />
           <ImportPanel onShareImported={onShareImported} />
         </>
       ) : null}
