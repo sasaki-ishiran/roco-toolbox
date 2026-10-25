@@ -56,6 +56,14 @@ export interface SpeciesEntry {
    * 没有（如 S4 新精灵未完虫）时走种族值兜底算法。
    */
   recommendedNatures?: string[];
+  /**
+   * 这颗蛋的推荐性格（只在基础形态上烘焙，2026-10-25）。
+   *
+   * 按**进化分支的最终形态**汇总 PVP 分布后挑：初始形态一致但有分支的精灵
+   * （小灵面、书魔虫）不能只看基础形态自己的数据，否则会被低级玩法带偏。
+   * 母本达标判定优先用它，没有才退回 `recommendedNatures` / 种族值兜底。
+   */
+  eggRecommendedNatures?: string[];
 }
 
 export interface OwnedPet {

@@ -18,10 +18,9 @@ const eggKey = (eggGameId: number): string => String(eggGameId);
 
 /**
  * 一颗蛋的默认推荐性格：
- * 1. 取**进化链最高形态**的 PVP 推荐（排除首领形态）——打 PVP 没人用低阶形态，
- *    与 `catalog.ts` 的 `chainTopNaturesByGameId` 同一口径；
- * 2. 链上没有 PVP 数据 → 按链顶种族值兜底，再退到基础形态；
- * 3. 都没有 → 空。
+ * 1. 用图鉴烘焙好的 `eggRecommendedNatures`（按进化分支最终形态汇总，2026-10-25）；
+ * 2. 没有烘焙值 → 取进化链最高形态的 PVP 推荐（排除首领形态，与 `chainTopNaturesByGameId` 同口径）；
+ * 3. 仍没有 → 按种族值兜底，最后空。
  */
 export function defaultEggNatures(
   species: readonly SpeciesEntry[],
@@ -29,6 +28,7 @@ export function defaultEggNatures(
 ): string[] {
   const base = species.find((entry) => entry.gameId === eggGameId);
   if (!base) return [];
+  if ((base.eggRecommendedNatures?.length ?? 0) > 0) return [...base.eggRecommendedNatures!];
   const chain = base.evolutionId
     ? species.filter((entry) => entry.evolutionId === base.evolutionId)
     : [base];

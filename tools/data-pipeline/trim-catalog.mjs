@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { pickRecommendedNatures } from './src/pvp-natures.mjs';
+import { pickRecommendedNatures, pickAcrossBranches } from './src/pvp-natures.mjs';
 import { wikiEggBaseOf } from './src/egg-fallback.mjs';
 import { resolveBodySize } from '../../src/shared/bodySize.js';
 
@@ -152,6 +152,64 @@ const species = pets.pets.map((p) => ({
   stats: p.stats ?? undefined,
   recommendedNatures: recommendedNaturesFor(p.game_id ?? 0),
 }));
+
+/**
+ * 每颗蛋的推荐性格（2026-10-25）：按**进化分支的最终形态**汇总 PVP 分布再挑。
+ *
+ * 初始形态一致、存在分支的精灵（小灵面 → 幽冥眼_睁眼/闭眼，书魔虫 → 古卷执政官/古卷匣魔像），
+ * 基础形态自己的 PVP 数据会被低级玩法带偏（小灵面 30% 调皮），不能代表养成目标；
+ * 取各分支最高形态（排除首领形态）合并后，再按占比阈值挑。
+ * 结果只挂在**基础形态**条目上（`eggGameId === gameId`），运行期按蛋查。
+ */
+function eggNaturesByGameId() {
+  const byEgg = new Map();
+  for (const entry of species) {
+    if (entry.eggGameId == null) continue;
+    const list = byEgg.get(entry.eggGameId) ?? [];
+    list.push(entry);
+    byEgg.set(entry.eggGameId, list);
+  }
+  const result = new Map();
+  for (const [eggId, family] of byEgg) {
+    const chains = new Map();
+    for (const entry of family) {
+      const key = entry.evolutionId ?? `solo:${entry.gameId}`;
+      const list = chains.get(key) ?? [];
+      list.push(entry);
+      chains.set(key, list);
+    }
+    const finals = [];
+    for (const chain of chains.values()) {
+      const normal = chain.filter((entry) => entry.form !== '首领形态');
+      const pool = normal.length > 0 ? normal : chain;
+      const maxStage = Math.max(...pool.map((entry) => entry.stage ?? 0));
+      for (const entry of pool) {
+        if ((entry.stage ?? 0) === maxStage) finals.push(entry);
+      }
+    }
+    // 只认「走到这颗蛋最高阶级」的分支：小灵面自己的链停在 stage 1，
+    // 它的 30% 调皮是低级玩法数据，不能和幽冥眼（stage 3）的推荐平起平坐。
+    const familyMaxStage = Math.max(...finals.map((entry) => entry.stage ?? 0));
+    const topFinals = finals.filter((entry) => (entry.stage ?? 0) === familyMaxStage);
+    const picked = pickAcrossBranches(
+      (topFinals.length > 0 ? topFinals : finals)
+        .map((entry) => pvp.recommendations?.[String(entry.gameId)])
+        .filter(Boolean),
+    );
+    const names = picked
+      .map((candidate) => natureNameById.get(candidate.natureId) ?? '')
+      .filter(Boolean);
+    if (names.length > 0) result.set(eggId, names);
+  }
+  return result;
+}
+
+const eggNatures = eggNaturesByGameId();
+for (const entry of species) {
+  if (entry.gameId !== entry.eggGameId) continue;
+  const names = eggNatures.get(entry.gameId);
+  if (names?.length) entry.eggRecommendedNatures = names;
+}
 
 // 可孵物种缺体型数据时拒绝覆盖现有产物，避免上线后把真实母本静默算成缺失。
 const missingBodySizes = species.filter((entry) => entry.eggGameId != null && !entry.bodySize);

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   extractPvpNatureRecommendations,
+  pickAcrossBranches,
   pickRecommendedNatures,
   pickTargetNatures,
   rankNaturesByEggGroup,
@@ -15,6 +16,29 @@ const reference = {
     3004: {},
   },
 };
+
+describe('pickAcrossBranches：多分支进化按最终形态汇总', () => {
+  test('两个分支都以同一性格为主 → 只留它（小灵面 → 幽冥眼_睁眼/闭眼）', () => {
+    const branches = [
+      { candidates: [{ natureId: 21, count: 5336 }, { natureId: 3, count: 300 }] },
+      { candidates: [{ natureId: 21, count: 4100 }, { natureId: 3, count: 700 }] },
+    ];
+    expect(pickAcrossBranches(branches).map((item) => item.natureId)).toEqual([21]);
+  });
+
+  test('两个分支各有自己的主流性格 → 都保留（书魔虫 → 古卷执政官/古卷匣魔像）', () => {
+    const branches = [
+      { candidates: [{ natureId: 11, count: 5000 }, { natureId: 21, count: 1500 }] },
+      { candidates: [{ natureId: 2, count: 4600 }, { natureId: 30, count: 900 }] },
+    ];
+    expect(pickAcrossBranches(branches).map((item) => item.natureId)).toEqual([11, 2]);
+  });
+
+  test('没有任何 PVP 数据时不硬凑', () => {
+    expect(pickAcrossBranches([])).toEqual([]);
+    expect(pickAcrossBranches([{}, { candidates: [] }])).toEqual([]);
+  });
+});
 
 describe('extractPvpNatureRecommendations', () => {
   test('取数值最高的性格作为推荐', () => {

@@ -93,6 +93,32 @@ export function pickRecommendedNatures(item, { absFloor = 0.1, ratio = 1 / 3, ca
 }
 
 /**
+ * 多分支进化：把各分支「最终形态」的 PVP 分布按人数相加，再按占比挑推荐。
+ *
+ * 初始形态一致、但存在进化分支的精灵（小灵面、书魔虫…），基础形态自己的 PVP 数据
+ * 往往被「低级玩法」带偏（如小灵面 30% 调皮），而真正的养成目标是分支最终形态
+ * （幽冥眼_睁眼的样子 53% 胆小）。所以按**最终形态**汇总后再挑。
+ *
+ * @param {Array<{candidates?:Array<{natureId:number,count:number}>}>} branches
+ * @param {{absFloor?:number, ratio?:number, cap?:number}} [options]
+ * @returns {Array<{natureId:number,count:number}>}
+ */
+export function pickAcrossBranches(branches, options = {}) {
+  const counts = new Map();
+  let total = 0;
+  for (const item of branches ?? []) {
+    for (const candidate of item?.candidates ?? []) {
+      if (!candidate || !Number.isFinite(candidate.count) || candidate.count <= 0) continue;
+      counts.set(candidate.natureId, (counts.get(candidate.natureId) ?? 0) + candidate.count);
+      total += candidate.count;
+    }
+  }
+  if (total <= 0) return [];
+  const candidates = [...counts.entries()].map(([natureId, count]) => ({ natureId, count }));
+  return pickRecommendedNatures({ candidates, total }, options);
+}
+
+/**
  * 按蛋组统计推荐性格。
  *
  * 计数单位是「一条进化链」（`evolution_id`），而不是图鉴条目：

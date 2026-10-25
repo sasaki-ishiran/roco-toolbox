@@ -52,6 +52,18 @@ describe('推荐性格：图鉴优先，缺数据按种族值兜底', () => {
     expect(defaultEggNatures(chain, 301)).toEqual(['固执', '开朗']);
   });
 
+  test('图鉴烘焙的「按蛋推荐」优先（多分支进化按最终形态汇总）', () => {
+    const withEgg: SpeciesEntry[] = [
+      entry({
+        gameId: 501,
+        name: '小灵面',
+        recommendedNatures: ['调皮'],
+        eggRecommendedNatures: ['胆小'],
+      }),
+    ];
+    expect(defaultEggNatures(withEgg, 501)).toEqual(['胆小']);
+  });
+
   test('图鉴没收录推荐性格的物种按种族值兜底（魔攻高 → 聪明）', () => {
     expect(defaultEggNatures(species, 201)).toEqual(['聪明']);
   });
