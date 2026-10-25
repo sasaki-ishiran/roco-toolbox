@@ -43,6 +43,22 @@ describe('母本达标口径（看板卡与母本页共用）', () => {
     expect(isQualifiedMother(pet({ voiceDb: -100, medalBody: '小不点' }), DEFAULT)).toBe(true);
   });
 
+  test('体型达标放宽 0.5 个百分位，显示口径仍是 98% / 2%', () => {
+    const bigOnly: MotherCriteria = { voices: ['+100'], bodies: ['大块头'] };
+    const smallOnly: MotherCriteria = { voices: ['+100'], bodies: ['小不点'] };
+    // 差一点到 98% 的（97.5%~97.9%）按大块头算，但自身仍然显示「普通」
+    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 97.5 }), bigOnly)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 97.9 }), bigOnly)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 97.4 }), bigOnly)).toBe(false);
+    // 小不点同理：2.5% 以内算达标
+    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 2.5 }), smallOnly)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 2.6 }), smallOnly)).toBe(false);
+    // 真·小不点不会因此被算成大块头
+    expect(isQualifiedMother(pet({ medalBody: '小不点', weightPercent: 0 }), bigOnly)).toBe(false);
+    // 没有百分位（老数据 / 采集器缺图鉴且无体重）时保持原样，不靠猜
+    expect(isQualifiedMother(pet({ medalBody: '' }), bigOnly)).toBe(false);
+  });
+
   test('某一维度一个都不选 = 该维度不限', () => {
     const bodyAny: MotherCriteria = { voices: ['+100', '-100'], bodies: [] };
     expect(isQualifiedMother(pet({ medalBody: '' }), bodyAny)).toBe(true);

@@ -4,6 +4,20 @@ import { bodyMedalOf } from '../shared/bodySize.js';
 
 const bodySizeByGameId = new Map(species.map((entry) => [entry.gameId, entry.bodySize]));
 
+/**
+ * 体重百分位（与抓包解析器同一口径）：大块头阈值对应 98%，小不点阈值对应 2%。
+ *
+ * 采集器的图鉴没有收录的新物种（例如刚补进来的云梦豚）给不出百分位，
+ * 这里用我们自己的图鉴补算，否则「差一点到 98%」的放宽判定无从判断。
+ */
+function weightPercentOf(size: { small: number; big: number } | undefined, weightKg: number | undefined): number | undefined {
+  if (!size || typeof weightKg !== 'number' || !Number.isFinite(weightKg) || weightKg <= 0) return undefined;
+  const span = (size.big - size.small) / 0.96;
+  if (!(span > 0)) return undefined;
+  const percent = ((weightKg - (size.small - span * 0.02)) / span) * 100;
+  return Math.round(Math.min(100, Math.max(0, percent)) * 10) / 10;
+}
+
 export interface BackupEgg {
   petName: string;
   weightGrams: number;
@@ -82,20 +96,20 @@ export function parseBackup(raw: unknown, importedAt: string): AccountSnapshot {
     // 与 backup.ts 的 sanitizePet 保持同一清洗口径，避免「幽灵精灵」进库
     const name = asString(item.name);
     if (!name) continue;
+    const gameId = asNumber(item.speciesPetId);
+    const weightKg = typeof item.weightGrams === 'number' && Number.isFinite(item.weightGrams) && item.weightGrams > 0
+      ? item.weightGrams / 1000
+      : asOptionalNumber(item.weightKg);
+    const size = bodySizeByGameId.get(gameId);
     pets.push({
-      gameId: asNumber(item.speciesPetId),
+      gameId,
       name,
       captureId: asOptionalString(item.id),
       gender,
       nature: asString(item.nature),
       voiceDb: asNumber(item.voiceDb),
-      medalBody: asString(item.medalBody) || bodyMedalOf(
-        bodySizeByGameId.get(asNumber(item.speciesPetId)),
-        typeof item.weightGrams === 'number' && Number.isFinite(item.weightGrams) && item.weightGrams > 0
-          ? item.weightGrams / 1000
-          : asOptionalNumber(item.weightKg),
-      ),
-      weightPercent: asOptionalNumber(item.weightPercent),
+      medalBody: asString(item.medalBody) || bodyMedalOf(size, weightKg),
+      weightPercent: asOptionalNumber(item.weightPercent) ?? weightPercentOf(size, weightKg),
       isShiny: asBoolean(item.isShiny),
       // 炫彩：直接从导入内容读（备份 JSON 里是平铺的 isColorful 字段）——用户拍板不依赖采集器新字段
       isColorful: item.isColorful === true,

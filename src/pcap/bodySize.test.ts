@@ -90,6 +90,17 @@ describe('成体体型解析到母本共享', () => {
     expect(resource.accounts[0].eggGameIds).toContain(3090);
   });
 
+  test('采集器图鉴还没收录的物种（云梦豚）回落到我们自己的图鉴算体型', async () => {
+    const payload = await decodePet(3784, 28000);
+    const item = payload.collections.petBackpack.items[0];
+    // 抓包解析器自带图鉴没有 3784 → 它给不出体型，也没有百分位
+    expect(item.medalBody).toBe('');
+    expect(item.weightPercent).toBeNull();
+    const snapshot = parseBackup(payload, '2026-10-25T00:00:00.000Z');
+    expect(snapshot.pets[0].medalBody).toBe('大块头');
+    expect(snapshot.pets[0].weightPercent).toBeGreaterThan(97);
+  });
+
   test.each([[2861, ''], [2862, '大块头'], [1038, '小不点'], [1039, ''], [0, '']])('布灵 %s 克的边界判定为 %s', async (grams, expected) => {
     const payload = await decodePet(3775, grams as number);
     expect(payload.collections.petBackpack.items[0].medalBody).toBe(expected);

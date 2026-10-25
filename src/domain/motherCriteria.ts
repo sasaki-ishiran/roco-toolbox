@@ -51,12 +51,32 @@ export const effectiveMotherVoices = (
 export const matchesMotherVoice = (voiceDb: number, voices: readonly string[]): boolean =>
   voices.some((voice) => matchesVoiceOption(voiceDb, voice));
 
+/**
+ * 体型达标容差（体重百分位，2026-10-25 用户拍板）。
+ *
+ * 抓包解析器把「大块头」定在 98%、「小不点」定在 2%；实际会碰到 97.7% / 97.9%
+ * 这种差几克没过线、但游戏里已经显示大块头的精灵。达标判定放宽 0.5 个百分位，
+ * **显示仍按原阈值**：97.x% 的精灵照常显示为「普通」，只是不再漏算成母本。
+ */
+export const MOTHER_BODY_PERCENT_TOLERANCE = 0.5;
+
+/** 该精灵是否命中选中的体型（先看解析出的奖章，再按百分位放宽口径兜底）。 */
+export function matchesMotherBody(pet: OwnedPet, bodies: readonly MotherBody[]): boolean {
+  if (bodies.length === 0) return true;
+  if (pet.medalBody && (bodies as readonly string[]).includes(pet.medalBody)) return true;
+  const percent = pet.weightPercent;
+  if (typeof percent !== 'number' || !Number.isFinite(percent)) return false;
+  return bodies.some((body) =>
+    body === '大块头'
+      ? percent >= 98 - MOTHER_BODY_PERCENT_TOLERANCE
+      : percent <= 2 + MOTHER_BODY_PERCENT_TOLERANCE,
+  );
+}
+
 /** 单只精灵是否是「达标母本」。 */
 export function isQualifiedMother(pet: OwnedPet, criteria: MotherCriteria): boolean {
   if (pet.gender !== '母') return false;
-  if (criteria.bodies.length > 0 && !(criteria.bodies as readonly string[]).includes(pet.medalBody)) {
-    return false;
-  }
+  if (!matchesMotherBody(pet, criteria.bodies)) return false;
   if (criteria.voices.length > 0 && !matchesMotherVoice(pet.voiceDb, criteria.voices)) return false;
   return true;
 }
