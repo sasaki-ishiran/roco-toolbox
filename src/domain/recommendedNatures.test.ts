@@ -27,6 +27,31 @@ describe('推荐性格：图鉴优先，缺数据按种族值兜底', () => {
     expect(defaultEggNatures(species, 101)).toEqual(['固执']);
   });
 
+  test('同一进化链按最高形态的推荐（打 PVP 不用低阶）', () => {
+    const chain: SpeciesEntry[] = [
+      entry({ gameId: 301, name: '火花', evolutionId: 'evo-a', recommendedNatures: ['固执'] }),
+      entry({
+        gameId: 302,
+        name: '火神',
+        eggGameId: 301,
+        stage: 3,
+        evolutionId: 'evo-a',
+        recommendedNatures: ['固执', '开朗'],
+      }),
+      entry({
+        gameId: 303,
+        name: '烈火战神_首领形态',
+        eggGameId: 301,
+        stage: 4,
+        evolutionId: 'evo-a',
+        form: '首领形态',
+        recommendedNatures: ['认真'],
+      }),
+    ];
+    // 首领形态不参与链顶选择
+    expect(defaultEggNatures(chain, 301)).toEqual(['固执', '开朗']);
+  });
+
   test('图鉴没收录推荐性格的物种按种族值兜底（魔攻高 → 聪明）', () => {
     expect(defaultEggNatures(species, 201)).toEqual(['聪明']);
   });

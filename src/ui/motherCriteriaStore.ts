@@ -38,7 +38,8 @@ const store = createModuleStore<MotherCriteria>(DEFAULT_MOTHER_CRITERIA, {
     bodies: Array.isArray(loaded.bodies)
       ? loaded.bodies.filter(isBody)
       : [...DEFAULT_MOTHER_CRITERIA.bodies],
-    recommendedNatures: loaded.recommendedNatures === true,
+    // 只在开启时落字段：老数据 / 关闭状态保持原样，避免把存量对象改胖
+    ...(loaded.recommendedNatures === true ? { recommendedNatures: true } : {}),
   }),
 });
 
