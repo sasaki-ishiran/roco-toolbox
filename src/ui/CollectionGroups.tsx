@@ -125,10 +125,11 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
               <button
                 type="button"
                 onClick={() => void hook.refresh()}
-                className="min-h-[30px] shrink-0 rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500"
+                disabled={hook.refreshing}
+                className="min-h-[30px] shrink-0 rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500 disabled:opacity-50"
                 data-testid="group-refresh"
               >
-                刷新
+                {hook.refreshing ? '刷新中…' : '刷新'}
               </button>
             </div>
             <p className="mt-0.5 text-[11px] text-slate-400" data-testid="group-sync-status">

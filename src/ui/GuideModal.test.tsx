@@ -18,12 +18,13 @@ describe('使用教程', () => {
     expect(GUIDE_VERSION).not.toBe('0');
   });
 
-  test('教程覆盖用户主线：功能简介 / 导入数据 / 看板 / 云同步', () => {
+  test('教程覆盖用户主线：功能简介 / 采集导入 / 小组 / 看板 / 云同步', () => {
     const titles = GUIDE_STEPS.map((step) => step.title).join('|');
     // 前两页先讲"能干什么、值在哪"（功能简介）
     expect(titles).toContain('帮你做什么');
     expect(titles).toContain('档位和性格');
-    expect(titles).toContain('导进来');
+    expect(titles).toContain('采集完自动导入');
+    expect(titles).toContain('小组');
     expect(titles).toContain('看板');
     expect(titles).toContain('云同步');
     // 推荐种公 / 配窝建议只在第 1 页简介里说明，不再单独开页（避免重复）

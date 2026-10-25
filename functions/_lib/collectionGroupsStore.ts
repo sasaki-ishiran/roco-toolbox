@@ -798,6 +798,17 @@ export async function updateCollectionTarget(
   if (config.groupType !== target.kind) {
     throw new MotherStoreError('TARGET_NOT_READY', '目标类型与小组类型不一致');
   }
+  // 旧组没有配置行：先补一行默认配置，否则下面的 CAS 永远匹配不到（表现为「目标已被其他设备更新」）
+  await db
+    .prepare(
+      `INSERT INTO collection_group_configs
+         (group_id, group_type, target_revision, resource_epoch, target_json, updated_at)
+       SELECT ?, ?, 0, 0, '', ?
+        WHERE EXISTS (SELECT 1 FROM mother_groups WHERE id = ?)
+       ON CONFLICT(group_id) DO NOTHING`,
+    )
+    .bind(groupId, config.groupType, now, groupId)
+    .run();
   const result = await db
     .prepare(
       `UPDATE collection_group_configs

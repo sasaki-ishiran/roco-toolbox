@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CAPTURE_UPLOAD_MAX_BYTES, collectorAction, readCollectorState, type CaptureUpload, type CollectorAction, type CollectorState } from '../collector/nativeCollector';
+import {
+  hasAutoImported,
+  hasAutoStopped,
+  markAutoImported,
+  markAutoStopped,
+  unmarkAutoStopped,
+} from '../collector/captureSessionStore';
 import { Button } from './primitives/Button';
 import { ModalSurface } from './primitives/ModalSurface';
 import { StateNotice } from './primitives/StateNotice';
@@ -30,7 +37,6 @@ export function NativeCollectorPanel() {
   const [requestedImport, setRequestedImport] = useState(false);
   /** 自动停止保存成功后弹「采集完成」，值是本次保存的文件 id */
   const [completed, setCompleted] = useState<string | null>(null);
-  const autoStoppedFor = useRef<string | null>(null);
   const importLock = useRef(false);
   const mounted = useRef(false);
   const reading = useRef(false);
@@ -88,14 +94,22 @@ export function NativeCollectorPanel() {
     finally { await refresh(); }
   };
   /**
-   * 采集完成（稳定进度条走满）自动停止并保存（2026-10-25 用户要求）。
-   * 每个采集会话只触发一次；停止成功后弹「采集完成」，让用户选择是否立刻解析导入。
+   * 采集完成（稳定进度条走满）自动停止、保存并**自动导入**（2026-10-25 用户要求）。
+   * 不再让用户点「解析并导入」；完成后弹窗只保留「取消 / 上传蛋神助手」。
+   * 标记放在模块级会话集合里：切页卸载再回来也不会重复停止或重复导入。
    */
   const handleCaptureReady = (session: string | undefined) => {
-    if (!session || autoStoppedFor.current === session) return;
-    autoStoppedFor.current = session;
-    void action('stopCapture').then((saved) => {
-      if (saved && mounted.current) setCompleted(session);
+    if (!session || hasAutoStopped(session)) return;
+    markAutoStopped(session);
+    void action('stopCapture').then(async (saved) => {
+      if (!saved) {
+        unmarkAutoStopped(session);
+        return;
+      }
+      if (mounted.current) setCompleted(session);
+      if (hasAutoImported(session)) return;
+      markAutoImported(session);
+      await action('importCapture', session);
     });
   };
   if (!checked) {
@@ -125,6 +139,7 @@ export function NativeCollectorPanel() {
   }
   const busy = state != null && ['starting', 'capturing', 'stopping'].includes(state.phase);
   const uploadSupported = typeof window.RocoCapture?.uploadCapture === 'function';
+  const completedFile = completed ? state?.files.find((file) => file.id === completed) : undefined;
   return (
     <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm" data-testid="native-collector">
       <h2 className="text-base font-semibold text-slate-900">本机采集</h2>
@@ -136,7 +151,7 @@ export function NativeCollectorPanel() {
           <ol className="list-decimal space-y-0.5 pl-5 text-xs text-slate-500">
             <li>关闭其他 VPN 或游戏加速器，开始采集并同意系统 VPN 授权。</li>
             <li>打开游戏，重新登录，依次查看精灵仓库、背包与蛋仓。</li>
-            <li>查看数据进度；内容稳定（进度条走满）后会自动停止并保存，再解析导入。</li>
+            <li>查看数据进度；内容稳定（进度条走满）后会自动停止、保存并开始导入。</li>
           </ol>
           <div className="flex flex-wrap gap-2">
             {busy ? <Button disabled={state.phase === 'stopping'} onClick={() => action('stopCapture')}>停止并保存</Button>
@@ -178,22 +193,38 @@ export function NativeCollectorPanel() {
       </> : null}
       <ModalSurface open={completed != null} title="采集完成" onClose={() => setCompleted(null)} testId="capture-complete" footer={
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setCompleted(null)}>稍后</Button>
+          <Button variant="secondary" onClick={() => setCompleted(null)}>取消</Button>
           <Button
-            disabled={busy || importing || !!error}
+            disabled={
+              !uploadSupported ||
+              !completedFile?.valid ||
+              completedFile.size > CAPTURE_UPLOAD_MAX_BYTES ||
+              busy ||
+              !!state?.uploadBusy ||
+              !!error
+            }
             onClick={() => {
               const id = completed;
               setCompleted(null);
-              if (id) void action('importCapture', id);
+              if (id) void action('uploadCapture', id);
             }}
           >
-            解析并导入
+            上传蛋神助手
           </Button>
         </div>
       }>
-        <div className="space-y-1 p-4">
-          <p className="text-sm text-slate-600">已自动停止并保存本次采集。</p>
-          <p className="text-xs text-slate-400">现在可以解析并导入；原包仍会保留，也可以稍后在文件列表里手动导入。</p>
+        <div className="space-y-1 p-4" data-testid="capture-complete-status">
+          <p className="text-sm text-slate-600">已自动停止并保存本次采集，无需再手动解析。</p>
+          <p className="text-xs text-slate-400">
+            {importing
+              ? '正在自动解析并导入工具箱…'
+              : outcome.local === 'saved'
+                ? '已自动导入工具箱。'
+                : outcome.local === 'failed'
+                  ? `自动导入失败：${outcome.message ?? '请稍后在文件列表里重试'}`
+                  : '正在准备自动导入…'}
+          </p>
+          <p className="text-xs text-slate-400">原包仍会保留；刷新页面或切回本页不会重复导入。</p>
         </div>
       </ModalSurface>
       <ModalSurface open={deleting != null} title="删除本机原包？" onClose={() => setDeleting(null)} footer={

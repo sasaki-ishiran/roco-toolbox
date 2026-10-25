@@ -1,4 +1,4 @@
-﻿import { readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 const SAMPLE = readFileSync('src/domain/__fixtures__/backup-sample.json', 'utf8');
@@ -27,7 +27,7 @@ test('manifest 声明了分享目标（采集器「分享」→「洛克工具�
   });
 });
 
-test('分享一份采集数据进来，页面自动导入并回到首页', async ({ page }) => {
+test('分享一份采集数据进来，页面自动导入并停在导入页', async ({ page }) => {
   await page.goto('/');
   await waitForController(page);
   await expect(page.getByText('还没有数据')).toBeVisible();
@@ -46,11 +46,10 @@ test('分享一份采集数据进来，页面自动导入并回到首页', async
   expect(posted.pathname).toMatch(/^\/(index\.html)?$/);
 
   // 分享会重新导航回首页，应用启动时把文件取走自动导入；
-  // 导入后默认落看板（有数据），data-message 在「导入数据」页
+  // 导入后不再自动跳看板（2026-10-25），结果留在「导入数据」页
   await page.reload();
-  await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '我的', exact: true }).click();
   await expect(page.getByTestId('data-message')).toContainText('已导入分享进来的采集数据');
+  await expect(page.getByRole('heading', { name: '种公全收集' })).toHaveCount(0);
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 
   // 再刷新一次不会重复导入（暂存取走就删了）；页签停在原处（导入数据页），数据仍在
@@ -73,10 +72,9 @@ test('原生壳 APK 注入分享数据后自动导入（应用已经开着的情
     window.dispatchEvent(new Event('roco-share'));
   }, SAMPLE);
 
-  // 导入后默认落看板（有数据），data-message 在「导入数据」页
-  await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '我的', exact: true }).click();
+  // 应用会切到导入页并自动导入；导入后不自动跳看板（2026-10-25）
   await expect(page.getByTestId('data-message')).toContainText('已导入分享进来的采集数据');
+  await expect(page.getByRole('heading', { name: '种公全收集' })).toHaveCount(0);
   await expect(page.getByText('还没有数据')).toHaveCount(0);
 });
 
@@ -108,7 +106,9 @@ test('分享导入后自动做一次云同步（跨设备用户不用再手动�
     window.dispatchEvent(new Event('roco-share'));
   }, SAMPLE);
 
-  await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
+  // 导入成功后停在导入页（不自动跳看板）
+  await expect(page.getByTestId('data-message')).toContainText('已导入分享进来的采集数据');
+  await expect(page.getByRole('heading', { name: '种公全收集' })).toHaveCount(0);
   // 自动同步 = 先拉云端（GET，云端为空时本机当第一份）再推回（PUT），不用用户动手
   await expect.poll(() => calls).toContain('GET');
   await expect.poll(() => calls).toContain('PUT');
@@ -141,10 +141,9 @@ test('采集器分享抓包进来：网页自动解码并导入', async ({ page 
     window.dispatchEvent(new Event('roco-share'));
   });
 
-  // 导入后默认落看板（有数据）；data-message 与「N 个账号」在「导入数据」页
-  await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '我的', exact: true }).click();
+  // 导入后停在导入页（不自动跳看板）；data-message 与「N 个账号」都在这里
   await expect(page.getByTestId('data-message')).toContainText('已解析并导入分享进来的抓包数据');
+  await expect(page.getByRole('heading', { name: '种公全收集' })).toHaveCount(0);
   await expect(page.getByText('还没有数据')).toHaveCount(0);
   await expect(page.getByText('1 个账号')).toBeVisible();
   // 解出来的账号与精灵要真的落到看板上（合成抓包里只有一只精灵，且不在我们图鉴里）

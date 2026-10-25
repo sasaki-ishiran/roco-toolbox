@@ -143,10 +143,10 @@ test('真实 Functions + D1：三个身份、A 两设备共享同一成员与资
   await pageA.getByTestId('mother-view-all').click();
   await expect(
     pageA.getByTestId('mother-resource-row').filter({ hasText: '火花' }),
-  ).toContainText('有：阿甲（账号1001）');
+  ).toContainText('有：阿甲');
   await expect(
     pageA.getByTestId('mother-resource-row').filter({ hasText: '水蓝蓝' }),
-  ).toContainText('有：阿乙（账号2001）');
+  ).toContainText('有：阿乙');
   await expect(
     pageA.getByTestId('mother-resource-row').filter({ hasText: '喵喵' }),
   ).toContainText('已发布成员均无，另 1 人待发布/更新');

@@ -112,16 +112,6 @@ export function MotherGroupResources({
         : member.displayName;
   }, [group.members]);
 
-  const sourceNames = (row: MotherCoverageRow, memberId: string): string => {
-    const member = memberById.get(memberId);
-    if (!member?.resource) return '';
-    const holder = row.holders.find((item) => item.accountId === memberId);
-    if (!holder) return '';
-    return holder.accountKeys
-      .map((key) => member.resource?.accounts.find((account) => account.accountKey === key)?.accountName ?? key)
-      .join('、');
-  };
-
   const currentRows =
     effectiveView === 'missing'
       ? views.missingForMe
@@ -152,9 +142,7 @@ export function MotherGroupResources({
     row.holders
       .map((holder) => {
         const member = memberById.get(holder.accountId);
-        const name = member ? labelOf(member) : holder.accountId.slice(0, 6);
-        const sources = sourceNames(row, holder.accountId);
-        return sources ? `${name}（${sources}）` : name;
+        return member ? labelOf(member) : holder.accountId.slice(0, 6);
       })
       .join('、');
 

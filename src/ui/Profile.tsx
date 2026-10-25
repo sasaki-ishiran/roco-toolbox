@@ -13,7 +13,6 @@ export interface ProfileProps {
   section: ProfileSection;
   returnToGroups: boolean;
   onNavigate: (intent: NavigationIntent) => void;
-  onShareImported: () => void;
   /** 打开完整教程（首启入门卡 / 顶部按钮） */
   onOpenGuide?: () => void;
 }
@@ -34,7 +33,6 @@ export function Profile({
   section,
   returnToGroups,
   onNavigate,
-  onShareImported,
   onOpenGuide,
 }: ProfileProps) {
   // 导入后的自动上传冲突仍以 syncNoticeStore 为准，交给 AccountPanel 二选一
@@ -102,7 +100,7 @@ export function Profile({
           ) : null}
           <ImportOutcomeNotice onOpenGroups={() => onNavigate({ type: 'open-groups' })} />
           <NativeCollectorPanel />
-          <ImportPanel onShareImported={onShareImported} />
+          <ImportPanel />
         </>
       ) : null}
 

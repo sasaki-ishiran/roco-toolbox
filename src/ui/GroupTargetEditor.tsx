@@ -59,7 +59,17 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
       await action();
       setMessage(success);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : '操作失败，请稍后再试');
+      const text = failure instanceof Error ? failure.message : '操作失败，请稍后再试';
+      if (/目标已被其他设备更新|状态已更新|刷新后再/.test(text)) {
+        try {
+          await hook.refresh();
+        } catch {
+          // 刷新失败时保留原错误，用户可手动点刷新
+        }
+        setError('已刷新到最新目标，请再保存一次');
+      } else {
+        setError(text);
+      }
     } finally {
       setBusy(false);
     }
@@ -170,7 +180,7 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap items-center gap-1" data-testid="mother-target-options">
             {MOTHER_TARGET_BODIES.map((body) => (
               <button
                 key={body}
@@ -187,8 +197,6 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
                 {body}
               </button>
             ))}
-          </div>
-          <div className="flex flex-wrap gap-1">
             {motherVoicesForTargetMode(motherMode).map((voice) => (
               <button
                 key={voice}

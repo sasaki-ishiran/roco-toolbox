@@ -48,16 +48,17 @@ describe('App', () => {
 
   test('壳把分享内容注入时自动切到「导入数据」页（否则分享会被静默搁置）', async () => {
     presetFirstRunSeen();
-    // 有数据时应用会自动落到看板，而接收分享的监听在「导入数据」页里（只挂载当前页）
     await saveSnapshot(snapshot('账号甲'));
     resetSnapshotCacheForTest();
 
     render(<App />);
-    await waitFor(() => expect(screen.queryByTestId('import-input')).toBeNull());
+    // 2026-10-25：导入后不再自动跳看板，首次打开也停在「导入数据」页
+    await waitFor(() => expect(screen.getByTestId('import-input')).toBeDefined());
 
     fireEvent(window, new Event('roco-share'));
 
     await waitFor(() => expect(screen.getByTestId('import-input')).toBeDefined());
+    expect(screen.getByText('导入游戏数据')).toBeTruthy();
   });
 
   test('已在小组时从看板点求蛋，落到个人求种公而不是母本共享', async () => {

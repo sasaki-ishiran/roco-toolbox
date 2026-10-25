@@ -4,6 +4,9 @@ test('配窝：看板直接给出完整摆位与配对，并保留覆盖度 / �
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-breed-pair.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
+  // 2026-10-25 起导入后不再自动跳看板，配窝在看板上，自己点过去
+  await expect(page.getByTestId('import-outcome')).toContainText('已保存到本机');
+  await page.getByRole('button', { name: '看板', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: '配窝' })).toBeVisible();
   await expect(page.getByTestId('nest-summary-line')).toContainText('还差');
@@ -27,6 +30,8 @@ test('配窝：看板直接给出完整摆位与配对，并保留覆盖度 / �
 test('「去看怎么迭代」跳过去：自动展开第一个可迭代的蛋组并滚到它，直接看到那对怎么放', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-breed-pair.json');
+  await expect(page.getByTestId('import-outcome')).toContainText('已保存到本机');
+  await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByTestId('nest-open-coverage')).toBeVisible();
 
   await page.getByTestId('nest-open-coverage').click();

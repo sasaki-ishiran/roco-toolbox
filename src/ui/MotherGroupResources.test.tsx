@@ -127,7 +127,7 @@ describe('MotherGroupResources 三视图', () => {
     expect(text).not.toContain('火花');
   });
 
-  test('小组资源：显示拥有者与来源账号、缺口和未知人数', () => {
+  test('小组资源：只显示拥有者昵称（不显示来源账号）、缺口和未知人数', () => {
     renderResources();
     fireEvent.click(screen.getByTestId('mother-view-all'));
 
@@ -135,7 +135,8 @@ describe('MotherGroupResources 三视图', () => {
       .getAllByTestId('mother-resource-row')
       .find((row) => row.textContent?.includes('火花'));
     expect(fire).toBeTruthy();
-    expect(fire).toHaveTextContent('有：A（账号1001）');
+    expect(fire).toHaveTextContent('有：A');
+    expect(fire).not.toHaveTextContent('账号1001');
     expect(fire).toHaveTextContent('缺：B，另 1 人待发布/更新');
   });
 

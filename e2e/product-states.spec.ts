@@ -28,9 +28,9 @@ test('导入成功：本机 / 私有云 / 小组三个阶段分别反馈，且�
     .getByTestId('import-input')
     .setInputFiles('src/domain/__fixtures__/backup-sample.json');
 
-  // 有数据后自动落看板；回「我的 · 游戏数据」看反馈
+  // 2026-10-25：导入完成后不再自动跳看板，用户留在导入页看结果
   await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '我的', exact: true }).click();
+  await expect(page.getByTestId('import-button')).toBeVisible();
 
   const outcome = page.getByTestId('import-outcome');
   await expect(outcome).toContainText('已保存到本机');

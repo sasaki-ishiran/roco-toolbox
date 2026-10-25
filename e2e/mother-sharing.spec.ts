@@ -57,7 +57,7 @@ test('小组资源：显示来源账号、缺口与未知人数；可切换视�
   const searchBox = await page.getByTestId('mother-search').boundingBox();
   expect(searchBox?.width ?? 0).toBeGreaterThan(260);
   const fire = page.getByTestId('mother-resource-row').filter({ hasText: '火花' });
-  await expect(fire).toContainText('有：阿甲（甲的大号）');
+  await expect(fire).toContainText('有：阿甲');
   await expect(fire).toContainText('缺：阿乙，另 1 人待发布/更新');
 
   // 搜「火神」能命中「火花」那颗蛋（按蛋聚合，识别同血脉的其它形态）
@@ -68,7 +68,7 @@ test('小组资源：显示来源账号、缺口与未知人数；可切换视�
   await page.getByTestId('mother-search').fill('');
   await page.getByTestId('mother-view-missing').click();
   await expect(page.getByTestId('mother-resource-row').filter({ hasText: '水蓝蓝' })).toContainText(
-    '有：阿乙（乙的号）',
+    '有：阿乙',
   );
 });
 

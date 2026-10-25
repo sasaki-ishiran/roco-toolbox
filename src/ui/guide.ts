@@ -7,9 +7,10 @@
 const GUIDE_SEEN_KEY = 'roco.guideSeen';
 
 /**
- * 教程版本：改内容时 +1（2026-10-06 → 2：开头加了两页功能简介；→ 3：精简掉重复的两页 + 导入页重排）
+ * 教程版本：改内容时 +1（2026-10-06 → 2：开头加了两页功能简介；→ 3：精简掉重复的两页 + 导入页重排；
+ * → 4：采集完成自动导入 + 小组母本/种公与共同寻找）
  */
-export const GUIDE_VERSION = '3';
+export const GUIDE_VERSION = '4';
 
 export function guidePending(): boolean {
   if (typeof window === 'undefined') return false;

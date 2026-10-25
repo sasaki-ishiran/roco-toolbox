@@ -5,7 +5,6 @@ import { refreshApp } from './pwa/hardRefresh';
 import { ChangelogModal } from './ui/ChangelogModal';
 import { GuideModal } from './ui/GuideModal';
 import { guidePending, markGuideSeen } from './ui/guide';
-import { hasPendingNativeShare } from './share/nativeShare';
 import { Dashboard } from './ui/Dashboard';
 import { Collection } from './ui/Collection';
 import { CollectionGroups } from './ui/CollectionGroups';
@@ -19,7 +18,7 @@ import {
   type AppNavigation,
   type NavigationIntent,
 } from './ui/navigation';
-import { readLastTab, saveLastTab, hasSavedTab } from './ui/lastTab';
+import { readLastTab, saveLastTab } from './ui/lastTab';
 import { readSwapMainView, saveSwapMainView } from './ui/swapViewStore';
 import { getImportOutcome, useImportOutcome } from './ui/importOutcomeStore';
 import { useSnapshots } from './ui/useSnapshots';
@@ -53,49 +52,18 @@ export default function App() {
   const activeTab = navigation.page;
   /** 手动刷新按钮的忙碌态（真正刷新会让页面重载，这里只防连点） */
   const [refreshing, setRefreshing] = useState(false);
-  const { snapshots, loaded, refreshError, refreshedAt } = useSnapshots();
+  const { loaded, refreshError, refreshedAt } = useSnapshots();
   // 壳（APK）把分享内容注入**当前页面**，而消费分享的监听挂在「导入数据」页里（只挂载当前页）：
   // 应用开着且停在别的页签时，分享会被静默搁置（看起来像「分享过来什么都没发生」）。
-  // 所以一收到分享事件就切到导入页、并先按住「自动落看板」；等这次分享**导入完成**后
-  // （ImportPanel 的 onShareImported 回调）再跳回看板，让用户直接看到「本次新增」——
-  // 与网页版分享目标的行为一致。
-  const [shareSeen, setShareSeen] = useState(() => hasPendingNativeShare());
-  /**
-   * 「分享导入完成后跳一次看板」的一次性标记。
-   * 不复用 autoRedirected：那会把它重新武装，导致用户之后手动回「导入数据」页
-   * 管理数据时又被弹走（原设计明确要避免这一点）。
-   */
-  const shareRedirect = useRef(false);
+  // 所以一收到分享事件就切到导入页；导入完成后**不再自动跳看板**（2026-10-25 用户要求）：
+  // 现在用户多在工具箱内采集导入，更关心采集/导入/上传是否成功，应留在原页看进度。
   useEffect(() => {
     const onShare = () => {
-      shareRedirect.current = false;
-      // 先按住自动落看板：否则导入还没跑完、导入页就被切走卸载了
-      setShareSeen(true);
       navigate({ type: 'open-profile', section: 'data' });
     };
     window.addEventListener('roco-share', onShare);
     return () => window.removeEventListener('roco-share', onShare);
   }, [navigate]);
-  // 有数据时默认落看板：首帧仍停在「导入数据」，读到数据后只在「还没被用户手动切走过、
-  //  且仍停在导入页」时跳一次到看板，之后用户自由切换（回到导入数据页管理数据不再被打扰）。
-  // 注意：本机已经记过页签（= 不是第一次打开）时不再自动跳，否则重开后点「导入数据」会被弹回看板。
-  const autoRedirected = useRef(hasSavedTab());
-  const onProfileDataPage = navigation.page === 'profile' && navigation.profileSection === 'data';
-  useEffect(() => {
-    if (loaded && !autoRedirected.current && !shareSeen && snapshots.length > 0 && onProfileDataPage) {
-      autoRedirected.current = true;
-      navigate({ type: 'tab', page: 'dashboard' });
-    }
-  }, [loaded, snapshots, onProfileDataPage, shareSeen, navigate]);
-  /** 分享数据导入成功后标记「待跳看板」；等快照真的更新了再跳（保证看板已能看到新数据） */
-  const handleShareImported = () => {
-    shareRedirect.current = true;
-  };
-  useEffect(() => {
-    if (!shareRedirect.current || snapshots.length === 0) return;
-    shareRedirect.current = false;
-    navigate({ type: 'tab', page: 'dashboard' });
-  }, [snapshots, navigate]);
   // 切页面（含看板卡片跳转）时回到页面顶部：否则新页面会沿用上一页的滚动偏移，
   // 跳转落点不准（2026-10-05 修）。用 useLayoutEffect 在浏览器绘制前复位，避免闪现旧位置。
   useLayoutEffect(() => {
@@ -210,7 +178,6 @@ export default function App() {
           section={navigation.profileSection}
           returnToGroups={navigation.returnToGroups}
           onNavigate={navigate}
-          onShareImported={handleShareImported}
           onOpenGuide={() => setGuide(true)}
         />
       ) : navigation.page === 'groups' ? (

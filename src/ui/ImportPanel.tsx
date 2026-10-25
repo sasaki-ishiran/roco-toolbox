@@ -44,13 +44,8 @@ import { recordSyncedPets } from './syncAdditions';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-export interface ImportPanelProps {
-  /** 分享进来的数据导入完成后通知上层（App 据此跳一次看板，让用户直接看到「本次新增」） */
-  onShareImported?: () => void;
-}
-
 /** 「导入数据」页：抓包导入 / 合并导入 / 导出全部 / 重置，以及导入结果汇报。 */
-export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
+export function ImportPanel() {
   const { snapshots, loaded } = useSnapshots();
   // 历史入口常驻：只要有导入历史，卡片就渲染（重启后入口仍在，2026-10-05 用户拍板）
   const importHistory = useLastImportHistory();
@@ -278,9 +273,7 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
           new File([fromBrowser.blob], name),
           `已导入分享进来的采集数据（${name}）`,
         );
-        // 只有真导入成功才通知（失败时留在本页让用户看到错误）
-        if (result !== null) onShareImported?.();
-        return;
+        return result;
       }
 
       const fromShell = takeNativeShare();
@@ -292,22 +285,21 @@ export function ImportPanel({ onShareImported }: ImportPanelProps = {}) {
             // Metadata only on the UI thread: Worker streams the native file and decodes there.
             const result = await importOne(new File([], name), `已解析并导入本机采集数据（${name}）`,
               async () => (await decodeUrlInWorker(fromShell.url, name)).payload);
-            if (result !== null) onShareImported?.();
-            return;
+            return result;
           }
           const bytes = await fetchShellCapture(fromShell.url);
           const result = await importOne(
             new File([bytes], name, { type: 'application/octet-stream' }),
             `已解析并导入分享进来的抓包数据（${name}）`,
           );
-          if (result !== null) onShareImported?.();
+          return result;
         } else {
           const name = fromShell.name || 'shared.json';
           const result = await importOne(
             new File([fromShell.text], name, { type: 'application/json' }),
             `已导入分享进来的采集数据（${name}）`,
           );
-          if (result !== null) onShareImported?.();
+          return result;
         }
       } catch (error) {
         setActionError(error instanceof Error ? error.message : '导入分享的数据失败');

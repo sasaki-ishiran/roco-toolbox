@@ -19,13 +19,13 @@ test('首次打开不阻断：入门卡可直达教程，可跳过且不再打�
   // 第 1 页是功能简介（先讲"能干什么"，再讲操作）
   await expect(guide.getByTestId('guide-body')).toContainText('这个工具能帮你做什么');
   await expect(guide.getByTestId('guide-body')).toContainText('推荐种公');
-  await expect(guide.getByTestId('guide-progress')).toHaveText('1 / 5');
+  await expect(guide.getByTestId('guide-progress')).toHaveText('1 / 6');
 
-  // 翻页：下一步 → 2/5；上一步 → 回 1/5
+  // 翻页：下一步 → 2/6；上一步 → 回 1/6
   await page.getByTestId('guide-next').click();
-  await expect(page.getByTestId('guide-progress')).toHaveText('2 / 5');
+  await expect(page.getByTestId('guide-progress')).toHaveText('2 / 6');
   await page.getByTestId('guide-prev').click();
-  await expect(page.getByTestId('guide-progress')).toHaveText('1 / 5');
+  await expect(page.getByTestId('guide-progress')).toHaveText('1 / 6');
 
   // 跳过 → 消失，页面可用
   await page.getByTestId('guide-skip').click();
@@ -47,9 +47,9 @@ test('顶部「教程」入口随时能回看，走到最后一步是「开始�
   const guide = page.getByTestId('guide-modal');
   await expect(guide).toBeVisible();
 
-  // 5 页：最后一步是「开始用」（GUIDE_STEPS 长度变了要同步改这里）
-  for (let index = 0; index < 4; index += 1) await page.getByTestId('guide-next').click();
-  await expect(page.getByTestId('guide-progress')).toHaveText('5 / 5');
+  // 6 页：最后一步是「开始用」（GUIDE_STEPS 长度变了要同步改这里）
+  for (let index = 0; index < 5; index += 1) await page.getByTestId('guide-next').click();
+  await expect(page.getByTestId('guide-progress')).toHaveText('6 / 6');
   await expect(page.getByTestId('guide-body')).toContainText('云同步');
   await page.getByTestId('guide-done').click();
   await expect(guide).toHaveCount(0);

@@ -143,34 +143,10 @@ export function StudGroupResources({
     return `${groupLabel}${row.natureName}${row.grade}`.toLowerCase().includes(keyword);
   });
   const grouped = groupRowsByGroupId(filtered);
-  const sourceNames = (row: StudSlotRow, accountId: string): string => {
-    const member = memberById.get(accountId);
-    const holder =
-      row.holders.find((item) => item.accountId === accountId) ??
-      row.breedableHolders.find((item) => item.accountId === accountId);
-    if (!member || !holder) return '';
-    return holder.accountKeys
-      .map(
-        (key) =>
-          member.studResource?.accounts.find((account) => account.accountKey === key)?.accountName ??
-          key,
-      )
-      .join('、');
-  };
   const holderText = (row: StudSlotRow): string =>
-    row.holders
-      .map((holder) => {
-        const sources = sourceNames(row, holder.accountId);
-        return sources ? `${labelOf(holder.accountId)}（${sources}）` : labelOf(holder.accountId);
-      })
-      .join('、');
+    row.holders.map((holder) => labelOf(holder.accountId)).join('、');
   const breedableText = (row: StudSlotRow): string =>
-    row.breedableHolders
-      .map((holder) => {
-        const sources = sourceNames(row, holder.accountId);
-        return sources ? `${labelOf(holder.accountId)}（${sources}）` : labelOf(holder.accountId);
-      })
-      .join('、');
+    row.breedableHolders.map((holder) => labelOf(holder.accountId)).join('、');
 
   const taskKeyOf = (row: StudSlotRow): string => `stud:${row.key}`;
   const taskOf = (row: StudSlotRow): CollectionTaskRecord | undefined =>

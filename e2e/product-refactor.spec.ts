@@ -4,7 +4,9 @@ import { progressOf } from './progress';
 const importSample = async (page: Page) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
-  await expect(page.getByText('还没有数据')).toHaveCount(0);
+  // 导入后停在导入页（2026-10-25 起不再自动跳看板），等落盘后再切
+  await expect(page.getByTestId('import-outcome')).toContainText('已保存到本机');
+  await page.getByRole('button', { name: '看板', exact: true }).click();
 };
 
 test('旧共享记忆不影响看板求蛋：点「全部」落到个人求种公', async ({ page }) => {

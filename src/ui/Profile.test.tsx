@@ -17,7 +17,6 @@ const renderProfile = (section: 'identity' | 'data' | 'sync' = 'data') =>
       section={section}
       returnToGroups={false}
       onNavigate={vi.fn()}
-      onShareImported={vi.fn()}
     />,
   );
 
@@ -25,7 +24,7 @@ describe('Profile（我的）', () => {
   test('三个分区可切换，并带上明确的分区意图', () => {
     const onNavigate = vi.fn();
     render(
-      <Profile section="data" returnToGroups={false} onNavigate={onNavigate} onShareImported={vi.fn()} />,
+      <Profile section="data" returnToGroups={false} onNavigate={onNavigate} />,
     );
     fireEvent.click(screen.getByTestId('profile-section-identity'));
     expect(onNavigate).toHaveBeenCalledWith({ type: 'open-profile', section: 'identity' });
@@ -50,7 +49,7 @@ describe('Profile（我的）', () => {
     expect(screen.getByTestId('account-panel')).toHaveTextContent('工具箱身份');
 
     rerender(
-      <Profile section="sync" returnToGroups onNavigate={vi.fn()} onShareImported={vi.fn()} />,
+      <Profile section="sync" returnToGroups onNavigate={vi.fn()} />,
     );
     expect(screen.getByTestId('profile-sync-intro')).toHaveTextContent('不会更新小组资源');
     expect(screen.getByTestId('account-panel')).toHaveTextContent('私有同步');
@@ -62,7 +61,7 @@ describe('Profile（我的）', () => {
     updateImportOutcome(id, { local: 'saved' });
     const onNavigate = vi.fn();
     render(
-      <Profile section="data" returnToGroups={false} onNavigate={onNavigate} onShareImported={vi.fn()} />,
+      <Profile section="data" returnToGroups={false} onNavigate={onNavigate} />,
     );
     fireEvent.click(screen.getByTestId('import-outcome-open-groups'));
     expect(onNavigate).toHaveBeenCalledWith({ type: 'open-groups' });

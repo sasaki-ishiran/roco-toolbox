@@ -109,6 +109,7 @@ export interface CollectionGroupsHook {
   target: GroupTargetConfig | null;
   targetReady: boolean;
   loading: boolean;
+  refreshing: boolean;
   error: string;
   offline: boolean;
   nextPollAt: number | null;
@@ -236,6 +237,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
   const [currentGroupId, setCurrentGroupId] = useState<string | null>(boot.currentGroupId);
   const [currentGroup, setCurrentGroup] = useState<CollectionGroupDetail | null>(boot.currentGroup);
   const [loading, setLoading] = useState(boot.loading);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [offline, setOffline] = useState(false);
   const [nextPollAt, setNextPollAt] = useState<number | null>(null);
@@ -582,16 +584,19 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     const account = accountRef.current;
     if (!account) return;
     const active = scope(true);
+    setRefreshing(true);
     try {
       const list = await refreshGroups();
       if (!active() || list === null) return;
       if (modeRef.current === 'group' && groupRef.current === null) applyGroupList(list, account);
       setError('');
+      await reloadCurrent();
     } catch (failure) {
       if (!active()) return;
       setError(messageOf(failure));
+    } finally {
+      if (active()) setRefreshing(false);
     }
-    await reloadCurrent();
   }, [applyGroupList, refreshGroups, reloadCurrent, scope]);
 
   const groupType = currentGroup?.group.groupType ?? null;
@@ -776,12 +781,40 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
   const claimTask = useCallback(
     async (targetKey: string) => {
       const groupId = groupRef.current;
-      if (!groupId) throw new Error('还没有打开小组');
+      const account = accountRef.current;
+      if (!groupId || !account) throw new Error('还没有打开小组');
       const current = tasksView.tasks.find((task) => task.targetKey === targetKey);
-      await claimTaskApi(groupId, { targetKey, version: current?.version });
-      await loadTasks(groupId);
+      const optimistic: CollectionTaskRecord = {
+        groupId,
+        targetRevision: tasksView.targetRevision,
+        targetKey,
+        round: current?.round ?? 0,
+        status: 'claimed',
+        ownerAccountId: account,
+        version: (current?.version ?? 0) + 1,
+        updatedAt: Date.now(),
+        closedAt: null,
+      };
+      // 先就地更新，点击立即有反馈；服务器确认失败再回滚
+      setTasksView((view) => ({
+        ...view,
+        tasks: [...view.tasks.filter((task) => task.targetKey !== targetKey), optimistic],
+      }));
+      try {
+        await claimTaskApi(groupId, { targetKey, version: current?.version });
+      } catch (failure) {
+        setTasksView((view) => ({
+          ...view,
+          tasks: current
+            ? [...view.tasks.filter((task) => task.targetKey !== targetKey), current]
+            : view.tasks.filter((task) => task.targetKey !== targetKey),
+        }));
+        setTasksError(messageOf(failure));
+        throw failure;
+      }
+      void loadTasks(groupId);
     },
-    [loadTasks, tasksView.tasks],
+    [loadTasks, tasksView.targetRevision, tasksView.tasks],
   );
 
   const releaseTask = useCallback(
@@ -789,10 +822,36 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
       const groupId = groupRef.current;
       if (!groupId) throw new Error('还没有打开小组');
       const current = tasksView.tasks.find((task) => task.targetKey === targetKey);
-      await releaseTaskApi(groupId, { targetKey, version: current?.version });
-      await loadTasks(groupId);
+      const optimistic: CollectionTaskRecord = {
+        groupId,
+        targetRevision: tasksView.targetRevision,
+        targetKey,
+        round: current?.round ?? 0,
+        status: 'open',
+        ownerAccountId: null,
+        version: (current?.version ?? 0) + 1,
+        updatedAt: Date.now(),
+        closedAt: null,
+      };
+      setTasksView((view) => ({
+        ...view,
+        tasks: [...view.tasks.filter((task) => task.targetKey !== targetKey), optimistic],
+      }));
+      try {
+        await releaseTaskApi(groupId, { targetKey, version: current?.version });
+      } catch (failure) {
+        setTasksView((view) => ({
+          ...view,
+          tasks: current
+            ? [...view.tasks.filter((task) => task.targetKey !== targetKey), current]
+            : view.tasks.filter((task) => task.targetKey !== targetKey),
+        }));
+        setTasksError(messageOf(failure));
+        throw failure;
+      }
+      void loadTasks(groupId);
     },
-    [loadTasks, tasksView.tasks],
+    [loadTasks, tasksView.targetRevision, tasksView.tasks],
   );
 
   const transferTask = useCallback(
@@ -800,10 +859,36 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
       const groupId = groupRef.current;
       if (!groupId) throw new Error('还没有打开小组');
       const current = tasksView.tasks.find((task) => task.targetKey === targetKey);
-      await transferTaskApi(groupId, { targetKey, toAccountId, version: current?.version });
-      await loadTasks(groupId);
+      const optimistic: CollectionTaskRecord = {
+        groupId,
+        targetRevision: tasksView.targetRevision,
+        targetKey,
+        round: current?.round ?? 0,
+        status: 'claimed',
+        ownerAccountId: toAccountId,
+        version: (current?.version ?? 0) + 1,
+        updatedAt: Date.now(),
+        closedAt: null,
+      };
+      setTasksView((view) => ({
+        ...view,
+        tasks: [...view.tasks.filter((task) => task.targetKey !== targetKey), optimistic],
+      }));
+      try {
+        await transferTaskApi(groupId, { targetKey, toAccountId, version: current?.version });
+      } catch (failure) {
+        setTasksView((view) => ({
+          ...view,
+          tasks: current
+            ? [...view.tasks.filter((task) => task.targetKey !== targetKey), current]
+            : view.tasks.filter((task) => task.targetKey !== targetKey),
+        }));
+        setTasksError(messageOf(failure));
+        throw failure;
+      }
+      void loadTasks(groupId);
     },
-    [loadTasks, tasksView.tasks],
+    [loadTasks, tasksView.targetRevision, tasksView.tasks],
   );
 
   const refreshTasks = useCallback(async () => {
@@ -937,6 +1022,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     target,
     targetReady,
     loading,
+    refreshing,
     error,
     offline,
     nextPollAt,

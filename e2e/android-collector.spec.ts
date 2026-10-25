@@ -53,10 +53,11 @@ test('新版安卓入口从采集保存到真实 Worker 解析、账号持久化
   await expect(card.getByRole('button', { name: '解析并导入', exact: true })).toBeDisabled();
   await card.getByRole('button', { name: '停止并保存', exact: true }).click();
   await card.getByRole('button', { name: '解析并导入', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
-  await page.getByRole('button', { name: '我的', exact: true }).click();
+  // 2026-10-25：导入后不再自动跳看板，结果留在「导入数据」页
   await expect(page.getByTestId('data-message')).toContainText('已解析并导入本机采集数据');
+  await expect(page.getByTestId('import-outcome')).toContainText('已保存到本机');
   await expect(page.getByText('1 个账号')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '种公全收集' })).toHaveCount(0);
   // The raw file is still present; reloading does not need another import.
   await expect(card.getByText('capture-123.pcap')).toBeVisible();
   await page.reload();
@@ -131,9 +132,13 @@ test('角色精灵和分页蛋仓收齐后，内容连续稳定后自动停止�
   const done = page.getByTestId('capture-complete');
   await expect(done).toBeVisible({ timeout: 35000 });
   await expect(done).toContainText('已自动停止并保存本次采集');
+  // 自动导入（2026-10-25）：弹窗里能看到导入状态，按钮只剩「取消 / 上传蛋神助手」
+  await expect(done.getByTestId('capture-complete-status')).toContainText('工具箱');
   await expect(page.getByTestId('capture-progress')).toHaveCount(0);
   await expect(card.getByRole('button', { name: '开始采集', exact: true })).toBeVisible();
-  await done.getByRole('button', { name: '稍后', exact: true }).click();
+  await expect(done.getByRole('button', { name: '上传蛋神助手', exact: true })).toBeVisible();
+  await done.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(done).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

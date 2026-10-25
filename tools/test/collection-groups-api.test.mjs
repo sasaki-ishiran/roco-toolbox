@@ -407,6 +407,30 @@ test('母本组自选口径：新口径可发布，旧固定口径被拒绝', as
   assert.equal(byOld.body.code, 'TARGET_CHANGED');
 });
 
+test('旧接口创建的组也能保存自选口径（自动补配置行）', async () => {
+  const legacy = await call(A.token, 'POST', '/api/mother-groups', {
+    name: '旧组自选',
+    displayName: 'A',
+  });
+  assert.equal(legacy.status, 200);
+  const groupId = legacy.body.group.id;
+
+  const update = await call(A.token, 'PUT', `/api/collection-groups/${groupId}/target`, {
+    baseTargetRevision: 0,
+    target: {
+      kind: 'mother',
+      mode: 'medal',
+      bodies: ['小不点'],
+      voices: ['婉转声'],
+      catalogVersion: 'test-v1',
+    },
+  });
+  assert.equal(update.status, 200, JSON.stringify(update.body));
+  const detail = await call(A.token, 'GET', `/api/collection-groups/${groupId}`);
+  assert.equal(detail.body.group.target.criteriaId, `mother-v2-${fnv1a('medal|小不点|婉转声')}`);
+  assert.equal(detail.body.group.targetRevision, 1);
+});
+
 test('共同寻找：全员确认后才能认领，并发只有一个成功；发布补齐自动结束任务', async () => {
   const created = await createGroup(A, {
     name: '共同寻找组',
