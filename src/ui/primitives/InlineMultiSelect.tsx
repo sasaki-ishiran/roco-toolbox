@@ -9,6 +9,8 @@ export interface InlineMultiSelectProps {
   onValuesChange: (values: string[]) => void;
   /** 一个都没选时按钮上显示的文案，同时作为「全选」项 */
   allLabel?: string;
+  /** 多于两个选中项时显示「N {unit}」，默认「人」 */
+  unit?: string;
   testId?: string;
   menuTestId?: string;
   optionTestId?: (value: string) => string;
@@ -28,6 +30,7 @@ export function InlineMultiSelect({
   options,
   onValuesChange,
   allLabel = '全部成员',
+  unit = '人',
   testId,
   menuTestId,
   optionTestId,
@@ -44,7 +47,7 @@ export function InlineMultiSelect({
       ? allLabel
       : chosen.length <= 2
         ? chosen.map((option) => option.label).join('、')
-        : `${chosen.length} 人`;
+        : `${chosen.length} ${unit}`;
 
   const closeAndRefocus = () => {
     setOpen(false);

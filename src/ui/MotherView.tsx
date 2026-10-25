@@ -16,6 +16,7 @@ import { FilterAccordion } from './FilterAccordion';
 import { FilterPanel } from './primitives/FilterPanel';
 import { ScopeSummary } from './primitives/ScopeSummary';
 import { SearchField } from './primitives/SearchField';
+import { InlineMultiSelect } from './primitives/InlineMultiSelect';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { setPersonalQuery, usePersonalList } from './listViewStore';
 import { GenderMark } from './GenderMark';
@@ -383,14 +384,30 @@ export function MotherView({
 
   return (
     <div className="space-y-2">
-      {/* 搜索常显（用户拍板：对所有母本搜索，支持进化链全员命中） */}
-      <SearchField
-        label="搜索母本"
-        value={query}
-        onValueChange={setQuery}
-        placeholder="搜索母本名称或图鉴号（支持进化链）"
-        testId="mother-search"
-      />
+      {/* 搜索 + 蛋组筛选同一行：蛋组用页内下拉多选，不再单开一段面板（2026-10-25 用户要求） */}
+      <div className="flex items-center gap-1.5">
+        <SearchField
+          className="min-w-0 flex-1"
+          label="搜索母本"
+          value={query}
+          onValueChange={setQuery}
+          placeholder="搜索母本名称或图鉴号（支持进化链）"
+          testId="mother-search"
+        />
+        <InlineMultiSelect
+          label="蛋组筛选"
+          values={eggGroupFilter}
+          options={eggGroupOptions}
+          onValuesChange={setEggGroupFilter}
+          allLabel="全部蛋组"
+          unit="个蛋组"
+          testId="mother-egg-group-filter"
+          menuTestId="mother-egg-group-options"
+          optionTestId={(value) => `mother-egg-filter-option-${value || 'all'}`}
+          align="right"
+          className="max-w-[116px] shrink-0"
+        />
+      </div>
 
       {/* 达标条件（决定「已收集 / 未收集」，与看板同口径）：体型 / 声音属于标准，不是本页筛选 */}
       <FilterPanel
@@ -439,54 +456,6 @@ export function MotherView({
           ]}
         />
       </FilterPanel>
-
-      {/* 筛选：只有一个蛋组维度，直接铺开，不再套一层「筛选清单 / 全部蛋组」面板（2026-10-25 去冗余） */}
-      <section
-        className="rounded-2xl bg-white px-2.5 py-2 shadow-sm"
-        data-testid="mother-filters"
-      >
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[11px] text-slate-400">蛋组</span>
-          <button
-            type="button"
-            aria-pressed={eggGroupFilter.length === 0}
-            onClick={() => setEggGroupFilter([])}
-            data-testid="mother-egg-group-all"
-            className={`min-h-[26px] rounded-md border px-1.5 text-[11px] ${
-              eggGroupFilter.length === 0
-                ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
-                : 'border-slate-200 bg-white text-slate-500'
-            }`}
-          >
-            全部
-          </button>
-          {eggGroupOptions.map((option) => {
-            const on = eggGroupFilter.includes(option.value);
-            return (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={on}
-                onClick={() =>
-                  setEggGroupFilter((prev) =>
-                    prev.includes(option.value)
-                      ? prev.filter((item) => item !== option.value)
-                      : [...prev, option.value],
-                  )
-                }
-                data-testid={`mother-egg-group-${option.value}`}
-                className={`min-h-[26px] rounded-md border px-1.5 text-[11px] ${
-                  on
-                    ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
-                    : 'border-slate-200 bg-white text-slate-500'
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
       {planGroups.length > 0 ? (
         <CollapsibleSection
