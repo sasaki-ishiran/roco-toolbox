@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { allNatureNames, species } from '../data/catalog';
 import { defaultEggNatures, eggNatures } from '../domain/recommendedNatures';
+import { speciesDisplayName } from '../domain/speciesName';
 import { NATURE_OVERRIDE_MAX_NATURES } from '../shared/collectionGroups';
 import { setEggNatures, useNatureOverrides } from './natureOverrideStore';
 import { ModalSurface } from './primitives/ModalSurface';
@@ -39,11 +40,12 @@ export function RecommendedNatureEditor({ open, onClose }: RecommendedNatureEdit
     [],
   );
 
+  /** 显示名带形态（如「雪绒鸟_春天的样子」），搜索也按它匹配 */
+  const labelOf = (egg: (typeof eggs)[number]): string => speciesDisplayName(egg, egg.name);
   const keyword = query.trim().toLowerCase();
   const filtered = keyword
     ? eggs.filter(
-        (egg) =>
-          egg.name.toLowerCase().includes(keyword) || egg.number.includes(keyword),
+        (egg) => labelOf(egg).toLowerCase().includes(keyword) || egg.number.includes(keyword),
       )
     : eggs;
 
@@ -65,6 +67,7 @@ export function RecommendedNatureEditor({ open, onClose }: RecommendedNatureEdit
       open={open}
       title="推荐性格"
       onClose={onClose}
+      size="lg"
       testId="nature-editor"
       closeTestId="nature-editor-close"
       backdropTestId="nature-editor-backdrop"
@@ -85,7 +88,7 @@ export function RecommendedNatureEditor({ open, onClose }: RecommendedNatureEdit
         {filtered.length === 0 ? (
           <p className="py-4 text-center text-xs text-slate-400">没有匹配的蛋。</p>
         ) : (
-          <ul className="space-y-1">
+          <ul className="grid grid-cols-4 gap-1" data-testid="nature-editor-grid">
             {filtered.map((egg) => {
               const current = eggNatures(species, egg.gameId, overrides);
               const defaults = defaultEggNatures(species, egg.gameId);
@@ -94,18 +97,22 @@ export function RecommendedNatureEditor({ open, onClose }: RecommendedNatureEdit
               return (
                 <li
                   key={egg.gameId}
-                  className="rounded-xl bg-slate-50 px-2.5 py-2"
+                  className={`min-w-0 rounded-lg bg-slate-50 px-1.5 py-1.5 ${
+                    expanded ? 'col-span-full' : ''
+                  }`}
                   data-testid="nature-editor-row"
                 >
                   <button
                     type="button"
                     onClick={() => setEditing(expanded ? null : egg.gameId)}
                     data-testid={`nature-editor-toggle-${egg.gameId}`}
-                    className="flex w-full items-baseline justify-between gap-2 text-left"
+                    className="w-full break-words text-left"
                   >
-                    <span className="text-sm text-slate-700">{egg.name}</span>
-                    <span className="shrink-0 text-[11px] text-slate-500">
-                      {current.join(' / ') || '无推荐'}
+                    <span className="block text-[11px] leading-tight text-slate-700">
+                      {labelOf(egg)}
+                    </span>
+                    <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">
+                      {current.join('/') || '无推荐'}
                       {customized ? ' · 已改' : ''}
                     </span>
                   </button>

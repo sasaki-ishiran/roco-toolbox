@@ -17,6 +17,8 @@ export interface ModalSurfaceProps {
   children: ReactNode;
   /** 固定在底部、不随正文滚动的动作区 */
   footer?: ReactNode;
+  /** 面板宽度档位（默认 md；内容密集的列表用 lg/xl） */
+  size?: 'md' | 'lg' | 'xl';
   testId?: string;
   closeTestId?: string;
   backdropTestId?: string;
@@ -51,6 +53,7 @@ export function ModalSurface({
   onClose,
   children,
   footer,
+  size = 'md',
   testId,
   closeTestId,
   backdropTestId,
@@ -136,7 +139,9 @@ export function ModalSurface({
         tabIndex={-1}
         onKeyDown={onPanelKeyDown}
         style={{ maxHeight: '85dvh' }}
-        className={`relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden bg-white shadow-xl focus:outline-none ${
+        className={`relative flex max-h-[85vh] w-full ${
+          size === 'xl' ? 'max-w-2xl' : size === 'lg' ? 'max-w-lg' : 'max-w-md'
+        } flex-col overflow-hidden bg-white shadow-xl focus:outline-none ${
           placement === 'sheet' ? 'rounded-t-2xl' : 'rounded-2xl'
         }`}
       >

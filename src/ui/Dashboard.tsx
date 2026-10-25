@@ -90,7 +90,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   );
 
   return (
-    <main className="mx-auto max-w-md space-y-3 p-4">
+    <main className="mx-auto max-w-md space-y-2 p-3">
       <AccountFilterBar accounts={accounts} />
       {noSelectedAccounts ? (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800" data-testid="dashboard-empty-accounts">

@@ -206,7 +206,7 @@ export function StudGroupResources({
   };
 
   return (
-    <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm" data-testid="stud-resources">
+    <section className="space-y-2 rounded-2xl bg-white p-2.5 shadow-sm" data-testid="stud-resources">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-500">小组槽位</h2>
         <span className="text-[11px] text-slate-400" data-testid="stud-criteria">

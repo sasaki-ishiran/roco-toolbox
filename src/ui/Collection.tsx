@@ -55,7 +55,7 @@ export function Collection({
 
   return (
     <>
-      <div className="mx-auto max-w-md px-4 pt-3">
+      <div className="mx-auto max-w-md px-3 pt-2">
         <SegmentedControl
           label="收集视图"
           value={kind}
@@ -66,7 +66,7 @@ export function Collection({
       </div>
 
       {location.kind === 'mothers' ? (
-        <main className="mx-auto max-w-md space-y-3 p-4">
+        <main className="mx-auto max-w-md space-y-2 p-3">
           <MotherView
             owned={owned}
             searchIndex={searchIndex}
