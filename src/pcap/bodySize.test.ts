@@ -71,6 +71,25 @@ describe('成体体型解析到母本共享', () => {
     }
   });
 
+  test('同一 petId 有首领形态时按体重选回普通形态（3092 烈火守护）', async () => {
+    // 3092 同时挂着「烈焰狂战士_首领形态」（136.7~218.3KG）与「烈火守护」（76.72~87.28KG），
+    // 两者基础属性完全相同，只靠属性分辨不出来；不按体重兜底就会把烈火守护判成小不点。
+    const big = await decodePet(3092, 87500);
+    const item = big.collections.petBackpack.items[0];
+    expect(item.name).toBe('烈火守护');
+    expect(item.medalBody).toBe('大块头');
+    expect(item.weightPercent).toBeGreaterThan(95);
+
+    const snapshot = parseBackup(big, '2026-10-25T00:00:00.000Z');
+    const resource = buildMotherResource({
+      snapshots: [snapshot],
+      selectedAccountKeys: ['uid:1001'],
+      species,
+      catalogVersion: CATALOG_VERSION,
+    });
+    expect(resource.accounts[0].eggGameIds).toContain(3090);
+  });
+
   test.each([[2861, ''], [2862, '大块头'], [1038, '小不点'], [1039, ''], [0, '']])('布灵 %s 克的边界判定为 %s', async (grams, expected) => {
     const payload = await decodePet(3775, grams as number);
     expect(payload.collections.petBackpack.items[0].medalBody).toBe(expected);

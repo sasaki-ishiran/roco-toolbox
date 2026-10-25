@@ -1682,7 +1682,34 @@ function comparablePetName(value) {
     .trim();
 }
 
-function resolveForm(raw) {
+/** 体重到候选体型区间的距离：0 表示落在区间内。用于同 petId 多形态时兜底。 */
+function weightRangeDistance(entry, weightKg) {
+  const size = resolveBodySize(entry);
+  if (!size || !Number.isFinite(weightKg) || weightKg <= 0) return Infinity;
+  if (weightKg < size.small) return size.small - weightKg;
+  if (weightKg > size.big) return weightKg - size.big;
+  return 0;
+}
+
+/**
+ * 同 petId 挂多个形态且基础属性相同时（如 3092 同时是「烈焰狂战士_首领形态」与
+ * 「烈火守护」），按这只精灵自己的体重选最近的体型区间，否则会固定取到表里第一个
+ * 形态，把普通形态判成小不点 / 大块头。
+ */
+function pickCandidateByWeight(entries, weightKg) {
+  let best = entries[0];
+  let bestDistance = weightRangeDistance(best, weightKg);
+  for (let index = 1; index < entries.length; index += 1) {
+    const distance = weightRangeDistance(entries[index], weightKg);
+    if (distance < bestDistance) {
+      best = entries[index];
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function resolveForm(raw, weightKg) {
   const protocolPetId = rawFirstInt(raw, 15);
   const candidates = [];
   const seen = new Set();
@@ -1726,8 +1753,9 @@ function resolveForm(raw) {
   }
   const matches = usableCandidates.filter((entry) => sameStats(entry.stats, baseStats));
   if (matches.length === 1) return { entry: matches[0], reason: "protocol-base-stats", candidateCount: usableCandidates.length };
+  const pool = matches.length ? matches : usableCandidates;
   return {
-    entry: matches[0] || usableCandidates[0],
+    entry: pickCandidateByWeight(pool, weightKg),
     reason: matches.length > 1 ? "duplicate-stat-fallback" : "ambiguous-fallback",
     candidateCount: usableCandidates.length
   };
@@ -1788,7 +1816,10 @@ function composeBrand(body, voice) {
 }
 
 function buildItem(raw, gameId) {
-  const resolution = resolveForm(raw);
+  const heightCm = rawFirstInt(raw, 26);
+  const weightGrams = rawFirstInt(raw, 27);
+  const weightKg = weightGrams / 1000;
+  const resolution = resolveForm(raw, weightKg);
   const entry = resolution.entry;
   const spriteName = entry && entry.name || "";
   const flags = petFlags(raw);
@@ -1800,9 +1831,6 @@ function buildItem(raw, gameId) {
   const groups = [boxGroup].concat(flags.isShiny ? ["异色"] : [], flags.isColorful ? ["炫彩"] : []);
   const playerName = String(raw.player_name || "").trim();
   const natureId = rawFirstInt(raw, 7);
-  const heightCm = rawFirstInt(raw, 26);
-  const weightGrams = rawFirstInt(raw, 27);
-  const weightKg = weightGrams / 1000;
   const body = bodyMedal(entry, weightKg);
   const voiceDb = firstSignedInt(raw, 93);
   const medalVoice = voiceMedal(voiceDb);

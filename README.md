@@ -103,4 +103,4 @@ e2e 依赖两个首启弹窗（更新公告、使用教程）被预置为「已�
 
 - 本项目代码以 **GPL-3.0** 授权，见 [LICENSE](LICENSE)。
 - 图鉴数据来自 [洛克王国：世界 Wiki](https://wiki.biligame.com/nrc)，以 **CC BY-SA 4.0** 授权。
-- `src/pcap-decoder/` 是上游「数据采集器」的抓包解析器源码，以 **GPL-3.0** 原样内嵌（含其 [LICENSE](src/pcap-decoder/LICENSE)），未作修改。
+- `src/pcap-decoder/` 是上游「数据采集器」的抓包解析器源码，以 **GPL-3.0** 内嵌（含其 [LICENSE](src/pcap-decoder/LICENSE)）。除一处本地修补外未作修改：`core.js` 的同 petId 多形态兜底改为按体重选最近的体型区间（见 `resolveForm`，2026-10-25）。
