@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { pickRecommendedNatures } from './src/pvp-natures.mjs';
+import { wikiEggBaseOf } from './src/egg-fallback.mjs';
 import { resolveBodySize } from '../../src/shared/bodySize.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -126,7 +127,9 @@ const species = pets.pets.map((p) => ({
   eggGroups: (p.egg_group ?? []).filter((g) => typeof g === 'number'),
   // 抓取建议需要：能否野外遇到（ecology.areas 非空）＋能否出公（gender_ratio.male > 0）
   catchable: (p.ecology?.areas?.length ?? 0) > 0,
-  maleCapable: (p.gender_ratio?.male ?? 0) > 0,
+  // 图鉴没填 gender_ratio（新赛季精灵常见，如云梦豚）时按「未知」处理成可出公，
+  // 不能默认成 0：那会让新精灵永远进不了配窝 / 种公推荐。
+  maleCapable: p.gender_ratio?.male == null ? true : p.gender_ratio.male > 0,
   // 性别比例特殊物种（2026-10-05）：游戏自带 10 分制公母比，烘焙给覆盖度页
   // 「性别比例 ≠ 5:5」专用收集模式（区分纯母 10:0 / 公多母少 8:2 / 母多公少 2:8）
   genderRatio:
@@ -141,8 +144,9 @@ const species = pets.pets.map((p) => ({
   // 这个形态「对应哪颗蛋」：母本清单按它分组（见 loadEggMap）；
   // null = 无蛋血脉（如首领形态/领地试炼用）或不可孵蛋，不进母本清单。
   // 再挡一层「可孵蛋」判断：蛋归属表理论上已过滤，这里防表格过期/手改。
+  // 蛋神助手表里查不到时用 wiki 兜底（赛季新增精灵先到 wiki，见 egg-fallback.mjs）。
   eggGameId: (p.egg_group ?? []).some((g) => g >= 2 && g <= 15)
-    ? eggMap.map.get(p.game_id ?? 0) ?? null
+    ? eggMap.map.get(p.game_id ?? 0) ?? wikiEggBaseOf(p, pets.pets)
     : null,
   // 推荐算法专项（2026-10-04）：种族值六围 + PVP 推荐性格 top2，供「优质种公推荐」兜底算法用
   stats: p.stats ?? undefined,
@@ -188,6 +192,14 @@ const withOfficial = species.filter((s) => s.officialName).length;
 console.log(`officialName：${withOfficial} / ${species.length} 条`);
 const eggSpeciesCount = species.filter((s) => s.eggGameId != null && s.eggGameId === s.gameId).length;
 console.log(`蛋物种：${eggSpeciesCount} 个（蛋归属表 ${eggMap.dataVersion}）`);
+// 蛋神助手还没收录、但 wiki 已经有蛋的新精灵：提醒一下，方便赛季更新后核对
+const fallbackEggs = species.filter((s) => s.eggGameId != null && !eggMap.map.has(s.gameId));
+if (fallbackEggs.length > 0) {
+  console.log(`wiki 兜底蛋归属：${fallbackEggs.length} 个形态`);
+  for (const entry of fallbackEggs.slice(0, 10)) {
+    console.log(`  ${entry.name}(${entry.gameId}) → 蛋物种 ${entry.eggGameId}`);
+  }
+}
 if (conflicts.length > 0) {
   console.log(`蛋级配置里同名物种有多个名字的：${conflicts.length} 条（已按物种级表取值）`);
   for (const item of conflicts.slice(0, 5)) {

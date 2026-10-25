@@ -3,7 +3,7 @@
  "sourceModule": "Module:Pets/data/Catalog",
  "license": "CC BY-SA 4.0（游戏素材不适用）",
  "dataVersion": "s4-2026-10-16",
- "fetchedAt": "2026-10-22T18:18:44.272Z",
+ "fetchedAt": "2026-10-25T02:21:26.671Z",
  "petCountDeclared": 633,
  "petCountParsed": 633,
  "breedableCount": 586,
@@ -13579,7 +13579,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3145.png",
     "illustration": "PetPortrait_xiaolinggu.png",
-    "shiny": "PetPortrait_img_Gho_LingGu1_101_Res.png",
+    "shiny": "PetPortrait_LingGu1_yise.png",
     "shiny_head": "PetAvatar_3145_1.png"
    },
    "learnset_id": "learnset_3cb59620d1da",
@@ -13675,7 +13675,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3146.png",
     "illustration": "PetPortrait_youlinggu.png",
-    "shiny": "PetPortrait_img_Gho_LingGu2_101_Res.png",
+    "shiny": "PetPortrait_LingGu2_yise.png",
     "shiny_head": "PetAvatar_3146_1.png"
    },
    "learnset_id": "learnset_3cb59620d1da",
@@ -13781,7 +13781,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3147.png",
     "illustration": "PetPortrait_lunhuilinggu.png",
-    "shiny": "PetPortrait_img_Gho_LingGu3_101_Res.png",
+    "shiny": "PetPortrait_LingGu3_yise.png",
     "shiny_head": "PetAvatar_3147_1.png"
    },
    "learnset_id": "learnset_3cb59620d1da",
@@ -16321,7 +16321,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3180.png",
     "illustration": "PetPortrait_xiaopaersasi.png",
-    "shiny": "PetPortrait_img_Dem_PaErSaSi1_101_Res.png",
+    "shiny": "PetPortrait_PaErSaSi1_yise.png",
     "shiny_head": "PetAvatar_3180_1.png"
    },
    "learnset_id": "learnset_536373cc8446",
@@ -16397,7 +16397,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3181.png",
     "illustration": "PetPortrait_paersasi2.png",
-    "shiny": "PetPortrait_img_Dem_PaErSaSi2_101_Res.png",
+    "shiny": "PetPortrait_PaErSaSi2_yise.png",
     "shiny_head": "PetAvatar_3181_1.png"
    },
    "learnset_id": "learnset_536373cc8446",
@@ -16472,7 +16472,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3182.png",
     "illustration": "PetPortrait_longxipaer.png",
-    "shiny": "PetPortrait_img_Dem_PaErSaSi3_102_Res.png",
+    "shiny": "PetPortrait_PaErSaSi3_yise.png",
     "shiny_head": "PetAvatar_3182_1.png"
    },
    "learnset_id": "learnset_536373cc8446",
@@ -16589,7 +16589,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3183.png",
     "illustration": "PetPortrait_guiyankungchong.png",
-    "shiny": "PetPortrait_img_Dem_KuangChong1_101_Res.png",
+    "shiny": "PetPortrait_KuangChong1_yise.png",
     "shiny_head": "PetAvatar_3183_1.png"
    },
    "learnset_id": "learnset_71c4f11177de",
@@ -16681,7 +16681,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3184.png",
     "illustration": "PetPortrait_erlingguimei.png",
-    "shiny": "PetPortrait_img_Dem_KuangChong2_101_Res.png",
+    "shiny": "PetPortrait_KuangChong2_yise.png",
     "shiny_head": "PetAvatar_3184_1.png"
    },
    "learnset_id": "learnset_71c4f11177de",
@@ -16773,7 +16773,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3185.png",
     "illustration": "PetPortrait_jumoxiechong.png",
-    "shiny": "PetPortrait_img_Dem_KuangChong3_101_Res.png",
+    "shiny": "PetPortrait_KuangChong3_yise.png",
     "shiny_head": "PetAvatar_3185_1.png"
    },
    "learnset_id": "learnset_71c4f11177de",
@@ -26408,7 +26408,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3321.png",
     "illustration": "PetPortrait_mimifu.png",
-    "shiny": "PetPortrait_img_Win_NiNi1_101_Res.png",
+    "shiny": "PetPortrait_NiNi1_yise.png",
     "shiny_head": "PetAvatar_3321_1.png"
    },
    "learnset_id": "learnset_2ca547f80b05",
@@ -26490,7 +26490,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3322.png",
     "illustration": "PetPortrait_fanfanfu.png",
-    "shiny": "PetPortrait_img_Win_NiNi2_101_Res.png",
+    "shiny": "PetPortrait_NiNi2_yise.png",
     "shiny_head": "PetAvatar_3322_1.png"
    },
    "learnset_id": "learnset_2ca547f80b05",
@@ -26572,7 +26572,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3323.png",
     "illustration": "PetPortrait_yeyoumo.png",
-    "shiny": "PetPortrait_img_Win_NiNi3_101_Res.png",
+    "shiny": "PetPortrait_NiNi3_yise.png",
     "shiny_head": "PetAvatar_3323_1.png"
    },
    "learnset_id": "learnset_2ca547f80b05",
@@ -27915,7 +27915,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3347.png",
     "illustration": "PetPortrait_yayanmo.png",
-    "shiny": "PetPortrait_img_Dem_DuYan1_101_Res.png",
+    "shiny": "PetPortrait_DuYan1_yise.png",
     "shiny_head": "PetAvatar_3347_1.png"
    },
    "learnset_id": "learnset_dbb1967ec957",
@@ -27998,7 +27998,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3348.png",
     "illustration": "PetPortrait_yeyanmo.png",
-    "shiny": "PetPortrait_img_Dem_DuYan2_101_Res.png",
+    "shiny": "PetPortrait_DuYan2_yise.png",
     "shiny_head": "PetAvatar_3348_1.png"
    },
    "learnset_id": "learnset_dbb1967ec957",
@@ -28081,7 +28081,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3349.png",
     "illustration": "PetPortrait_duyanjumo.png",
-    "shiny": "PetPortrait_img_Dem_DuYan3_101_Res.png",
+    "shiny": "PetPortrait_DuYan3_yise.png",
     "shiny_head": "PetAvatar_3349_1.png"
    },
    "learnset_id": "learnset_dbb1967ec957",
@@ -29670,7 +29670,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3373.png",
     "illustration": "PetPortrait_doudou.png",
-    "shiny": "PetPortrait_img_Com_DouDouMao1_101_Res.png",
+    "shiny": "PetPortrait_DouDouMao1_yise.png",
     "shiny_head": "PetAvatar_3373_1.png"
    },
    "learnset_id": "learnset_bec3a1367d3f",
@@ -29749,7 +29749,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3374.png",
     "illustration": "PetPortrait_qiqiumao.png",
-    "shiny": "PetPortrait_img_Com_DouDouMao2_101_Res.png",
+    "shiny": "PetPortrait_DouDouMao2_yise.png",
     "shiny_head": "PetAvatar_3374_1.png"
    },
    "learnset_id": "learnset_bec3a1367d3f",
@@ -29830,7 +29830,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3375.png",
     "illustration": "PetPortrait_qimengmi.png",
-    "shiny": "PetPortrait_img_Com_DouDouMao3_101_Res.png",
+    "shiny": "PetPortrait_DouDouMao3_yise.png",
     "shiny_head": "PetAvatar_3375_1.png"
    },
    "learnset_id": "learnset_bec3a1367d3f",
@@ -42794,7 +42794,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3568.png",
     "illustration": "PetPortrait_xiaoheimao.png",
-    "shiny": "PetPortrait_img_Com_HeiMao1_101_Res.png",
+    "shiny": "PetPortrait_HeiMao1_yise.png",
     "shiny_head": "PetAvatar_3568_1.png"
    },
    "learnset_id": "learnset_64425c87a4af",
@@ -42872,7 +42872,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3569.png",
     "illustration": "PetPortrait_heimaowushi.png",
-    "shiny": "PetPortrait_img_Com_HeiMao2_101_Res.png",
+    "shiny": "PetPortrait_HeiMao2_yise.png",
     "shiny_head": "PetAvatar_3569_1.png"
    },
    "learnset_id": "learnset_64425c87a4af",
@@ -43490,7 +43490,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3584.png",
     "illustration": "PetPortrait_ciluntuo_yidi.png",
-    "shiny": "PetPortrait_img_Poi_CiLunTuo1Ar_101_Res.png",
+    "shiny": "PetPortrait_CiLunTuo1Ar_yise.png",
     "shiny_head": "PetAvatar_3584_1.png"
    },
    "learnset_id": "learnset_889812b2b5b1",
@@ -43576,7 +43576,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3585.png",
     "illustration": "PetPortrait_yueliangtuo_yidi.png",
-    "shiny": "PetPortrait_img_Poi_CiLunTuo2Ar_101_Res.png",
+    "shiny": "PetPortrait_CiLunTuo2Ar_yise.png",
     "shiny_head": "PetAvatar_3585_1.png"
    },
    "learnset_id": "learnset_889812b2b5b1",
@@ -43689,7 +43689,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3582.png",
     "illustration": "PetPortrait_ciluntuo.png",
-    "shiny": "PetPortrait_img_Poi_CiLunTuo1_101_Res.png",
+    "shiny": "PetPortrait_CiLunTuo1_yise.png",
     "shiny_head": "PetAvatar_3582_1.png"
    },
    "learnset_id": "learnset_f309a6f32ab5",
@@ -43774,7 +43774,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3583.png",
     "illustration": "PetPortrait_yueliangtuo.png",
-    "shiny": "PetPortrait_img_Poi_CiLunTuo2_101_Res.png",
+    "shiny": "PetPortrait_CiLunTuo2_yise.png",
     "shiny_head": "PetAvatar_3583_1.png"
    },
    "learnset_id": "learnset_f309a6f32ab5",
@@ -49973,7 +49973,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3665.png",
     "illustration": "PetPortrait_dingdingmao.png",
-    "shiny": "PetPortrait_img_Win_DDMao1_101_Res.png",
+    "shiny": "PetPortrait_DDMao1_yise.png",
     "shiny_head": "PetAvatar_3752_1.png"
    },
    "learnset_id": "learnset_9d72db510823",
@@ -50056,7 +50056,7 @@
     "has_fruit": true,
     "head": "PetAvatar_3666.png",
     "illustration": "PetPortrait_feifeiyao.png",
-    "shiny": "PetPortrait_img_Win_DDMao2_101_Res.png",
+    "shiny": "PetPortrait_DDMao2_yise.png",
     "shiny_head": "PetAvatar_3753_1.png"
    },
    "learnset_id": "learnset_9d72db510823",
@@ -51251,7 +51251,7 @@
     "has_fruit": false,
     "head": "PetAvatar_4083.png",
     "illustration": "PetPortrait_heimaowushi_shouling.png",
-    "shiny": "PetPortrait_img_Com_HeiMaoBo_101_Res.png",
+    "shiny": "PetPortrait_HeiMaoBo_yise.png",
     "shiny_head": "PetAvatar_4083_1.png"
    },
    "is_lord_evolution": true,
@@ -52514,7 +52514,7 @@
     "has_fruit": false,
     "head": "PetAvatar_4087.png",
     "illustration": "PetPortrait_qimengmi_shouling.png",
-    "shiny": "PetPortrait_img_Com_DouDouMaoBo_101_Res.png",
+    "shiny": "PetPortrait_DouDouMaoBo_yise.png",
     "shiny_head": "PetAvatar_4087_1.png"
    },
    "is_lord_evolution": true,
@@ -55637,8 +55637,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3236.png",
-    "illustration": "PetPortrait_img_Ill_QiuQiu1_001_Res.png",
-    "shiny": "PetPortrait_img_Ill_QiuQiu1_101_Res.png",
+    "illustration": "PetPortrait_QiuQiu1.png",
+    "shiny": "PetPortrait_QiuQiu1_yise.png",
     "shiny_head": "PetAvatar_3236_1.png"
    },
    "learnset_id": "learnset_d9e303dea3fa",
@@ -55729,8 +55729,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3542.png",
-    "illustration": "PetPortrait_img_Gho_WeiWanChong1_001_Res.png",
-    "shiny": "PetPortrait_img_Gho_WeiWanChong1_101_Res.png",
+    "illustration": "PetPortrait_WeiWanChong1.png",
+    "shiny": "PetPortrait_WeiWanChong1_yise.png",
     "shiny_head": "PetAvatar_3542_1.png"
    },
    "learnset_id": "learnset_c81fd418661c",
@@ -55812,8 +55812,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3574.png",
-    "illustration": "PetPortrait_img_Fir_ReTuanTuan1_001_Res.png",
-    "shiny": "PetPortrait_img_Fir_ReTuanTuan1_101_Res.png",
+    "illustration": "PetPortrait_ReTuanTuan1.png",
+    "shiny": "PetPortrait_ReTuanTuan1_yise.png",
     "shiny_head": "PetAvatar_3574_1.png"
    },
    "learnset_id": "learnset_b3450da94bc4",
@@ -55870,8 +55870,8 @@
     "has_egg": false,
     "has_fruit": false,
     "head": "PetAvatar_3575.png",
-    "illustration": "PetPortrait_img_Fir_ReTuanTuan2_001_Res.png",
-    "shiny": "PetPortrait_img_Fir_ReTuanTuan2_101_Res.png",
+    "illustration": "PetPortrait_ReTuanTuan2.png",
+    "shiny": "PetPortrait_ReTuanTuan2_yise.png",
     "shiny_head": "PetAvatar_3575_1.png"
    },
    "learnset_id": "learnset_b3450da94bc4",
@@ -55928,8 +55928,8 @@
     "has_egg": false,
     "has_fruit": false,
     "head": "PetAvatar_3576.png",
-    "illustration": "PetPortrait_img_Fir_ReTuanTuan3_001_Res.png",
-    "shiny": "PetPortrait_img_Fir_ReTuanTuan3_101_Res.png",
+    "illustration": "PetPortrait_ReTuanTuan3.png",
+    "shiny": "PetPortrait_ReTuanTuan3_yise.png",
     "shiny_head": "PetAvatar_3576_1.png"
    },
    "learnset_id": "learnset_b3450da94bc4",
@@ -56021,8 +56021,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3589.png",
-    "illustration": "PetPortrait_img_Ill_DaiGui1_001_Res.png",
-    "shiny": "PetPortrait_img_Ill_DaiGui1_101_Res.png",
+    "illustration": "PetPortrait_DaiGui1.png",
+    "shiny": "PetPortrait_DaiGui1_yise.png",
     "shiny_head": "PetAvatar_3589_1.png"
    },
    "learnset_id": "learnset_6aafdc70e10d",
@@ -56101,8 +56101,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3590.png",
-    "illustration": "PetPortrait_img_Ill_DaiGui2_001_Res.png",
-    "shiny": "PetPortrait_img_Ill_DaiGui2_101_Res.png",
+    "illustration": "PetPortrait_DaiGui2.png",
+    "shiny": "PetPortrait_DaiGui2_yise.png",
     "shiny_head": "PetAvatar_3590_1.png"
    },
    "learnset_id": "learnset_6aafdc70e10d",
@@ -56194,8 +56194,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3664.png",
-    "illustration": "PetPortrait_img_Win_LiangFengWan1_001_Res.png",
-    "shiny": "PetPortrait_img_Win_LiangFengWan1_101_Res.png",
+    "illustration": "PetPortrait_LiangFengWan1.png",
+    "shiny": "PetPortrait_LiangFengWan1_yise.png",
     "shiny_head": "PetAvatar_3664_1.png"
    },
    "learnset_id": "learnset_1a9550642f32",
@@ -56274,8 +56274,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3663.png",
-    "illustration": "PetPortrait_img_Win_LiangFengWan2_001_Res.png",
-    "shiny": "PetPortrait_img_Win_LiangFengWan2_101_Res.png",
+    "illustration": "PetPortrait_LiangFengWan2.png",
+    "shiny": "PetPortrait_LiangFengWan2_yise.png",
     "shiny_head": "PetAvatar_3663_1.png"
    },
    "learnset_id": "learnset_1a9550642f32",
@@ -56339,7 +56339,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3759.png",
-    "illustration": "PetPortrait_img_Wus_LangLing1_001_Res.png"
+    "illustration": "PetPortrait_LangLing1.png"
    },
    "learnset_id": "learnset_8dbb81ed3b94",
    "move_type": "地面",
@@ -56394,7 +56394,7 @@
     "has_egg": false,
     "has_fruit": false,
     "head": "PetAvatar_3762.png",
-    "illustration": "PetPortrait_img_Wus_LangLing2_001_Res.png"
+    "illustration": "PetPortrait_LangLing2.png"
    },
    "learnset_id": "learnset_8dbb81ed3b94",
    "move_type": "地面",
@@ -56449,7 +56449,7 @@
     "has_egg": false,
     "has_fruit": false,
     "head": "PetAvatar_3763.png",
-    "illustration": "PetPortrait_img_Wus_LangLing3_001_Res.png"
+    "illustration": "PetPortrait_LangLing3.png"
    },
    "learnset_id": "learnset_8dbb81ed3b94",
    "move_type": "地面",
@@ -56532,8 +56532,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3764.png",
-    "illustration": "PetPortrait_img_Win_XinYueLu1_001_Res.png",
-    "shiny": "PetPortrait_img_Win_XinYueLu1_101_Res.png",
+    "illustration": "PetPortrait_XinYueLu1.png",
+    "shiny": "PetPortrait_XinYueLu1_yise.png",
     "shiny_head": "PetAvatar_3764_1.png"
    },
    "learnset_id": "learnset_14c02eaf9252",
@@ -56592,8 +56592,8 @@
     "has_egg": false,
     "has_fruit": false,
     "head": "PetAvatar_3765.png",
-    "illustration": "PetPortrait_img_Win_XinYueLu2_001_Res.png",
-    "shiny": "PetPortrait_img_Win_XinYueLu2_101_Res.png",
+    "illustration": "PetPortrait_XinYueLu2.png",
+    "shiny": "PetPortrait_XinYueLu2_yise.png",
     "shiny_head": "PetAvatar_3765_1.png"
    },
    "learnset_id": "learnset_14c02eaf9252",
@@ -56652,8 +56652,8 @@
     "has_egg": false,
     "has_fruit": false,
     "head": "PetAvatar_3766.png",
-    "illustration": "PetPortrait_img_Win_XinYueLu3_001_Res.png",
-    "shiny": "PetPortrait_img_Win_XinYueLu3_101_Res.png",
+    "illustration": "PetPortrait_XinYueLu3.png",
+    "shiny": "PetPortrait_XinYueLu3_yise.png",
     "shiny_head": "PetAvatar_3766_1.png"
    },
    "learnset_id": "learnset_14c02eaf9252",
@@ -56747,8 +56747,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3767.png",
-    "illustration": "PetPortrait_img_Lig_ZhangNaoWan1_001_Res.png",
-    "shiny": "PetPortrait_img_Lig_ZhangNaoWan1_101_Res.png",
+    "illustration": "PetPortrait_ZhangNaoWan1.png",
+    "shiny": "PetPortrait_ZhangNaoWan1_yise.png",
     "shiny_head": "PetAvatar_3767_1.png"
    },
    "learnset_id": "learnset_0cc5c212022b",
@@ -56829,8 +56829,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3768.png",
-    "illustration": "PetPortrait_img_Lig_ZhangNaoWan3_001_Res.png",
-    "shiny": "PetPortrait_img_Lig_ZhangNaoWan3_101_Res.png",
+    "illustration": "PetPortrait_ZhangNaoWan3.png",
+    "shiny": "PetPortrait_ZhangNaoWan3_yise.png",
     "shiny_head": "PetAvatar_3768_1.png"
    },
    "learnset_id": "learnset_0cc5c212022b",
@@ -56924,8 +56924,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3771.png",
-    "illustration": "PetPortrait_img_Dem_XiaoHuanDan1_001_Res.png",
-    "shiny": "PetPortrait_img_Dem_XiaoHuanDan1_101_Res.png",
+    "illustration": "PetPortrait_XiaoHuanDan1.png",
+    "shiny": "PetPortrait_XiaoHuanDan1_yise.png",
     "shiny_head": "PetAvatar_3771_1.png"
    },
    "learnset_id": "learnset_08e7b3db2198",
@@ -56995,8 +56995,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3772.png",
-    "illustration": "PetPortrait_img_Dem_XiaoHuanDan2_001_Res.png",
-    "shiny": "PetPortrait_img_Dem_XiaoHuanDan2_101_Res.png",
+    "illustration": "PetPortrait_XiaoHuanDan2.png",
+    "shiny": "PetPortrait_XiaoHuanDan2_yise.png",
     "shiny_head": "PetAvatar_3772_1.png"
    },
    "learnset_id": "learnset_08e7b3db2198",
@@ -57089,8 +57089,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3773.png",
-    "illustration": "PetPortrait_img_Gho_YouLing1_001_Res.png",
-    "shiny": "PetPortrait_img_Gho_YouLing1_101_Res.png",
+    "illustration": "PetPortrait_YouLing1.png",
+    "shiny": "PetPortrait_YouLing1_yise.png",
     "shiny_head": "PetAvatar_3773_1.png"
    },
    "learnset_id": "learnset_9a7fa38a93d4",
@@ -57160,8 +57160,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3774.png",
-    "illustration": "PetPortrait_img_Gho_YouLing3_001_Res.png",
-    "shiny": "PetPortrait_img_Gho_YouLing3_101_Res.png",
+    "illustration": "PetPortrait_YouLing3.png",
+    "shiny": "PetPortrait_YouLing3_yise.png",
     "shiny_head": "PetAvatar_3774_1.png"
    },
    "learnset_id": "learnset_9a7fa38a93d4",
@@ -57253,8 +57253,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3775.png",
-    "illustration": "PetPortrait_img_Ill_BuLing1_001_Res.png",
-    "shiny": "PetPortrait_img_Ill_BuLing1_101_Res.png",
+    "illustration": "PetPortrait_BuLing1.png",
+    "shiny": "PetPortrait_BuLing1_yise.png",
     "shiny_head": "PetAvatar_3775_1.png"
    },
    "learnset_id": "learnset_56083f9b616d",
@@ -57324,8 +57324,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3776.png",
-    "illustration": "PetPortrait_img_Ill_BuLing2_001_Res.png",
-    "shiny": "PetPortrait_img_Ill_BuLing2_101_Res.png",
+    "illustration": "PetPortrait_BuLing2.png",
+    "shiny": "PetPortrait_BuLing2_yise.png",
     "shiny_head": "PetAvatar_3776_1.png"
    },
    "learnset_id": "learnset_56083f9b616d",
@@ -57432,8 +57432,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3784.png",
-    "illustration": "PetPortrait_img_Wat_ZhuZhuTun1_001_Res.png",
-    "shiny": "PetPortrait_img_Wat_ZhuZhuTun1_101_Res.png",
+    "illustration": "PetPortrait_ZhuZhuTun1.png",
+    "shiny": "PetPortrait_ZhuZhuTun1_yise.png",
     "shiny_head": "PetAvatar_3784_1.png"
    },
    "learnset_id": "learnset_82c460e52064",
@@ -57502,8 +57502,8 @@
     "has_egg": true,
     "has_fruit": true,
     "head": "PetAvatar_3785.png",
-    "illustration": "PetPortrait_img_Wat_ZhuZhuTun3_001_Res.png",
-    "shiny": "PetPortrait_img_Wat_ZhuZhuTun3_101_Res.png",
+    "illustration": "PetPortrait_ZhuZhuTun3.png",
+    "shiny": "PetPortrait_ZhuZhuTun3_yise.png",
     "shiny_head": "PetAvatar_3785_1.png"
    },
    "learnset_id": "learnset_82c460e52064",
@@ -57592,7 +57592,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3796.png",
-    "illustration": "PetPortrait_img_Mac_FangFang3SP_001_Res.png"
+    "illustration": "PetPortrait_FangFang3SP.png"
    },
    "learnset_id": "learnset_dd31bf30f76e",
    "move_type": "步行",
@@ -57648,7 +57648,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_4107.png",
-    "illustration": "PetPortrait_img_Fir_WaTeBo_001_Res.png"
+    "illustration": "PetPortrait_WaTeBo.png"
    },
    "is_lord_evolution": true,
    "learnset_id": "learnset_b3dbba8177bf",
@@ -57707,8 +57707,8 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_4108.png",
-    "illustration": "PetPortrait_img_Poi_CiLunTuoBo_001_Res.png",
-    "shiny": "PetPortrait_img_Poi_CiLunTuoBo_101_Res.png",
+    "illustration": "PetPortrait_CiLunTuoBo.png",
+    "shiny": "PetPortrait_CiLunTuoBo_yise.png",
     "shiny_head": "PetAvatar_4108_1.png"
    },
    "is_lord_evolution": true,
@@ -57771,8 +57771,8 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_4108.png",
-    "illustration": "PetPortrait_img_Poi_CiLunTuoBo_001_Res.png",
-    "shiny": "PetPortrait_img_Poi_CiLunTuoBo_101_Res.png",
+    "illustration": "PetPortrait_CiLunTuoBo.png",
+    "shiny": "PetPortrait_CiLunTuoBo_yise.png",
     "shiny_head": "PetAvatar_4108_1.png"
    },
    "is_lord_evolution": true,
@@ -57850,7 +57850,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3870.png",
-    "illustration": "PetPortrait_img_Fir_YinSuQuan1Ar_001_Res.png"
+    "illustration": "PetPortrait_YinSuQuan1Ar.png"
    },
    "learnset_id": "learnset_d5f049eeb3ac",
    "move_type": "步行",
@@ -57914,7 +57914,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3871.png",
-    "illustration": "PetPortrait_img_Fir_YinSuQuan2Ar_001_Res.png"
+    "illustration": "PetPortrait_YinSuQuan2Ar.png"
    },
    "learnset_id": "learnset_d5f049eeb3ac",
    "move_type": "步行",
@@ -57989,7 +57989,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3872.png",
-    "illustration": "PetPortrait_img_Com_GongPingGe1Ar_001_Res.png"
+    "illustration": "PetPortrait_GongPingGe1Ar.png"
    },
    "learnset_id": "learnset_4702b8ee2b1c",
    "move_type": "步行",
@@ -58123,7 +58123,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3873.png",
-    "illustration": "PetPortrait_img_Roc_BenBoShu1Ar_001_Res.png"
+    "illustration": "PetPortrait_BenBoShu1Ar.png"
    },
    "learnset_id": "learnset_412843a92f4a",
    "move_type": "步行",
@@ -58188,7 +58188,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3874.png",
-    "illustration": "PetPortrait_img_Roc_BenBoShu2Ar_001_Res.png"
+    "illustration": "PetPortrait_BenBoShu2Ar.png"
    },
    "learnset_id": "learnset_412843a92f4a",
    "move_type": "步行",
@@ -58262,7 +58262,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3875.png",
-    "illustration": "PetPortrait_img_Roc_HuaYuanMan1Ar_001_Res.png"
+    "illustration": "PetPortrait_HuaYuanMan1Ar.png"
    },
    "learnset_id": "learnset_77e2b813a745",
    "move_type": "地面",
@@ -58328,7 +58328,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3876.png",
-    "illustration": "PetPortrait_img_Roc_HuaYuanMan3Ar_001_Res.png"
+    "illustration": "PetPortrait_HuaYuanMan3Ar.png"
    },
    "learnset_id": "learnset_77e2b813a745",
    "move_type": "步行",
@@ -58402,7 +58402,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3877.png",
-    "illustration": "PetPortrait_img_Men_DaoCaoRen1Ar_001_Res.png"
+    "illustration": "PetPortrait_DaoCaoRen1Ar.png"
    },
    "learnset_id": "learnset_ae85b40c1fe9",
    "move_type": "步行",
@@ -58467,7 +58467,7 @@
     "has_egg": true,
     "has_fruit": false,
     "head": "PetAvatar_3878.png",
-    "illustration": "PetPortrait_img_Men_DaoCaoRen3Ar_001_Res.png"
+    "illustration": "PetPortrait_DaoCaoRen3Ar.png"
    },
    "learnset_id": "learnset_ae85b40c1fe9",
    "move_type": "步行",
