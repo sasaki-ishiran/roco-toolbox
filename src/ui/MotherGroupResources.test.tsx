@@ -35,6 +35,29 @@ beforeEach(() => {
 });
 
 describe('MotherGroupResources 三视图', () => {
+  test('小组口径显示本组真实目标，不再写死大块头 +100', () => {
+    render(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        target={{
+          kind: 'mother',
+          criteriaId: 'mother-v2-test',
+          mode: 'medal',
+          bodies: ['大块头'],
+          voices: ['婉转声'],
+          catalogVersion: FIXTURE_CATALOG_VERSION,
+          requireRecommendedNatures: true,
+        }}
+      />,
+    );
+    expect(screen.getByTestId('mother-criteria')).toHaveTextContent(
+      '母 · 大块头 · 婉转声 · 追双牌 · 推荐性格',
+    );
+  });
+
   test('三视图顺序：我缺的 / 我能补的 / 共同寻找', () => {
     renderResources();
     const groupControl = screen.getByRole('group', { name: '小组资源视图' });

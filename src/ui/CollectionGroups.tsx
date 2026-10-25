@@ -219,6 +219,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
               criteriaId={
                 hook.target?.kind === 'mother' ? hook.target.criteriaId : undefined
               }
+              target={hook.target?.kind === 'mother' ? hook.target : null}
               tasks={hook.tasks}
               tasksConfirmed={hook.tasksConfirmed}
               tasksPendingMemberIds={hook.tasksPendingMemberIds}

@@ -8,6 +8,7 @@ import type {
   MotherGroupMember,
 } from '../shared/motherGroups';
 import type { CollectionTaskRecord } from '../shared/collectionGroups';
+import { motherTargetLabel, type MotherTargetConfig } from '../shared/collectionGroups';
 import { ensureGroupSession, setGroupList, useGroupList, type GroupListState } from './listViewStore';
 import { InlineSelect } from './primitives/InlineSelect';
 import { InlineMultiSelect } from './primitives/InlineMultiSelect';
@@ -34,6 +35,8 @@ export interface MotherGroupResourcesProps {
   catalogVersion: string;
   /** 本组口径；旧组 / 不传时按一期固定口径。 */
   criteriaId?: string;
+  /** 本组目标：用来显示真实口径（模式 / 体型 / 声音 / 推荐性格），不传时退回一期文案。 */
+  target?: MotherTargetConfig | null;
   /** 共同寻找的任务与确认状态；不传时只看资源。 */
   tasks?: CollectionTaskRecord[];
   tasksConfirmed?: boolean;
@@ -57,6 +60,7 @@ export function MotherGroupResources({
   species,
   catalogVersion,
   criteriaId,
+  target = null,
   tasks = [],
   tasksConfirmed = false,
   tasksPendingMemberIds = [],
@@ -225,7 +229,7 @@ export function MotherGroupResources({
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-500">小组资源</h2>
         <span className="text-[11px] text-slate-400" data-testid="mother-criteria">
-          小组口径：母 · 大块头 · +100dB
+          小组口径：{target ? motherTargetLabel(target) : '母 · 大块头 · +100dB'}
         </span>
       </div>
       <p className="text-[11px] text-slate-400">按已共享账号汇总，未知成员不计缺口。</p>

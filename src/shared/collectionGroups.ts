@@ -84,6 +84,20 @@ export function natureOverridesSignature(overrides?: Record<string, string[]>): 
     .join('|');
 }
 
+/**
+ * 母本组口径的展示文案（界面「小组口径」用）：模式 + 体型 + 声音 + 是否要求推荐性格。
+ * 与目标本身同源，别再写死「母 · 大块头 · +100dB」。
+ */
+export function motherTargetLabel(
+  target: Pick<MotherTargetConfig, 'mode' | 'bodies' | 'voices' | 'requireRecommendedNatures'>,
+): string {
+  const bodies = target.bodies.join('/') || '体型不限';
+  const voices = target.voices.join('/') || '声音不限';
+  return `母 · ${bodies} · ${voices} · ${TARGET_MODES_LABELS[target.mode]}${
+    target.requireRecommendedNatures ? ' · 推荐性格' : ''
+  }`;
+}
+
 /** 种公目标的可比性标识：模式 + 排序后的槽位集合。 */
 export function studSlotSetIdOf(target: {
   mode: CollectionTargetMode;
