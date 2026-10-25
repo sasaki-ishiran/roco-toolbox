@@ -131,12 +131,16 @@ export function MotherGroupResources({
   const filtered = (currentRows ?? []).filter((row) => {
     if (onlyOwned && row.holders.length === 0) return false;
     if (memberFilter) {
+      // 我缺的 / 共同寻找：按「谁有」筛；我能补的：按「缺这只的人」筛
+      // （选莱茵 = 看我能补给莱茵哪些，2026-10-25 用户口径）
       const related =
         effectiveView === 'seeking'
           ? row.holders.some((holder) => holder.accountId === memberFilter) ||
             row.missingMemberIds.includes(memberFilter) ||
             row.unknownMemberIds.includes(memberFilter)
-          : row.holders.some((holder) => holder.accountId === memberFilter);
+          : effectiveView === 'mine'
+            ? row.missingMemberIds.includes(memberFilter)
+            : row.holders.some((holder) => holder.accountId === memberFilter);
       if (!related) return false;
     }
     const keyword = query.trim().toLowerCase();

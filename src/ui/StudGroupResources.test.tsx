@@ -110,6 +110,24 @@ describe('StudGroupResources', () => {
     expect(screen.getByTestId('stud-slot-none')).toHaveTextContent('已发布成员均无，另 1 人待发布/更新');
   });
 
+  test('我能补的：成员筛选按「缺这个槽位的人」', () => {
+    const withD: CollectionGroupDetail = {
+      ...group,
+      members: [...group.members, member('D', studResource([]))],
+    };
+    render(<StudGroupResources group={withD} viewerAccountId="A" catalogVersion="v1" />);
+    fireEvent.click(screen.getByTestId('stud-slot-view-mine'));
+    fireEvent.click(screen.getByTestId('stud-member-filter'));
+    fireEvent.click(screen.getByRole('radio', { name: '成员D' }));
+    const rows = screen.getAllByTestId('stud-slot-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('开朗');
+    // B 是可迭代（自己能孵），不算缺口
+    fireEvent.click(screen.getByTestId('stud-member-filter'));
+    fireEvent.click(screen.getByRole('radio', { name: '成员B' }));
+    expect(screen.queryAllByTestId('stud-slot-row')).toHaveLength(0);
+  });
+
   test('搜索按蛋组 / 性格过滤', () => {
     render(<StudGroupResources group={group} viewerAccountId="A" catalogVersion="v1" />);
     fireEvent.change(screen.getByTestId('stud-slot-search'), { target: { value: '固执' } });

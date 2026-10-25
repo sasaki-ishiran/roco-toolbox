@@ -57,17 +57,54 @@ describe('MotherGroupResources 三视图', () => {
     expect(screen.getByText('组员暂时没有需要你补的母本')).toBeTruthy();
   });
 
-  test('我能补的：只列我已发布且组内其他人缺的资源', () => {
+  test('我能补的：按「缺这只的人」筛选成员', () => {
     renderResources();
     fireEvent.click(screen.getByTestId('mother-view-mine'));
+    // A 是拥有者，不是缺口 → 选 A 看不到东西
     fireEvent.click(screen.getByTestId('mother-member-filter'));
     fireEvent.click(screen.getByRole('radio', { name: 'A' }));
+    expect(screen.queryAllByTestId('mother-resource-row')).toHaveLength(0);
+    // B 缺火花 → 选 B 看到我能补给他的火花
+    fireEvent.click(screen.getByTestId('mother-member-filter'));
+    fireEvent.click(screen.getByRole('radio', { name: 'B' }));
     const rows = screen.getAllByTestId('mother-resource-row');
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent('火花');
+    // C 未发布（未知）→ 不算缺口
     fireEvent.click(screen.getByTestId('mother-member-filter'));
     fireEvent.click(screen.getByRole('radio', { name: 'C' }));
     expect(screen.queryAllByTestId('mother-resource-row')).toHaveLength(0);
+  });
+
+  test('我能补的：选谁就只看他缺的（B 缺火花、D 缺水蓝蓝）', () => {
+    const groupWithTwo: MotherGroupDetail = {
+      group: group.group,
+      members: [
+        member('A', resourceWith([101, 201], { accounts: [sharedAccount(1001, [101, 201])] })),
+        member('B', resourceWith([201], { accounts: [sharedAccount(1002, [201])] })),
+        member('D', resourceWith([101], { accounts: [sharedAccount(1004, [101])] })),
+      ],
+    };
+    render(
+      <MotherGroupResources
+        group={groupWithTwo}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('mother-view-mine'));
+    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(2);
+
+    fireEvent.click(screen.getByTestId('mother-member-filter'));
+    fireEvent.click(screen.getByRole('radio', { name: 'B' }));
+    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(1);
+    expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('火花');
+
+    fireEvent.click(screen.getByTestId('mother-member-filter'));
+    fireEvent.click(screen.getByRole('radio', { name: 'D' }));
+    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(1);
+    expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('水蓝蓝');
   });
 
   test('共同寻找：全员确认后可认领，已认领显示负责人并可释放', async () => {

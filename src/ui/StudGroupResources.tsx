@@ -133,13 +133,16 @@ export function StudGroupResources({
         : rows.filter((row) => row.holders.length === 0);
   const filtered = (currentRows ?? []).filter((row) => {
     if (memberFilter) {
+      // 我缺的 / 共同寻找：按「谁有」筛；我能补的：按「缺这个槽位的人」筛
       const related =
         effectiveView === 'seeking'
           ? row.holders.some((holder) => holder.accountId === memberFilter) ||
             row.missingMemberIds.includes(memberFilter) ||
             row.breedableHolders.some((holder) => holder.accountId === memberFilter) ||
             row.unknownMemberIds.includes(memberFilter)
-          : row.holders.some((holder) => holder.accountId === memberFilter);
+          : effectiveView === 'mine'
+            ? row.missingMemberIds.includes(memberFilter)
+            : row.holders.some((holder) => holder.accountId === memberFilter);
       if (!related) return false;
     }
     const keyword = query.trim().toLowerCase();
