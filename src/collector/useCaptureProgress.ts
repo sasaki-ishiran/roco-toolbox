@@ -33,10 +33,14 @@ export function useCaptureProgress(state: CollectorState | null): ProgressState 
         }
       : empty;
     setResult(initial);
+    // 已经走满：彻底停下，不再读快照 / 解码。否则走满后再来个数据包就会重新复核，
+    // 拖住紧随其后的自动停止与导入（2026-10-25 用户要求）。
+    if (initial.progress?.stage === 'ready') return;
 
     let disposed = false, epoch = 0;
     let timer: number | undefined;
     let controller: AbortController | undefined;
+    let settled = false;
     let previous: CaptureProgress | null = cached?.progress ?? null;
     let analysisCache: { size: number; analysis: CaptureAnalysis } | null = cached
       ? { size: cached.sourceBytes, analysis: cached.analysis }
@@ -56,7 +60,7 @@ export function useCaptureProgress(state: CollectorState | null): ProgressState 
     };
 
     const check = async (run: number) => {
-      if (!active(run)) return;
+      if (!active(run) || settled) return;
       try {
         const snapshot = await readCaptureSnapshot();
         if (!active(run)) return;
@@ -83,6 +87,10 @@ export function useCaptureProgress(state: CollectorState | null): ProgressState 
           };
           setResult(next);
           persist(next, analysis);
+          if (next.progress?.stage === 'ready') {
+            settled = true;
+            return;
+          }
         }
       } catch (error) {
         if (!active(run)) return;
@@ -108,6 +116,7 @@ export function useCaptureProgress(state: CollectorState | null): ProgressState 
     };
 
     const visibility = () => {
+      if (settled) return;
       const run = ++epoch;
       window.clearTimeout(timer); controller?.abort();
       if (!document.hidden) void check(run);

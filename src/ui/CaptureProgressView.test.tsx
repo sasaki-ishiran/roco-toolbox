@@ -36,11 +36,16 @@ describe('采集进度走满', () => {
     expect(onReady).toHaveBeenCalledTimes(1);
   });
 
-  test('有新流量正在复核时不自动停止', () => {
+  test('进度条走满后即使又检测到新流量，也立即通知自动停止（不再复核）', () => {
     mockProgress({ checking: true });
     const onReady = vi.fn();
-    render(<CaptureProgressView state={state} onReady={onReady} />);
-    expect(onReady).not.toHaveBeenCalled();
+    render(
+      <CaptureProgressView
+        state={{ ...state, savedBytes: 200 }}
+        onReady={onReady}
+      />,
+    );
+    expect(onReady).toHaveBeenCalledTimes(1);
   });
 
   test('已经停止保存后不再通知', () => {

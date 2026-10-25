@@ -12,8 +12,10 @@ export interface CaptureProgressViewProps {
 export function CaptureProgressView({ state, onReady }: CaptureProgressViewProps) {
   const { progress, sourceBytes, error, checking } = useCaptureProgress(state);
   const firedFor = useRef<string | null>(null);
-  const verifying = checking || (state.savedBytes ?? 0) > sourceBytes;
-  const ready = state.phase === 'capturing' && progress?.stage === 'ready' && !verifying;
+  // 进度条走满就是最终状态（2026-10-25 用户要求）：之后再有数据包也不复核，
+  // 直接自动停止保存 → 自动导入，避免卡在「有新流量，正在复核」。
+  const ready = state.phase === 'capturing' && progress?.stage === 'ready';
+  const verifying = !ready && (checking || (state.savedBytes ?? 0) > sourceBytes);
 
   useEffect(() => {
     if (!ready || !progress || !onReady) return;

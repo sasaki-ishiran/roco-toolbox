@@ -13,28 +13,37 @@ function setup() {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
   let fail = false;
   let size = 100;
+  let inspectCalls = 0;
   class WorkerStub {
     onmessage?: (event: unknown) => void;
     terminate() {}
     postMessage() { queueMicrotask(() => this.onmessage?.({ data: fail ? { ok: false, error: '本次无法解析' } : { ok: true, value: analysis } })); }
   }
   vi.stubGlobal('Worker', WorkerStub);
-  window.RocoCapture = { getState: () => JSON.stringify(state), inspectCapture: () => JSON.stringify({ id: state.fileId, size, url: 'https://roco-share.invalid/collector/12345678-1234-1234-1234-123456789abc' }) };
+  window.RocoCapture = {
+    getState: () => JSON.stringify(state),
+    inspectCapture: () => {
+      inspectCalls += 1;
+      return JSON.stringify({ id: state.fileId, size, url: 'https://roco-share.invalid/collector/12345678-1234-1234-1234-123456789abc' });
+    },
+  };
   const hook = renderHook((value) => useCaptureProgress(value), { initialProps: state });
-  return { ...hook, failure: () => { fail = true; size++; } };
+  return { ...hook, failure: () => { fail = true; size++; }, inspectCalls: () => inspectCalls };
 }
 const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 
 describe('采集进度生命周期', () => {
-  test('解析错误撤销旧就绪状态，继续采集仍可重试', async () => {
+  test('进度走满后立刻停止检测：再来数据包也不复核，不打断自动导入', async () => {
     const hook = setup();
     await tick(0); await tick(12000);
     expect(hook.result.current.progress?.stage).toBe('ready');
-    hook.failure(); await tick(3000);
-    expect(hook.result.current.progress).toBeNull();
-    expect(hook.result.current.error).toBe('本次无法解析');
+    const calls = hook.inspectCalls();
+    hook.failure(); await tick(30000);
+    expect(hook.result.current.progress?.stage).toBe('ready');
+    expect(hook.result.current.error).toBeNull();
+    expect(hook.inspectCalls()).toBe(calls);
   });
-  test('切到后台不会清零已识别进度，回到前台继续核对', async () => {
+  test('切到后台不会清零已识别进度，回到前台也不再复核', async () => {
     let hidden = false;
     vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
     const hook = setup();
@@ -45,8 +54,7 @@ describe('采集进度生命周期', () => {
     expect(hook.result.current.progress?.stage).toBe('ready');
     act(() => { hidden = false; document.dispatchEvent(new Event('visibilitychange')); });
     await tick(0);
-    expect(hook.result.current.progress?.stage).toBe('stabilizing');
-    expect(hook.result.current.progress?.remainingMs).toBe(12000);
+    expect(hook.result.current.progress?.stage).toBe('ready');
     hook.rerender({ ...state, phase: 'idle' });
     expect(hook.result.current.progress).toBeNull();
   });
@@ -55,10 +63,15 @@ describe('采集进度生命周期', () => {
     const first = setup();
     await tick(0); await tick(12000);
     expect(first.result.current.progress?.stage).toBe('ready');
+    const calls = first.inspectCalls();
     first.unmount();
 
     const second = renderHook(() => useCaptureProgress(state));
     expect(second.result.current.progress?.stage).toBe('ready');
     expect(second.result.current.sourceBytes).toBe(100);
+    // 已走满的会话不再重新读快照 / 解码
+    await tick(30000);
+    expect(second.result.current.progress?.stage).toBe('ready');
+    expect(first.inspectCalls()).toBe(calls);
   });
 });
