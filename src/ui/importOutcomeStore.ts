@@ -14,7 +14,12 @@ export interface ImportOutcome {
   operationId: number;
   local: 'idle' | 'importing' | 'saved' | 'failed';
   cloud: 'not-enabled' | 'syncing' | 'synced' | 'failed' | 'conflict';
-  group: 'unverified';
+  /**
+   * 小组资源：默认 `unverified`（导入不等于已发布）；
+   * 导入后自动同步成功时 `updated`，并记录同步了几个组。
+   */
+  group: 'unverified' | 'updated';
+  groupCount: number;
   message: string | null;
 }
 
@@ -23,6 +28,7 @@ const INITIAL: ImportOutcome = {
   local: 'idle',
   cloud: 'not-enabled',
   group: 'unverified',
+  groupCount: 0,
   message: null,
 };
 
@@ -53,7 +59,7 @@ export function updateImportOutcome(
   const current = store.get();
   // 旧操作的晚到响应直接丢弃：否则会把新一次导入的结果覆盖成旧的
   if (operationId !== current.operationId) return;
-  store.set({ ...current, ...patch, group: 'unverified' });
+  store.set({ ...current, ...patch });
 }
 
 export function resetImportOutcomeForTest(): void {

@@ -14,12 +14,16 @@ import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { StateNotice } from './primitives/StateNotice';
 
-type ViewId = 'missing' | 'seeking' | 'all';
+type ViewId = 'missing' | 'mine' | 'seeking';
 
+/**
+ * 三视图（2026-10-25 用户改口径）：主用途是「看自己缺的 / 给别人孵 / 大家缺的一起认领」，
+ * 组整体完成度不重要，所以把原来的「小组资源」换成「我能补的」。
+ */
 const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: 'missing', label: '我缺的' },
+  { id: 'mine', label: '我能补的' },
   { id: 'seeking', label: '共同寻找' },
-  { id: 'all', label: '小组资源' },
 ];
 
 export interface MotherGroupResourcesProps {
@@ -65,7 +69,12 @@ export function MotherGroupResources({
   const setList = (patch: Partial<GroupListState>) =>
     setGroupList(viewerAccountId, group.group.id, patch);
   const { view, query, memberFilter, onlyOwned } = list;
-  const effectiveView: ViewId = view === 'help' ? 'missing' : view;
+  // 旧值兼容：`help`（旧的「我能补谁」）与 `all`（旧「小组资源」）都落到「我能补的」
+  const effectiveView: ViewId = view === 'help' || view === 'all'
+    ? 'mine'
+    : view === 'mine' || view === 'seeking'
+      ? view
+      : 'missing';
   const [busyKey, setBusyKey] = useState('');
   const [taskError, setTaskError] = useState('');
 
@@ -115,9 +124,9 @@ export function MotherGroupResources({
   const currentRows =
     effectiveView === 'missing'
       ? views.missingForMe
-      : effectiveView === 'seeking'
-        ? rows.filter((row) => row.holders.length === 0)
-        : views.all;
+      : effectiveView === 'mine'
+        ? views.mineForOthers
+        : rows.filter((row) => row.holders.length === 0);
 
   const filtered = (currentRows ?? []).filter((row) => {
     if (onlyOwned && row.holders.length === 0) return false;
@@ -215,7 +224,7 @@ export function MotherGroupResources({
       {currentRows === null ? (
         <StateNotice
           kind="incomparable"
-          title="不能计算我的缺口"
+          title={effectiveView === 'mine' ? '不能计算我能补的' : '不能计算我的缺口'}
           description="我的资源尚未发布，或图鉴/口径与当前版本不一致；发布或更新后再看这一页。"
           testId="mother-view-unknown-self"
         />
@@ -264,7 +273,9 @@ export function MotherGroupResources({
           </p>
 
           {filtered.length === 0 ? (
-            <p className="py-4 text-center text-xs text-slate-400">这一页没有条目</p>
+            <p className="py-4 text-center text-xs text-slate-400">
+              {effectiveView === 'mine' ? '组员暂时没有需要你补的母本' : '这一页没有条目'}
+            </p>
           ) : (
         <ul className="grid grid-cols-2 items-start gap-1.5">
           {filtered.map((row) => (

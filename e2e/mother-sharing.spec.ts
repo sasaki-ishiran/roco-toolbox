@@ -46,14 +46,14 @@ test('已登录且本机无数据：能浏览小组资源，不能发布自己�
   await expect(cat).toContainText('已发布成员均无，另 1 人待发布/更新');
 });
 
-test('小组资源：显示来源账号、缺口与未知人数；可切换视图与按血脉搜索', async ({ page }) => {
+test('小组资源：显示拥有者昵称、缺口与未知人数；可切换视图与按血脉搜索', async ({ page }) => {
   await loginAs(page);
   await enterGroup(page);
   await mockMotherGroups(page);
   await page.goto('/');
   await openGroups(page);
 
-  await page.getByTestId('mother-view-all').click();
+  await page.getByTestId('mother-view-mine').click();
   const searchBox = await page.getByTestId('mother-search').boundingBox();
   expect(searchBox?.width ?? 0).toBeGreaterThan(260);
   const fire = page.getByTestId('mother-resource-row').filter({ hasText: '火花' });
@@ -113,7 +113,7 @@ test('375 / 390 宽度下小组页不横向溢出', async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/');
     await openGroups(page);
-    await page.getByTestId('mother-view-all').click();
+    await page.getByTestId('mother-view-mine').click();
     const overflow = await page.evaluate(() => {
       const doc = document.scrollingElement as HTMLElement;
       return doc.scrollWidth - doc.clientWidth;

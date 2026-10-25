@@ -140,10 +140,11 @@ test('真实 Functions + D1：三个身份、A 两设备共享同一成员与资
   await expect(pageA.getByTestId('group-card')).toContainText('3 人');
   await expect(pageA.getByTestId('group-type-label')).toContainText('母本收集');
 
-  await pageA.getByTestId('mother-view-all').click();
+  await pageA.getByTestId('mother-view-mine').click();
   await expect(
     pageA.getByTestId('mother-resource-row').filter({ hasText: '火花' }),
   ).toContainText('有：阿甲');
+  await pageA.getByTestId('mother-view-missing').click();
   await expect(
     pageA.getByTestId('mother-resource-row').filter({ hasText: '水蓝蓝' }),
   ).toContainText('有：阿乙');
@@ -154,7 +155,7 @@ test('真实 Functions + D1：三个身份、A 两设备共享同一成员与资
   // A 的第二台设备：没有本地导入数据，也能发现同一组并看到云端摘要
   await openSharing(pageA2);
   await expect(pageA2.getByTestId('group-card')).toContainText('3 人');
-  await pageA2.getByTestId('mother-view-all').click();
+  await pageA2.getByTestId('mother-view-mine').click();
   await expect(
     pageA2.getByTestId('mother-resource-row').filter({ hasText: '火花' }),
   ).toContainText('有：阿甲');

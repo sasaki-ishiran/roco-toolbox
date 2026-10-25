@@ -41,6 +41,7 @@ import { beginImport, updateImportOutcome, useImportOutcome } from './importOutc
 import { setSyncConflict, setSyncNotice, useSyncFeedback } from './syncNoticeStore';
 import { resetImportedData } from './resetImportedData';
 import { recordSyncedPets } from './syncAdditions';
+import { autoPublishGroups } from './groupAutoPublish';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -197,6 +198,8 @@ export function ImportPanel() {
       // 合并以「当前写进去的状态」为准，多文件时后一个能看见前一个的结果
       let working = [...snapshots];
       const imported: AccountSnapshot[] = [];
+      /** 这次导入涉及的账号：自动发布时并进小组的选号（手动取消过的旧账号不会被加回来） */
+      const touched = new Set<string>();
       const messages: string[] = [];
 
       for (const file of files) {
@@ -208,6 +211,7 @@ export function ImportPanel() {
           const merged = mergeSnapshots(working, backup.accounts);
           working = merged.snapshots;
           await writeSnapshots(working);
+          for (const account of backup.accounts) touched.add(account.accountKey ?? accountKeyOf(account));
           messages.push(mergeMessage(file.name, merged));
           messages.push(...applyBackupPlanning(backup));
           continue;
@@ -219,6 +223,7 @@ export function ImportPanel() {
         const key = accountKeyOf(snapshot);
         working = [...working.filter((item) => accountKeyOf(item) !== key), snapshot];
         imported.push(snapshot);
+        touched.add(key);
       }
 
       await refreshSnapshots();
@@ -234,6 +239,18 @@ export function ImportPanel() {
         message: text,
         cloud: readAccountId() ? 'syncing' : 'not-enabled',
       });
+      // 导入后直接把资源同步到已加入的小组（发布不再是用户必须记得的一步）。
+      // 尽力而为：失败不影响本机与云同步，也不打断用户操作。
+      void autoPublishGroups({
+        snapshots: working,
+        species,
+        catalogVersion: CATALOG_VERSION,
+        touchedAccountKeys: [...touched],
+      })
+        .then((count) => {
+          if (count > 0) updateImportOutcome(operationId, { group: 'updated', groupCount: count });
+        })
+        .catch(() => {});
       return imported;
     } catch (error) {
       updateImportOutcome(operationId, {

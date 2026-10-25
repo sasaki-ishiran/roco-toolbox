@@ -46,9 +46,13 @@ export function ImportOutcomeNotice({ onOpenGroups }: ImportOutcomeNoticeProps =
         }
       />
       <StateNotice
-        kind="unknown"
-        title="小组资源未自动更新"
-        description="私有同步不会更新小组资源；进入小组查看是否需要发布。"
+        kind={outcome.group === 'updated' ? 'success' : 'unknown'}
+        title={outcome.group === 'updated'
+          ? `已自动更新 ${outcome.groupCount} 个小组的资源`
+          : '小组资源未自动更新'}
+        description={outcome.group === 'updated'
+          ? '导入后已自动发布到已加入的小组；需要调整共享账号可在小组页改选号。'
+          : '私有同步不会更新小组资源；进入小组查看是否需要发布。'}
         testId="import-outcome-group"
         action={
           onOpenGroups ? (

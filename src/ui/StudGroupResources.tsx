@@ -15,12 +15,12 @@ import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { StateNotice } from './primitives/StateNotice';
 
-type ViewId = 'missing' | 'seeking' | 'all';
+type ViewId = 'missing' | 'mine' | 'seeking';
 
 const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: 'missing', label: '我缺的' },
+  { id: 'mine', label: '我能补的' },
   { id: 'seeking', label: '共同寻找' },
-  { id: 'all', label: '小组槽位' },
 ];
 
 export interface StudGroupResourcesProps {
@@ -37,9 +37,10 @@ export interface StudGroupResourcesProps {
 }
 
 /**
- * 种公组的槽位覆盖视图：我缺的 / 小组槽位。
+ * 种公组的槽位覆盖视图（2026-10-25 与母本组统一）：我缺的 / 我能补的 / 共同寻找。
  *
  * 「我缺的」= 我没有真实公精灵覆盖的槽位；组内已有人覆盖的排前。
+ * 「我能补的」= 我有覆盖、组内还有可比成员缺的槽位。
  * 可迭代单独一行展示，不算已覆盖；未知成员（未发布 / 目标修订或图鉴不一致）不计缺口。
  */
 export function StudGroupResources({
@@ -58,7 +59,11 @@ export function StudGroupResources({
   const list = useGroupList(viewerAccountId, group.group.id);
   const setList = (patch: Partial<typeof list>) => setGroupList(viewerAccountId, group.group.id, patch);
   const { view, query, memberFilter } = list;
-  const effectiveView: ViewId = view === 'help' ? 'missing' : view;
+  const effectiveView: ViewId = view === 'help' || view === 'all'
+    ? 'mine'
+    : view === 'mine' || view === 'seeking'
+      ? view
+      : 'missing';
   const [busyKey, setBusyKey] = useState('');
   const [taskError, setTaskError] = useState('');
 
@@ -123,9 +128,9 @@ export function StudGroupResources({
   const currentRows =
     effectiveView === 'missing'
       ? views.missingForMe
-      : effectiveView === 'seeking'
-        ? rows.filter((row) => row.holders.length === 0)
-        : views.all;
+      : effectiveView === 'mine'
+        ? views.mineForOthers
+        : rows.filter((row) => row.holders.length === 0);
   const filtered = (currentRows ?? []).filter((row) => {
     if (memberFilter) {
       const related =
@@ -205,7 +210,7 @@ export function StudGroupResources({
       {currentRows === null ? (
         <StateNotice
           kind="incomparable"
-          title="不能计算我的缺口"
+          title={effectiveView === 'mine' ? '不能计算我能补的' : '不能计算我的缺口'}
           description="我的资源尚未发布，或目标修订/图鉴与当前版本不一致；发布或更新后再看这一页。"
           testId="stud-view-unknown-self"
         />
@@ -240,7 +245,9 @@ export function StudGroupResources({
             当前页 {filtered.length} 项
           </p>
           {filtered.length === 0 ? (
-            <p className="py-4 text-center text-xs text-slate-400">这一页没有条目</p>
+            <p className="py-4 text-center text-xs text-slate-400">
+              {effectiveView === 'mine' ? '组员暂时没有需要你补的槽位' : '这一页没有条目'}
+            </p>
           ) : (
             <div className="space-y-2">
               {grouped.map(({ groupId, rows: groupRows }) => (

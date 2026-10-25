@@ -20,6 +20,11 @@ export interface CollectionGroupPrefs {
   lastGroupIds: Partial<Record<CollectionGroupType, string>>;
   /** 组长本机看到的邀请码明文。 */
   inviteCodes: Record<string, string>;
+  /**
+   * 主动「停止共享」过的组（本机记忆）。
+   * 导入后会自动把资源同步到小组，但不能把用户主动撤回的组又发回去。
+   */
+  sharingOff: Record<string, true>;
 }
 
 const EMPTY: CollectionGroupPrefs = {
@@ -27,16 +32,17 @@ const EMPTY: CollectionGroupPrefs = {
   personalType: 'mother',
   lastGroupIds: {},
   inviteCodes: {},
+  sharingOff: {},
 };
 
 const storageKey = (accountId: string | null): string =>
   accountId ? `${KEY_PREFIX}${accountId}` : GUEST_KEY;
 
 export function readCollectionGroupPrefs(accountId: string | null): CollectionGroupPrefs {
-  if (typeof window === 'undefined') return { ...EMPTY, lastGroupIds: {}, inviteCodes: {} };
+  if (typeof window === 'undefined') return { ...EMPTY, lastGroupIds: {}, inviteCodes: {}, sharingOff: {} };
   try {
     const raw = window.localStorage.getItem(storageKey(accountId));
-    if (!raw) return { ...EMPTY, lastGroupIds: {}, inviteCodes: {} };
+    if (!raw) return { ...EMPTY, lastGroupIds: {}, inviteCodes: {}, sharingOff: {} };
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const lastGroupIds: Partial<Record<CollectionGroupType, string>> = {};
     if (typeof parsed.lastGroupIds === 'object' && parsed.lastGroupIds !== null) {
@@ -52,14 +58,21 @@ export function readCollectionGroupPrefs(accountId: string | null): CollectionGr
         if (typeof value === 'string') inviteCodes[key] = value;
       }
     }
+    const sharingOff: Record<string, true> = {};
+    if (typeof parsed.sharingOff === 'object' && parsed.sharingOff !== null) {
+      for (const [key, value] of Object.entries(parsed.sharingOff as Record<string, unknown>)) {
+        if (value === true) sharingOff[key] = true;
+      }
+    }
     return {
       mode: parsed.mode === 'group' ? 'group' : 'personal',
       personalType: parsed.personalType === 'stud' ? 'stud' : 'mother',
       lastGroupIds,
       inviteCodes,
+      sharingOff,
     };
   } catch {
-    return { ...EMPTY, lastGroupIds: {}, inviteCodes: {} };
+    return { ...EMPTY, lastGroupIds: {}, inviteCodes: {}, sharingOff: {} };
   }
 }
 
@@ -101,6 +114,19 @@ export function saveLastGroupId(
 
 export function readCollectionInviteCode(accountId: string | null, groupId: string): string | null {
   return readCollectionGroupPrefs(accountId).inviteCodes[groupId] ?? null;
+}
+
+/** 该组是否被用户主动「停止共享」过（自动发布要跳过，避免把撤回的资源又发回去）。 */
+export function isGroupSharingOff(accountId: string | null, groupId: string): boolean {
+  return readCollectionGroupPrefs(accountId).sharingOff[groupId] === true;
+}
+
+export function setGroupSharingOff(accountId: string | null, groupId: string, off: boolean): void {
+  const prefs = readCollectionGroupPrefs(accountId);
+  const sharingOff = { ...prefs.sharingOff };
+  if (off) sharingOff[groupId] = true;
+  else delete sharingOff[groupId];
+  write(accountId, { ...prefs, sharingOff });
 }
 
 export function saveCollectionInviteCode(

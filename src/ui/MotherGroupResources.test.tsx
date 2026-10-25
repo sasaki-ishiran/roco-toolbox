@@ -35,6 +35,13 @@ beforeEach(() => {
 });
 
 describe('MotherGroupResources 三视图', () => {
+  test('三视图顺序：我缺的 / 我能补的 / 共同寻找', () => {
+    renderResources();
+    const groupControl = screen.getByRole('group', { name: '小组资源视图' });
+    const labels = Array.from(groupControl.querySelectorAll('button')).map((item) => item.textContent);
+    expect(labels).toEqual(['我缺的', '我能补的', '共同寻找']);
+  });
+
   test('成员筛选在我缺的中只展示该成员拥有的资源，并使用页内下拉栏', () => {
     render(<MotherGroupResources group={{ ...group, members: [member('A', resourceWith([])), member('B', resourceWith([101])), member('C', resourceWith([201]))] }} viewerAccountId="A" species={catalog} catalogVersion={FIXTURE_CATALOG_VERSION} />);
     const filter = screen.getByTestId('mother-member-filter');
@@ -44,16 +51,15 @@ describe('MotherGroupResources 三视图', () => {
     expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(1);
     expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('火花');
     expect(filter).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(screen.getByTestId('mother-view-all'));
-    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(1);
-    fireEvent.click(filter);
-    fireEvent.click(screen.getByRole('radio', { name: '全部成员' }));
-    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(3);
+    // 我没发布过会补的母本 → 「我能补的」为空，不会把别人的东西算成我能补
+    fireEvent.click(screen.getByTestId('mother-view-mine'));
+    expect(screen.queryAllByTestId('mother-resource-row')).toHaveLength(0);
+    expect(screen.getByText('组员暂时没有需要你补的母本')).toBeTruthy();
   });
 
-  test('全部资源按成员筛选：只展示该成员拥有的资源', () => {
+  test('我能补的：只列我已发布且组内其他人缺的资源', () => {
     renderResources();
-    fireEvent.click(screen.getByTestId('mother-view-all'));
+    fireEvent.click(screen.getByTestId('mother-view-mine'));
     fireEvent.click(screen.getByTestId('mother-member-filter'));
     fireEvent.click(screen.getByRole('radio', { name: 'A' }));
     const rows = screen.getAllByTestId('mother-resource-row');
@@ -127,9 +133,9 @@ describe('MotherGroupResources 三视图', () => {
     expect(text).not.toContain('火花');
   });
 
-  test('小组资源：只显示拥有者昵称（不显示来源账号）、缺口和未知人数', () => {
+  test('我能补的：只显示拥有者昵称（不显示来源账号）、缺口和未知人数', () => {
     renderResources();
-    fireEvent.click(screen.getByTestId('mother-view-all'));
+    fireEvent.click(screen.getByTestId('mother-view-mine'));
 
     const fire = screen
       .getAllByTestId('mother-resource-row')
@@ -142,7 +148,7 @@ describe('MotherGroupResources 三视图', () => {
 
   test('搜索按蛋聚合：搜「火神」能命中「火花」那颗蛋', () => {
     renderResources();
-    fireEvent.click(screen.getByTestId('mother-view-all'));
+    fireEvent.click(screen.getByTestId('mother-view-mine'));
     fireEvent.change(screen.getByTestId('mother-search'), { target: { value: '火神' } });
 
     const rows = screen.getAllByTestId('mother-resource-row');

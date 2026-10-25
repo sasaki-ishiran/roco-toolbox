@@ -51,6 +51,7 @@ import {
   saveLastGroupId,
   savePageMode,
   savePersonalType,
+  setGroupSharingOff,
   type GroupPageMode,
 } from './collectionGroupStore';
 import {
@@ -731,6 +732,8 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         baseTargetRevision: detail.group.targetRevision,
         resource,
       });
+      // 手动发布 = 恢复共享：清掉「主动停止共享」的本机记忆，导入后可以继续自动同步
+      setGroupSharingOff(account, groupId, false);
       if (!active()) return;
       if (draftRevision === draftRevisionRef.current) {
         dirtyRef.current = false;
@@ -754,6 +757,8 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
 
   const stopSharing = useCallback(async () => {
     const { catalogVersion } = inputRef.current;
+    const groupId = groupRef.current;
+    const account = accountRef.current;
     if (groupType === 'stud') {
       const target = currentGroup?.group.target;
       if (!target || target.kind !== 'stud') throw new Error('本组目标还没确认');
@@ -766,16 +771,16 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         targetRevision: currentGroup?.group.targetRevision ?? 0,
         accounts: [],
       });
-      return;
-    }
-    if (groupType === 'mother') {
+    } else if (groupType === 'mother') {
       const criteriaId = currentGroup?.group.target?.kind === 'mother'
         ? currentGroup.group.target.criteriaId
         : MOTHER_CRITERIA_ID;
       await publishResource(emptyMotherDraft(catalogVersion, criteriaId));
-      return;
+    } else {
+      await publishResource(emptyMotherDraft(catalogVersion));
     }
-    await publishResource(emptyMotherDraft(catalogVersion));
+    // 记住「主动停止共享」：之后导入触发的自动发布要跳过这个组
+    if (groupId) setGroupSharingOff(account, groupId, true);
   }, [currentGroup, groupType, publishResource]);
 
   const claimTask = useCallback(

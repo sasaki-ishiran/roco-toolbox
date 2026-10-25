@@ -25,11 +25,6 @@ const KINDS = [
   { value: 'inventory', label: '精灵库' },
 ];
 
-const MOTHER_STATUS = [
-  { value: 'missing', label: '未收集' },
-  { value: 'collected', label: '已收集' },
-];
-
 /**
  * 收集（2026-10-24 重构任务 7）：母本 / 种公 / 精灵库三类目标工具。
  *
@@ -71,32 +66,16 @@ export function Collection({
       </div>
 
       {location.kind === 'mothers' ? (
-        <>
-          <div className="mx-auto max-w-md px-4 pt-2">
-            <SegmentedControl
-              label="母本收集状态"
-              value={location.status === 'collected' ? 'collected' : 'missing'}
-              options={MOTHER_STATUS}
-              onValueChange={(next) =>
-                onNavigate({
-                  type: 'open-collection',
-                  location: { kind: 'mothers', status: next as 'missing' | 'collected' },
-                })
-              }
-              optionTestId={(value) => `mother-status-${value}`}
-            />
-          </div>
-          <main className="mx-auto max-w-md space-y-3 p-4">
-            <MotherView
-              owned={owned}
-              searchIndex={searchIndex}
-              eggGroupNames={eggGroupNames}
-              motherGroups={motherGroups}
-              mode={mode}
-              status={location.status}
-            />
-          </main>
-        </>
+        <main className="mx-auto max-w-md space-y-3 p-4">
+          <MotherView
+            owned={owned}
+            searchIndex={searchIndex}
+            eggGroupNames={eggGroupNames}
+            motherGroups={motherGroups}
+            mode={mode}
+            status={location.status}
+          />
+        </main>
       ) : location.kind === 'studs' ? (
         <StudCollection
           expandedGroupId={expandedGroupId}

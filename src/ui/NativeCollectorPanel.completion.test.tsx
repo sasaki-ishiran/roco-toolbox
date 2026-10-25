@@ -99,14 +99,18 @@ describe('采集完成自动停止与自动导入', () => {
     expect(bridge.importCapture).toHaveBeenCalledTimes(3);
   });
 
-  test('完成弹窗带出云同步结果与小组发布提示', async () => {
+  test('完成弹窗带出云同步结果与小组自动更新提示', async () => {
     const bridge = setup();
-    bridge.importCapture.mockImplementation(() => { finishImport('synced'); return ''; });
+    bridge.importCapture.mockImplementation(() => {
+      const operationId = finishImport('synced');
+      updateImportOutcome(operationId, { group: 'updated', groupCount: 2 });
+      return '';
+    });
 
     fireEvent.click(await screen.findByRole('button', { name: '模拟进度走满' }));
 
     const dialog = await screen.findByRole('dialog', { name: '导入完成' });
     expect(within(dialog).getByTestId('capture-complete-cloud')).toHaveTextContent('私有云已同步');
-    expect(within(dialog).getByTestId('capture-complete-group')).toHaveTextContent('发布更新');
+    expect(within(dialog).getByTestId('capture-complete-group')).toHaveTextContent('2 个小组');
   });
 });

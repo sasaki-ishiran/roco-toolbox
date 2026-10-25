@@ -20,7 +20,7 @@ vi.mock('./Coverage', () => ({ Coverage: () => <div data-testid="stub-coverage" 
 vi.mock('./Swap', () => ({ Swap: () => <div data-testid="stub-swap" /> }));
 
 describe('Collection（收集）', () => {
-  test('母本默认未收集，可切已收集', () => {
+  test('母本不再在顶部重复「未收集 / 已收集」：列表内那个控件是唯一入口', () => {
     const onNavigate = vi.fn();
     render(
       <Collection
@@ -30,12 +30,8 @@ describe('Collection（收集）', () => {
       />,
     );
     expect(screen.getByTestId('stub-mother-view')).toBeTruthy();
-    expect(screen.getByTestId('mother-status-missing')).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByTestId('mother-status-collected'));
-    expect(onNavigate).toHaveBeenCalledWith({
-      type: 'open-collection',
-      location: { kind: 'mothers', status: 'collected' },
-    });
+    expect(screen.queryByTestId('mother-status-missing')).toBeNull();
+    expect(screen.queryByTestId('mother-status-collected')).toBeNull();
   });
 
   test('种公只保留覆盖矩阵，求蛋入口已迁到小组', () => {

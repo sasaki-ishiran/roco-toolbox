@@ -340,7 +340,11 @@ export function NativeCollectorPanel() {
           {outcome.local === 'saved' ? (
             <div data-testid="capture-complete-after-import">
               <p className="text-xs text-slate-500" data-testid="capture-complete-cloud">{CLOUD_LABEL[outcome.cloud]}</p>
-              <p className="text-xs text-slate-500" data-testid="capture-complete-group">小组资源不会自动更新；需要的话去「小组」发布更新。</p>
+              <p className="text-xs text-slate-500" data-testid="capture-complete-group">
+                {outcome.group === 'updated'
+                  ? `小组资源已自动更新（${outcome.groupCount} 个小组）`
+                  : '小组资源没有自动更新（未加入小组或同步失败）；需要的话去「小组」看看'}
+              </p>
             </div>
           ) : null}
           <p className="text-xs text-slate-400">

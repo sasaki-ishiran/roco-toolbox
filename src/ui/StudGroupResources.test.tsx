@@ -87,8 +87,14 @@ beforeEach(() => {
 
 describe('StudGroupResources', () => {
   test('有覆盖 / 可迭代 / 未知分开显示，未知不算缺', () => {
-    render(<StudGroupResources group={group} viewerAccountId="A" catalogVersion="v1" />);
-    fireEvent.click(screen.getByTestId('stud-slot-view-all'));
+    // 再加一个「什么都没覆盖」的可比成员 D：这样 A 覆盖的「开朗」才是「我能补的」
+    const withD: CollectionGroupDetail = {
+      ...group,
+      members: [...group.members, member('D', studResource([]))],
+    };
+    render(<StudGroupResources group={withD} viewerAccountId="A" catalogVersion="v1" />);
+    // 我能补的：A 已覆盖、D 缺的「开朗」
+    fireEvent.click(screen.getByTestId('stud-slot-view-mine'));
 
     const fire = screen
       .getAllByTestId('stud-slot-row')
@@ -97,6 +103,10 @@ describe('StudGroupResources', () => {
     expect(fire).toHaveTextContent('开朗 · 大婉');
     expect(screen.getByTestId('stud-slot-holders')).toHaveTextContent('成员A');
     expect(screen.getByTestId('stud-slot-breedable')).toHaveTextContent('成员B');
+    expect(screen.queryByTestId('stud-slot-none')).toBeNull();
+
+    // 共同寻找：没人有、且有人待确认的「固执」
+    fireEvent.click(screen.getByTestId('stud-slot-view-seeking'));
     expect(screen.getByTestId('stud-slot-none')).toHaveTextContent('已发布成员均无，另 1 人待发布/更新');
   });
 

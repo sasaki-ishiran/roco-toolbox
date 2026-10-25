@@ -1,4 +1,4 @@
-﻿import { expect, test, type Page } from '@playwright/test';
+﻿﻿﻿import { expect, test, type Page } from '@playwright/test';
 import { progressOf } from './progress';
 
 const importSample = async (page: Page) => {
@@ -38,7 +38,7 @@ test('看板两类进度一步直达目标，种公求蛋已迁到小组', async
   // 母本进度卡 → 收集 · 母本 · 未收集
   await page.getByRole('button', { name: '看板', exact: true }).click();
   await page.getByTestId('progress-card-action-mother').click();
-  await expect(page.getByTestId('mother-status-missing')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('mother-chain-filter-uncollected')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('mother-search')).toBeVisible();
 
   // 收集 · 种公只剩覆盖矩阵；求蛋入口在小组 · 个人求种公
