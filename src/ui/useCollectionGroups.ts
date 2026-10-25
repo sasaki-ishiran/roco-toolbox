@@ -662,6 +662,8 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
               }
             : undefined,
           criteriaId: motherTarget?.criteriaId ?? MOTHER_CRITERIA_ID,
+          requireRecommendedNatures: motherTarget?.requireRecommendedNatures === true,
+          natureOverrides: motherTarget?.natureOverrides,
         });
         const base = myMember?.resource ?? emptyMotherDraft(catalogVersion);
         return {

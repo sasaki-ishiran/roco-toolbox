@@ -10,11 +10,13 @@ import {
   countQualifiedMotherChains,
   effectiveMotherVoices,
 } from '../domain/motherCriteria';
+import { createNaturesResolver } from '../domain/recommendedNatures';
 import { computeStudCoverage } from '../domain/studCoverage';
 import { computeStudRecommendations } from '../domain/suggestions';
 import type { OwnedPet } from '../domain/types';
 import { useCoverageSlots } from './useCoverageSlots';
 import { useMotherCriteria } from './motherCriteriaStore';
+import { useNatureOverrides } from './natureOverrideStore';
 import { useOwnedPets } from './useOwnedPets';
 import { useSnapshots } from './useSnapshots';
 import { useSwapWishes } from './useSwapWishes';
@@ -42,11 +44,18 @@ export function useCollectionSummary(): CollectionSummary {
   const { owned } = useOwnedPets();
   const mode = useTargetMode();
   const motherCriteria = useMotherCriteria();
+  const natureOverrides = useNatureOverrides();
   const slots = useCoverageSlots();
 
   const speciesByGameId = useMemo(
     () => new Map(catalogSpecies.map((entry) => [entry.gameId, entry])),
     [],
+  );
+
+  /** 推荐性格解析器（与母本页、小组同一口径） */
+  const naturesOf = useMemo(
+    () => createNaturesResolver({ species: catalogSpecies, overrides: natureOverrides }),
+    [natureOverrides],
   );
 
   const motherGroups = useMemo(
@@ -56,13 +65,19 @@ export function useCollectionSummary(): CollectionSummary {
 
   const mother = useMemo(
     () => ({
-      collected: countQualifiedMotherChains(motherGroups, owned, {
-        bodies: motherCriteria.bodies,
-        voices: effectiveMotherVoices(motherCriteria.voices, mode),
-      }),
+      collected: countQualifiedMotherChains(
+        motherGroups,
+        owned,
+        {
+          bodies: motherCriteria.bodies,
+          voices: effectiveMotherVoices(motherCriteria.voices, mode),
+          recommendedNatures: motherCriteria.recommendedNatures === true,
+        },
+        naturesOf,
+      ),
       total: motherGroups.length,
     }),
-    [motherGroups, owned, motherCriteria, mode],
+    [motherGroups, owned, motherCriteria, mode, naturesOf],
   );
 
   const stud = useMemo(

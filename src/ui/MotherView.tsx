@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { boxLabel } from '../domain/coverageDetail';
 import type { MotherGroup, TargetMode } from '../domain/petFilters';
 import type { OwnedPet } from '../domain/types';
-import { chainTopNaturesByGameId } from '../data/catalog';
+import { species as catalogSpecies } from '../data/catalog';
 import {
   effectiveMotherVoices,
   isChainCollected as chainCollectedBy,
@@ -27,6 +27,9 @@ import {
   type MotherVoice,
 } from './motherCriteriaStore';
 import { removeManyFromMotherPlan, toggleMotherPlan, useMotherPlan } from './motherPlanStore';
+import { createNaturesResolver, eggNatures } from '../domain/recommendedNatures';
+import { useNatureOverrides } from './natureOverrideStore';
+import { RecommendedNatureEditor } from './RecommendedNatureEditor';
 
 /** 每节的分页大小：母本视角的每一节动辄上百条，必须分页 */
 const PAGE_SIZE = 20;
@@ -211,6 +214,13 @@ export function MotherView({
 }: MotherViewProps) {
   const plan = useMotherPlan();
   const criteria = useMotherCriteria();
+  const natureOverrides = useNatureOverrides();
+  /** 推荐性格解析器：蛋覆盖 → 图鉴 PVP → 种族值兜底（与小组同一口径） */
+  const naturesOf = useMemo(
+    () => createNaturesResolver({ species: catalogSpecies, overrides: natureOverrides }),
+    [natureOverrides],
+  );
+  const [natureEditorOpen, setNatureEditorOpen] = useState(false);
   // 搜索是本次会话的临时查看条件（切页保留、重启清空）
   const query = usePersonalList('mothers').query;
   const setQuery = (value: string) => setPersonalQuery('mothers', value);
@@ -246,11 +256,15 @@ export function MotherView({
    * 定义本身在领域层 `src/domain/motherCriteria.ts`（看板「母本全收集」卡共用同一份），
    * 这里只是把当前模式下的有效声音选择传进去。
    */
-  const effectiveCriteria: MotherCriteria = { bodies: criteria.bodies, voices: activeVoices };
+  const effectiveCriteria: MotherCriteria = {
+    bodies: criteria.bodies,
+    voices: activeVoices,
+    recommendedNatures: criteria.recommendedNatures === true,
+  };
   const isQualifiedMother = (pet: OwnedPet): boolean =>
-    isQualifiedMotherBy(pet, effectiveCriteria);
+    isQualifiedMotherBy(pet, effectiveCriteria, naturesOf);
   const isChainCollected = (group: MotherGroup): boolean =>
-    chainCollectedBy(group, owned, effectiveCriteria);
+    chainCollectedBy(group, owned, effectiveCriteria, naturesOf);
 
   const toggleCriteria = <T extends string>(current: T[], value: T): T[] =>
     current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
@@ -479,18 +493,43 @@ export function MotherView({
 
       {/* 链清单：一条链一行（按蛋组分区），密集排版便于一眼看整体；搜索即刻看到已收集/未收集 */}
       <section className="space-y-2" data-testid="mother-chain-list">
-        <div className="flex items-center justify-between px-1">
+        <div className="flex items-center justify-between gap-2 px-1">
           <span className="text-[11px] text-slate-400" data-testid="mother-chain-summary">
             共 {matchedGroups.length} 条链 · 已收集 {collectedChainCount}
           </span>
-          <SegmentedControl
-            label="母本收集状态"
-            value={chainFilter}
-            options={CHAIN_FILTERS.map((item) => ({ value: item.value, label: item.label }))}
-            onValueChange={(next) => setChainFilter(next as ChainFilter)}
-            optionTestId={(value) => `mother-chain-filter-${value}`}
-            className="w-[148px] shrink-0"
-          />
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              aria-pressed={criteria.recommendedNatures === true}
+              onClick={() =>
+                setMotherCriteria({ ...criteria, recommendedNatures: criteria.recommendedNatures !== true })
+              }
+              data-testid="mother-recommended-only"
+              className={`min-h-[30px] rounded-lg border px-2 text-xs ${
+                criteria.recommendedNatures
+                  ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}
+            >
+              只算推荐性格
+            </button>
+            <button
+              type="button"
+              onClick={() => setNatureEditorOpen(true)}
+              data-testid="mother-nature-editor"
+              className="min-h-[30px] rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-500"
+            >
+              编辑性格
+            </button>
+            <SegmentedControl
+              label="母本收集状态"
+              value={chainFilter}
+              options={CHAIN_FILTERS.map((item) => ({ value: item.value, label: item.label }))}
+              onValueChange={(next) => setChainFilter(next as ChainFilter)}
+              optionTestId={(value) => `mother-chain-filter-${value}`}
+              className="w-[132px]"
+            />
+          </div>
         </div>
         {chainSections.length === 0 ? (
           <p
@@ -517,7 +556,7 @@ export function MotherView({
                   <MotherEggRow
                     key={group.chainKey}
                     eggName={group.formLabel || '未知精灵'}
-                    recommendedNatures={chainTopNaturesByGameId.get(group.eggGameId) ?? []}
+                    recommendedNatures={eggNatures(catalogSpecies, group.eggGameId, natureOverrides)}
                     mothers={mothersOf(group)}
                     eggGroupLabels={group.eggGroups.map(
                       (groupId) => eggGroupNames[groupId] ?? `蛋组${groupId}`,
@@ -537,6 +576,7 @@ export function MotherView({
         section="mothers"
         onClose={() => setEditorOpen(false)}
       />
+      <RecommendedNatureEditor open={natureEditorOpen} onClose={() => setNatureEditorOpen(false)} />
     </div>
   );
 }

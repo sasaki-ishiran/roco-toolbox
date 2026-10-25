@@ -2,6 +2,7 @@
 import { TARGET_MODE_LABELS, gradeLabel, type TargetMode } from '../domain/petFilters';
 import { effectiveMotherVoices, isChainCollected, type MotherCriteria } from '../domain/motherCriteria';
 import { findUncataloguedCount, studEmptyNote } from '../domain/suggestions';
+import { createNaturesResolver } from '../domain/recommendedNatures';
 import { species } from '../data/catalog';
 import { AccountFilterBar } from './AccountFilterBar';
 import { ImportAdditionCard } from './ImportAdditionCard';
@@ -16,6 +17,7 @@ import { useOwnedPets } from './useOwnedPets';
 import { useCollectionSummary } from './useCollectionSummary';
 import { useCoverageFilter } from './coverageFilterStore';
 import { useMotherCriteria } from './motherCriteriaStore';
+import { useNatureOverrides } from './natureOverrideStore';
 import { setTargetMode } from './targetModeStore';
 import { useAccountFilter } from './accountFilterStore';
 import type { NavigationIntent } from './navigation';
@@ -52,11 +54,17 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const effectiveCriteria: MotherCriteria = {
     bodies: motherCriteria.bodies,
     voices: effectiveMotherVoices(motherCriteria.voices, mode),
+    recommendedNatures: motherCriteria.recommendedNatures === true,
   };
+  const natureOverrides = useNatureOverrides();
+  const naturesOf = useMemo(
+    () => createNaturesResolver({ species, overrides: natureOverrides }),
+    [natureOverrides],
+  );
   /** 母本缺口只报**个人事实**；小组未加载时不在看板声称某成员拥有 */
   const missingMothers = useMemo(
-    () => motherGroups.filter((group) => !isChainCollected(group, owned, effectiveCriteria)),
-    [motherGroups, owned, effectiveCriteria],
+    () => motherGroups.filter((group) => !isChainCollected(group, owned, effectiveCriteria, naturesOf)),
+    [motherGroups, owned, effectiveCriteria, naturesOf],
   );
   const motherMissingPreview = missingMothers.slice(0, 3);
 

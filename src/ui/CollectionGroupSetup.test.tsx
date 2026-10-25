@@ -25,7 +25,27 @@ describe('CollectionGroupSetup（二期）', () => {
     fireEvent.change(screen.getByTestId('group-setup-nickname'), { target: { value: '阿甲' } });
     fireEvent.change(screen.getByTestId('group-setup-group-name'), { target: { value: '种公组' } });
     fireEvent.click(screen.getByTestId('group-create-submit'));
-    await waitFor(() => expect(onCreate).toHaveBeenCalledWith('种公组', '阿甲', 'stud'));
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenCalledWith('种公组', '阿甲', 'stud', {
+        requireRecommendedNatures: false,
+      }),
+    );
+  });
+
+  test('母本组创建时可以要求推荐性格', async () => {
+    const onCreate = vi.fn().mockResolvedValue({ groupId: 'g1' });
+    render(
+      <CollectionGroupSetup onCreate={onCreate} onJoin={vi.fn()} preflightInvite={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByTestId('group-create-require-natures'));
+    fireEvent.change(screen.getByTestId('group-setup-nickname'), { target: { value: '阿甲' } });
+    fireEvent.change(screen.getByTestId('group-setup-group-name'), { target: { value: '母本组' } });
+    fireEvent.click(screen.getByTestId('group-create-submit'));
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenCalledWith('母本组', '阿甲', 'mother', {
+        requireRecommendedNatures: true,
+      }),
+    );
   });
 
   test('加入前先展示组名、类型与目标，确认后才提交', async () => {

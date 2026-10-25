@@ -45,6 +45,53 @@ const errorOf = (fn: () => unknown): MotherResourceError | null => {
   }
 };
 
+describe('buildMotherResource：推荐性格口径（2026-10-25）', () => {
+  const speciesWithNatures = catalog.map((entry) =>
+    entry.gameId === 101 ? { ...entry, recommendedNatures: ['固执'] } : entry,
+  );
+
+  const buildWithNatures = (
+    snapshots: Parameters<typeof buildMotherResource>[0]['snapshots'],
+    input: { require?: boolean; overrides?: Record<string, string[]> },
+  ) =>
+    buildMotherResource({
+      snapshots,
+      selectedAccountKeys: ['uid:1001'],
+      species: speciesWithNatures,
+      catalogVersion: FIXTURE_CATALOG_VERSION,
+      criteriaId: 'mother-test-natures',
+      requireRecommendedNatures: input.require,
+      natureOverrides: input.overrides,
+    });
+
+  test('开启后只收录「推荐性格」的母本', () => {
+    const opened = buildWithNatures([snapshot(1001, '甲', [mother(101, { nature: '开朗' })])], {
+      require: true,
+    });
+    expect(opened.accounts[0].eggGameIds).toEqual([]);
+
+    const matched = buildWithNatures([snapshot(1001, '甲', [mother(101, { nature: '固执' })])], {
+      require: true,
+    });
+    expect(matched.accounts[0].eggGameIds).toEqual([101]);
+  });
+
+  test('不开启时性格不参与判定', () => {
+    const resource = buildWithNatures([snapshot(1001, '甲', [mother(101, { nature: '开朗' })])], {
+      require: false,
+    });
+    expect(resource.accounts[0].eggGameIds).toEqual([101]);
+  });
+
+  test('组长那份推荐性格覆盖优先于图鉴推荐', () => {
+    const resource = buildWithNatures([snapshot(1001, '甲', [mother(101, { nature: '开朗' })])], {
+      require: true,
+      overrides: { '101': ['开朗'] },
+    });
+    expect(resource.accounts[0].eggGameIds).toEqual([101]);
+  });
+});
+
 describe('buildMotherResource：从原始账号快照提取固定口径母本', () => {
   test('进化形态归蛋且重名账号保留不同来源', () => {
     const resource = build(

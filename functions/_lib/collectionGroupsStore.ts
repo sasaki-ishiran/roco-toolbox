@@ -130,6 +130,7 @@ function parseStoredTarget(rawType: string, raw: string): GroupTargetConfig | nu
     if (typeof parsed !== 'object' || parsed === null) return null;
     const record = parsed as Record<string, unknown>;
     if (record.kind === 'mother' && asGroupType(rawType) === 'mother') {
+      const overrides = record.natureOverrides;
       return {
         kind: 'mother',
         criteriaId: String(record.criteriaId ?? ''),
@@ -137,6 +138,10 @@ function parseStoredTarget(rawType: string, raw: string): GroupTargetConfig | nu
         bodies: Array.isArray(record.bodies) ? record.bodies.map(String) : [],
         voices: Array.isArray(record.voices) ? record.voices.map(String) : [],
         catalogVersion: String(record.catalogVersion ?? ''),
+        ...(record.requireRecommendedNatures === true ? { requireRecommendedNatures: true } : {}),
+        ...(overrides && typeof overrides === 'object' && !Array.isArray(overrides)
+          ? { natureOverrides: overrides as Record<string, string[]> }
+          : {}),
       };
     }
     if (record.kind === 'stud' && asGroupType(rawType) === 'stud') {
@@ -913,6 +918,8 @@ export function normalizeMotherTarget(target: MotherTargetConfig): MotherTargetC
       mode: target.mode,
       bodies: target.bodies,
       voices: target.voices,
+      requireRecommendedNatures: target.requireRecommendedNatures === true,
+      natureOverrides: target.natureOverrides,
     }),
   };
 }
@@ -927,7 +934,7 @@ export function describeTarget(target: GroupTargetConfig | null): string {
   if (target.kind === 'mother') {
     const bodies = target.bodies.join('/') || '体型不限';
     const voices = target.voices.join('/') || '声音不限';
-    return `母 · ${bodies} · ${voices}`;
+    return `母 · ${bodies} · ${voices}${target.requireRecommendedNatures ? ' · 推荐性格' : ''}`;
   }
   if (target.slots.length === 0) return '目标待确认';
   const natures = [...new Set(target.slots.map((slot) => slot.natureName))];

@@ -57,13 +57,31 @@ export function motherCriteriaIdOf(input: {
   mode: CollectionTargetMode;
   bodies: readonly string[];
   voices: readonly string[];
+  /** 组内是否要求母本性格为推荐性格（2026-10-25）。 */
+  requireRecommendedNatures?: boolean;
+  /** 组长那一份推荐性格覆盖（蛋 gameId → 性格名）。 */
+  natureOverrides?: Record<string, string[]>;
 }): string {
   const bodies = [...new Set(input.bodies)].sort().join(',');
   const voices = [...new Set(input.voices)].sort().join(',');
+  const requireNatures = input.requireRecommendedNatures === true;
   const isDefault =
     input.mode === 'perfect' && bodies === '大块头' && voices === '+100';
-  if (isDefault) return MOTHER_CRITERIA_ID;
-  return `mother-v2-${fnv1a(`${input.mode}|${bodies}|${voices}`)}`;
+  if (isDefault && !requireNatures) return MOTHER_CRITERIA_ID;
+  const natures = requireNatures
+    ? `|natures|${natureOverridesSignature(input.natureOverrides)}`
+    : '';
+  return `mother-v2-${fnv1a(`${input.mode}|${bodies}|${voices}${natures}`)}`;
+}
+
+/** 推荐性格覆盖表的稳定签名：键排序、值去重排序，空值忽略。 */
+export function natureOverridesSignature(overrides?: Record<string, string[]>): string {
+  if (!overrides) return '';
+  return Object.keys(overrides)
+    .filter((key) => Array.isArray(overrides[key]) && overrides[key].length > 0)
+    .sort((a, b) => Number(a) - Number(b) || a.localeCompare(b))
+    .map((key) => `${key}:${[...new Set(overrides[key])].sort().join('/')}`)
+    .join('|');
 }
 
 /** 种公目标的可比性标识：模式 + 排序后的槽位集合。 */
@@ -91,6 +109,13 @@ export interface MotherTargetConfig {
   bodies: string[];
   voices: string[];
   catalogVersion: string;
+  /**
+   * 组内是否要求母本性格为推荐性格（2026-10-25 用户拍板，旧组默认关闭）。
+   * 开启后按「组长那一份推荐性格表」判定，没改过的蛋用图鉴推荐 / 种族值兜底。
+   */
+  requireRecommendedNatures?: boolean;
+  /** 组长那一份推荐性格覆盖：蛋 gameId → 性格名（只存改过的蛋）。 */
+  natureOverrides?: Record<string, string[]>;
 }
 
 export interface StudTargetSlot {
@@ -265,12 +290,35 @@ export function isTargetReady(
   return target.kind === 'stud' && target.slots.length > 0;
 }
 
-/** 母本目标是否合法：模式与声音/体型必须匹配。 */
+/** 推荐性格覆盖：最多多少个蛋、每颗蛋最多几个性格（防止异常请求体）。 */
+export const NATURE_OVERRIDE_MAX_EGGS = 900;
+export const NATURE_OVERRIDE_MAX_NATURES = 6;
+
+/** 覆盖表是否合法：键是正整数、值是 1~6 个非空性格名。 */
+export function isValidNatureOverrides(value: unknown): value is Record<string, string[]> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > NATURE_OVERRIDE_MAX_EGGS) return false;
+  return entries.every(([key, natures]) => {
+    if (!/^[1-9]\d*$/.test(key)) return false;
+    if (!Array.isArray(natures) || natures.length === 0) return false;
+    if (natures.length > NATURE_OVERRIDE_MAX_NATURES) return false;
+    return natures.every((nature) => typeof nature === 'string' && nature.trim().length > 0 && nature.length <= 8);
+  });
+}
+
+/** 母本目标是否合法：模式与声音/体型必须匹配，覆盖表结构合法。 */
 export function isValidMotherTarget(target: MotherTargetConfig): boolean {
   const allowedVoices = motherVoicesForTargetMode(target.mode);
   if (target.voices.length === 0 || target.bodies.length === 0) return false;
   if (target.voices.some((voice) => !allowedVoices.includes(voice))) return false;
-  return target.bodies.every((body) => (MOTHER_TARGET_BODIES as readonly string[]).includes(body));
+  if (!target.bodies.every((body) => (MOTHER_TARGET_BODIES as readonly string[]).includes(body))) {
+    return false;
+  }
+  if (target.natureOverrides !== undefined && !isValidNatureOverrides(target.natureOverrides)) {
+    return false;
+  }
+  return true;
 }
 
 /** 种公目标是否合法：槽位不重复、数量与取值在范围内。 */

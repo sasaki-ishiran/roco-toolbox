@@ -101,6 +101,9 @@ export const targetNatureNames: string[] = [
 
 const natureIdByName = new Map(data.natures.map((n) => [n.name, n.id]));
 
+/** 全部性格名（按图鉴顺序）：推荐性格编辑器的可选项。 */
+export const allNatureNames: string[] = data.natures.map((nature) => nature.name);
+
 /**
  * 可勾选的目标性格池（带 id）：就是「八大性格」。
  * 性格筛选从这个池子里选，默认取每个蛋组推荐的前 3（见 targetNatures）。

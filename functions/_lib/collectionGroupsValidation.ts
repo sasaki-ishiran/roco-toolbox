@@ -22,6 +22,7 @@ import {
   isTargetGrade,
   isTargetMode,
   isValidMotherTarget,
+  isValidNatureOverrides,
   motherCriteriaIdOf,
   motherVoicesForTargetMode,
   slotKeyOf,
@@ -119,13 +120,21 @@ export function parseCollectionTarget(
     if (bodies.some((body) => !(MOTHER_TARGET_BODIES as readonly string[]).includes(body))) {
       invalid('体型选项不受支持');
     }
+    const requireRecommendedNatures = record.requireRecommendedNatures === true;
+    let natureOverrides: Record<string, string[]> | undefined;
+    if (record.natureOverrides !== undefined && record.natureOverrides !== null) {
+      if (!isValidNatureOverrides(record.natureOverrides)) invalid('推荐性格覆盖表不合法');
+      natureOverrides = record.natureOverrides;
+    }
     const target: MotherTargetConfig = {
       kind: 'mother',
-      criteriaId: motherCriteriaIdOf({ mode, bodies, voices }),
+      criteriaId: motherCriteriaIdOf({ mode, bodies, voices, requireRecommendedNatures, natureOverrides }),
       mode,
       bodies,
       voices,
       catalogVersion,
+      ...(requireRecommendedNatures ? { requireRecommendedNatures: true } : {}),
+      ...(natureOverrides ? { natureOverrides } : {}),
     };
     if (!isValidMotherTarget(target)) invalid('母本目标不合法');
     return target;

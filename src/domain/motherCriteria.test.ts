@@ -59,6 +59,23 @@ describe('母本达标口径（看板卡与母本页共用）', () => {
     expect(isQualifiedMother(pet({ medalBody: '' }), bigOnly)).toBe(false);
   });
 
+  test('要求推荐性格时，性格不在推荐列表里的母本不算达标', () => {
+    const criteria: MotherCriteria = {
+      voices: ['+100'],
+      bodies: ['大块头'],
+      recommendedNatures: true,
+    };
+    const naturesOf = (gameId: number): string[] => (gameId === 1 ? ['固执'] : []);
+    expect(isQualifiedMother(pet({ nature: '固执' }), criteria, naturesOf)).toBe(true);
+    expect(isQualifiedMother(pet({ nature: '开朗' }), criteria, naturesOf)).toBe(false);
+    // 没有解析器 / 解析不出推荐性格 = 无法判定，按不达标处理（与小组口径一致，不靠猜）
+    expect(isQualifiedMother(pet({ nature: '固执' }), criteria)).toBe(false);
+    // 不开开关时性格不参与判定
+    expect(
+      isQualifiedMother(pet({ nature: '开朗' }), { ...criteria, recommendedNatures: false }, naturesOf),
+    ).toBe(true);
+  });
+
   test('某一维度一个都不选 = 该维度不限', () => {
     const bodyAny: MotherCriteria = { voices: ['+100', '-100'], bodies: [] };
     expect(isQualifiedMother(pet({ medalBody: '' }), bodyAny)).toBe(true);

@@ -26,6 +26,7 @@ export const SYNCED_PREF_KEYS = [
   'roco.excludedAccounts',
   'roco.petPageSize',
   'roco.copyPreviewOff',
+  'roco.natureOverrides',
 ] as const;
 
 /**
@@ -47,6 +48,8 @@ export const CLOUD_WINS_PREF_KEYS: ReadonlySet<string> = new Set([
   'roco.motherCriteria',
   'roco.excludedAccounts',
   'roco.coverageFilter',
+  // 推荐性格覆盖决定「谁算达标母本」，两台不一致会直接导致小组口径不同 → 以云端为准
+  'roco.natureOverrides',
 ]);
 
 const SNAPSHOT_TYPE = 'roco-toolbox-cloud';

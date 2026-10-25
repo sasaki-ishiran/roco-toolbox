@@ -114,6 +114,12 @@ function parseTarget(value: unknown): GroupTargetConfig | null {
       bodies: bodies.filter((body) => (MOTHER_TARGET_BODIES as readonly string[]).includes(body)),
       voices,
       catalogVersion,
+      ...(record.requireRecommendedNatures === true ? { requireRecommendedNatures: true } : {}),
+      ...(record.natureOverrides &&
+      typeof record.natureOverrides === 'object' &&
+      !Array.isArray(record.natureOverrides)
+        ? { natureOverrides: record.natureOverrides as Record<string, string[]> }
+        : {}),
     };
     return target;
   }

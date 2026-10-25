@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { buildEggSearchIndex } from '../domain/petFilters';
 import { groupPublicationStatus } from '../domain/collectionPublication';
 import { CATALOG_VERSION, eggGroupNames, species } from '../data/catalog';
-import { GROUP_TYPE_LABELS, type CollectionGroupType } from '../shared/collectionGroups';
+import {
+  GROUP_TYPE_LABELS,
+  defaultMotherTarget,
+  motherCriteriaIdOf,
+  type CollectionGroupType,
+  type GroupTargetConfig,
+} from '../shared/collectionGroups';
+import { activeNatureOverrides } from '../domain/recommendedNatures';
+import { getNatureOverrides } from './natureOverrideStore';
 import { CollectionGroupSetup } from './CollectionGroupSetup';
 import { useCollectionGroups } from './useCollectionGroups';
 import { GroupTargetEditor } from './GroupTargetEditor';
@@ -280,9 +288,27 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
       {hook.accountId ? (
         <CollectionGroupSetup
           key={hook.accountId}
-          onCreate={async (name, displayName, groupType) => {
+          onCreate={async (name, displayName, groupType, options) => {
             if (!(await confirmLeave())) return false;
-            return hook.createGroup(name, displayName, groupType);
+            // 创建时就要求推荐性格：用组长的默认口径 + 当前这份推荐性格表
+            let target: GroupTargetConfig | undefined;
+            if (groupType === 'mother' && options?.requireRecommendedNatures) {
+              const base = defaultMotherTarget(CATALOG_VERSION);
+              const overrides = activeNatureOverrides(getNatureOverrides());
+              target = {
+                ...base,
+                criteriaId: motherCriteriaIdOf({
+                  mode: base.mode,
+                  bodies: base.bodies,
+                  voices: base.voices,
+                  requireRecommendedNatures: true,
+                  natureOverrides: overrides,
+                }),
+                requireRecommendedNatures: true,
+                ...(Object.keys(overrides).length > 0 ? { natureOverrides: overrides } : {}),
+              };
+            }
+            return hook.createGroup(name, displayName, groupType, target);
           }}
           onJoin={async (inviteCode, displayName) => {
             if (!(await confirmLeave())) return false;

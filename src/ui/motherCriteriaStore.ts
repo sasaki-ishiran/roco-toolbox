@@ -38,6 +38,7 @@ const store = createModuleStore<MotherCriteria>(DEFAULT_MOTHER_CRITERIA, {
     bodies: Array.isArray(loaded.bodies)
       ? loaded.bodies.filter(isBody)
       : [...DEFAULT_MOTHER_CRITERIA.bodies],
+    recommendedNatures: loaded.recommendedNatures === true,
   }),
 });
 

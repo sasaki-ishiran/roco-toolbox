@@ -138,6 +138,8 @@ function buildResource(
       voices: target.voices as never,
     },
     criteriaId: target.criteriaId,
+    requireRecommendedNatures: target.requireRecommendedNatures === true,
+    natureOverrides: target.natureOverrides,
   });
 }
 

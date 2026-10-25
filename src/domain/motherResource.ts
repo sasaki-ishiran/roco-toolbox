@@ -12,6 +12,7 @@ import {
 } from '../shared/motherGroups';
 import { isBreedableGroup } from './eggs';
 import { isQualifiedMother, type MotherCriteria } from './motherCriteria';
+import { createNaturesResolver, type NatureOverrides } from './recommendedNatures';
 import { accountKeyOf, type AccountSnapshot } from './parseBackup';
 import type { SpeciesEntry } from './types';
 
@@ -56,6 +57,10 @@ export interface BuildMotherResourceInput {
   criteria?: MotherCriteria;
   /** 与 criteria 对应的稳定标识；不传时用一期的固定 id。 */
   criteriaId?: string;
+  /** 组内是否要求母本性格为推荐性格（2026-10-25）。 */
+  requireRecommendedNatures?: boolean;
+  /** 这份口径用的推荐性格覆盖（组长那一份）；不传 = 图鉴推荐 + 种族值兜底。 */
+  natureOverrides?: NatureOverrides;
 }
 
 /**
@@ -66,6 +71,10 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
   const { snapshots, selectedAccountKeys, species, catalogVersion } = input;
   const criteria = input.criteria ?? SHARED_MOTHER_CRITERIA;
   const criteriaId = input.criteriaId ?? MOTHER_CRITERIA_ID;
+  const effectiveCriteria: MotherCriteria = input.requireRecommendedNatures
+    ? { ...criteria, recommendedNatures: true }
+    : criteria;
+  const naturesOf = createNaturesResolver({ species, overrides: input.natureOverrides });
 
   if (catalogVersion.trim().length === 0 || catalogVersion.length > MOTHER_CATALOG_VERSION_MAX) {
     throw new MotherResourceError('INVALID_CATALOG_VERSION', '图鉴版本无效');
@@ -112,7 +121,7 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
     for (const pet of snapshot.pets) {
       const eggGameId = byGameId.get(pet.gameId)?.eggGameId;
       if (eggGameId == null || !eggSpeciesIds.has(eggGameId)) continue;
-      if (!isQualifiedMother(pet, criteria)) continue;
+      if (!isQualifiedMother(pet, effectiveCriteria, naturesOf)) continue;
       eggGameIds.add(eggGameId);
     }
     if (eggGameIds.size > MOTHER_RESOURCE_MAX_EGGS_PER_ACCOUNT) {

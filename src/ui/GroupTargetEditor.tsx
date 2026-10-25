@@ -7,9 +7,13 @@ import {
   slotKeyOf,
   studSlotSetIdOf,
   type GroupTargetConfig,
+  type MotherTargetConfig,
 } from '../shared/collectionGroups';
+import { activeNatureOverrides } from '../domain/recommendedNatures';
 import type { CollectionGroupsHook } from './useCollectionGroups';
 import { useCoverageSlots } from './useCoverageSlots';
+import { getNatureOverrides, useNatureOverrides } from './natureOverrideStore';
+import { RecommendedNatureEditor } from './RecommendedNatureEditor';
 import { useTargetMode } from './targetModeStore';
 import { TARGET_MODE_LABELS } from '../domain/petFilters';
 
@@ -37,17 +41,22 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
   const [motherMode, setMotherMode] = useState<'perfect' | 'medal'>('perfect');
   const [bodies, setBodies] = useState<string[]>(['大块头']);
   const [voices, setVoices] = useState<string[]>(['+100']);
+  const [requireNatures, setRequireNatures] = useState(false);
+  const [natureEditorOpen, setNatureEditorOpen] = useState(false);
+  const natureOverrides = useNatureOverrides();
 
   useEffect(() => {
     if (target?.kind !== 'mother') {
       setMotherMode('perfect');
       setBodies(['大块头']);
       setVoices(['+100']);
+      setRequireNatures(false);
       return;
     }
     setMotherMode(target.mode);
     setBodies(target.bodies);
     setVoices(target.voices);
+    setRequireNatures(target.requireRecommendedNatures === true);
   }, [target, hook.currentGroup?.group.id, hook.currentGroup?.group.targetRevision]);
 
   const run = async (action: () => Promise<unknown>, success: string) => {
@@ -103,15 +112,30 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
       setError('至少选择一种声音');
       return;
     }
-    const next: GroupTargetConfig = {
+    // 组长那份推荐性格表在保存这一刻带进目标；之后改表要再保存一次（用户拍板：手动更新口径）
+    const overrides = requireNatures ? activeNatureOverrides(getNatureOverrides()) : {};
+    const next: MotherTargetConfig = {
       kind: 'mother',
-      criteriaId: motherCriteriaIdOf({ mode: motherMode, bodies, voices }),
+      criteriaId: motherCriteriaIdOf({
+        mode: motherMode,
+        bodies,
+        voices,
+        requireRecommendedNatures: requireNatures,
+        natureOverrides: overrides,
+      }),
       mode: motherMode,
       bodies,
       voices,
       catalogVersion: CATALOG_VERSION,
+      ...(requireNatures ? { requireRecommendedNatures: true } : {}),
+      ...(requireNatures && Object.keys(overrides).length > 0 ? { natureOverrides: overrides } : {}),
     };
-    void run(() => hook.updateTarget(next), '本组口径已更新，成员需要重新发布');
+    void run(
+      () => hook.updateTarget(next),
+      requireNatures
+        ? '本组口径已更新（含推荐性格），成员需要重新发布'
+        : '本组口径已更新，成员需要重新发布',
+    );
   };
 
   const toggle = (list: string[], value: string, set: (next: string[]) => void) => {
@@ -128,7 +152,9 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
   const summary = (() => {
     if (!target) return '目标待确认';
     if (target.kind === 'mother') {
-      return `母 · ${target.bodies.join('/')} · ${target.voices.join('/')} · ${TARGET_MODE_LABELS[target.mode]}`;
+      return `母 · ${target.bodies.join('/')} · ${target.voices.join('/')} · ${TARGET_MODE_LABELS[target.mode]}${
+        target.requireRecommendedNatures ? ' · 推荐性格' : ''
+      }`;
     }
     if (target.slots.length === 0) return '目标待确认';
     const groups = [...new Set(target.slots.map((slot) => eggGroupNames[slot.groupId] ?? `蛋组${slot.groupId}`))];
@@ -214,6 +240,35 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
               </button>
             ))}
           </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              aria-pressed={requireNatures}
+              onClick={() => setRequireNatures((value) => !value)}
+              data-testid="mother-target-natures"
+              className={`min-h-[28px] rounded-md border px-2 text-xs ${
+                requireNatures
+                  ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}
+            >
+              要求推荐性格
+            </button>
+            <button
+              type="button"
+              onClick={() => setNatureEditorOpen(true)}
+              data-testid="mother-target-nature-editor"
+              className="min-h-[28px] rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-500"
+            >
+              编辑我的推荐性格
+            </button>
+          </div>
+          {requireNatures ? (
+            <p className="text-[11px] leading-snug text-slate-400" data-testid="mother-target-nature-hint">
+              已改 {Object.keys(activeNatureOverrides(natureOverrides)).length} 颗蛋；没改的用图鉴推荐、图鉴没收录的按种族值兜底。
+              改完要再点「保存本组口径」才会生效，成员需重新发布。
+            </p>
+          ) : null}
           <button
             type="button"
             disabled={busy}
@@ -224,7 +279,14 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
             {busy ? '保存中…' : '保存本组口径'}
           </button>
           <p className="text-[11px] text-slate-400">
-            口径标识 {motherCriteriaIdOf({ mode: motherMode, bodies, voices })}
+            口径标识{requireNatures ? '（含推荐性格）' : ''}{' '}
+            {motherCriteriaIdOf({
+              mode: motherMode,
+              bodies,
+              voices,
+              requireRecommendedNatures: requireNatures,
+              natureOverrides: requireNatures ? activeNatureOverrides(natureOverrides) : undefined,
+            })}
           </p>
         </div>
       ) : null}
@@ -243,6 +305,7 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
           目标标识 {studSlotSetIdOf(target)} · {target.slots.slice(0, 3).map(slotKeyOf).join(' ')}
         </p>
       ) : null}
+      <RecommendedNatureEditor open={natureEditorOpen} onClose={() => setNatureEditorOpen(false)} />
     </section>
   );
 }

@@ -14,7 +14,12 @@ export interface InvitePreviewShape {
 }
 
 export interface CollectionGroupSetupProps {
-  onCreate: (name: string, displayName: string, groupType: CollectionGroupType) => Promise<unknown>;
+  onCreate: (
+    name: string,
+    displayName: string,
+    groupType: CollectionGroupType,
+    options?: { requireRecommendedNatures?: boolean },
+  ) => Promise<unknown>;
   onJoin: (inviteCode: string, displayName: string) => Promise<unknown>;
   preflightInvite: (inviteCode: string) => Promise<InvitePreviewShape>;
   initialInviteCode?: string;
@@ -22,7 +27,11 @@ export interface CollectionGroupSetupProps {
 
 const targetText = (target: GroupTargetConfig | null): string => {
   if (!target) return '目标待确认';
-  if (target.kind === 'mother') return `母 · ${target.bodies.join('/')} · ${target.voices.join('/')}`;
+  if (target.kind === 'mother') {
+    return `母 · ${target.bodies.join('/')} · ${target.voices.join('/')}${
+      target.requireRecommendedNatures ? ' · 推荐性格' : ''
+    }`;
+  }
   if (target.slots.length === 0) return '目标待确认';
   const natures = [...new Set(target.slots.map((slot) => slot.natureName))];
   return `${target.mode === 'perfect' ? '追满分' : '追双牌'} · ${target.slots.length} 个槽位 · ${natures.slice(0, 3).join('/')}${natures.length > 3 ? '…' : ''}`;
@@ -47,6 +56,7 @@ export function CollectionGroupSetup({
 }: CollectionGroupSetupProps) {
   const [mode, setMode] = useState<'create' | 'join'>(initialInviteCode ? 'join' : 'create');
   const [groupType, setGroupType] = useState<CollectionGroupType>('mother');
+  const [requireNatures, setRequireNatures] = useState(false);
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [inviteCode, setInviteCode] = useState(initialInviteCode);
@@ -124,6 +134,28 @@ export function CollectionGroupSetup({
           </div>
         ) : null}
 
+        {mode === 'create' && groupType === 'mother' ? (
+          <div className="mt-2 space-y-1" data-testid="group-create-nature-option">
+            <button
+              type="button"
+              aria-pressed={requireNatures}
+              onClick={() => setRequireNatures((value) => !value)}
+              data-testid="group-create-require-natures"
+              className={`min-h-[30px] w-full rounded-lg border px-2 text-xs ${
+                requireNatures
+                  ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}
+            >
+              {requireNatures ? '母本要求推荐性格：开' : '母本要求推荐性格：关'}
+            </button>
+            <p className="text-[11px] leading-snug text-slate-400">
+              开启后，母本还要符合「推荐性格」才算达标；小组用组长那份推荐性格表（默认图鉴推荐，
+              图鉴没收录的按种族值兜底）。创建后也可以在「本组目标」里改。
+            </p>
+          </div>
+        ) : null}
+
         <input
           value={displayName}
           onChange={(event) => setDisplayName(event.target.value)}
@@ -162,7 +194,9 @@ export function CollectionGroupSetup({
             disabled={busy !== '' || displayName.trim().length === 0 || name.trim().length === 0}
             onClick={() =>
               void run('create', () =>
-                onCreate(name.trim(), displayName.trim(), groupType),
+                onCreate(name.trim(), displayName.trim(), groupType, {
+                  requireRecommendedNatures: groupType === 'mother' && requireNatures,
+                }),
               )
             }
             data-testid="group-create-submit"
