@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { buildEggSearchIndex } from '../domain/petFilters';
+import { groupPublicationStatus } from '../domain/collectionPublication';
 import { CATALOG_VERSION, eggGroupNames, species } from '../data/catalog';
 import { GROUP_TYPE_LABELS, type CollectionGroupType } from '../shared/collectionGroups';
 import { CollectionGroupSetup } from './CollectionGroupSetup';
@@ -446,13 +447,16 @@ function PublicationCard({
   const mother = hook.myMember?.resource ?? null;
   const stud = hook.myMember?.studResource ?? null;
   const hasLocalData = snapshots.length > 0;
-  const status = hook.groupType === 'stud'
-    ? stud
-      ? '已发布'
-      : '未发布'
-    : mother
-      ? '已发布'
-      : '未发布';
+  // 「需更新」= 已发布的摘要与当前口径 / 图鉴可比，且和本机重建内容完全一致（2026-10-25 补回）
+  const status = groupPublicationStatus({
+    type: hook.groupType === 'stud' ? 'stud' : 'mother',
+    mother,
+    stud,
+    target: hook.target,
+    targetRevision: hook.currentGroup?.group.targetRevision ?? 0,
+    catalogVersion: CATALOG_VERSION,
+    unchanged: hook.publishPreview.diff == null || hook.publishPreview.diff.unchanged,
+  });
   const summary = hook.groupType === 'stud'
     ? stud
       ? `${stud.accounts.length} 个账号 · ${new Set(stud.accounts.flatMap((account) => account.covered.map((slot) => `${slot.groupId}:${slot.natureId}:${slot.grade}`))).size} 个覆盖格`
@@ -465,6 +469,11 @@ function PublicationCard({
     <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-publication-status">
       <h2 className="text-sm font-medium text-slate-700">我的共享资源 · {status}</h2>
       <p className="mt-1 text-xs text-slate-500">{summary}</p>
+      {status === '需更新' ? (
+        <p className="mt-1 text-[11px] text-amber-700" data-testid="group-publish-needed">
+          本机数据有更新，发布更新后组员才能看到最新资源。
+        </p>
+      ) : null}
       {!hasLocalData ? (
         <button
           type="button"
@@ -482,7 +491,7 @@ function PublicationCard({
         aria-expanded={editing}
         onClick={onToggle}
       >
-        {editing ? '收起选号' : status === '已发布' ? '管理选号' : '选号并发布'}
+        {editing ? '收起选号' : status === '需更新' ? '去发布更新' : status === '已发布' ? '管理选号' : '选号并发布'}
       </button>
       {hook.draftDirty && !editing ? (
         <p className="mt-1 text-[11px] text-amber-700" data-testid="group-draft-collapsed">

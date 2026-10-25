@@ -11,9 +11,18 @@ import { Button } from './primitives/Button';
 import { ModalSurface } from './primitives/ModalSurface';
 import { StateNotice } from './primitives/StateNotice';
 import { useImportOutcome } from './importOutcomeStore';
+import type { ImportOutcome } from './importOutcomeStore';
 import { CaptureProgressView } from './CaptureProgressView';
 
 const sizeLabel = (size: number) => `${(size / 1024 / 1024).toFixed(2)} MiB`;
+/** 导入后的云同步状态：自动导入也会顺手同步，弹窗里要能看到结果（2026-10-25） */
+const CLOUD_LABEL: Record<ImportOutcome['cloud'], string> = {
+  'not-enabled': '私有同步未开启（只保存在本机）',
+  syncing: '正在同步私有云…',
+  synced: '私有云已同步',
+  failed: '私有云同步失败（本机数据已保存）',
+  conflict: '私有云有另一份更新，到「我的 · 私有同步」处理',
+};
 const uploadStatus = (upload: CaptureUpload) => {
   const uid = upload.gameId ? ` · 游戏 UID ${upload.gameId}` : '';
   switch (upload.state) {
@@ -224,6 +233,12 @@ export function NativeCollectorPanel() {
                   ? `自动导入失败：${outcome.message ?? '请稍后在文件列表里重试'}`
                   : '正在准备自动导入…'}
           </p>
+          {outcome.local === 'saved' ? (
+            <div data-testid="capture-complete-after-import">
+              <p className="text-xs text-slate-500" data-testid="capture-complete-cloud">{CLOUD_LABEL[outcome.cloud]}</p>
+              <p className="text-xs text-slate-500" data-testid="capture-complete-group">小组资源不会自动更新；需要的话去「小组」发布更新。</p>
+            </div>
+          ) : null}
           <p className="text-xs text-slate-400">原包仍会保留；刷新页面或切回本页不会重复导入。</p>
         </div>
       </ModalSurface>

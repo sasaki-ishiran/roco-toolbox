@@ -713,7 +713,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         error: messageOf(failure),
       } as CollectionPublishPreview;
     }
-  }, [currentGroup, groupType, target, draftSelection, myMember]);
+  }, [currentGroup, groupType, target, draftSelection, myMember, input.snapshots]);
 
   const publishResource = useCallback(
     async (resource: MotherResourceDraft | StudResourceDraft) => {

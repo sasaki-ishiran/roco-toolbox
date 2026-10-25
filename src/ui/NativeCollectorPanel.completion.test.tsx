@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { CollectorState } from '../collector/nativeCollector';
 import { resetCaptureSessionMarks } from '../collector/captureSessionStore';
+import { beginImport, resetImportOutcomeForTest, updateImportOutcome } from './importOutcomeStore';
 import { NativeCollectorPanel } from './NativeCollectorPanel';
 
 vi.mock('./CaptureProgressView', () => ({
@@ -14,6 +15,7 @@ const file = { id: 'capture-123.pcap', name: 'capture-123.pcap', size: 1234, cre
 
 beforeEach(() => {
   resetCaptureSessionMarks();
+  resetImportOutcomeForTest();
 });
 
 afterEach(() => {
@@ -67,5 +69,18 @@ describe('采集完成自动停止与自动导入', () => {
     await waitFor(() => expect(bridge.importCapture).toHaveBeenCalledTimes(1));
     expect(bridge.stopCapture).toHaveBeenCalledTimes(1);
     expect(bridge.importCapture).toHaveBeenCalledTimes(1);
+  });
+
+  test('完成弹窗带出云同步结果与小组发布提示', async () => {
+    setup();
+    const operationId = beginImport();
+    updateImportOutcome(operationId, { local: 'saved', cloud: 'synced' });
+
+    const ready = await screen.findByRole('button', { name: '模拟进度走满' });
+    fireEvent.click(ready);
+
+    const dialog = await screen.findByRole('dialog', { name: '采集完成' });
+    expect(within(dialog).getByTestId('capture-complete-cloud')).toHaveTextContent('私有云已同步');
+    expect(within(dialog).getByTestId('capture-complete-group')).toHaveTextContent('发布更新');
   });
 });
