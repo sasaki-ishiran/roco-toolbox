@@ -22,6 +22,13 @@ afterEach(() => {
   delete window.RocoCapture;
 });
 
+/** 模拟 ImportPanel 的导入：真实环境里这一步由 roco-share 事件驱动 */
+const finishImport = (cloud: 'not-enabled' | 'syncing' | 'synced' = 'not-enabled') => {
+  const operationId = beginImport();
+  updateImportOutcome(operationId, { local: 'saved', cloud });
+  return operationId;
+};
+
 function setup() {
   let state: CollectorState = {
     version: 1, supported: true, phase: 'capturing', message: '采集中', packets: 2, bytes: 1234,
@@ -30,7 +37,7 @@ function setup() {
   const bridge = {
     getState: () => JSON.stringify(state),
     stopCapture: vi.fn(() => { state = { ...state, phase: 'idle', message: '已停止并保存' }; return ''; }),
-    importCapture: vi.fn(() => ''),
+    importCapture: vi.fn(() => { finishImport(); return ''; }),
     shareCapture: vi.fn(() => ''),
     startCapture: vi.fn(() => ''),
     openGame: vi.fn(() => ''),
@@ -43,7 +50,7 @@ function setup() {
 }
 
 describe('采集完成自动停止与自动导入', () => {
-  test('进度走满后自动停止、保存并自动导入；弹窗只给取消 / 上传', async () => {
+  test('导入结束后才弹「导入完成」；按钮只给取消 / 上传', async () => {
     const bridge = setup();
     const ready = await screen.findByRole('button', { name: '模拟进度走满' });
     fireEvent.click(ready);
@@ -51,8 +58,9 @@ describe('采集完成自动停止与自动导入', () => {
     await waitFor(() => expect(bridge.stopCapture).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(bridge.importCapture).toHaveBeenCalledWith(file.id));
 
-    const dialog = await screen.findByRole('dialog', { name: '采集完成' });
+    const dialog = await screen.findByRole('dialog', { name: '导入完成' });
     expect(dialog).toHaveTextContent('已自动停止并保存本次采集');
+    expect(dialog).toHaveTextContent('游戏数据已保存到本机');
     expect(within(dialog).getByRole('button', { name: '取消' })).toBeTruthy();
     expect(within(dialog).queryByRole('button', { name: '解析并导入' })).toBeNull();
 
@@ -71,15 +79,33 @@ describe('采集完成自动停止与自动导入', () => {
     expect(bridge.importCapture).toHaveBeenCalledTimes(1);
   });
 
+  test('壳还在保存时先重试；本机导入与云同步都结束后才弹窗', async () => {
+    const bridge = setup();
+    let calls = 0;
+    bridge.importCapture.mockImplementation(() => {
+      calls += 1;
+      if (calls <= 2) throw new Error('请先停止采集并等待保存完成');
+      const operationId = finishImport('syncing');
+      window.setTimeout(() => updateImportOutcome(operationId, { cloud: 'synced' }), 60);
+      return '';
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: '模拟进度走满' }));
+    // 还在保存 / 导入 / 同步：不弹窗
+    expect(screen.queryByRole('dialog', { name: '导入完成' })).toBeNull();
+
+    const dialog = await screen.findByRole('dialog', { name: '导入完成' }, { timeout: 6000 });
+    expect(within(dialog).getByTestId('capture-complete-cloud')).toHaveTextContent('私有云已同步');
+    expect(bridge.importCapture).toHaveBeenCalledTimes(3);
+  });
+
   test('完成弹窗带出云同步结果与小组发布提示', async () => {
-    setup();
-    const operationId = beginImport();
-    updateImportOutcome(operationId, { local: 'saved', cloud: 'synced' });
+    const bridge = setup();
+    bridge.importCapture.mockImplementation(() => { finishImport('synced'); return ''; });
 
-    const ready = await screen.findByRole('button', { name: '模拟进度走满' });
-    fireEvent.click(ready);
+    fireEvent.click(await screen.findByRole('button', { name: '模拟进度走满' }));
 
-    const dialog = await screen.findByRole('dialog', { name: '采集完成' });
+    const dialog = await screen.findByRole('dialog', { name: '导入完成' });
     expect(within(dialog).getByTestId('capture-complete-cloud')).toHaveTextContent('私有云已同步');
     expect(within(dialog).getByTestId('capture-complete-group')).toHaveTextContent('发布更新');
   });

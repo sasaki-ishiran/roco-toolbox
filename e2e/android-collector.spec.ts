@@ -132,8 +132,8 @@ test('角色精灵和分页蛋仓收齐后，内容连续稳定后自动停止�
   const done = page.getByTestId('capture-complete');
   await expect(done).toBeVisible({ timeout: 35000 });
   await expect(done).toContainText('已自动停止并保存本次采集');
-  // 自动导入（2026-10-25）：弹窗里能看到导入状态，按钮只剩「取消 / 上传蛋神助手」
-  await expect(done.getByTestId('capture-complete-status')).toContainText('工具箱');
+  // 自动导入（2026-10-25）：弹窗等本机导入与云同步结束后才出现，按钮只剩「取消 / 上传蛋神助手」
+  await expect(done.getByTestId('capture-complete-outcome')).toContainText('导入完成');
   await expect(done.getByTestId('capture-complete-cloud')).toContainText('私有同步未开启');
   await expect(done.getByTestId('capture-complete-group')).toContainText('发布更新');
   await expect(page.getByTestId('capture-progress')).toHaveCount(0);

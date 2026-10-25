@@ -21,8 +21,23 @@ export const markAutoImported = (session: string): void => {
   autoImported.add(session);
 };
 
+/**
+ * 自动导入已发起、但弹窗还没看过的会话。
+ * 等待导入 / 云同步期间用户切到别的页会卸载面板；回来时用它补弹「导入完成」，不丢结果。
+ */
+let pendingCompletion: string | null = null;
+export const setPendingCompletion = (session: string): void => {
+  pendingCompletion = session;
+};
+export const takePendingCompletion = (): string | null => {
+  const session = pendingCompletion;
+  pendingCompletion = null;
+  return session;
+};
+
 /** 只用于测试：清空会话标记。 */
 export const resetCaptureSessionMarks = (): void => {
   autoStopped.clear();
   autoImported.clear();
+  pendingCompletion = null;
 };

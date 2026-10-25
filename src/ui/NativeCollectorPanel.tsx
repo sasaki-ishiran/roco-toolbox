@@ -5,16 +5,29 @@ import {
   hasAutoStopped,
   markAutoImported,
   markAutoStopped,
+  setPendingCompletion,
+  takePendingCompletion,
   unmarkAutoStopped,
 } from '../collector/captureSessionStore';
 import { Button } from './primitives/Button';
 import { ModalSurface } from './primitives/ModalSurface';
 import { StateNotice } from './primitives/StateNotice';
-import { useImportOutcome } from './importOutcomeStore';
+import { getImportOutcome, useImportOutcome } from './importOutcomeStore';
 import type { ImportOutcome } from './importOutcomeStore';
 import { CaptureProgressView } from './CaptureProgressView';
 
 const sizeLabel = (size: number) => `${(size / 1024 / 1024).toFixed(2)} MiB`;
+/** 等文件落盘 / 等导入与云同步的上限；超时也要给用户一个结果，不能一直转圈 */
+const SAVE_WAIT_MS = 8000;
+const IMPORT_WAIT_MS = 20000;
+const delay = (ms: number) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms); });
+/** 自动导入走到哪一步（弹窗只在 done / failed 时出现，2026-10-25 用户要求） */
+type AutoStage = 'idle' | 'stopping' | 'importing' | 'syncing' | 'done' | 'failed';
+const AUTO_STAGE_LABEL: Partial<Record<AutoStage, string>> = {
+  stopping: '正在保存本次采集…',
+  importing: '已保存，正在导入工具箱…',
+  syncing: '已导入工具箱，正在同步私有云…',
+};
 /** 导入后的云同步状态：自动导入也会顺手同步，弹窗里要能看到结果（2026-10-25） */
 const CLOUD_LABEL: Record<ImportOutcome['cloud'], string> = {
   'not-enabled': '私有同步未开启（只保存在本机）',
@@ -44,8 +57,11 @@ export function NativeCollectorPanel() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [requestedImport, setRequestedImport] = useState(false);
-  /** 自动停止保存成功后弹「采集完成」，值是本次保存的文件 id */
+  /** 自动导入结束（成功或失败）后才弹「导入完成」，值是本次保存的文件 id */
   const [completed, setCompleted] = useState<string | null>(null);
+  const [autoStage, setAutoStage] = useState<AutoStage>('idle');
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const lastActionError = useRef<string | null>(null);
   const importLock = useRef(false);
   const mounted = useRef(false);
   const reading = useRef(false);
@@ -76,6 +92,9 @@ export function NativeCollectorPanel() {
   }, []);
   useEffect(() => {
     mounted.current = true;
+    // 等待导入期间切走再回来：补弹上次没看过的「导入完成」
+    const pending = takePendingCompletion();
+    if (pending) setCompleted(pending);
     void refresh();
     const poll = window.setInterval(() => { if (!document.hidden) refresh(); }, 1500);
     const visible = () => { if (!document.hidden) refresh(); };
@@ -84,6 +103,7 @@ export function NativeCollectorPanel() {
   }, [refresh]);
   const action = async (name: CollectorAction, id?: string): Promise<boolean> => {
     setActionError(null);
+    lastActionError.current = null;
     if (name === 'importCapture') {
       if (importing || importLock.current) return false;
       importLock.current = true;
@@ -96,30 +116,108 @@ export function NativeCollectorPanel() {
       return true;
     }
     catch (cause) {
+      const message = cause instanceof Error ? cause.message : '操作失败，请重试';
+      lastActionError.current = message;
       setRequestedImport(false);
-      setActionError(cause instanceof Error ? cause.message : '操作失败，请重试');
+      setActionError(message);
       return false;
     }
     finally { await refresh(); }
   };
+  /** 等壳把文件真正保存完（阶段回到 idle 且能看到这个文件），再请求导入 */
+  const waitForSaved = async (session: string): Promise<boolean> => {
+    const deadline = Date.now() + SAVE_WAIT_MS;
+    while (mounted.current && Date.now() < deadline) {
+      try {
+        const current = await readCollectorState();
+        if (mounted.current) setState(current);
+        if (current && current.phase === 'idle' && current.files.some((file) => file.id === session)) return true;
+      } catch { /* 保存中读不到状态：继续等 */ }
+      await delay(300);
+    }
+    return false;
+  };
+  /**
+   * 壳里的 importCapture 在「还在保存」时会被拒绝（请先停止采集并等待保存完成）。
+   * 刚停完就调用很容易撞上这个窗口，所以按提示重试一小会儿再判失败。
+   */
+  const importWithRetry = async (session: string): Promise<boolean> => {
+    for (let attempt = 0; attempt < 30 && mounted.current; attempt += 1) {
+      if (await action('importCapture', session)) return true;
+      if (!/等待保存完成/.test(lastActionError.current ?? '')) return false;
+      await delay(500);
+    }
+    return false;
+  };
+  /** 等导入结果：本机保存完成 → 云同步到终态（或超时）。弹窗只在这之后出现。 */
+  const waitForImportOutcome = async (baseline: number): Promise<'saved' | 'failed' | 'timeout'> => {
+    const deadline = Date.now() + IMPORT_WAIT_MS;
+    while (mounted.current && Date.now() < deadline) {
+      const current = getImportOutcome();
+      if (current.operationId > baseline) {
+        if (current.local === 'failed') return 'failed';
+        if (current.local === 'saved') {
+          if (current.cloud !== 'syncing') return 'saved';
+          setAutoStage('syncing');
+        }
+      }
+      await delay(250);
+    }
+    const current = getImportOutcome();
+    if (current.operationId > baseline && current.local === 'saved') return 'saved';
+    return current.operationId > baseline && current.local === 'failed' ? 'failed' : 'timeout';
+  };
   /**
    * 采集完成（稳定进度条走满）自动停止、保存并**自动导入**（2026-10-25 用户要求）。
-   * 不再让用户点「解析并导入」；完成后弹窗只保留「取消 / 上传蛋神助手」。
+   * 本轮再改（2026-10-25）：**先不弹窗**，等本机导入与云同步都到终态再弹「导入完成」，
+   * 避免用户只看到「正在准备自动导入」、误以为没同步。
    * 标记放在模块级会话集合里：切页卸载再回来也不会重复停止或重复导入。
    */
   const handleCaptureReady = (session: string | undefined) => {
     if (!session || hasAutoStopped(session)) return;
     markAutoStopped(session);
-    void action('stopCapture').then(async (saved) => {
-      if (!saved) {
+    setCompletionError(null);
+    setAutoStage('stopping');
+    void (async () => {
+      const stopped = await action('stopCapture');
+      if (!stopped) {
         unmarkAutoStopped(session);
+        if (mounted.current) setAutoStage('idle');
         return;
       }
-      if (mounted.current) setCompleted(session);
+      const saved = await waitForSaved(session);
+      if (!mounted.current) return;
+      if (!saved) {
+        setAutoStage('idle');
+        setActionError('采集已保存，但没等到文件就绪；请在文件列表里点「解析并导入」');
+        return;
+      }
       if (hasAutoImported(session)) return;
       markAutoImported(session);
-      await action('importCapture', session);
-    });
+      setAutoStage('importing');
+      const baseline = getImportOutcome().operationId;
+      const requested = await importWithRetry(session);
+      if (!requested) {
+        if (!mounted.current) { setPendingCompletion(session); return; }
+        setAutoStage('failed');
+        setCompletionError(lastActionError.current ?? '无法开始导入');
+        setCompleted(session);
+        return;
+      }
+      const result = await waitForImportOutcome(baseline);
+      // 等结果期间切页会卸载面板：记下待弹提示，回来再补，且只补一次
+      if (!mounted.current) { setPendingCompletion(session); return; }
+      if (result === 'failed') {
+        setAutoStage('failed');
+        setCompletionError(getImportOutcome().message ?? '导入失败，请在文件列表里重试');
+      } else if (result === 'timeout') {
+        setAutoStage('failed');
+        setCompletionError('导入没有完成，请在文件列表里点「解析并导入」重试');
+      } else {
+        setAutoStage('done');
+      }
+      setCompleted(session);
+    })();
   };
   if (!checked) {
     // 有采集桥但状态还没读完：先撑住卡片高度，避免切进「我的」时整块从无到有闪一下
@@ -149,6 +247,9 @@ export function NativeCollectorPanel() {
   const busy = state != null && ['starting', 'capturing', 'stopping'].includes(state.phase);
   const uploadSupported = typeof window.RocoCapture?.uploadCapture === 'function';
   const completedFile = completed ? state?.files.find((file) => file.id === completed) : undefined;
+  /** 弹窗只在导入结束后出现；失败 / 超时 / 导入报错都算「未完成」，要继续给出可操作提示 */
+  const importFailed = autoStage === 'failed' || outcome.local === 'failed' || completionError != null;
+  const popupTitle = importFailed ? '导入未完成' : outcome.local === 'importing' ? '正在导入' : '导入完成';
   return (
     <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm" data-testid="native-collector">
       <h2 className="text-base font-semibold text-slate-900">本机采集</h2>
@@ -170,6 +271,9 @@ export function NativeCollectorPanel() {
         </>}
         <StateNotice kind={state.phase === 'failed' ? 'error' : 'cached'} title={state.message || '准备采集'} />
         <CaptureProgressView state={state} onReady={() => handleCaptureReady(state.fileId)} />
+        {AUTO_STAGE_LABEL[autoStage] ? (
+          <p className="text-xs text-emerald-700" data-testid="capture-auto-status">{AUTO_STAGE_LABEL[autoStage]}</p>
+        ) : null}
         {busy ? <p className="text-xs text-slate-500">已记录 {state.packets} 包 · {sizeLabel(state.bytes)}。数量不代表数据已收齐。</p> : null}
         <p className="text-xs text-slate-500">最多保留 10 个原包，每次上限 128 MiB；导入后仍保留，不会自动清理。</p>
         {!uploadSupported ? <p className="text-xs text-slate-500">更新安卓安装包后可直接上传蛋神助手。</p> : null}
@@ -200,7 +304,7 @@ export function NativeCollectorPanel() {
           <a className="inline-flex min-h-[32px] items-center text-emerald-700 underline" href="https://github.com/sasaki-ishiran/roco-toolbox/blob/codex/android-collector/android-shell/THIRD_PARTY.md" target="_blank" rel="noreferrer">查看来源、许可证与对应源码</a>
         </details>
       </> : null}
-      <ModalSurface open={completed != null} title="采集完成" onClose={() => setCompleted(null)} testId="capture-complete" footer={
+      <ModalSurface open={completed != null} title={popupTitle} onClose={() => setCompleted(null)} testId="capture-complete" footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setCompleted(null)}>取消</Button>
           <Button
@@ -223,23 +327,25 @@ export function NativeCollectorPanel() {
         </div>
       }>
         <div className="space-y-1 p-4" data-testid="capture-complete-status">
-          <p className="text-sm text-slate-600">已自动停止并保存本次采集，无需再手动解析。</p>
-          <p className="text-xs text-slate-400">
-            {importing
-              ? '正在自动解析并导入工具箱…'
-              : outcome.local === 'saved'
-                ? '已自动导入工具箱。'
-                : outcome.local === 'failed'
-                  ? `自动导入失败：${outcome.message ?? '请稍后在文件列表里重试'}`
-                  : '正在准备自动导入…'}
-          </p>
+          <p className="text-sm text-slate-600">已自动停止并保存本次采集。</p>
+          {importFailed ? (
+            <p className="text-xs text-rose-600" data-testid="capture-complete-outcome">
+              导入没有完成：{completionError ?? outcome.message ?? '请在文件列表里点「解析并导入」重试'}
+            </p>
+          ) : outcome.local === 'importing' ? (
+            <p className="text-xs text-slate-400" data-testid="capture-complete-outcome">正在导入工具箱…</p>
+          ) : (
+            <p className="text-xs text-slate-600" data-testid="capture-complete-outcome">导入完成，游戏数据已保存到本机。</p>
+          )}
           {outcome.local === 'saved' ? (
             <div data-testid="capture-complete-after-import">
               <p className="text-xs text-slate-500" data-testid="capture-complete-cloud">{CLOUD_LABEL[outcome.cloud]}</p>
               <p className="text-xs text-slate-500" data-testid="capture-complete-group">小组资源不会自动更新；需要的话去「小组」发布更新。</p>
             </div>
           ) : null}
-          <p className="text-xs text-slate-400">原包仍会保留；刷新页面或切回本页不会重复导入。</p>
+          <p className="text-xs text-slate-400">
+            {importFailed ? '原包仍保留在文件列表里，可手动重试或直接上传蛋神助手。' : '原包仍会保留；刷新页面或切回本页不会重复导入。'}
+          </p>
         </div>
       </ModalSurface>
       <ModalSurface open={deleting != null} title="删除本机原包？" onClose={() => setDeleting(null)} footer={
