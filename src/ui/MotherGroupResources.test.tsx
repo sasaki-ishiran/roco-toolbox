@@ -58,7 +58,7 @@ describe('MotherGroupResources 三视图', () => {
     );
   });
 
-  test('要求推荐性格时，卡片上直接展示组长设定的蛋与性格', () => {
+  test('要求推荐性格时，每条母本条目直接标出本组要的性格', () => {
     const target = {
       kind: 'mother' as const,
       criteriaId: 'mother-v2-test',
@@ -67,21 +67,9 @@ describe('MotherGroupResources 三视图', () => {
       voices: ['+100'],
       catalogVersion: FIXTURE_CATALOG_VERSION,
       requireRecommendedNatures: true,
+      natureOverrides: { '101': ['固执', '开朗'] },
     };
     const { rerender } = render(
-      <MotherGroupResources
-        group={group}
-        viewerAccountId="A"
-        species={catalog}
-        catalogVersion={FIXTURE_CATALOG_VERSION}
-        target={{ ...target, natureOverrides: { '101': ['固执', '开朗'] } }}
-      />,
-    );
-    expect(screen.getByTestId('mother-nature-scope')).toHaveTextContent('火花 固执/开朗');
-    expect(screen.getAllByTestId('mother-nature-scope-item')).toHaveLength(1);
-
-    // 没改过任何蛋 → 明确写「图鉴默认」
-    rerender(
       <MotherGroupResources
         group={group}
         viewerAccountId="A"
@@ -90,9 +78,11 @@ describe('MotherGroupResources 三视图', () => {
         target={target}
       />,
     );
-    expect(screen.getByTestId('mother-nature-scope')).toHaveTextContent('图鉴默认');
+    fireEvent.click(screen.getByTestId('mother-view-mine'));
+    expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('火花');
+    expect(screen.getByTestId('mother-resource-natures')).toHaveTextContent('性格：固执 / 开朗');
 
-    // 不开该口径 → 不展示这一行
+    // 不开该口径 → 条目上不显示性格
     rerender(
       <MotherGroupResources
         group={group}
@@ -102,7 +92,8 @@ describe('MotherGroupResources 三视图', () => {
         target={{ ...target, requireRecommendedNatures: false }}
       />,
     );
-    expect(screen.queryByTestId('mother-nature-scope')).toBeNull();
+    expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('火花');
+    expect(screen.queryByTestId('mother-resource-natures')).toBeNull();
   });
 
   test('三视图顺序：我缺的 / 我能补的 / 共同寻找', () => {
