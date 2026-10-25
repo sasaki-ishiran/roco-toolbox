@@ -10,6 +10,7 @@ import type {
 import type { CollectionTaskRecord } from '../shared/collectionGroups';
 import { ensureGroupSession, setGroupList, useGroupList, type GroupListState } from './listViewStore';
 import { InlineSelect } from './primitives/InlineSelect';
+import { InlineMultiSelect } from './primitives/InlineMultiSelect';
 import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { StateNotice } from './primitives/StateNotice';
@@ -68,7 +69,7 @@ export function MotherGroupResources({
   const list = useGroupList(viewerAccountId, group.group.id);
   const setList = (patch: Partial<GroupListState>) =>
     setGroupList(viewerAccountId, group.group.id, patch);
-  const { view, query, memberFilter, onlyOwned } = list;
+  const { view, query, memberFilter, seekingMembers, onlyOwned } = list;
   // 旧值兼容：`help`（旧的「我能补谁」）与 `all`（旧「小组资源」）都落到「我能补的」
   const effectiveView: ViewId = view === 'help' || view === 'all'
     ? 'mine'
@@ -86,8 +87,11 @@ export function MotherGroupResources({
     if (memberFilter && !group.members.some((member) => member.accountId === memberFilter)) {
       setList({ memberFilter: '' });
     }
+    const alive = new Set(group.members.map((member) => member.accountId));
+    const kept = seekingMembers.filter((id) => alive.has(id));
+    if (kept.length !== seekingMembers.length) setList({ seekingMembers: kept });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.members, memberFilter]);
+  }, [group.members, memberFilter, seekingMembers]);
 
   const rows = useMemo(
     () => buildMotherCoverage({ species, catalogVersion, members: group.members, criteriaId }),
@@ -121,26 +125,39 @@ export function MotherGroupResources({
         : member.displayName;
   }, [group.members]);
 
+  /**
+   * 共同寻找 = 选中的人都缺的精灵（交集），空选择 = 全组成员。
+   *
+   * 2026-10-25 用户口径：组里进了个几乎全收集的人时，不能让他一个人「补齐」共同寻找；
+   * 把范围收缩到「我们几个」，看的才是我们真的一起要去找的东西。
+   */
+  const seekingScope =
+    seekingMembers.length > 0
+      ? seekingMembers
+      : group.members.map((member) => member.accountId);
+  const seekingRows = rows.filter((row) =>
+    seekingScope.every(
+      (id) =>
+        row.missingMemberIds.includes(id) || row.unknownMemberIds.includes(id),
+    ),
+  );
+
   const currentRows =
     effectiveView === 'missing'
       ? views.missingForMe
       : effectiveView === 'mine'
         ? views.mineForOthers
-        : rows.filter((row) => row.holders.length === 0);
+        : seekingRows;
 
   const filtered = (currentRows ?? []).filter((row) => {
     if (onlyOwned && row.holders.length === 0) return false;
     if (memberFilter) {
-      // 我缺的 / 共同寻找：按「谁有」筛；我能补的：按「缺这只的人」筛
+      // 我缺的：按「谁有」筛；我能补的：按「缺这只的人」筛
       // （选莱茵 = 看我能补给莱茵哪些，2026-10-25 用户口径）
       const related =
-        effectiveView === 'seeking'
-          ? row.holders.some((holder) => holder.accountId === memberFilter) ||
-            row.missingMemberIds.includes(memberFilter) ||
-            row.unknownMemberIds.includes(memberFilter)
-          : effectiveView === 'mine'
-            ? row.missingMemberIds.includes(memberFilter)
-            : row.holders.some((holder) => holder.accountId === memberFilter);
+        effectiveView === 'mine'
+          ? row.missingMemberIds.includes(memberFilter)
+          : row.holders.some((holder) => holder.accountId === memberFilter);
       if (!related) return false;
     }
     const keyword = query.trim().toLowerCase();
@@ -251,22 +268,40 @@ export function MotherGroupResources({
           />
           只看组内有人拥有
         </label>
-        <InlineSelect
-          label="筛选成员"
-          value={memberFilter}
-          options={[
-            { value: '', label: '全部成员' },
-            ...group.members.map((member) => ({
+        {effectiveView === 'seeking' ? (
+          <InlineMultiSelect
+            label="共同寻找范围"
+            values={seekingMembers}
+            options={group.members.map((member) => ({
               value: member.accountId,
               label: labelOf(member),
-            })),
-          ]}
-          onValueChange={(value) => setList({ memberFilter: value })}
-          testId="mother-member-filter"
-          menuTestId="mother-member-options"
-          align="right"
-          className="max-w-[168px]"
-        />
+            }))}
+            onValuesChange={(values) => setList({ seekingMembers: values })}
+            allLabel="全组成员"
+            testId="mother-seeking-members"
+            menuTestId="mother-seeking-member-options"
+            optionTestId={(value) => `mother-seeking-member-${value || 'all'}`}
+            align="right"
+            className="max-w-[168px]"
+          />
+        ) : (
+          <InlineSelect
+            label="筛选成员"
+            value={memberFilter}
+            options={[
+              { value: '', label: '全部成员' },
+              ...group.members.map((member) => ({
+                value: member.accountId,
+                label: labelOf(member),
+              })),
+            ]}
+            onValueChange={(value) => setList({ memberFilter: value })}
+            testId="mother-member-filter"
+            menuTestId="mother-member-options"
+            align="right"
+            className="max-w-[168px]"
+          />
+        )}
       </div>
 
       {/* 不可计算时不再叠一条「当前页 0 项 / 这一页没有条目」的普通空态：那是两种事实 */}
@@ -278,7 +313,11 @@ export function MotherGroupResources({
 
           {filtered.length === 0 ? (
             <p className="py-4 text-center text-xs text-slate-400">
-              {effectiveView === 'mine' ? '组员暂时没有需要你补的母本' : '这一页没有条目'}
+              {effectiveView === 'mine'
+                ? '组员暂时没有需要你补的母本'
+                : effectiveView === 'seeking'
+                  ? '选中的人没有共同缺的母本'
+                  : '这一页没有条目'}
             </p>
           ) : (
         <ul className="grid grid-cols-2 items-start gap-1.5">

@@ -107,6 +107,49 @@ describe('MotherGroupResources 三视图', () => {
     expect(screen.getByTestId('mother-resource-row')).toHaveTextContent('水蓝蓝');
   });
 
+  test('共同寻找：多选成员只看他们共同缺的，并记住选择', () => {
+    // E 几乎全收集：默认「全组」范围下共同寻找会被他一个人补齐，看不出我们真正缺什么
+    const withCollector: MotherGroupDetail = {
+      group: group.group,
+      members: [
+        member('A', resourceWith([101], { accounts: [sharedAccount(1001, [101])] })),
+        member('B', resourceWith([101], { accounts: [sharedAccount(1002, [101])] })),
+        member('E', resourceWith([101, 201], { accounts: [sharedAccount(1005, [101, 201])] })),
+        member('C', null),
+      ],
+    };
+    render(
+      <MotherGroupResources
+        group={withCollector}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+      />,
+    );
+    const names = (): string[] =>
+      screen.queryAllByTestId('mother-resource-row').map((row) => row.textContent ?? '');
+
+    fireEvent.click(screen.getByTestId('mother-view-seeking'));
+    // 全组范围：水蓝蓝被 E 补齐，不算共同缺口
+    expect(names().some((text) => text.includes('水蓝蓝'))).toBe(false);
+
+    // 只选 A、B：水蓝蓝是两人共同缺的（E 有也不影响他们的缺口）
+    fireEvent.click(screen.getByTestId('mother-seeking-members'));
+    fireEvent.click(screen.getByTestId('mother-seeking-member-A'));
+    fireEvent.click(screen.getByTestId('mother-seeking-member-B'));
+    expect(names().some((text) => text.includes('水蓝蓝'))).toBe(true);
+
+    // 切视图再回来，选择还在
+    fireEvent.click(screen.getByTestId('mother-view-missing'));
+    fireEvent.click(screen.getByTestId('mother-view-seeking'));
+    expect(names().some((text) => text.includes('水蓝蓝'))).toBe(true);
+    expect(screen.getByTestId('mother-seeking-members')).toHaveTextContent('A、B');
+    // 清空 = 回到全组范围
+    fireEvent.click(screen.getByTestId('mother-seeking-members'));
+    fireEvent.click(screen.getByTestId('mother-seeking-member-all'));
+    expect(names().some((text) => text.includes('水蓝蓝'))).toBe(false);
+  });
+
   test('共同寻找：全员确认后可认领，已认领显示负责人并可释放', async () => {
     const claim = vi.fn().mockResolvedValue(undefined);
     const release = vi.fn().mockResolvedValue(undefined);

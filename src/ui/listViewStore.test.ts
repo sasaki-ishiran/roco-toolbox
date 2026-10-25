@@ -40,6 +40,7 @@ describe('小组清单临时状态', () => {
       query: '',
       view: 'missing',
       memberFilter: '',
+      seekingMembers: [],
       onlyOwned: false,
     });
   });

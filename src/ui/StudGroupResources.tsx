@@ -11,6 +11,7 @@ import { TARGET_MODE_LABELS } from '../domain/petFilters';
 import type { CollectionGroupDetail, CollectionTaskRecord } from '../shared/collectionGroups';
 import { setGroupList, useGroupList } from './listViewStore';
 import { InlineSelect } from './primitives/InlineSelect';
+import { InlineMultiSelect } from './primitives/InlineMultiSelect';
 import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { StateNotice } from './primitives/StateNotice';
@@ -58,7 +59,7 @@ export function StudGroupResources({
   const target = group.group.target;
   const list = useGroupList(viewerAccountId, group.group.id);
   const setList = (patch: Partial<typeof list>) => setGroupList(viewerAccountId, group.group.id, patch);
-  const { view, query, memberFilter } = list;
+  const { view, query, memberFilter, seekingMembers } = list;
   const effectiveView: ViewId = view === 'help' || view === 'all'
     ? 'mine'
     : view === 'mine' || view === 'seeking'
@@ -125,24 +126,40 @@ export function StudGroupResources({
     );
   }
 
+  /**
+   * 共同寻找 = 选中的人都缺的槽位（交集），空选择 = 全组成员。
+   * 与母本组同一口径：不能因为一个几乎全收集的人就把共同寻找「补齐」。
+   */
+  const aliveIds = useMemo(
+    () => new Set(group.members.map((member) => member.accountId)),
+    [group.members],
+  );
+  const seekingPicked = seekingMembers.filter((id) => aliveIds.has(id));
+  const seekingScope = seekingPicked.length > 0
+    ? seekingPicked
+    : group.members.map((member) => member.accountId);
+  const seekingRows = rows.filter((row) =>
+    seekingScope.every(
+      (id) =>
+        row.missingMemberIds.includes(id) ||
+        row.unknownMemberIds.includes(id) ||
+        row.breedableHolders.some((holder) => holder.accountId === id),
+    ),
+  );
+
   const currentRows =
     effectiveView === 'missing'
       ? views.missingForMe
       : effectiveView === 'mine'
         ? views.mineForOthers
-        : rows.filter((row) => row.holders.length === 0);
+        : seekingRows;
   const filtered = (currentRows ?? []).filter((row) => {
     if (memberFilter) {
-      // 我缺的 / 共同寻找：按「谁有」筛；我能补的：按「缺这个槽位的人」筛
+      // 我缺的：按「谁有」筛；我能补的：按「缺这个槽位的人」筛
       const related =
-        effectiveView === 'seeking'
-          ? row.holders.some((holder) => holder.accountId === memberFilter) ||
-            row.missingMemberIds.includes(memberFilter) ||
-            row.breedableHolders.some((holder) => holder.accountId === memberFilter) ||
-            row.unknownMemberIds.includes(memberFilter)
-          : effectiveView === 'mine'
-            ? row.missingMemberIds.includes(memberFilter)
-            : row.holders.some((holder) => holder.accountId === memberFilter);
+        effectiveView === 'mine'
+          ? row.missingMemberIds.includes(memberFilter)
+          : row.holders.some((holder) => holder.accountId === memberFilter);
       if (!related) return false;
     }
     const keyword = query.trim().toLowerCase();
@@ -227,19 +244,37 @@ export function StudGroupResources({
         testId="stud-slot-search"
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <InlineSelect
-          label="筛选成员"
-          value={memberFilter}
-          options={[
-            { value: '', label: '全部成员' },
-            ...group.members.map((member) => ({ value: member.accountId, label: labelOf(member.accountId) })),
-          ]}
-          onValueChange={(value) => setList({ memberFilter: value })}
-          testId="stud-member-filter"
-          menuTestId="stud-member-options"
-          align="right"
-          className="max-w-[168px]"
-        />
+        {effectiveView === 'seeking' ? (
+          <InlineMultiSelect
+            label="共同寻找范围"
+            values={seekingMembers}
+            options={group.members.map((member) => ({
+              value: member.accountId,
+              label: labelOf(member.accountId),
+            }))}
+            onValuesChange={(values) => setList({ seekingMembers: values })}
+            allLabel="全组成员"
+            testId="stud-seeking-members"
+            menuTestId="stud-seeking-member-options"
+            optionTestId={(value) => `stud-seeking-member-${value || 'all'}`}
+            align="right"
+            className="max-w-[168px]"
+          />
+        ) : (
+          <InlineSelect
+            label="筛选成员"
+            value={memberFilter}
+            options={[
+              { value: '', label: '全部成员' },
+              ...group.members.map((member) => ({ value: member.accountId, label: labelOf(member.accountId) })),
+            ]}
+            onValueChange={(value) => setList({ memberFilter: value })}
+            testId="stud-member-filter"
+            menuTestId="stud-member-options"
+            align="right"
+            className="max-w-[168px]"
+          />
+        )}
       </div>
 
       {currentRows !== null ? (
@@ -249,7 +284,11 @@ export function StudGroupResources({
           </p>
           {filtered.length === 0 ? (
             <p className="py-4 text-center text-xs text-slate-400">
-              {effectiveView === 'mine' ? '组员暂时没有需要你补的槽位' : '这一页没有条目'}
+              {effectiveView === 'mine'
+                ? '组员暂时没有需要你补的槽位'
+                : effectiveView === 'seeking'
+                  ? '选中的人没有共同缺的槽位'
+                  : '这一页没有条目'}
             </p>
           ) : (
             <div className="space-y-2">

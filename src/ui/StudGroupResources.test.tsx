@@ -128,6 +128,35 @@ describe('StudGroupResources', () => {
     expect(screen.queryAllByTestId('stud-slot-row')).toHaveLength(0);
   });
 
+  test('共同寻找：多选成员只看他们共同缺的槽位，并记住选择', () => {
+    // E 两个槽位都有：全组范围下共同寻找被补齐，只看得到「选中的人共同缺的」
+    const withCollector: CollectionGroupDetail = {
+      ...group,
+      members: [
+        member('A', studResource([slot(2, 11)])),
+        member('B', studResource([])),
+        member('E', studResource([slot(2, 11), slot(3, 12)])),
+        member('C', null),
+      ],
+    };
+    render(<StudGroupResources group={withCollector} viewerAccountId="A" catalogVersion="v1" />);
+    fireEvent.click(screen.getByTestId('stud-slot-view-seeking'));
+    expect(screen.queryAllByTestId('stud-slot-row')).toHaveLength(0);
+
+    fireEvent.click(screen.getByTestId('stud-seeking-members'));
+    fireEvent.click(screen.getByTestId('stud-seeking-member-A'));
+    fireEvent.click(screen.getByTestId('stud-seeking-member-B'));
+    const rows = screen.getAllByTestId('stud-slot-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('固执');
+
+    // 切视图再回来，选择还在
+    fireEvent.click(screen.getByTestId('stud-slot-view-mine'));
+    fireEvent.click(screen.getByTestId('stud-slot-view-seeking'));
+    expect(screen.getAllByTestId('stud-slot-row')).toHaveLength(1);
+    expect(screen.getByTestId('stud-seeking-members')).toHaveTextContent('成员A、成员B');
+  });
+
   test('搜索按蛋组 / 性格过滤', () => {
     render(<StudGroupResources group={group} viewerAccountId="A" catalogVersion="v1" />);
     fireEvent.change(screen.getByTestId('stud-slot-search'), { target: { value: '固执' } });

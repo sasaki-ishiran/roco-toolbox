@@ -52,6 +52,11 @@ export interface GroupListState {
    */
   view: 'missing' | 'mine' | 'seeking' | 'help' | 'all';
   memberFilter: string;
+  /**
+   * 「共同寻找」的范围（多选）：空 = 全部成员。
+   * 与 memberFilter 分开记：前者回答「我们几个共同缺什么」，后者回答「谁有 / 谁缺」。
+   */
+  seekingMembers: string[];
   onlyOwned: boolean;
 }
 
@@ -59,6 +64,7 @@ const GROUP_DEFAULT: GroupListState = {
   query: '',
   view: 'missing',
   memberFilter: '',
+  seekingMembers: [],
   onlyOwned: false,
 };
 
