@@ -58,6 +58,53 @@ describe('MotherGroupResources 三视图', () => {
     );
   });
 
+  test('要求推荐性格时，卡片上直接展示组长设定的蛋与性格', () => {
+    const target = {
+      kind: 'mother' as const,
+      criteriaId: 'mother-v2-test',
+      mode: 'perfect' as const,
+      bodies: ['大块头'],
+      voices: ['+100'],
+      catalogVersion: FIXTURE_CATALOG_VERSION,
+      requireRecommendedNatures: true,
+    };
+    const { rerender } = render(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        target={{ ...target, natureOverrides: { '101': ['固执', '开朗'] } }}
+      />,
+    );
+    expect(screen.getByTestId('mother-nature-scope')).toHaveTextContent('火花 固执/开朗');
+    expect(screen.getAllByTestId('mother-nature-scope-item')).toHaveLength(1);
+
+    // 没改过任何蛋 → 明确写「图鉴默认」
+    rerender(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        target={target}
+      />,
+    );
+    expect(screen.getByTestId('mother-nature-scope')).toHaveTextContent('图鉴默认');
+
+    // 不开该口径 → 不展示这一行
+    rerender(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        target={{ ...target, requireRecommendedNatures: false }}
+      />,
+    );
+    expect(screen.queryByTestId('mother-nature-scope')).toBeNull();
+  });
+
   test('三视图顺序：我缺的 / 我能补的 / 共同寻找', () => {
     renderResources();
     const groupControl = screen.getByRole('group', { name: '小组资源视图' });

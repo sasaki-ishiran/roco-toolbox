@@ -9,6 +9,7 @@ import type {
 } from '../shared/motherGroups';
 import type { CollectionTaskRecord } from '../shared/collectionGroups';
 import { motherTargetLabel, type MotherTargetConfig } from '../shared/collectionGroups';
+import { speciesDisplayName } from '../domain/speciesName';
 import { ensureGroupSession, setGroupList, useGroupList, type GroupListState } from './listViewStore';
 import { InlineSelect } from './primitives/InlineSelect';
 import { InlineMultiSelect } from './primitives/InlineMultiSelect';
@@ -224,6 +225,25 @@ export function MotherGroupResources({
     }
   };
 
+  /**
+   * 本组要求推荐性格时，把组长设定过的蛋 + 性格直接摊在卡片上（2026-10-25 用户要求），
+   * 成员不用翻「本组目标」才知道哪些蛋按什么性格算。
+   */
+  const natureScope = useMemo(() => {
+    if (target?.kind !== 'mother' || target.requireRecommendedNatures !== true) return null;
+    return Object.entries(target.natureOverrides ?? {})
+      .filter(([, natures]) => natures.length > 0)
+      .map(([eggId, natures]) => {
+        const entry = species.find((item) => item.gameId === Number(eggId));
+        return {
+          key: eggId,
+          label: entry ? speciesDisplayName(entry, entry.name) : `蛋${eggId}`,
+          natures,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hans-CN'));
+  }, [target, species]);
+
   return (
     <section className="space-y-2 rounded-2xl bg-white p-2.5 shadow-sm" data-testid="mother-resources">
       <div className="flex items-baseline justify-between gap-2">
@@ -233,6 +253,33 @@ export function MotherGroupResources({
         </span>
       </div>
       <p className="text-[11px] text-slate-400">按已共享账号汇总，未知成员不计缺口。</p>
+
+      {natureScope ? (
+        <div
+          className="flex flex-wrap items-center gap-1 text-[11px]"
+          data-testid="mother-nature-scope"
+        >
+          <span className="text-slate-400">推荐性格：</span>
+          {natureScope.length === 0 ? (
+            <span className="text-slate-400">图鉴默认</span>
+          ) : (
+            <>
+              {natureScope.slice(0, 6).map((item) => (
+                <span
+                  key={item.key}
+                  data-testid="mother-nature-scope-item"
+                  className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-700"
+                >
+                  {item.label} {item.natures.join('/')}
+                </span>
+              ))}
+              {natureScope.length > 6 ? (
+                <span className="text-slate-400">等 {natureScope.length} 颗</span>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
 
       <SegmentedControl
         label="小组资源视图"
