@@ -73,9 +73,39 @@ export function buildStudCoverage(input: {
   members: readonly CollectionGroupMember[];
 }): StudSlotRow[] {
   const { target, targetRevision, catalogVersion, members } = input;
-  const comparable = members.filter((member) =>
-    isStudMemberComparable(member, target, targetRevision, catalogVersion),
+  const comparableIds = new Set(
+    members
+      .filter((member) => isStudMemberComparable(member, target, targetRevision, catalogVersion))
+      .map((member) => member.accountId),
   );
+  // 每个成员只解析一次摘要：槽位键 → 来源账号。避免「槽位 × 成员 × 账号 × 槽位」全量比较。
+  const indexed = new Map<
+    string,
+    { covered: Map<string, string[]>; breedable: Map<string, string[]> }
+  >();
+  const indexSlots = (
+    accounts: PublishedStudResource['accounts'],
+    field: 'covered' | 'breedable',
+  ): Map<string, string[]> => {
+    const map = new Map<string, string[]>();
+    for (const account of accounts) {
+      for (const item of account[field]) {
+        const key = slotKeyOf(item);
+        const list = map.get(key);
+        if (list) list.push(account.accountKey);
+        else map.set(key, [account.accountKey]);
+      }
+    }
+    return map;
+  };
+  for (const member of members) {
+    if (!comparableIds.has(member.accountId)) continue;
+    const resource = member.studResource as PublishedStudResource;
+    indexed.set(member.accountId, {
+      covered: indexSlots(resource.accounts, 'covered'),
+      breedable: indexSlots(resource.accounts, 'breedable'),
+    });
+  }
 
   return target.slots.map((slot) => {
     const key = slotKeyOf(slot);
@@ -85,27 +115,19 @@ export function buildStudCoverage(input: {
     const unknownMemberIds: string[] = [];
 
     for (const member of members) {
-      if (!comparable.includes(member)) {
+      const index = indexed.get(member.accountId);
+      if (!index) {
         unknownMemberIds.push(member.accountId);
         continue;
       }
-      const resource = member.studResource as PublishedStudResource;
-      const covered = new Set<string>();
-      const breedable = new Set<string>();
-      for (const account of resource.accounts) {
-        for (const item of account.covered) {
-          if (slotKeyOf(item) === key) covered.add(account.accountKey);
-        }
-        for (const item of account.breedable) {
-          if (slotKeyOf(item) === key) breedable.add(account.accountKey);
-        }
-      }
-      if (covered.size > 0) {
+      const covered = index.covered.get(key);
+      const breedable = index.breedable.get(key);
+      if (covered && covered.length > 0) {
         holders.push({
           accountId: member.accountId,
           accountKeys: [...covered].sort(compareAccountKey),
         });
-      } else if (breedable.size > 0) {
+      } else if (breedable && breedable.length > 0) {
         breedableHolders.push({
           accountId: member.accountId,
           accountKeys: [...breedable].sort(compareAccountKey),

@@ -9,7 +9,7 @@ import {
   type CollectionGroupType,
   type GroupTargetConfig,
 } from '../shared/collectionGroups';
-import { activeNatureOverrides } from '../domain/recommendedNatures';
+import { activeNatureOverrides, createNaturesResolver } from '../domain/recommendedNatures';
 import { getNatureOverrides } from './natureOverrideStore';
 import { CollectionGroupSetup } from './CollectionGroupSetup';
 import { useCollectionGroups } from './useCollectionGroups';
@@ -53,22 +53,38 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
 
   const searchIndex = useMemo(() => buildEggSearchIndex(species), []);
+  // 选号页的「达标 N 种」必须与发布同源：开启推荐性格时也要按组长那份覆盖表判定
+  const motherOverrides = hook.target?.kind === 'mother' ? hook.target.natureOverrides : undefined;
+  const motherOverridesKey = JSON.stringify(motherOverrides ?? {});
+  const motherNaturesOf = useMemo(
+    () => createNaturesResolver({ species, overrides: motherOverrides }),
+    [species, motherOverridesKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const editing = hook.currentGroupId != null && editingGroupId === hook.currentGroupId;
   const inGroup = hook.pageMode === 'group' && hook.currentGroup != null;
+  /** 组模式但详情还没回来：显示加载态，不能先渲染个人求蛋（切组时会闪一屏无关内容）。 */
+  const groupLoading = hook.pageMode === 'group' && hook.currentGroup == null && hook.currentGroupId != null;
 
   useEffect(() => {
     onDraftDirtyChange?.(hook.draftDirty);
     return () => onDraftDirtyChange?.(false);
   }, [hook.draftDirty, onDraftDirtyChange]);
 
-  // 直达：目标类型与当前组不符时切到个人模式，由用户决定加入哪个组
+  // 直达：优先进入同类型的组；没有兼容组时才落到个人求蛋
   useEffect(() => {
-    if (!focus?.groupType) return;
-    if (hook.currentGroup?.group.groupType === focus.groupType) return;
+    const type = focus?.groupType;
+    if (!type) return;
+    if (hook.currentGroup?.group.groupType === type) return;
+    if (hook.pageMode === 'group' && hook.currentGroupId && hook.currentGroup == null) return;
+    const compatible = hook.groups.find((group) => group.groupType === type);
+    if (compatible) {
+      hook.selectGroup(compatible.id, type);
+      return;
+    }
     hook.selectPersonal();
-    hook.setPersonalType(focus.groupType);
+    hook.setPersonalType(type);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus?.groupType, focus?.eggGameId]);
+  }, [focus?.groupType, focus?.eggGameId, hook.groups.length, hook.currentGroup?.group.id]);
 
   const selectGroup = async (groupId: string) => {
     if (groupId === hook.currentGroupId && hook.pageMode === 'group') return;
@@ -84,7 +100,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
     <section className="mx-auto max-w-md space-y-2 p-4" data-testid="collection-groups">
       <GroupSwitcher
         groups={hook.groups}
-        currentGroupId={inGroup ? hook.currentGroupId : null}
+        currentGroupId={hook.pageMode === 'group' ? hook.currentGroupId : null}
         pageMode={hook.pageMode}
         onSelect={(groupId) => void selectGroup(groupId)}
         onSelectPersonal={() => void (confirmLeave().then((ok) => ok && hook.selectPersonal()))}
@@ -107,7 +123,14 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
         </p>
       ) : null}
 
-      {inGroup && hook.currentGroup ? (
+      {groupLoading ? (
+        <div
+          className="rounded-2xl bg-white p-4 shadow-sm text-xs text-slate-500"
+          data-testid="group-loading"
+        >
+          正在读取小组资源…
+        </div>
+      ) : inGroup && hook.currentGroup ? (
         <>
           <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-card">
             <div className="flex items-start justify-between gap-2">
@@ -183,12 +206,16 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
                     ? {
                         bodies: hook.target.bodies as never,
                         voices: hook.target.voices as never,
+                        recommendedNatures: hook.target.requireRecommendedNatures === true,
                       }
                     : undefined
                 }
+                naturesOf={motherNaturesOf}
                 criteriaLabel={
                   hook.target?.kind === 'mother'
-                    ? `母 · ${hook.target.bodies.join('/')} · ${hook.target.voices.join('/')}`
+                    ? `母 · ${hook.target.bodies.join('/')} · ${hook.target.voices.join('/')}${
+                        hook.target.requireRecommendedNatures ? ' · 推荐性格' : ''
+                      }`
                     : undefined
                 }
               />
@@ -204,6 +231,8 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
               tasks={hook.tasks}
               tasksConfirmed={hook.tasksConfirmed}
               tasksPendingMemberIds={hook.tasksPendingMemberIds}
+              tasksLoading={hook.tasksLoading}
+              tasksError={hook.tasksError}
               isOwner={hook.currentGroup.group.ownerAccountId === hook.accountId}
               onClaimTask={hook.claimTask}
               onReleaseTask={hook.releaseTask}
@@ -223,10 +252,18 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
               tasks={hook.tasks}
               tasksConfirmed={hook.tasksConfirmed}
               tasksPendingMemberIds={hook.tasksPendingMemberIds}
+              tasksLoading={hook.tasksLoading}
+              tasksError={hook.tasksError}
               isOwner={hook.currentGroup.group.ownerAccountId === hook.accountId}
               onClaimTask={hook.claimTask}
               onReleaseTask={hook.releaseTask}
               onTransferTask={hook.transferTask}
+              demands={hook.demands}
+              onPublishDemand={hook.addDemand}
+              onWithdrawDemand={hook.withdrawDemand}
+              onClaimDemand={hook.claimDemand}
+              onReleaseDemand={hook.releaseDemand}
+              onCompleteDemand={hook.completeDemand}
             />
           )}
 
@@ -235,6 +272,8 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             group={hook.currentGroup}
             accountId={hook.accountId ?? ''}
             catalogVersion={CATALOG_VERSION}
+            groupType={hook.currentGroup.group.groupType}
+            targetCriteriaId={hook.target?.kind === 'mother' ? hook.target.criteriaId : undefined}
             inviteCode={
               hook.accountId ? readCollectionInviteCode(hook.accountId, hook.currentGroup.group.id) : null
             }
@@ -258,10 +297,6 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
           eggGameId={focus?.eggGameId}
         />
       )}
-
-      {hook.currentGroupId && !hook.currentGroup && hook.loading ? (
-        <p className="px-1 text-xs text-slate-400" data-testid="group-loading">正在读取小组资源…</p>
-      ) : null}
 
       {hook.accountId && hook.pageMode === 'group' && !hook.currentGroupId && !hook.groupsLoaded ? (
         hook.loading ? (

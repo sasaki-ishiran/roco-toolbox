@@ -116,6 +116,27 @@ function toEggSize(size) {
   return { min, miniMax, hugeMin, max };
 }
 
+/**
+ * 身高区间（米，2026-10-26）。
+ *
+ * 游戏里的身高百分位以物种区间 [min, max] 为 0~100%：100% = 上限、0% = 下限。
+ * 用户口径：两个 100% 身高能生大块头蛋、两个 0% 生小不点蛋。**只用于「合格」判定**，
+ * 大块头 / 小不点奖牌仍按体重 98% / 2%（见 bodySize.js 的 bodyMedalOf），这里不参与奖牌。
+ */
+function toHeightSize(height) {
+  const match = String(height ?? '').match(/^\s*(\d+(?:\.\d+)?)\s*~\s*(\d+(?:\.\d+)?)\s*M\s*$/i);
+  if (!match) return undefined;
+  const min = Number(match[1]);
+  const max = Number(match[2]);
+  if (!(min > 0) || !(max > min)) return undefined;
+  return { min, max };
+}
+
+/** 首领进化：不是配窝目标，也不能参与蛋级推荐性格的「最高阶级」。 */
+const lordEvolutionIds = new Set(
+  pets.pets.filter((p) => p.is_lord_evolution === true).map((p) => p.game_id),
+);
+
 const species = pets.pets.map((p) => ({
   key: p.key ?? p.id ?? String(p.game_id),
   gameId: p.game_id ?? 0,
@@ -129,7 +150,12 @@ const species = pets.pets.map((p) => ({
   catchable: (p.ecology?.areas?.length ?? 0) > 0,
   // 图鉴没填 gender_ratio（新赛季精灵常见，如云梦豚）时按「未知」处理成可出公，
   // 不能默认成 0：那会让新精灵永远进不了配窝 / 种公推荐。
-  maleCapable: p.gender_ratio?.male == null ? true : p.gender_ratio.male > 0,
+  // 首领进化不是配窝目标；不可孵蛋组（只有「未发现」）也不需要算可出公。
+  maleCapable: p.is_lord_evolution === true
+    ? false
+    : p.gender_ratio?.male == null
+      ? (p.egg_group ?? []).some((g) => typeof g === 'number' && g >= 2 && g <= 15)
+      : p.gender_ratio.male > 0,
   // 性别比例特殊物种（2026-10-05）：游戏自带 10 分制公母比，烘焙给覆盖度页
   // 「性别比例 ≠ 5:5」专用收集模式（区分纯母 10:0 / 公多母少 8:2 / 母多公少 2:8）
   genderRatio:
@@ -139,6 +165,8 @@ const species = pets.pets.map((p) => ({
   eggSize: toEggSize(p.egg_size),
   // 与内置采集解析器共用成体体型规则；旧 JSON 缺奖牌时可由精确体重恢复。
   bodySize: resolveBodySize({ ...decoderByGameId.get(p.game_id), weight: p.weight }) ?? undefined,
+  // 身高区间：算身高百分位用（合格判定放宽，见 toHeightSize）
+  heightSize: toHeightSize(p.height),
   // 游戏自己的叫法；没有就用 name + form 自己拼（见 loadOfficialNames 的说明）
   officialName: officialNames.get(p.game_id ?? 0),
   // 这个形态「对应哪颗蛋」：母本清单按它分组（见 loadEggMap）；
@@ -180,13 +208,18 @@ function eggNaturesByGameId() {
     }
     const finals = [];
     for (const chain of chains.values()) {
-      const normal = chain.filter((entry) => entry.form !== '首领形态');
-      const pool = normal.length > 0 ? normal : chain;
-      const maxStage = Math.max(...pool.map((entry) => entry.stage ?? 0));
-      for (const entry of pool) {
+      // 首领进化也要排除：只有少数条目 form 恰好叫「首领形态」，其余是具体名字
+      const normal = chain.filter(
+        (entry) => entry.form !== '首领形态' && !lordEvolutionIds.has(entry.gameId),
+      );
+      // 整条链都是首领进化时不回退到 chain（否则又会把首领形态算成最高阶级）
+      if (normal.length === 0) continue;
+      const maxStage = Math.max(...normal.map((entry) => entry.stage ?? 0));
+      for (const entry of normal) {
         if ((entry.stage ?? 0) === maxStage) finals.push(entry);
       }
     }
+    if (finals.length === 0) continue;
     // 只认「走到这颗蛋最高阶级」的分支：小灵面自己的链停在 stage 1，
     // 它的 30% 调皮是低级玩法数据，不能和幽冥眼（stage 3）的推荐平起平坐。
     const familyMaxStage = Math.max(...finals.map((entry) => entry.stage ?? 0));

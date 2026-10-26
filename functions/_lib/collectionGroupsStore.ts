@@ -19,13 +19,15 @@ import {
 } from '../../src/shared/motherGroups';
 import {
   COLLECTION_GROUP_SCHEMA_VERSION,
-  emptyStudTarget,
+  DEMAND_LIMIT_PER_GROUP,
+  demandLimitPerMember,
   isTargetReady,
-  motherCriteriaIdOf,
   motherTargetKey,
   studSlotSetIdOf,
   studTargetKey,
   slotKeyOf,
+  type CollectionDemand,
+  type CollectionDemandStatus,
   type CollectionGroupConfig,
   type CollectionGroupDetail,
   type CollectionGroupInfo,
@@ -37,13 +39,10 @@ import {
   type CollectionTaskRecord,
   type CollectionTaskStatus,
   type GroupTargetConfig,
-  type MotherTargetConfig,
   type PublishedStudResource,
   type SharedStudAccount,
   type StudResourceDraft,
   type StudSlotCoverage,
-  type StudTargetConfig,
-  type StudTargetSlot,
 } from '../../src/shared/collectionGroups';
 import { MotherStoreError, isMember, publishMemberResource } from './motherGroupsStore';
 
@@ -641,7 +640,9 @@ export async function publishStudResource(
                 published_at = ?,
                 catalog_version = ?,
                 criteria_id = ?
-          WHERE group_id = ? AND account_id = ? AND resource_revision = ?`,
+          WHERE group_id = ? AND account_id = ? AND resource_revision = ?
+            AND EXISTS (SELECT 1 FROM collection_group_configs
+                         WHERE group_id = ? AND target_revision = ?)`,
       )
       .bind(
         writeToken,
@@ -651,6 +652,8 @@ export async function publishStudResource(
         groupId,
         accountId,
         baseRevision,
+        groupId,
+        resource.targetRevision,
       ),
     db
       .prepare(
@@ -701,6 +704,11 @@ export async function publishStudResource(
   try {
     const results = await db.batch(statements);
     if ((results[0]?.meta.changes ?? 0) === 0) {
+      // 先区分「目标在本次发布期间被改」还是「摘要被其他设备更新」
+      const latest = await readGroupConfig(db, groupId);
+      if (latest.targetRevision !== resource.targetRevision) {
+        throw new MotherStoreError('TARGET_CHANGED', '本组目标已更新，请重新预览再发布');
+      }
       throw new MotherStoreError('REVISION_CONFLICT', '小组资源已被其他设备更新，请重新预览再发布');
     }
   } catch (error) {
@@ -787,6 +795,38 @@ const sameSlotList = (a: readonly StudSlotCoverage[], b: readonly StudSlotCovera
   );
 };
 
+/** 目标的可比较签名：忽略槽位 / 体型 / 声音 / 覆盖表的书写顺序。 */
+const sortedNatureOverrides = (value?: Record<string, string[]>): Record<string, string[]> => {
+  if (!value) return {};
+  const out: Record<string, string[]> = {};
+  for (const key of Object.keys(value).sort((a, b) => Number(a) - Number(b) || a.localeCompare(b))) {
+    if (value[key].length > 0) out[key] = [...new Set(value[key])].sort();
+  }
+  return out;
+};
+
+const targetSignatureOf = (target: GroupTargetConfig | null): string => {
+  if (!target) return '';
+  if (target.kind === 'mother') {
+    return JSON.stringify({
+      kind: target.kind,
+      mode: target.mode,
+      bodies: [...new Set(target.bodies)].sort(),
+      voices: [...new Set(target.voices)].sort(),
+      catalogVersion: target.catalogVersion,
+      requireRecommendedNatures: target.requireRecommendedNatures === true,
+      natureOverrides: sortedNatureOverrides(target.natureOverrides),
+      criteriaId: target.criteriaId,
+    });
+  }
+  return JSON.stringify({
+    kind: target.kind,
+    mode: target.mode,
+    catalogVersion: target.catalogVersion,
+    slots: target.slots.map(slotKeyOf).sort(),
+  });
+};
+
 /** 组长修改目标：CAS 递增 target_revision；旧摘要不删除，但按修订视为不可比。 */
 export async function updateCollectionTarget(
   db: D1Database,
@@ -802,6 +842,14 @@ export async function updateCollectionTarget(
   const config = await readGroupConfig(db, groupId);
   if (config.groupType !== target.kind) {
     throw new MotherStoreError('TARGET_NOT_READY', '目标类型与小组类型不一致');
+  }
+  // 目标完全没变就不要递增修订：否则全组摘要会无故失效，已覆盖的槽位会被当成缺口。
+  // 但带了过期的 baseTargetRevision 仍要报冲突，保持 CAS 语义。
+  if (targetSignatureOf(config.target) === targetSignatureOf(target)) {
+    if (baseTargetRevision !== config.targetRevision) {
+      throw new MotherStoreError('REVISION_CONFLICT', '本组目标已被其他设备更新，请刷新后再改');
+    }
+    return { targetRevision: config.targetRevision };
   }
   // 旧组没有配置行：先补一行默认配置，否则下面的 CAS 永远匹配不到（表现为「目标已被其他设备更新」）
   await db
@@ -838,19 +886,19 @@ export async function updateCollectionTarget(
     }
     throw new MotherStoreError('REVISION_CONFLICT', '本组目标已被其他设备更新，请刷新后再改');
   }
-  // 让旧修订下的寻找任务只作历史；新修订重新生成
+  // 让旧修订下的寻找任务只作历史；新修订重新生成。只关旧修订，不能把并发新认领一起关掉。
   await db
     .prepare(
       `UPDATE collection_group_tasks
           SET status = 'closed', closed_at = ?, updated_at = ?, version = version + 1
-        WHERE group_id = ? AND status <> 'closed'`,
+        WHERE group_id = ? AND status <> 'closed' AND target_revision <> ?`,
     )
-    .bind(now, now, groupId)
+    .bind(now, now, groupId, baseTargetRevision + 1)
     .run();
   return { targetRevision: baseTargetRevision + 1 };
 }
 
-/** 普通成员退出：释放自己认领的任务，再删成员（种公摘要随外键级联删除）。 */
+/** 普通成员退出：释放自己认领的任务与需求，删成员（种公摘要随外键级联删除），并递增资源版本。 */
 export async function leaveCollectionGroup(
   db: D1Database,
   groupId: string,
@@ -866,11 +914,28 @@ export async function leaveCollectionGroup(
           WHERE group_id = ? AND owner_account_id = ? AND status = 'claimed'`,
       )
       .bind(now, groupId, accountId),
+    // 需求承接也要释放，否则退出的人留下的「已接单」会永远卡住别人的需求
+    db
+      .prepare(
+        `UPDATE collection_group_demands
+            SET status = 'open', claimer_account_id = NULL,
+                updated_at = ?, version = version + 1
+          WHERE group_id = ? AND claimer_account_id = ? AND status = 'claimed'`,
+      )
+      .bind(now, groupId, accountId),
+    // 成员离开改变了组内资源集合：递增 epoch，让按 epoch 失效缓存的客户端能重新拉取
+    db
+      .prepare(
+        `UPDATE collection_group_configs
+            SET resource_epoch = resource_epoch + 1, updated_at = ?
+          WHERE group_id = ?`,
+      )
+      .bind(now, groupId),
     db
       .prepare('DELETE FROM mother_group_members WHERE group_id = ? AND account_id = ?')
       .bind(groupId, accountId),
   ]);
-  if ((result[1]?.meta.changes ?? 0) === 0) {
+  if ((result[3]?.meta.changes ?? 0) === 0) {
     throw new MotherStoreError('NOT_MEMBER', '不是该组成员');
   }
 }
@@ -884,11 +949,21 @@ export async function isMotherGroup(db: D1Database, groupId: string): Promise<bo
 /** 发布母本摘要到任意类型的组：类型必须匹配，其余复用一期原子写入。 */
 export async function publishMotherResourceToGroup(
   db: D1Database,
-  input: { groupId: string; accountId: string; baseRevision: number; resource: MotherResourceDraft },
+  input: {
+    groupId: string;
+    accountId: string;
+    baseRevision: number;
+    /** 发布体带上客户端看到的目标修订；不一致说明组目标已变，必须让客户端重新预览。 */
+    baseTargetRevision?: number;
+    resource: MotherResourceDraft;
+  },
 ): Promise<{ resourceRevision: number; publishedAt: number | null }> {
   const config = await readGroupConfig(db, input.groupId);
   if (config.groupType !== 'mother') {
     throw new MotherStoreError('GROUP_NOT_FOUND', '这个小组不是母本组');
+  }
+  if (input.baseTargetRevision != null && input.baseTargetRevision !== config.targetRevision) {
+    throw new MotherStoreError('TARGET_CHANGED', '本组口径已更新，请重新预览再发布');
   }
   const expectedCriteria =
     config.target?.kind === 'mother' ? config.target.criteriaId : MOTHER_CRITERIA_ID;
@@ -908,52 +983,6 @@ export async function publishMotherResourceToGroup(
   );
   await closeCoveredTasks(db, input.groupId, config.targetRevision, keys);
   return result;
-}
-
-/** 母本目标标准化：默认口径沿用一期 criteriaId。 */
-export function normalizeMotherTarget(target: MotherTargetConfig): MotherTargetConfig {
-  return {
-    ...target,
-    criteriaId: motherCriteriaIdOf({
-      mode: target.mode,
-      bodies: target.bodies,
-      voices: target.voices,
-      requireRecommendedNatures: target.requireRecommendedNatures === true,
-      natureOverrides: target.natureOverrides,
-    }),
-  };
-}
-
-/** 空种公目标的标准形式（创建种公组但尚未确认目标时使用）。 */
-export const emptyStudTargetFor = (catalogVersion: string): StudTargetConfig =>
-  emptyStudTarget(catalogVersion);
-
-/** 组目标的展示摘要（界面与加入确认共用）。 */
-export function describeTarget(target: GroupTargetConfig | null): string {
-  if (!target) return '目标待确认';
-  if (target.kind === 'mother') {
-    const bodies = target.bodies.join('/') || '体型不限';
-    const voices = target.voices.join('/') || '声音不限';
-    return `母 · ${bodies} · ${voices}${target.requireRecommendedNatures ? ' · 推荐性格' : ''}`;
-  }
-  if (target.slots.length === 0) return '目标待确认';
-  const natures = [...new Set(target.slots.map((slot) => slot.natureName))];
-  return `${target.mode === 'perfect' ? '追满分' : '追双牌'} · ${target.slots.length} 个槽位 · ${natures.slice(0, 3).join('/')}${natures.length > 3 ? '…' : ''}`;
-}
-
-/** 目标槽位按「蛋组 → 性格」分组，便于界面紧凑展示。 */
-export function groupSlotsByGroup(
-  target: StudTargetConfig,
-): Array<{ groupId: number; slots: StudTargetSlot[] }> {
-  const map = new Map<number, StudTargetSlot[]>();
-  for (const slot of target.slots) {
-    const list = map.get(slot.groupId) ?? [];
-    list.push(slot);
-    map.set(slot.groupId, list);
-  }
-  return [...map.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([groupId, slots]) => ({ groupId, slots }));
 }
 
 /* ---------- 共同寻找与认领 ---------- */
@@ -1035,6 +1064,23 @@ export async function listCollectionTasks(
   const pendingMemberIds = members
     .filter((row) => !isMemberComparableForTarget(row, config))
     .map((row) => row.account_id);
+  // 旧组 / 默认目标没有记录 catalogVersion：不能因此跳过图鉴比较。
+  // 此时要求所有已发布成员的图鉴版本彼此一致，否则全员按「待确认」处理。
+  if (targetCatalogOf(config).length === 0) {
+    const catalogs = new Set(
+      members
+        .filter((row) => row.published_at != null && row.catalog_version != null)
+        .map((row) => row.catalog_version as string),
+    );
+    if (catalogs.size > 1) {
+      return {
+        targetRevision: config.targetRevision,
+        confirmed: false,
+        pendingMemberIds: members.map((row) => row.account_id),
+        tasks: (taskResult.results as TaskRow[]).map(toTaskRecord),
+      };
+    }
+  }
   return {
     targetRevision: config.targetRevision,
     confirmed: pendingMemberIds.length === 0,
@@ -1124,7 +1170,7 @@ export interface ClaimTaskInput {
 }
 
 /** 认领：只有全员确认的缺口可认领；同一目标并发时只有一个成功。 */
-export async function claimCollectionTask(
+async function claimCollectionTaskInner(
   db: D1Database,
   input: ClaimTaskInput,
 ): Promise<CollectionTaskRecord> {
@@ -1218,6 +1264,32 @@ export async function claimCollectionTask(
   const raced = await findActiveTask(db, groupId, config.targetRevision, targetKey);
   if (!raced) throw new MotherStoreError('TASK_TAKEN', '任务状态已更新，请刷新后再试');
   return claimExisting(raced);
+}
+
+/**
+ * 认领的对外入口：先走原有裁决，再复核一次「是否已被组内资源补上」。
+ *
+ * 认领与「他人发布补齐」是两个请求：发布事务提交后才关任务，中间窗口里新建的认领
+ * 不会被关任务扫到。复核一次能把这种任务立即关闭，避免「资源已覆盖却仍挂着负责人」。
+ */
+export async function claimCollectionTask(
+  db: D1Database,
+  input: ClaimTaskInput,
+): Promise<CollectionTaskRecord> {
+  const record = await claimCollectionTaskInner(db, input);
+  const config = await readGroupConfig(db, record.groupId);
+  const covered = await coveredKeysOf(db, record.groupId, config);
+  if (!covered.has(record.targetKey)) return record;
+  const now = Date.now();
+  await db
+    .prepare(
+      `UPDATE collection_group_tasks
+          SET status = 'closed', closed_at = ?, updated_at = ?, version = version + 1
+        WHERE group_id = ? AND target_revision = ? AND target_key = ? AND status <> 'closed'`,
+    )
+    .bind(now, now, record.groupId, record.targetRevision, record.targetKey)
+    .run();
+  throw new MotherStoreError('TASK_ALREADY_COVERED', '这个目标已经被组内已发布资源补上了');
 }
 
 export interface ReleaseTaskInput {
@@ -1358,4 +1430,303 @@ async function closeCoveredTasks(
       ),
     );
   }
+}
+
+/* ---------- 需求承接（2026-10-26） ---------- */
+
+interface DemandRow {
+  group_id: string;
+  demander_account_id: string;
+  egg_game_id: number;
+  nature: string;
+  status: string;
+  claimer_account_id: string | null;
+  version: number;
+  created_at: number;
+  updated_at: number;
+}
+
+const toDemand = (row: DemandRow): CollectionDemand => ({
+  groupId: row.group_id,
+  demanderAccountId: row.demander_account_id,
+  eggGameId: row.egg_game_id,
+  nature: row.nature ?? '',
+  status: (row.status === 'claimed' || row.status === 'done' ? row.status : 'open') as CollectionDemandStatus,
+  claimerAccountId: row.claimer_account_id,
+  version: row.version,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const DEMAND_COLUMNS = `group_id, demander_account_id, egg_game_id, nature,
+  status, claimer_account_id, version, created_at, updated_at`;
+
+/** 组内全部需求（不分状态），按更新时间倒序。 */
+export async function listCollectionDemands(
+  db: D1Database,
+  groupId: string,
+): Promise<CollectionDemand[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${DEMAND_COLUMNS} FROM collection_group_demands
+        WHERE group_id = ? ORDER BY updated_at DESC`,
+    )
+    .bind(groupId)
+    .all<DemandRow>();
+  return results.map(toDemand);
+}
+
+async function findDemand(
+  db: D1Database,
+  groupId: string,
+  demanderAccountId: string,
+  eggGameId: number,
+  nature: string,
+): Promise<DemandRow | null> {
+  return db
+    .prepare(
+      `SELECT ${DEMAND_COLUMNS} FROM collection_group_demands
+        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?`,
+    )
+    .bind(groupId, demanderAccountId, eggGameId, nature)
+    .first<DemandRow>();
+}
+
+/** 本人在本组发布过的游戏账号数（决定需求额度）。 */
+async function sharedAccountCount(
+  db: D1Database,
+  groupId: string,
+  accountId: string,
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(DISTINCT game_account_key) AS total FROM mother_group_accounts
+        WHERE group_id = ? AND member_account_id = ?`,
+    )
+    .bind(groupId, accountId)
+    .first<{ total: number }>();
+  return row?.total ?? 0;
+}
+
+async function assertMotherGroup(db: D1Database, groupId: string): Promise<void> {
+  const config = await readGroupConfig(db, groupId);
+  if (config.groupType !== 'mother') {
+    throw new MotherStoreError('DEMAND_UNSUPPORTED', '只有母本组支持需求承接');
+  }
+}
+
+export interface PublishDemandInput {
+  groupId: string;
+  accountId: string;
+  eggGameId: number;
+  /** 要发布的性格；空数组 = 不挑性格（记成一条空性格）。 */
+  natures: string[];
+}
+
+/**
+ * 发布 / 更新需求：**一个性格一条**（2026-10-26 用户口径）。
+ *
+ * - 勾 2 个性格 = 2 条需求，占 2 个额度；
+ * - 同一颗蛋 + 同一性格重复发布视为更新（覆盖为待承接）；
+ * - 不勾性格时记一条 `nature = ''`，表示不挑。
+ */
+export async function publishCollectionDemand(
+  db: D1Database,
+  input: PublishDemandInput,
+): Promise<CollectionDemand[]> {
+  const { groupId, accountId, eggGameId } = input;
+  await assertMotherGroup(db, groupId);
+  const natures = input.natures.length > 0 ? [...new Set(input.natures)] : [''];
+
+  const existing = await Promise.all(
+    natures.map((nature) => findDemand(db, groupId, accountId, eggGameId, nature)),
+  );
+  const newRows = existing.filter((row) => row === null).length;
+  if (newRows > 0) {
+    const accountCount = await sharedAccountCount(db, groupId, accountId);
+    const groupRow = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM collection_group_demands
+          WHERE group_id = ? AND status <> 'done'`,
+      )
+      .bind(groupId)
+      .first<{ total: number }>();
+    if ((groupRow?.total ?? 0) + newRows > DEMAND_LIMIT_PER_GROUP) {
+      throw new MotherStoreError('DEMAND_LIMIT', '本组需求已满，等有人完成或撤回后再发');
+    }
+    const mineRow = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM collection_group_demands
+          WHERE group_id = ? AND demander_account_id = ? AND status <> 'done'`,
+      )
+      .bind(groupId, accountId)
+      .first<{ total: number }>();
+    const limit = demandLimitPerMember(accountCount);
+    if ((mineRow?.total ?? 0) + newRows > limit) {
+      throw new MotherStoreError(
+        'DEMAND_LIMIT',
+        `你的需求额度是 ${limit} 条（一个性格算一条），这次要多发 ${newRows} 条`,
+      );
+    }
+  }
+
+  const now = Date.now();
+  await db.batch(
+    natures.map((nature) =>
+      db
+        .prepare(
+          `INSERT INTO collection_group_demands
+            (group_id, demander_account_id, egg_game_id, nature, status,
+             claimer_account_id, version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'open', NULL, 0, ?, ?)
+           ON CONFLICT (group_id, demander_account_id, egg_game_id, nature) DO UPDATE SET
+             status = 'open',
+             claimer_account_id = NULL,
+             version = collection_group_demands.version + 1,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(groupId, accountId, eggGameId, nature, now, now),
+    ),
+  );
+
+  const saved = await Promise.all(
+    natures.map((nature) => findDemand(db, groupId, accountId, eggGameId, nature)),
+  );
+  return saved.filter((row): row is DemandRow => row !== null).map(toDemand);
+}
+
+/** 撤回自己的某一条需求（按性格单独撤回，2026-10-26）。 */
+export async function withdrawCollectionDemand(
+  db: D1Database,
+  groupId: string,
+  accountId: string,
+  eggGameId: number,
+  nature: string,
+): Promise<void> {
+  const existing = await findDemand(db, groupId, accountId, eggGameId, nature);
+  if (!existing) {
+    throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  }
+  await db
+    .prepare(
+      `DELETE FROM collection_group_demands
+        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?`,
+    )
+    .bind(groupId, accountId, eggGameId, nature)
+    .run();
+}
+
+export interface DemandActionInput {
+  groupId: string;
+  accountId: string;
+  demanderAccountId: string;
+  eggGameId: number;
+  /** 接的是哪个性格的那一条（空字符串 = 不挑）。 */
+  nature: string;
+  expectedVersion?: number;
+}
+
+/** 接单：不能接自己的；同一需求只能有一个承接人。 */
+export async function claimCollectionDemand(
+  db: D1Database,
+  input: DemandActionInput,
+): Promise<CollectionDemand> {
+  const { groupId, accountId, demanderAccountId, eggGameId, nature, expectedVersion } = input;
+  if (accountId === demanderAccountId) {
+    throw new MotherStoreError('DEMAND_SELF', '不能接自己的需求');
+  }
+  const existing = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  if (!existing) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  if (existing.status === 'done') {
+    throw new MotherStoreError('DEMAND_ALREADY_DONE', '这条需求已经完成了');
+  }
+  if (existing.status === 'claimed' && existing.claimer_account_id != null) {
+    if (existing.claimer_account_id !== accountId) {
+      throw new MotherStoreError('DEMAND_TAKEN', '这条需求已经被别人接了');
+    }
+    return toDemand(existing);
+  }
+  const now = Date.now();
+  // 承接人注销账号时外键会把 claimer 置 NULL 但状态仍是 claimed，这里一并视为可重新接单
+  const result = await db
+    .prepare(
+      `UPDATE collection_group_demands
+          SET status = 'claimed', claimer_account_id = ?, version = version + 1, updated_at = ?
+        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+          AND (status = 'open' OR (status = 'claimed' AND claimer_account_id IS NULL))
+          AND version = ?`,
+    )
+    .bind(now, groupId, demanderAccountId, eggGameId, nature, expectedVersion ?? existing.version)
+    .run();
+  if ((result.meta?.changes ?? 0) === 0) {
+    throw new MotherStoreError('DEMAND_TAKEN', '这条需求刚被抢走了，刷新后再看');
+  }
+  const saved = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  return toDemand(saved);
+}
+
+/** 释放接单：只有承接人自己可以放弃。 */
+export async function releaseCollectionDemand(
+  db: D1Database,
+  input: DemandActionInput,
+): Promise<CollectionDemand> {
+  const { groupId, accountId, demanderAccountId, eggGameId, nature, expectedVersion } = input;
+  const existing = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  if (!existing) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  if (existing.status !== 'claimed' || existing.claimer_account_id !== accountId) {
+    throw new MotherStoreError('DEMAND_NOT_YOURS', '只有接单的人可以放弃');
+  }
+  const now = Date.now();
+  const result = await db
+    .prepare(
+      `UPDATE collection_group_demands
+          SET status = 'open', claimer_account_id = NULL, version = version + 1, updated_at = ?
+        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+          AND status = 'claimed' AND claimer_account_id = ? AND version = ?`,
+    )
+    .bind(now, groupId, demanderAccountId, eggGameId, nature, accountId, expectedVersion ?? existing.version)
+    .run();
+  if ((result.meta.changes ?? 0) === 0) {
+    // 0 行更新不能当作成功：需求可能刚被需求方确认完成，或状态被别人改过
+    const latest = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+    if (!latest) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+    if (latest.status === 'done') {
+      throw new MotherStoreError('DEMAND_ALREADY_DONE', '这条需求已经完成了');
+    }
+    throw new MotherStoreError('DEMAND_TAKEN', '需求状态已更新，刷新后再看');
+  }
+  const saved = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  return toDemand(saved);
+}
+
+/** 完成确认：只有需求方（或组长）可以点。 */
+export async function completeCollectionDemand(
+  db: D1Database,
+  input: DemandActionInput & { isOwner: boolean },
+): Promise<CollectionDemand> {
+  const { groupId, accountId, demanderAccountId, eggGameId, nature, isOwner } = input;
+  if (accountId !== demanderAccountId && !isOwner) {
+    throw new MotherStoreError('DEMAND_NOT_YOURS', '只有需求方或组长可以确认完成');
+  }
+  const existing = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  if (!existing) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  if (existing.status === 'done') return toDemand(existing);
+  if (existing.status !== 'claimed') {
+    throw new MotherStoreError('DEMAND_NOT_CLAIMED', '还没有人接单，不能确认完成');
+  }
+  const now = Date.now();
+  await db
+    .prepare(
+      `UPDATE collection_group_demands
+          SET status = 'done', version = version + 1, updated_at = ?
+        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+          AND status = 'claimed'`,
+    )
+    .bind(now, groupId, demanderAccountId, eggGameId, nature)
+    .run();
+  const saved = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  return toDemand(saved);
 }

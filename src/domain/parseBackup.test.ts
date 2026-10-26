@@ -19,6 +19,21 @@ describe('parseBackup', () => {
     expect(parsed.pets.map((pet) => pet.medalBody)).toEqual(['大块头', '', '小不点', '', '小不点']);
   });
 
+  test('身高百分位按图鉴身高区间换算（100% / 0% / 中间）；缺身高时留空', () => {
+    const items = [
+      { speciesPetId: 3200, name: '机械方方', heightCm: 60 },
+      { speciesPetId: 3200, name: '机械方方', heightCm: 42 },
+      { speciesPetId: 3200, name: '机械方方', heightCm: 51 },
+      { speciesPetId: 3200, name: '机械方方' },
+      { speciesPetId: 3200, name: '机械方方', heightCm: 42, heightPercent: 100 },
+    ];
+    const parsed = parseBackup(
+      { meta: { type: 'hatch-backup', gameId: 1001 }, collections: { petBackpack: { items } } },
+      'now',
+    );
+    expect(parsed.pets.map((pet) => pet.heightPercent)).toEqual([100, 0, 50, undefined, 100]);
+  });
+
   test('正常解析：账号名、精灵数、字段、蛋仓', () => {
     const snapshot = parseBackup(fixture, '2026-09-26T00:00:00.000Z');
     expect(snapshot.accountName).toBe('测试甲');

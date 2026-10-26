@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { isMotherResourceComparable } from '../domain/motherSharing';
+import { slotKeyOf, type CollectionGroupType, type PublishedStudResource } from '../shared/collectionGroups';
 import type { MotherGroupDetail, MotherGroupMember } from '../shared/motherGroups';
 
 const timeText = (ms: number): string => (ms ? new Date(ms).toLocaleDateString() : '—');
@@ -8,6 +9,10 @@ export interface MotherGroupMembersProps {
   group: MotherGroupDetail;
   accountId: string;
   catalogVersion: string;
+  /** 组类型：种公组的摘要只在 studResource 里，不能按母本摘要判断发布状态。 */
+  groupType?: CollectionGroupType;
+  /** 本组母本口径；不传时按一期固定口径。 */
+  targetCriteriaId?: string;
   inviteCode: string | null;
   onRename: (displayName: string) => Promise<void>;
   onResetInvite: () => Promise<string>;
@@ -23,6 +28,8 @@ export function MotherGroupMembers({
   group,
   accountId,
   catalogVersion,
+  groupType = 'mother',
+  targetCriteriaId,
   inviteCode,
   onRename,
   onResetInvite,
@@ -52,9 +59,31 @@ export function MotherGroupMembers({
         : member.displayName;
   }, [group.members]);
 
+  const studResourceOf = (member: MotherGroupMember): PublishedStudResource | null =>
+    (member as MotherGroupMember & { studResource?: PublishedStudResource | null }).studResource ?? null;
+
+  const studAccountsOf = (member: MotherGroupMember) =>
+    studResourceOf(member)?.accounts ?? [];
+
+  const publishedAtOf = (member: MotherGroupMember): number | null => {
+    const stud = studResourceOf(member);
+    if (groupType === 'stud') return stud?.publishedAt ?? null;
+    return member.resource?.publishedAt ?? null;
+  };
+
   const statusOf = (member: MotherGroupMember): string => {
+    if (groupType === 'stud') {
+      const stud = studResourceOf(member);
+      if (!stud) return member.resourceRevision > 0 ? '已停止共享' : '尚未发布';
+      const count = new Set(
+        stud.accounts.flatMap((account) =>
+          [...account.covered, ...account.breedable].map((slot) => slotKeyOf(slot)),
+        ),
+      ).size;
+      return count > 0 ? `已发布 ${count} 格` : '已发布 · 目前无达标种公';
+    }
     if (!member.resource) return member.resourceRevision > 0 ? '已停止共享' : '尚未发布';
-    if (!isMotherResourceComparable(member.resource, catalogVersion)) return '需更新';
+    if (!isMotherResourceComparable(member.resource, catalogVersion, targetCriteriaId)) return '需更新';
     const count = new Set(member.resource.accounts.flatMap((account) => account.eggGameIds)).size;
     return count > 0 ? `已发布 ${count} 种` : '已发布 · 目前无达标母本';
   };
@@ -102,14 +131,26 @@ export function MotherGroupMembers({
                 </span>
                 <span className="mt-0.5 block text-[11px] text-slate-400">
                   {statusOf(member)}
-                  {member.resource ? ` · 更新于 ${timeText(member.resource.publishedAt)}` : ''}
+                  {publishedAtOf(member) ? ` · 更新于 ${timeText(publishedAtOf(member) as number)}` : ''}
                 </span>
               </button>
               <span className="shrink-0 text-[11px] text-slate-300">{expanded === member.accountId ? '收起' : '展开'}</span>
             </div>
             {expanded === member.accountId ? (
               <ul className="mt-2 space-y-1 border-t border-slate-200 pt-2" data-testid="mother-member-accounts">
-                {member.resource && member.resource.accounts.length > 0 ? (
+                {groupType === 'stud' ? (
+                  studAccountsOf(member).length > 0 ? (
+                    studAccountsOf(member).map((account) => (
+                      <li key={account.accountKey} className="text-[11px] text-slate-500">
+                        {account.accountName} · UID {account.accountKey.slice(4)} · 覆盖{' '}
+                        {account.covered.length} 格 · 可迭代 {account.breedable.length} 格 · 导出{' '}
+                        {timeText(Date.parse(account.sourceExportedAt))}
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-[11px] text-slate-400">没有共享中的游戏账号</li>
+                  )
+                ) : member.resource && member.resource.accounts.length > 0 ? (
                   member.resource.accounts.map((account) => (
                     <li key={account.accountKey} className="text-[11px] text-slate-500">
                       {account.accountName} · UID {account.accountKey.slice(4)} · 达标{' '}
@@ -129,8 +170,8 @@ export function MotherGroupMembers({
         <input
           value={nickname}
           onChange={(event) => setNickname(event.target.value)}
-          maxLength={20}
-          placeholder="我在组里的昵称"
+          maxLength={6}
+          placeholder="我在组里的昵称（最多 6 个字）"
           data-testid="mother-nickname-input"
           className="min-h-[32px] min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 text-xs text-slate-600"
         />

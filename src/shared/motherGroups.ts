@@ -7,8 +7,14 @@
  * 设计见 `docs/superpowers/specs/2026-10-23-多人母本资源共享-design.md`。
  */
 
-/** 一期固定口径：母 + 大块头 + +100dB，不限制性格。二期自选口径用 `mother-v2-<hash>`。 */
-export const MOTHER_CRITERIA_ID = 'female-huge-voice100-v1' as const;
+/**
+ * 一期固定口径：母 + 大块头 + +100dB，不限制性格。
+ *
+ * v2（2026-10-26）：合格判定加入「身高 100% / 0% 兜底」与体重 97.5% 宽容。
+ * 判据变了就必须换版本：v1 摘要按旧阈值少算了合格母本，不能再当成可比，
+ * 否则组内会把实际已有的资源当成「已确认缺口」。旧摘要统一显示「需更新」。
+ */
+export const MOTHER_CRITERIA_ID = 'female-huge-voice100-v2' as const;
 /** 口径标识是稳定字符串：一期固定值 + 二期自选的 `mother-v2-<8hex>`。 */
 export type MotherCriteriaId = string;
 
@@ -28,8 +34,12 @@ export const MOTHER_ACCOUNT_NAME_MAX = 80;
 export const MOTHER_CATALOG_VERSION_MAX = 80;
 /** 组名 1–40 个 Unicode 码点。 */
 export const MOTHER_GROUP_NAME_MAX = 40;
-/** 组内昵称 1–20 个 Unicode 码点。 */
-export const MOTHER_DISPLAY_NAME_MAX = 20;
+/**
+ * 小组昵称长度上限（2026-10-26 收紧到 6）：
+ * 与卡片里昵称的展示宽度一致——卡片最多显示 6 个字，超过就会截断，
+ * 所以在创建 / 加入小组时就限制住，避免出现「卡片里被截断」的情况。
+ */
+export const MOTHER_DISPLAY_NAME_MAX = 6;
 /** 邀请码长度（明文只返回一次）。 */
 export const MOTHER_INVITE_CODE_LENGTH = 8;
 

@@ -1,6 +1,7 @@
 import type { OwnedPet, SpeciesEntry } from './types';
 import { isBreedableGroup } from './eggs';
 import { speciesDisplayName } from './speciesName';
+import { heightBodyOf } from '../shared/bodySize.js';
 
 export type TagKind = 'account' | 'body' | 'voice' | 'gender' | 'shiny' | 'eggGroup' | 'nature';
 
@@ -88,8 +89,12 @@ export function betterMotherClass(
 export function classifyGrade(pet: OwnedPet, mode: TargetMode): PetGrade | null {
   const threshold = mode === 'perfect' ? PERFECT_DB : MEDAL_DB;
   if (Math.abs(pet.voiceDb) < threshold) return null;
-  const big = pet.medalBody === BIG_BODY;
-  const small = pet.medalBody === SMALL_BODY;
+  // 体型：奖牌（体重 98% / 2%）优先；没有奖牌时看身高百分位是否到顶 / 到底
+  // （2026-10-26 用户拍板：两个 100% 身高能生大块头蛋、两个 0% 生小不点蛋）。
+  // 奖牌本身仍按体重判定，这里的放宽只影响「够不够格当合格种公 / 母本」。
+  const body = pet.medalBody || heightBodyOf(pet.heightPercent);
+  const big = body === BIG_BODY;
+  const small = body === SMALL_BODY;
   if (!big && !small) return null;
   const sweet = pet.voiceDb > 0;
   if (big) return sweet ? '大婉' : '大粗';

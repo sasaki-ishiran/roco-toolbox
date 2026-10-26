@@ -16,6 +16,8 @@ import {
   isCollectionGroupType,
   isTargetGrade,
   isTargetMode,
+  type CollectionDemand,
+  type CollectionDemandStatus,
   type CollectionGroupDetail,
   type CollectionGroupInfo,
   type CollectionGroupMember,
@@ -440,6 +442,105 @@ export const transferCollectionTask = (
   signal?: AbortSignal,
 ) => taskAction(groupId, 'transfer', input, signal);
 
+/* ---------- 需求承接（2026-10-26） ---------- */
+
+function parseDemand(value: unknown): CollectionDemand {
+  const record = asRecord(value, 'demand');
+  const status = record.status;
+  if (status !== 'open' && status !== 'claimed' && status !== 'done') {
+    bad('demand.status 不受支持');
+  }
+  const claimer = record.claimerAccountId;
+  return {
+    groupId: asString(record.groupId, 'groupId'),
+    demanderAccountId: asString(record.demanderAccountId, 'demanderAccountId'),
+    eggGameId: asNumber(record.eggGameId, 'eggGameId'),
+    nature: typeof record.nature === 'string' ? record.nature : bad('demand.nature 必须是字符串'),
+    status: status as CollectionDemandStatus,
+    claimerAccountId:
+      claimer === null || claimer === undefined ? null : asString(claimer, 'claimerAccountId'),
+    version: asNumber(record.version, 'version'),
+    createdAt: asNumber(record.createdAt, 'createdAt'),
+    updatedAt: asNumber(record.updatedAt, 'updatedAt'),
+  };
+}
+
+export async function getCollectionDemands(
+  groupId: string,
+  signal?: AbortSignal,
+): Promise<CollectionDemand[]> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/demands`,
+      jsonInit('GET', undefined, signal),
+    ),
+    '响应',
+  );
+  return asArray(data.demands, 'demands').map(parseDemand);
+}
+
+export async function publishCollectionDemand(
+  groupId: string,
+  input: { eggGameId: number; natures: string[] },
+  signal?: AbortSignal,
+): Promise<CollectionDemand[]> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/demands`,
+      jsonInit('POST', input, signal),
+    ),
+    '响应',
+  );
+  return asArray(data.demands, 'demands').map(parseDemand);
+}
+
+export async function withdrawCollectionDemand(
+  groupId: string,
+  eggGameId: number,
+  nature: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await request(
+    `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${eggGameId}?nature=${encodeURIComponent(nature)}`,
+    jsonInit('DELETE', undefined, signal),
+  );
+}
+
+async function demandAction(
+  groupId: string,
+  eggGameId: number,
+  action: 'claim' | 'release' | 'complete',
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<CollectionDemand> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${eggGameId}/${action}`,
+      jsonInit('POST', body, signal),
+    ),
+    '响应',
+  );
+  return parseDemand(data.demand);
+}
+
+export const claimCollectionDemand = (
+  groupId: string,
+  input: { demanderAccountId: string; eggGameId: number; nature: string; version?: number },
+  signal?: AbortSignal,
+) => demandAction(groupId, input.eggGameId, 'claim', input, signal);
+
+export const releaseCollectionDemand = (
+  groupId: string,
+  input: { demanderAccountId: string; eggGameId: number; nature: string; version?: number },
+  signal?: AbortSignal,
+) => demandAction(groupId, input.eggGameId, 'release', input, signal);
+
+export const completeCollectionDemand = (
+  groupId: string,
+  input: { demanderAccountId: string; eggGameId: number; nature: string; version?: number },
+  signal?: AbortSignal,
+) => demandAction(groupId, input.eggGameId, 'complete', input, signal);
+
 export async function updateCollectionGroupProfile(
   groupId: string,
   displayName: string,
@@ -450,7 +551,6 @@ export async function updateCollectionGroupProfile(
     jsonInit('PUT', { displayName }, signal),
   );
 }
-
 export async function resetCollectionGroupInvite(
   groupId: string,
   signal?: AbortSignal,

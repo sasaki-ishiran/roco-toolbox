@@ -87,20 +87,20 @@ describe('内置采集入口', () => {
     expect(bridge.importCapture).toHaveBeenCalledOnce();
     expect(screen.getByRole('button', { name: '删除' })).toBeDisabled();
   });
-  test('上传蛋神助手显示云端 UID，成功后仍保留重新上传入口', async () => {
+  test('上传蛋神助手显示云端 UID，成功后按钮置为已上传', async () => {
     const bridge = setup({}, { onUpload: (patch) => patch({ files: [{ ...file, upload: { state: 'persisted', message: '角色数据已完整保存到云端', progress: 100, gameId: '293143' } }] }) });
     await waitFor(() => expect(screen.getByRole('button', { name: '上传蛋神助手' })).toBeTruthy());
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '上传蛋神助手' })); });
     expect(bridge.uploadCapture).toHaveBeenCalledWith(file.id);
     await waitFor(() => expect(screen.getByText(/游戏 UID 293143/)).toBeTruthy());
-    expect(screen.getByRole('button', { name: '重新上传' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '已上传' })).toBeDisabled();
   });
   test('去重入库按成功展示，不报失败，并保留上传入口', async () => {
     setup({ files: [{ ...file, upload: { state: 'persisted', message: '角色数据已完整保存到云端', progress: 100, gameId: '293143', deduplicated: true } }] });
     await waitFor(() => expect(screen.getByText(/云端已有相同数据/)).toBeTruthy());
     expect(screen.getByText(/游戏 UID 293143/)).toBeTruthy();
     expect(screen.queryByText(/失败/)).toBeNull();
-    expect(screen.getByRole('button', { name: '重新上传' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '已上传' })).toBeDisabled();
   });
   test('超过 5 MiB 的文件禁止上传并说明原因', async () => {
     setup({ files: [{ ...file, size: CAPTURE_UPLOAD_MAX_BYTES + 1 }] });

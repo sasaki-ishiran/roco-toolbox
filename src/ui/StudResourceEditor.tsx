@@ -218,7 +218,11 @@ export function StudResourceEditor({ hook, snapshots, species, onGoAccount }: St
             ) : null}
             {preview?.diff && !preview.diff.unchanged ? (
               <span className="ml-1" data-testid="stud-preview-diff">
-                （新增 {preview.diff.addedSlots.length} 格、移除 {preview.diff.removedSlots.length} 格）
+                （新增 {preview.diff.addedSlots.length} 格、移除 {preview.diff.removedSlots.length} 格
+                {preview.diff.reclassifiedSlots.length > 0
+                  ? `、${preview.diff.reclassifiedSlots.length} 格在已覆盖/可迭代之间变化`
+                  : ''}
+                ）
               </span>
             ) : null}
           </p>

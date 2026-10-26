@@ -1,8 +1,9 @@
 import type { OwnedPet } from './types';
 import { species } from '../data/catalog';
-import { bodyMedalOf } from '../shared/bodySize.js';
+import { bodyMedalOf, heightPercentOf } from '../shared/bodySize.js';
 
 const bodySizeByGameId = new Map(species.map((entry) => [entry.gameId, entry.bodySize]));
+const heightSizeByGameId = new Map(species.map((entry) => [entry.gameId, entry.heightSize]));
 
 /**
  * 体重百分位（与抓包解析器同一口径）：大块头阈值对应 98%，小不点阈值对应 2%。
@@ -110,6 +111,12 @@ export function parseBackup(raw: unknown, importedAt: string): AccountSnapshot {
       voiceDb: asNumber(item.voiceDb),
       medalBody: asString(item.medalBody) || bodyMedalOf(size, weightKg),
       weightPercent: asOptionalNumber(item.weightPercent) ?? weightPercentOf(size, weightKg),
+      // 身高百分位（2026-10-26）：抓包条目自带 heightCm（厘米），按我们图鉴的身高区间换算。
+      // 老抓包没有该字段 → 留空，合格判定自动退回「只看体重奖牌」的原口径。
+      heightPercent:
+        asOptionalNumber(item.heightPercent) ??
+        heightPercentOf(heightSizeByGameId.get(gameId), asOptionalNumber(item.heightCm)) ??
+        undefined,
       isShiny: asBoolean(item.isShiny),
       // 炫彩：直接从导入内容读（备份 JSON 里是平铺的 isColorful 字段）——用户拍板不依赖采集器新字段
       isColorful: item.isColorful === true,

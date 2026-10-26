@@ -44,7 +44,23 @@ export type MotherStoreErrorCode =
   /** 共同寻找：任务不存在或已关闭。 */
   | 'TASK_NOT_FOUND'
   /** 共同寻找：只有负责人或组长可以释放 / 转交。 */
-  | 'TASK_NOT_YOURS';
+  | 'TASK_NOT_YOURS'
+  /** 需求承接：只有母本组支持需求。 */
+  | 'DEMAND_UNSUPPORTED'
+  /** 需求承接：需求不存在 / 已撤回。 */
+  | 'DEMAND_NOT_FOUND'
+  /** 需求承接：超出本人或本组额度。 */
+  | 'DEMAND_LIMIT'
+  /** 需求承接：已被别人接单。 */
+  | 'DEMAND_TAKEN'
+  /** 需求承接：不能接自己的需求。 */
+  | 'DEMAND_SELF'
+  /** 需求承接：已经完成。 */
+  | 'DEMAND_ALREADY_DONE'
+  /** 需求承接：还没人接单，不能确认完成。 */
+  | 'DEMAND_NOT_CLAIMED'
+  /** 需求承接：只有需求方 / 组长 / 承接人能操作。 */
+  | 'DEMAND_NOT_YOURS';
 
 export class MotherStoreError extends Error {
   readonly code: MotherStoreErrorCode;
@@ -253,11 +269,38 @@ export async function leaveGroup(
   groupId: string,
   accountId: string,
 ): Promise<void> {
-  const result = await db
-    .prepare('DELETE FROM mother_group_members WHERE group_id = ? AND account_id = ?')
-    .bind(groupId, accountId)
-    .run();
-  if ((result.meta.changes ?? 0) === 0) {
+  const now = Date.now();
+  const result = await db.batch([
+    // 旧接口退出也要释放认领任务，否则共同寻找里会留下「其他成员」占着的任务
+    db
+      .prepare(
+        `UPDATE collection_group_tasks
+            SET owner_account_id = NULL, status = 'open',
+                updated_at = ?, version = version + 1
+          WHERE group_id = ? AND owner_account_id = ? AND status = 'claimed'`,
+      )
+      .bind(now, groupId, accountId),
+    db
+      .prepare(
+        `UPDATE collection_group_demands
+            SET status = 'open', claimer_account_id = NULL,
+                updated_at = ?, version = version + 1
+          WHERE group_id = ? AND claimer_account_id = ? AND status = 'claimed'`,
+      )
+      .bind(now, groupId, accountId),
+    // 成员变化同批递增 resource_epoch（与 /api/collection-groups 的退出路径一致）
+    db
+      .prepare(
+        `UPDATE collection_group_configs
+            SET resource_epoch = resource_epoch + 1, updated_at = ?
+          WHERE group_id = ?`,
+      )
+      .bind(now, groupId),
+    db
+      .prepare('DELETE FROM mother_group_members WHERE group_id = ? AND account_id = ?')
+      .bind(groupId, accountId),
+  ]);
+  if ((result[3]?.meta.changes ?? 0) === 0) {
     throw new MotherStoreError('NOT_MEMBER', '不是该组成员');
   }
 }

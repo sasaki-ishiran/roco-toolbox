@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:data-pipeline": "vitest run --config vitest.data-pipeline.config.ts",
     "e2e": "playwright test",
     "test:mother-groups:api": "node tools/test/run-mother-groups-local.mjs",
     "test:mother-groups:live": "node tools/test/run-mother-groups-local.mjs --live",

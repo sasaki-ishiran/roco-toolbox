@@ -16,6 +16,8 @@ export interface MotherResourceEditorProps {
   onGoAccount?: () => void;
   /** 本组口径；不传时按一期固定口径（母 · 大块头 · +100dB）。 */
   criteria?: MotherCriteria;
+  /** 推荐性格解析器：开启「要求推荐性格」时用于每个账号的达标计数，必须与发布同源。 */
+  naturesOf?: (gameId: number) => readonly string[];
   criteriaLabel?: string;
 }
 
@@ -31,6 +33,7 @@ export function MotherResourceEditor({
   species,
   onGoAccount,
   criteria = SHARED_MOTHER_CRITERIA,
+  naturesOf,
   criteriaLabel = '母 · 大块头 · +100dB',
 }: MotherResourceEditorProps) {
   const [busy, setBusy] = useState(false);
@@ -47,7 +50,7 @@ export function MotherResourceEditor({
   const preview = hook.publishPreview;
   const selection = hook.draftSelection;
 
-  /** 每个本机账号在固定口径下的达标母本种数（只用于展示，不参与发布）。 */
+  /** 每个本机账号在**本组口径**下的达标母本种数（只用于展示，不参与发布）。 */
   const coverageOf = useMemo(() => {
     const byGameId = new Map(species.map((entry) => [entry.gameId, entry]));
     const eggIds = new Set(
@@ -61,13 +64,13 @@ export function MotherResourceEditor({
     return (snapshot: AccountSnapshot): number => {
       const ids = new Set<number>();
       for (const pet of snapshot.pets) {
-        if (!isQualifiedMother(pet, criteria)) continue;
+        if (!isQualifiedMother(pet, criteria, naturesOf)) continue;
         const eggGameId = byGameId.get(pet.gameId)?.eggGameId;
         if (eggGameId != null && eggIds.has(eggGameId)) ids.add(eggGameId);
       }
       return ids.size;
     };
-  }, [species, criteria]);
+  }, [species, criteria, naturesOf]);
 
   // 有未发布的选号修改时，关闭/刷新页面前提醒（发布成功或草稿回到服务器状态后自动解除）
   useEffect(() => {

@@ -340,7 +340,7 @@ export function MotherView({
         ),
       }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchedGroups, chainFilter, owned, criteria, activeVoices.join(',')]);
+  }, [matchedGroups, chainFilter, owned, criteria, activeVoices.join(','), naturesOf]);
 
   const plannedSet = useMemo(() => new Set(plan), [plan]);
   const planGroups = useMemo(

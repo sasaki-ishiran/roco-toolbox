@@ -159,8 +159,8 @@ export function CollectionGroupSetup({
         <input
           value={displayName}
           onChange={(event) => setDisplayName(event.target.value)}
-          placeholder="我在组里的昵称"
-          maxLength={20}
+          placeholder="我在组里的昵称（最多 6 个字）"
+          maxLength={6}
           data-testid="group-setup-nickname"
           className="mt-2 min-h-[36px] w-full rounded-lg border border-slate-200 px-2.5 text-sm text-slate-700 placeholder:text-slate-300"
         />

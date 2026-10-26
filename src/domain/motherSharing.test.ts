@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { buildEggSearchIndex } from './petFilters';
-import { buildMotherCoverage, selectMotherSharingViews } from './motherSharing';
+import { buildMotherCoverage, isMotherResourceComparable, selectMotherSharingViews } from './motherSharing';
+import { MOTHER_CRITERIA_ID } from '../shared/motherGroups';
 import {
   FIXTURE_CATALOG_VERSION,
   catalog,
@@ -143,6 +144,15 @@ describe('selectMotherSharingViews：我缺的 / 我能补谁 / 小组资源', (
     const views = selectMotherSharingViews(rows, 'A', ['B']);
     expect(views.missingForMe).toBeNull();
     expect(views.mineForOthers).toBeNull();
+  });
+});
+
+describe('口径版本', () => {
+  test('旧 v1 摘要与当前 v2 口径不可比较（判据变更必须重新发布）', () => {
+    const legacy = { ...resourceWith([101]), criteriaId: 'female-huge-voice100-v1' };
+    expect(MOTHER_CRITERIA_ID).toBe('female-huge-voice100-v2');
+    expect(isMotherResourceComparable(legacy, FIXTURE_CATALOG_VERSION)).toBe(false);
+    expect(isMotherResourceComparable(resourceWith([101]), FIXTURE_CATALOG_VERSION)).toBe(true);
   });
 });
 

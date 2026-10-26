@@ -4,29 +4,35 @@ import {
   isMotherGroupsApiError,
 } from '../api/motherGroups';
 import {
+  claimCollectionDemand as claimDemandApi,
   claimCollectionTask as claimTaskApi,
+  completeCollectionDemand as completeDemandApi,
   createCollectionGroup as createCollectionGroupApi,
   dissolveCollectionGroup,
+  getCollectionDemands,
   getCollectionGroup,
   getCollectionTasks,
   joinCollectionGroup as joinCollectionGroupApi,
   leaveCollectionGroup,
   listCollectionGroups,
   previewCollectionInvite,
+  publishCollectionDemand as publishDemandApi,
   publishCollectionResources,
+  releaseCollectionDemand as releaseDemandApi,
   releaseCollectionTask as releaseTaskApi,
   resetCollectionGroupInvite,
   transferCollectionTask as transferTaskApi,
   updateCollectionGroupProfile,
   updateCollectionTarget as updateCollectionTargetApi,
+  withdrawCollectionDemand as withdrawDemandApi,
   type CollectionTasksResponse,
   type InvitePreview,
 } from '../api/collectionGroups';
 import { readAccountId, subscribeSession } from '../api/session';
-import { diffMotherResources, motherResourceSignature, buildMotherResource } from '../domain/motherResource';
+import { diffMotherResources, buildMotherResource } from '../domain/motherResource';
 import type { MotherBody, MotherVoice } from '../domain/motherCriteria';
 import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
-import { buildStudResource, diffStudResources, studResourceSignature } from '../domain/studResource';
+import { buildStudResource, diffStudResources } from '../domain/studResource';
 import type { SpeciesEntry } from '../domain/types';
 import {
   MOTHER_CRITERIA_ID,
@@ -36,6 +42,7 @@ import {
 import {
   isTargetReady,
   studSlotSetIdOf,
+  type CollectionDemand,
   type CollectionGroupDetail,
   type CollectionGroupMember,
   type CollectionGroupSummary,
@@ -128,7 +135,17 @@ export interface CollectionGroupsHook {
   claimTask: (targetKey: string) => Promise<void>;
   releaseTask: (targetKey: string) => Promise<void>;
   transferTask: (targetKey: string, toAccountId: string) => Promise<void>;
-  selectGroup: (groupId: string) => void;
+  /** 需求承接（2026-10-26）：组内需求与我的操作。 */
+  demands: CollectionDemand[];
+  demandsLoading: boolean;
+  demandsError: string;
+  refreshDemands: () => Promise<void>;
+  addDemand: (eggGameId: number, natures: string[]) => Promise<CollectionDemand[]>;
+  withdrawDemand: (eggGameId: number, nature: string) => Promise<void>;
+  claimDemand: (demand: CollectionDemand) => Promise<CollectionDemand>;
+  releaseDemand: (demand: CollectionDemand) => Promise<CollectionDemand>;
+  completeDemand: (demand: CollectionDemand) => Promise<CollectionDemand>;
+  selectGroup: (groupId: string, groupTypeHint?: CollectionGroupType) => void;
   selectPersonal: () => void;
   setPersonalType: (type: CollectionGroupType) => void;
   setDraftSelection: (accountKeys: string[]) => void;
@@ -164,7 +181,12 @@ const messageOf = (error: unknown): string => {
 const selectionOf = (detail: CollectionGroupDetail | null, accountId: string | null): string[] => {
   if (!detail || !accountId) return [];
   const mine = detail.members.find((member) => member.accountId === accountId);
-  return mine?.resource?.accounts.map((account) => account.accountKey) ?? [];
+  // 母本组只有 resource，种公组只有 studResource；按组类型取账号，否则种公组会永远显示「未选号」。
+  const accounts =
+    detail.group.groupType === 'stud'
+      ? mine?.studResource?.accounts
+      : mine?.resource?.accounts;
+  return accounts?.map((account) => account.accountKey) ?? [];
 };
 
 const emptyMotherDraft = (
@@ -249,6 +271,9 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
   const [tasksView, setTasksView] = useState<CollectionTasksResponse>(EMPTY_TASKS);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState('');
+  const [demands, setDemands] = useState<CollectionDemand[]>([]);
+  const [demandsLoading, setDemandsLoading] = useState(false);
+  const [demandsError, setDemandsError] = useState('');
 
   const accountRef = useRef(accountId);
   const modeRef = useRef(pageMode);
@@ -262,6 +287,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
   const detailRequestRef = useRef(0);
   const draftRevisionRef = useRef(0);
   const tasksRequestRef = useRef(0);
+  const demandsRequestRef = useRef(0);
   const nextPollAtRef = useRef<number | null>(null);
   const inputRef = useRef(input);
 
@@ -306,7 +332,106 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     setTasksView(EMPTY_TASKS);
     setTasksError('');
     setTasksLoading(false);
+    // 需求与任务同生命周期：切组 / 退出时一起清掉，避免串组（2026-10-26）
+    demandsRequestRef.current += 1;
+    setDemands([]);
+    setDemandsError('');
+    setDemandsLoading(false);
   }, []);
+
+  /* ---------- 需求承接（2026-10-26） ---------- */
+
+  const loadDemands = useCallback(
+    async (groupId: string) => {
+      const active = scope(true);
+      const request = ++demandsRequestRef.current;
+      setDemandsLoading(true);
+      try {
+        const list = await getCollectionDemands(groupId);
+        if (!active() || request !== demandsRequestRef.current) return;
+        setDemands(list);
+        setDemandsError('');
+      } catch (failure) {
+        if (!active() || request !== demandsRequestRef.current) return;
+        setDemandsError(messageOf(failure));
+      } finally {
+        if (active() && request === demandsRequestRef.current) setDemandsLoading(false);
+      }
+    },
+    [scope],
+  );
+
+  const refreshDemands = useCallback(async () => {
+    const groupId = groupRef.current;
+    if (!groupId) return;
+    await loadDemands(groupId);
+  }, [loadDemands]);
+
+  /** 用服务器返回的那一条覆盖本地，避免整表重拉（一个性格一条）。 */
+  const mergeDemand = useCallback((next: CollectionDemand) => {
+    // 慢网下切组后旧组的响应不能写进新组列表
+    if (next.groupId !== groupRef.current) return;
+    setDemands((list) => [
+      next,
+      ...list.filter(
+        (item) =>
+          !(
+            item.demanderAccountId === next.demanderAccountId &&
+            item.eggGameId === next.eggGameId &&
+            item.nature === next.nature
+          ),
+      ),
+    ]);
+  }, []);
+
+  const addDemand = useCallback(
+    async (eggGameId: number, natures: string[]) => {
+      const groupId = groupRef.current;
+      if (!groupId) throw new Error('还没有打开小组');
+      const saved = await publishDemandApi(groupId, { eggGameId, natures });
+      saved.forEach(mergeDemand);
+      return saved;
+    },
+    [mergeDemand],
+  );
+
+  const withdrawDemand = useCallback(async (eggGameId: number, nature: string) => {
+    const groupId = groupRef.current;
+    const account = accountRef.current;
+    if (!groupId) throw new Error('还没有打开小组');
+    await withdrawDemandApi(groupId, eggGameId, nature);
+    setDemands((list) =>
+      list.filter(
+        (item) =>
+          !(
+            item.demanderAccountId === account &&
+            item.eggGameId === eggGameId &&
+            item.nature === nature
+          ),
+      ),
+    );
+  }, []);
+
+  const demandAction = useCallback(
+    async (
+      action: 'claim' | 'release' | 'complete',
+      demand: Pick<CollectionDemand, 'demanderAccountId' | 'eggGameId' | 'nature' | 'version'>,
+    ) => {
+      const groupId = groupRef.current;
+      if (!groupId) throw new Error('还没有打开小组');
+      const call =
+        action === 'claim' ? claimDemandApi : action === 'release' ? releaseDemandApi : completeDemandApi;
+      const saved = await call(groupId, {
+        demanderAccountId: demand.demanderAccountId,
+        eggGameId: demand.eggGameId,
+        nature: demand.nature,
+        version: demand.version,
+      });
+      mergeDemand(saved);
+      return saved;
+    },
+    [mergeDemand],
+  );
 
   /* ---------- 会话切换 ---------- */
   useEffect(
@@ -368,16 +493,22 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
   const applyGroupList = useCallback((list: CollectionGroupSummary[], account: string) => {
     const prefs = readCollectionGroupPrefs(account);
     const preferredType = prefs.personalType;
-    const stored = readLastGroupId(account, preferredType);
+    const lastMother = readLastGroupId(account, 'mother');
+    const lastStud = readLastGroupId(account, 'stud');
+    const lastPreferred = preferredType === 'mother' ? lastMother : lastStud;
     const target =
-      list.find((group) => group.id === stored)?.id ??
+      list.find((group) => group.id === lastPreferred)?.id ??
       list.find((group) => group.groupType === preferredType)?.id ??
+      list.find((group) => group.id === lastMother)?.id ??
+      list.find((group) => group.id === lastStud)?.id ??
       list[0]?.id ??
       null;
     if (groupRef.current !== target) groupEpochRef.current += 1;
     groupRef.current = target;
     setCurrentGroupId(target);
-    if (target) saveLastGroupId(account, preferredType, target);
+    // 按组自己的类型记住，不能写成「个人求蛋当前类型」，否则母本/种公互相污染
+    const targetGroup = list.find((group) => group.id === target);
+    if (target && targetGroup) saveLastGroupId(account, targetGroup.groupType, target);
   }, []);
 
   useEffect(() => {
@@ -435,6 +566,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         nextPollAtRef.current = null;
         setNextPollAt(null);
         void loadTasks(groupId);
+        void loadDemands(groupId);
       } catch (failure) {
         if (!active()) return;
         if (isMotherGroupsApiError(failure) && (failure.status === 403 || failure.status === 404)) {
@@ -462,7 +594,9 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
           setError(failure.message);
           return;
         }
-        if (detailRef.current) {
+        // 只有网络不可用 / 服务端 5xx 才沿用旧数据标「离线」；401、解析失败等要让用户看到真实错误
+        const status = isMotherGroupsApiError(failure) ? failure.status : 0;
+        if (detailRef.current && (status === 0 || status >= 500)) {
           setOffline(true);
           return;
         }
@@ -472,7 +606,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
           request === detailRequestRef.current) setLoading(false);
       }
     },
-    [applySelection, clearTasks, loadTasks, refreshGroups],
+    [applySelection, clearTasks, loadDemands, loadTasks, refreshGroups],
   );
 
   useEffect(() => {
@@ -518,7 +652,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     };
   }, [accountId, currentGroupId, loadDetail]);
 
-  const selectGroup = useCallback((groupId: string) => {
+  const selectGroup = useCallback((groupId: string, groupTypeHint?: CollectionGroupType) => {
     const group = groups.find((item) => item.id === groupId);
     if (groupId === groupRef.current && modeRef.current === 'group') return;
     groupEpochRef.current += 1;
@@ -529,7 +663,9 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     setPageMode('group');
     modeRef.current = 'group';
     savePageMode(accountRef.current, 'group');
-    if (group) saveLastGroupId(accountRef.current, group.groupType, group.id);
+    // 新建/加入后 groups 可能还没刷新到，用调用方传入的类型兜底
+    const type = group?.groupType ?? groupTypeHint;
+    if (type) saveLastGroupId(accountRef.current, type, groupId);
     draftRef.current = [];
     dirtyRef.current = false;
     setDraftSelectionState([]);
@@ -596,7 +732,8 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
       if (!active()) return;
       setError(messageOf(failure));
     } finally {
-      if (active()) setRefreshing(false);
+      // 刷新按钮的忙碌态只跟这一次点击有关；切组/切身份不应让它永久卡在「刷新中…」
+      setRefreshing(false);
     }
   }, [applyGroupList, refreshGroups, reloadCurrent, scope]);
 
@@ -761,6 +898,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     const { catalogVersion } = inputRef.current;
     const groupId = groupRef.current;
     const account = accountRef.current;
+    if (!groupId) throw new Error('还没有打开小组');
     if (groupType === 'stud') {
       const target = currentGroup?.group.target;
       if (!target || target.kind !== 'stud') throw new Error('本组目标还没确认');
@@ -773,16 +911,14 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         targetRevision: currentGroup?.group.targetRevision ?? 0,
         accounts: [],
       });
-    } else if (groupType === 'mother') {
+    } else {
       const criteriaId = currentGroup?.group.target?.kind === 'mother'
         ? currentGroup.group.target.criteriaId
         : MOTHER_CRITERIA_ID;
       await publishResource(emptyMotherDraft(catalogVersion, criteriaId));
-    } else {
-      await publishResource(emptyMotherDraft(catalogVersion));
     }
     // 记住「主动停止共享」：之后导入触发的自动发布要跳过这个组
-    if (groupId) setGroupSharingOff(account, groupId, true);
+    setGroupSharingOff(account, groupId, true);
   }, [currentGroup, groupType, publishResource]);
 
   const claimTask = useCallback(
@@ -791,37 +927,24 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
       const account = accountRef.current;
       if (!groupId || !account) throw new Error('还没有打开小组');
       const current = tasksView.tasks.find((task) => task.targetKey === targetKey);
-      const optimistic: CollectionTaskRecord = {
-        groupId,
-        targetRevision: tasksView.targetRevision,
-        targetKey,
-        round: current?.round ?? 0,
-        status: 'claimed',
-        ownerAccountId: account,
-        version: (current?.version ?? 0) + 1,
-        updatedAt: Date.now(),
-        closedAt: null,
-      };
-      // 先就地更新，点击立即有反馈；服务器确认失败再回滚
-      setTasksView((view) => ({
-        ...view,
-        tasks: [...view.tasks.filter((task) => task.targetKey !== targetKey), optimistic],
-      }));
+      // 服务器是唯一裁决方：等成功后再刷新，不在离线/失败时先显示「我认领了」
+      const active = scope(true);
       try {
         await claimTaskApi(groupId, { targetKey, version: current?.version });
       } catch (failure) {
-        setTasksView((view) => ({
-          ...view,
-          tasks: current
-            ? [...view.tasks.filter((task) => task.targetKey !== targetKey), current]
-            : view.tasks.filter((task) => task.targetKey !== targetKey),
-        }));
-        setTasksError(messageOf(failure));
+        if (active()) {
+          setTasksError(messageOf(failure));
+          // 竞争失败时立即拉一次当前负责人，而不是等 15 秒轮询
+          void loadTasks(groupId);
+        }
         throw failure;
       }
-      void loadTasks(groupId);
+      if (active()) {
+        setTasksError('');
+        void loadTasks(groupId);
+      }
     },
-    [loadTasks, tasksView.targetRevision, tasksView.tasks],
+    [loadTasks, scope, tasksView.tasks],
   );
 
   const releaseTask = useCallback(
@@ -829,36 +952,22 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
       const groupId = groupRef.current;
       if (!groupId) throw new Error('还没有打开小组');
       const current = tasksView.tasks.find((task) => task.targetKey === targetKey);
-      const optimistic: CollectionTaskRecord = {
-        groupId,
-        targetRevision: tasksView.targetRevision,
-        targetKey,
-        round: current?.round ?? 0,
-        status: 'open',
-        ownerAccountId: null,
-        version: (current?.version ?? 0) + 1,
-        updatedAt: Date.now(),
-        closedAt: null,
-      };
-      setTasksView((view) => ({
-        ...view,
-        tasks: [...view.tasks.filter((task) => task.targetKey !== targetKey), optimistic],
-      }));
+      const active = scope(true);
       try {
         await releaseTaskApi(groupId, { targetKey, version: current?.version });
       } catch (failure) {
-        setTasksView((view) => ({
-          ...view,
-          tasks: current
-            ? [...view.tasks.filter((task) => task.targetKey !== targetKey), current]
-            : view.tasks.filter((task) => task.targetKey !== targetKey),
-        }));
-        setTasksError(messageOf(failure));
+        if (active()) {
+          setTasksError(messageOf(failure));
+          void loadTasks(groupId);
+        }
         throw failure;
       }
-      void loadTasks(groupId);
+      if (active()) {
+        setTasksError('');
+        void loadTasks(groupId);
+      }
     },
-    [loadTasks, tasksView.targetRevision, tasksView.tasks],
+    [loadTasks, scope, tasksView.tasks],
   );
 
   const transferTask = useCallback(
@@ -866,36 +975,22 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
       const groupId = groupRef.current;
       if (!groupId) throw new Error('还没有打开小组');
       const current = tasksView.tasks.find((task) => task.targetKey === targetKey);
-      const optimistic: CollectionTaskRecord = {
-        groupId,
-        targetRevision: tasksView.targetRevision,
-        targetKey,
-        round: current?.round ?? 0,
-        status: 'claimed',
-        ownerAccountId: toAccountId,
-        version: (current?.version ?? 0) + 1,
-        updatedAt: Date.now(),
-        closedAt: null,
-      };
-      setTasksView((view) => ({
-        ...view,
-        tasks: [...view.tasks.filter((task) => task.targetKey !== targetKey), optimistic],
-      }));
+      const active = scope(true);
       try {
         await transferTaskApi(groupId, { targetKey, toAccountId, version: current?.version });
       } catch (failure) {
-        setTasksView((view) => ({
-          ...view,
-          tasks: current
-            ? [...view.tasks.filter((task) => task.targetKey !== targetKey), current]
-            : view.tasks.filter((task) => task.targetKey !== targetKey),
-        }));
-        setTasksError(messageOf(failure));
+        if (active()) {
+          setTasksError(messageOf(failure));
+          void loadTasks(groupId);
+        }
         throw failure;
       }
-      void loadTasks(groupId);
+      if (active()) {
+        setTasksError('');
+        void loadTasks(groupId);
+      }
     },
-    [loadTasks, tasksView.targetRevision, tasksView.tasks],
+    [loadTasks, scope, tasksView.tasks],
   );
 
   const refreshTasks = useCallback(async () => {
@@ -924,7 +1019,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
       saveCollectionInviteCode(account, created.group.id, created.inviteCode);
       await refreshGroups();
       if (!active()) throw new Error('身份或小组已切换，请在原身份中查看操作结果');
-      selectGroup(created.group.id);
+      selectGroup(created.group.id, created.group.groupType);
       return { groupId: created.group.id, inviteCode: created.inviteCode };
     },
     [refreshGroups, scope, selectGroup],
@@ -1046,6 +1141,15 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     claimTask,
     releaseTask,
     transferTask,
+    demands,
+    demandsLoading,
+    demandsError,
+    refreshDemands,
+    addDemand,
+    withdrawDemand,
+    claimDemand: (demand: CollectionDemand) => demandAction('claim', demand),
+    releaseDemand: (demand: CollectionDemand) => demandAction('release', demand),
+    completeDemand: (demand: CollectionDemand) => demandAction('complete', demand),
     selectGroup,
     selectPersonal,
     setPersonalType,
@@ -1064,23 +1168,5 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     clearError: () => setError(''),
   };
 }
-
-/** 供 UI 判断「这份草稿和服务器上的摘要是否同一份覆盖」。 */
-export const sameCollectionCoverage = (
-  a: MotherResourceDraft | StudResourceDraft | null,
-  b: MotherResourceDraft | StudResourceDraft | null,
-): boolean => {
-  if (a == null || b == null) return false;
-  const aStud = 'kind' in a && a.kind === 'stud';
-  const bStud = 'kind' in b && b.kind === 'stud';
-  if (aStud || bStud) {
-    if (!aStud || !bStud) return false;
-    return studResourceSignature(a as StudResourceDraft) === studResourceSignature(b as StudResourceDraft);
-  }
-  return (
-    motherResourceSignature(a as MotherResourceDraft) ===
-    motherResourceSignature(b as MotherResourceDraft)
-  );
-};
 
 export { MotherGroupsApiError };

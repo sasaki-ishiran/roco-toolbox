@@ -31,6 +31,8 @@ export interface StudGroupResourcesProps {
   tasks?: CollectionTaskRecord[];
   tasksConfirmed?: boolean;
   tasksPendingMemberIds?: string[];
+  tasksLoading?: boolean;
+  tasksError?: string;
   isOwner?: boolean;
   onClaimTask?: (targetKey: string) => Promise<void>;
   onReleaseTask?: (targetKey: string) => Promise<void>;
@@ -51,6 +53,8 @@ export function StudGroupResources({
   tasks = [],
   tasksConfirmed = false,
   tasksPendingMemberIds = [],
+  tasksLoading = false,
+  tasksError = '',
   isOwner = false,
   onClaimTask,
   onReleaseTask,
@@ -115,6 +119,19 @@ export function StudGroupResources({
     };
   }, [group.members, memberById]);
 
+  /**
+   * 共同寻找 = 选中的人都缺的槽位（交集），空选择 = 全组成员。
+   * 与母本组同一口径：不能因为一个几乎全收集的人就把共同寻找「补齐」。
+   *
+   * 注意：这个 useMemo 必须放在「目标未确认」的提前 return 之前。
+   * 组长点「确认本组目标」后组件会从空目标变成有槽位，若 hook 数量随之变化，
+   * React 会直接抛错导致整页白屏（2026-10-25 线上 bug）。
+   */
+  const aliveIds = useMemo(
+    () => new Set(group.members.map((member) => member.accountId)),
+    [group.members],
+  );
+
   if (!studTarget || studTarget.slots.length === 0) {
     return (
       <StateNotice
@@ -126,14 +143,6 @@ export function StudGroupResources({
     );
   }
 
-  /**
-   * 共同寻找 = 选中的人都缺的槽位（交集），空选择 = 全组成员。
-   * 与母本组同一口径：不能因为一个几乎全收集的人就把共同寻找「补齐」。
-   */
-  const aliveIds = useMemo(
-    () => new Set(group.members.map((member) => member.accountId)),
-    [group.members],
-  );
   const seekingPicked = seekingMembers.filter((id) => aliveIds.has(id));
   const seekingScope = seekingPicked.length > 0
     ? seekingPicked
@@ -154,7 +163,9 @@ export function StudGroupResources({
         ? views.mineForOthers
         : seekingRows;
   const filtered = (currentRows ?? []).filter((row) => {
-    if (memberFilter) {
+    // memberFilter 只服务「我缺的 / 我能补的」；「共同寻找」的成员范围由 seekingMembers 决定，
+    // 否则切视图后会沿用隐藏的筛选条件把列表清空。
+    if (memberFilter && effectiveView !== 'seeking') {
       // 我缺的：按「谁有」筛；我能补的：按「缺这个槽位的人」筛
       const related =
         effectiveView === 'mine'
@@ -168,10 +179,12 @@ export function StudGroupResources({
     return `${groupLabel}${row.natureName}${row.grade}`.toLowerCase().includes(keyword);
   });
   const grouped = groupRowsByGroupId(filtered);
-  const holderText = (row: StudSlotRow): string =>
-    row.holders.map((holder) => labelOf(holder.accountId)).join('、');
-  const breedableText = (row: StudSlotRow): string =>
-    row.breedableHolders.map((holder) => labelOf(holder.accountId)).join('、');
+  /** 有 / 可迭代 / 缺：一个名字一行（2026-10-26 用户口径，不再用「、」挤在一行）。 */
+  const holderNames = (row: StudSlotRow): string[] =>
+    row.holders.map((holder) => labelOf(holder.accountId));
+  const breedableNames = (row: StudSlotRow): string[] =>
+    row.breedableHolders.map((holder) => labelOf(holder.accountId));
+  const missingNames = (row: StudSlotRow): string[] => row.missingMemberIds.map(labelOf);
 
   const taskKeyOf = (row: StudSlotRow): string => `stud:${row.key}`;
   const taskOf = (row: StudSlotRow): CollectionTaskRecord | undefined =>
@@ -312,7 +325,7 @@ export function StudGroupResources({
                         </p>
                         {row.holders.length > 0 ? (
                           <p className="mt-0.5 text-[11px] text-emerald-700" data-testid="stud-slot-holders">
-                            有：{holderText(row)}
+                            有：<NameLines names={holderNames(row)} />
                           </p>
                         ) : (
                           <p className="mt-0.5 text-[11px] text-slate-400" data-testid="stud-slot-none">
@@ -324,12 +337,12 @@ export function StudGroupResources({
                         )}
                         {row.breedableHolders.length > 0 ? (
                           <p className="mt-0.5 text-[11px] text-amber-700" data-testid="stud-slot-breedable">
-                            可迭代：{breedableText(row)}
+                            可迭代：<NameLines names={breedableNames(row)} />
                           </p>
                         ) : null}
                         {row.holders.length > 0 && row.missingMemberIds.length > 0 ? (
                           <p className="mt-0.5 text-[11px] text-slate-400" data-testid="stud-slot-missing">
-                            缺：{row.missingMemberIds.map(labelOf).join('、')}
+                            缺：<NameLines names={missingNames(row)} />
                             {row.unknownMemberIds.length > 0
                               ? `，另 ${row.unknownMemberIds.length} 人待发布/更新`
                               : ''}
@@ -337,10 +350,16 @@ export function StudGroupResources({
                         ) : null}
                         {effectiveView === 'seeking' ? (
                           <div className="mt-1 border-t border-slate-200 pt-1 text-[11px]" data-testid="stud-task">
-                            {!tasksConfirmed ? (
-                              <span className="text-amber-700">
-                                待确认：{tasksPendingMemberIds.length} 人未发布/更新，暂不能认领
-                              </span>
+                            {tasksError ? (
+                              <span className="text-rose-600">任务读取失败：{tasksError}</span>
+                            ) : !tasksConfirmed ? (
+                              tasksLoading ? (
+                                <span className="text-slate-500">正在核对组员发布状态…</span>
+                              ) : (
+                                <span className="text-amber-700">
+                                  待确认：{tasksPendingMemberIds.length} 人未发布/更新，暂不能认领
+                                </span>
+                              )
                             ) : taskOf(row)?.ownerAccountId ? (
                               <span className="flex flex-wrap items-center gap-1">
                                 <span
@@ -413,5 +432,19 @@ export function StudGroupResources({
         </>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * 名字一行一个（2026-10-26 用户口径）：有 / 可迭代 / 缺有多人时不再用「、」挤在一行。
+ * 用 inline-flex 竖排：第一个名字紧跟在前缀后面，其余往下排。
+ */
+function NameLines({ names }: { names: string[] }) {
+  return (
+    <span className="inline-flex flex-col align-top break-words">
+      {names.map((name, index) => (
+        <span key={`${name}-${index}`}>{name}</span>
+      ))}
+    </span>
   );
 }

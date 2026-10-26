@@ -17,20 +17,26 @@ import {
   parseTargetUpdateBody,
 } from './collectionGroupsValidation';
 import {
+  claimCollectionDemand,
   claimCollectionTask,
+  completeCollectionDemand,
   createCollectionGroup,
   findCollectionGroup,
   joinCollectionGroup,
   leaveCollectionGroup,
+  listCollectionDemands,
   listCollectionGroups,
   listCollectionTasks,
   previewInviteGroup,
+  publishCollectionDemand,
   publishMotherResourceToGroup,
   publishStudResource,
   readCollectionGroupDetail,
+  releaseCollectionDemand,
   releaseCollectionTask,
   transferCollectionTask,
   updateCollectionTarget,
+  withdrawCollectionDemand,
 } from './collectionGroupsStore';
 import {
   MotherStoreError,
@@ -41,7 +47,12 @@ import {
   updateDisplayName,
 } from './motherGroupsStore';
 import { type Env, authenticate, clientIp, json, newId, rateLimit, sha256Hex } from './util';
-import { STUD_RESOURCE_MAX_BODY_BYTES } from '../../src/shared/collectionGroups';
+import {
+  DEMAND_NATURE_MAX,
+  STUD_RESOURCE_MAX_BODY_BYTES,
+  isValidDemandNatures,
+} from '../../src/shared/collectionGroups';
+import { MOTHER_RESOURCE_MAX_BODY_BYTES } from '../../src/shared/motherGroups';
 
 const HOUR = 3_600_000;
 const READ_LIMIT = 1800;
@@ -67,6 +78,14 @@ const STORE_STATUS: Record<MotherStoreErrorCode, number> = {
   TASKS_NOT_CONFIRMED: 409,
   TASK_NOT_FOUND: 404,
   TASK_NOT_YOURS: 403,
+  DEMAND_UNSUPPORTED: 409,
+  DEMAND_NOT_FOUND: 404,
+  DEMAND_LIMIT: 409,
+  DEMAND_TAKEN: 409,
+  DEMAND_SELF: 409,
+  DEMAND_ALREADY_DONE: 409,
+  DEMAND_NOT_CLAIMED: 409,
+  DEMAND_NOT_YOURS: 403,
 };
 
 const failCode = (origin: string | null, status: number, code: string, error: string): Response => {
@@ -181,6 +200,24 @@ export async function handleCollectionGroups(
     ) {
       return await handleTaskAction(request, env, origin, accountId, groupId, rest[2]);
     }
+    // 需求承接（2026-10-26）：母本组专用
+    if (rest.length === 2 && rest[1] === 'demands' && method === 'GET') {
+      return await handleDemandsList(env, origin, accountId, groupId);
+    }
+    if (rest.length === 2 && rest[1] === 'demands' && method === 'POST') {
+      return await handleDemandPublish(request, env, origin, accountId, groupId);
+    }
+    if (rest.length === 3 && rest[1] === 'demands' && method === 'DELETE') {
+      return await handleDemandWithdraw(request, env, origin, accountId, groupId, rest[2]);
+    }
+    if (
+      rest.length === 4 &&
+      rest[1] === 'demands' &&
+      ['claim', 'release', 'complete'].includes(rest[3]) &&
+      method === 'POST'
+    ) {
+      return await handleDemandAction(request, env, origin, accountId, groupId, rest[2], rest[3]);
+    }
     return failCode(origin, 404, 'GROUP_NOT_FOUND', '没有这个接口');
   } catch (error) {
     if (error instanceof MotherInputError) {
@@ -285,7 +322,10 @@ async function handlePublish(
   }
 
   const parsed = parseCollectionPublishBody(
-    await readJsonBody(request, STUD_RESOURCE_MAX_BODY_BYTES),
+    await readJsonBody(
+      request,
+      group.groupType === 'stud' ? STUD_RESOURCE_MAX_BODY_BYTES : MOTHER_RESOURCE_MAX_BODY_BYTES,
+    ),
     group.groupType,
   );
   const result =
@@ -300,6 +340,7 @@ async function handlePublish(
           groupId,
           accountId,
           baseRevision: parsed.baseRevision,
+          baseTargetRevision: parsed.baseTargetRevision ?? undefined,
           resource: parsed.resource as Parameters<typeof publishMotherResourceToGroup>[1]['resource'],
         });
   return okJson(origin, {
@@ -423,6 +464,140 @@ async function handleTaskAction(
     expectedVersion,
   });
   return okJson(origin, { task });
+}
+
+/* ---------- 需求承接（2026-10-26） ---------- */
+
+const parseDemandEggGameId = (raw: unknown): number => {
+  const id = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new MotherInputError('INVALID_INPUT', 'eggGameId 无效');
+  }
+  return id;
+};
+
+const parseDemanderAccountId = (body: Record<string, unknown>): string => {
+  const value = body.demanderAccountId;
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > 64) {
+    throw new MotherInputError('INVALID_INPUT', 'demanderAccountId 无效');
+  }
+  return value.trim();
+};
+
+async function requireMember(
+  env: Env,
+  origin: string | null,
+  accountId: string,
+  groupId: string,
+): Promise<Response | null> {
+  const group = await findCollectionGroup(env.DB, groupId);
+  if (!group) return failCode(origin, 404, 'GROUP_NOT_FOUND', '小组不存在');
+  if (!(await isMember(env.DB, groupId, accountId))) {
+    return failCode(origin, 403, 'NOT_MEMBER', '不是该组成员');
+  }
+  return null;
+}
+
+async function handleDemandsList(
+  env: Env,
+  origin: string | null,
+  accountId: string,
+  groupId: string,
+): Promise<Response> {
+  const readLimited = await limited(env, origin, `cg-read:${accountId}`, READ_LIMIT);
+  if (readLimited) return readLimited;
+  const denied = await requireMember(env, origin, accountId, groupId);
+  if (denied) return denied;
+  return okJson(origin, { demands: await listCollectionDemands(env.DB, groupId) });
+}
+
+async function handleDemandPublish(
+  request: Request,
+  env: Env,
+  origin: string | null,
+  accountId: string,
+  groupId: string,
+): Promise<Response> {
+  const writeLimited = await limited(env, origin, `cg-write:${accountId}`, WRITE_LIMIT);
+  if (writeLimited) return writeLimited;
+  const denied = await requireMember(env, origin, accountId, groupId);
+  if (denied) return denied;
+  const body = (await readJsonBody(request)) as Record<string, unknown>;
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new MotherInputError('INVALID_INPUT', '请求体必须是对象');
+  }
+  const eggGameId = parseDemandEggGameId(body.eggGameId);
+  const natures = body.natures ?? [];
+  if (!isValidDemandNatures(natures)) {
+    throw new MotherInputError('INVALID_INPUT', `性格最多 ${DEMAND_NATURE_MAX} 个，且不能为空`);
+  }
+  const demand = await publishCollectionDemand(env.DB, {
+    groupId,
+    accountId,
+    eggGameId,
+    natures: natures as string[],
+  });
+  return okJson(origin, { demands: demand });
+}
+
+async function handleDemandWithdraw(
+  request: Request,
+  env: Env,
+  origin: string | null,
+  accountId: string,
+  groupId: string,
+  rawEggGameId: string | undefined,
+): Promise<Response> {
+  const writeLimited = await limited(env, origin, `cg-write:${accountId}`, WRITE_LIMIT);
+  if (writeLimited) return writeLimited;
+  const denied = await requireMember(env, origin, accountId, groupId);
+  if (denied) return denied;
+  const eggGameId = parseDemandEggGameId(rawEggGameId);
+  // 按性格单独撤回：`?nature=` 为空表示撤回「不挑性格」那一条
+  const nature = new URL(request.url).searchParams.get('nature') ?? '';
+  if (nature.length > 8) throw new MotherInputError('INVALID_INPUT', 'nature 无效');
+  await withdrawCollectionDemand(env.DB, groupId, accountId, eggGameId, nature);
+  return okJson(origin, { withdrawn: { eggGameId, nature } });
+}
+
+async function handleDemandAction(
+  request: Request,
+  env: Env,
+  origin: string | null,
+  accountId: string,
+  groupId: string,
+  rawEggGameId: string | undefined,
+  action: string,
+): Promise<Response> {
+  const writeLimited = await limited(env, origin, `cg-write:${accountId}`, WRITE_LIMIT);
+  if (writeLimited) return writeLimited;
+  const denied = await requireMember(env, origin, accountId, groupId);
+  if (denied) return denied;
+  const body = (await readJsonBody(request)) as Record<string, unknown>;
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new MotherInputError('INVALID_INPUT', '请求体必须是对象');
+  }
+  const demanderAccountId = parseDemanderAccountId(body);
+  const eggGameId = parseDemandEggGameId(rawEggGameId);
+  const nature = body.nature ?? '';
+  if (typeof nature !== 'string' || nature.length > 8) {
+    throw new MotherInputError('INVALID_INPUT', 'nature 无效');
+  }
+  const expectedVersion = parseOptionalVersion(body);
+  const base = { groupId, accountId, demanderAccountId, eggGameId, nature, expectedVersion };
+
+  if (action === 'claim') {
+    return okJson(origin, { demand: await claimCollectionDemand(env.DB, base) });
+  }
+  if (action === 'release') {
+    return okJson(origin, { demand: await releaseCollectionDemand(env.DB, base) });
+  }
+  const group = await findCollectionGroup(env.DB, groupId);
+  const demand = await completeCollectionDemand(env.DB, {
+    ...base,
+    isOwner: group?.ownerAccountId === accountId,
+  });
+  return okJson(origin, { demand });
 }
 
 async function handleProfile(

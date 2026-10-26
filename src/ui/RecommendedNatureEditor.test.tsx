@@ -18,6 +18,19 @@ describe('推荐性格编辑器', () => {
     expect(rows.some((row) => row.textContent?.includes('春天的样子'))).toBe(true);
   });
 
+  test('卡片紧凑：窄屏三列、宽屏四列，长名字完整显示不截断', () => {
+    render(<RecommendedNatureEditor open onClose={() => {}} />);
+    const grid = screen.getByTestId('nature-editor-grid');
+    expect(grid.className).toContain('grid-cols-3');
+    expect(grid.className).toContain('sm:grid-cols-4');
+
+    const longName = screen
+      .getAllByTestId('nature-editor-row')
+      .find((row) => row.textContent?.includes('小星光_月光能量的样子'));
+    expect(longName).toBeTruthy();
+    expect(longName?.querySelector('.truncate')).toBeNull();
+  });
+
   test('改一颗蛋的性格会写入覆盖并标「已改」，恢复默认清掉', () => {
     render(<RecommendedNatureEditor open onClose={() => {}} />);
     fireEvent.click(screen.getAllByTestId(/nature-editor-toggle-\d+/)[0]);

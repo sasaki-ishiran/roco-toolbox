@@ -42,6 +42,7 @@ describe('小组清单临时状态', () => {
       memberFilter: '',
       seekingMembers: [],
       onlyOwned: false,
+      onlyDemanded: false,
     });
   });
 

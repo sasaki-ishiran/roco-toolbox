@@ -116,7 +116,7 @@ export function parseMotherResource(value: unknown): MotherResourceDraft {
   const criteriaId = record.criteriaId;
   if (
     typeof criteriaId !== 'string' ||
-    !/^(female-huge-voice100-v1|mother-v2-[0-9a-f]{8})$/.test(criteriaId)
+    !/^(female-huge-voice100-v2|mother-v2-[0-9a-f]{8})$/.test(criteriaId)
   ) {
     invalid('criteriaId 不受支持');
   }

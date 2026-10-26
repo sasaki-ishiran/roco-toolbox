@@ -13,7 +13,6 @@ import {
   STUD_RESOURCE_MAX_SLOTS_PER_ACCOUNT,
   studSlotSetIdOf,
   slotKeyOf,
-  type CollectionGroupType,
   type SharedStudAccount,
   type StudResourceDraft,
   type StudSlotCoverage,
@@ -173,19 +172,40 @@ export interface StudResourceDiff {
   addedAccounts: string[];
   removedAccounts: string[];
   changedAccounts: Array<{ accountKey: string; addedSlots: string[]; removedSlots: string[] }>;
+  /** 同一格在「已覆盖 / 仅可迭代」之间迁移的槽位（需要重新发布）。 */
+  reclassifiedSlots: string[];
   unchanged: boolean;
 }
 
 const slotSetOfAccount = (account: SharedStudAccount): Set<string> =>
   new Set([...account.covered, ...account.breedable].map(slotKeyOf));
 
-/** 对比两份摘要的覆盖（忽略 revision / 时间 / 账号名）。 */
+/** 带类别前缀的槽位集合：用来识别「已覆盖 ↔ 可迭代」的类别迁移。 */
+const categorySlotSetOfAccount = (account: SharedStudAccount): Set<string> =>
+  new Set([
+    ...account.covered.map((slot) => `covered:${slotKeyOf(slot)}`),
+    ...account.breedable.map((slot) => `breedable:${slotKeyOf(slot)}`),
+  ]);
+
+/**
+ * 对比两份摘要的覆盖（忽略时间 / 账号名）。
+ *
+ * `unchanged` 还要看可比性四元组与「覆盖类别」：只改目标模式 / 修订 / 图鉴，
+ * 或同一格从「已覆盖」变成「仅可迭代」，都必须允许重新发布，否则成员会把
+ * 旧修订 / 旧类别一直留在组里。
+ */
 export function diffStudResources(
   previous: StudResourceDraft,
   next: StudResourceDraft,
 ): StudResourceDiff {
   const prev = new Map(previous.accounts.map((account) => [account.accountKey, slotSetOfAccount(account)]));
   const after = new Map(next.accounts.map((account) => [account.accountKey, slotSetOfAccount(account)]));
+  const prevCategories = new Map(
+    previous.accounts.map((account) => [account.accountKey, categorySlotSetOfAccount(account)]),
+  );
+  const afterCategories = new Map(
+    next.accounts.map((account) => [account.accountKey, categorySlotSetOfAccount(account)]),
+  );
   const addedAccounts = [...after.keys()].filter((key) => !prev.has(key)).sort(compareAccountKey);
   const removedAccounts = [...prev.keys()].filter((key) => !after.has(key)).sort(compareAccountKey);
   const changedAccounts: StudResourceDiff['changedAccounts'] = [];
@@ -202,13 +222,48 @@ export function diffStudResources(
   const afterAll = unionSlots(after);
   const addedSlots = [...afterAll].filter((slot) => !beforeAll.has(slot)).sort();
   const removedSlots = [...beforeAll].filter((slot) => !afterAll.has(slot)).sort();
+  const reclassifiedSlots = (() => {
+    const categoryOfBare = (sets: Map<string, Set<string>>): Map<string, string> => {
+      const map = new Map<string, string>();
+      for (const set of sets.values()) {
+        for (const item of set) {
+          const separator = item.indexOf(':');
+          const bare = item.slice(separator + 1);
+          const category = item.slice(0, separator);
+          const current = map.get(bare);
+          // 同一格可能同时出现在 covered 与 breedable；只有类别集合完全一致才算没迁移
+          map.set(bare, current == null ? category : `${current}+${category}`);
+        }
+      }
+      return map;
+    };
+    const before = categoryOfBare(prevCategories);
+    const after = categoryOfBare(afterCategories);
+    return [...after.keys()]
+      .filter((bare) => before.has(bare) && before.get(bare) !== after.get(bare))
+      .sort();
+  })();
+  const sameIdentity =
+    previous.mode === next.mode &&
+    previous.targetId === next.targetId &&
+    previous.targetRevision === next.targetRevision &&
+    previous.catalogVersion === next.catalogVersion;
+  const sameCategories =
+    prevCategories.size === afterCategories.size &&
+    [...afterCategories.entries()].every(([key, set]) => {
+      const before = prevCategories.get(key);
+      return before != null && before.size === set.size && [...set].every((item) => before.has(item));
+    });
   return {
     addedSlots,
     removedSlots,
     addedAccounts,
     removedAccounts,
     changedAccounts,
+    reclassifiedSlots,
     unchanged:
+      sameIdentity &&
+      sameCategories &&
       addedSlots.length === 0 &&
       removedSlots.length === 0 &&
       addedAccounts.length === 0 &&
@@ -242,26 +297,3 @@ export function studResourceSignature(resource: StudResourceDraft): string {
       .sort((a, b) => compareAccountKey(a.accountKey, b.accountKey)),
   });
 }
-
-/** 供界面展示：一只个体能补哪些槽位（已覆盖优先，其次可迭代）。 */
-export function studClaimsOfTarget(
-  target: StudTargetConfig,
-  snapshot: AccountSnapshot,
-  species: readonly SpeciesEntry[],
-): { covered: StudSlotCoverage[]; breedable: StudSlotCoverage[] } {
-  const resource = buildStudResource({
-    snapshots: [snapshot],
-    selectedAccountKeys: [snapshot.accountKey ?? accountKeyOf(snapshot)],
-    species,
-    catalogVersion: target.catalogVersion || 'local',
-    target,
-    targetRevision: 0,
-  });
-  return resource.accounts[0] ?? { accountKey: '', accountName: '', sourceExportedAt: '', covered: [], breedable: [] };
-}
-
-/** 组类型与目标必须一致；种公组目标为空时不能发布（服务端同样拒绝）。 */
-export const canPublishStud = (
-  groupType: CollectionGroupType,
-  target: StudTargetConfig | null,
-): boolean => groupType === 'stud' && isStudTargetReady(target);

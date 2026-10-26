@@ -1,4 +1,5 @@
 import { matchesVoiceOption, type MotherGroup, type TargetMode } from './petFilters';
+import { heightBodyOf } from '../shared/bodySize.js';
 import type { OwnedPet } from './types';
 
 /**
@@ -65,10 +66,15 @@ export const matchesMotherVoice = (voiceDb: number, voices: readonly string[]): 
  */
 export const MOTHER_BODY_PERCENT_TOLERANCE = 0.5;
 
-/** 该精灵是否命中选中的体型（先看解析出的奖章，再按百分位放宽口径兜底）。 */
+/** 该精灵是否命中选中的体型（先看解析出的奖章，再看身高百分位，最后按体重百分位放宽口径兜底）。 */
 export function matchesMotherBody(pet: OwnedPet, bodies: readonly MotherBody[]): boolean {
   if (bodies.length === 0) return true;
-  if (pet.medalBody && (bodies as readonly string[]).includes(pet.medalBody)) return true;
+  // 有奖牌就以奖牌为准：奖牌是体重 98% / 2% 判出来的，不再拿身高 / 体重百分位二次改判
+  if (pet.medalBody) return (bodies as readonly string[]).includes(pet.medalBody);
+  // 没有奖牌时才看身高百分位（2026-10-26 用户拍板：两个 100% 身高能生大块头蛋，
+  // 两个 0% 生小不点蛋）。奖牌本身不变，这里只是放宽「能不能作为合格亲本」的判定。
+  const heightBody = heightBodyOf(pet.heightPercent);
+  if (heightBody) return (bodies as readonly string[]).includes(heightBody);
   const percent = pet.weightPercent;
   if (typeof percent !== 'number' || !Number.isFinite(percent)) return false;
   return bodies.some((body) =>

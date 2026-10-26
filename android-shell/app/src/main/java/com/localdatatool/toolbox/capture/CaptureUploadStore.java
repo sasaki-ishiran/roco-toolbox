@@ -51,6 +51,14 @@ final class CaptureUploadStore {
         catch (Exception error) { return new JSONObject(); }
     }
 
+    /** 重新上传前清掉旧任务号：否则进程被杀后重启会把旧任务当成在途任务继续查询。 */
+    synchronized void clearCaptureId(String name) throws IOException {
+        JSONObject row = records.get(name);
+        if (row == null || row.optString("captureId").isEmpty()) return;
+        row.remove("captureId");
+        save();
+    }
+
     synchronized void update(String name, String state, String captureId, String gameId,
                              String message, long sent, long total, boolean deduplicated,
                              boolean durable) throws IOException {

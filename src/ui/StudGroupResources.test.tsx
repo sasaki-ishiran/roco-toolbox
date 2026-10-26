@@ -110,6 +110,27 @@ describe('StudGroupResources', () => {
     expect(screen.getByTestId('stud-slot-none')).toHaveTextContent('已发布成员均无，另 1 人待发布/更新');
   });
 
+  test('多个成员拥有同一槽位时，「有 / 缺」都是一行一个名字（不再用「、」）', () => {
+    const withD: CollectionGroupDetail = {
+      ...group,
+      members: [
+        member('A', studResource([slot(2, 11)])),
+        member('E', studResource([slot(2, 11)])),
+        member('B', studResource([])),
+        member('D', studResource([])),
+      ],
+    };
+    render(<StudGroupResources group={withD} viewerAccountId="B" catalogVersion="v1" />);
+    const linesOf = (testId: string): string[] => {
+      const column = screen.getByTestId(testId).querySelector('span.inline-flex');
+      return Array.from(column?.children ?? []).map((child) => child.textContent ?? '');
+    };
+    expect(screen.getByTestId('stud-slot-holders')).not.toHaveTextContent('、');
+    expect(linesOf('stud-slot-holders')).toEqual(['成员A', '成员E']);
+    expect(screen.getByTestId('stud-slot-missing')).not.toHaveTextContent('、');
+    expect(linesOf('stud-slot-missing')).toEqual(['成员B', '成员D']);
+  });
+
   test('我能补的：成员筛选按「缺这个槽位的人」', () => {
     const withD: CollectionGroupDetail = {
       ...group,
@@ -192,6 +213,23 @@ describe('StudGroupResources', () => {
     fireEvent.click(screen.getByTestId('stud-slot-view-seeking'));
     expect(screen.queryAllByTestId('stud-task-claim')).toHaveLength(0);
     expect(screen.getAllByText(/待确认/).length).toBeGreaterThan(0);
+  });
+
+  test('目标从未确认变为已确认不会白屏（hook 数量不能随目标变化）', () => {
+    const pending: CollectionGroupDetail = {
+      ...group,
+      group: { ...group.group, target: { ...target, slots: [] } },
+    };
+    const { rerender } = render(
+      <StudGroupResources group={pending} viewerAccountId="A" catalogVersion="v1" />,
+    );
+    expect(screen.getByTestId('stud-resources-pending')).toBeTruthy();
+
+    // 组长点「确认本组目标」后，同一实例从「无槽位」切到「有槽位」。
+    // 修复前这里会因 hook 数量变化抛错，整页白屏。
+    rerender(<StudGroupResources group={group} viewerAccountId="A" catalogVersion="v1" />);
+    expect(screen.getByTestId('stud-resources')).toBeTruthy();
+    expect(screen.getAllByTestId('stud-slot-row').length).toBeGreaterThan(0);
   });
 
   test('目标未确认时给出明确提示', () => {

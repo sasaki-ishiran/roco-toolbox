@@ -34,6 +34,13 @@ const MIGRATIONS = [
       'collection_group_tasks',
     ],
   },
+  {
+    label: 'collection-demands',
+    file: path.join(root, 'functions/migrations/2026-10-26-collection-demands.sql'),
+    start: '-- >>> collection-demands (2026-10-26)',
+    end: '-- <<< collection-demands (2026-10-26)',
+    tables: ['collection_group_demands'],
+  },
 ];
 const NEW_TABLES = MIGRATIONS.flatMap((item) => item.tables);
 
@@ -180,6 +187,8 @@ assert.throws(
   () => insertStud.run('g1', 'uid:3001', 'acc-b', '乙', '2026-10-23T00:00:00.000Z', 0, '{}'),
   /UNIQUE|constraint/i,
 );
+// 给 acc-b 单独插入一条合法摘要，后面的「删成员级联删除」才有可验证的行
+insertStud.run('g1', 'uid:3002', 'acc-b', '乙', '2026-10-23T00:00:00.000Z', 0, '{}');
 
 // 任务：同目标修订 + 目标键 + 轮次唯一；owner 注销时置空但任务保留
 const insertTask = full.prepare(

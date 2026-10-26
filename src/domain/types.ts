@@ -29,6 +29,12 @@ export interface SpeciesEntry {
   /** 成体体重的大小体型边界（kg），与 eggSize 的蛋重区分。 */
   bodySize?: { small: number; big: number };
   /**
+   * 成体身高区间（米，2026-10-26）。用来算身高百分位：100% = 上限、0% = 下限。
+   * 用户口径：两个 100% 身高能生大块头蛋、两个 0% 生小不点蛋；
+   * **只参与「合格」判定，不改大块头 / 小不点奖牌**（奖牌仍按体重 98% / 2%）。
+   */
+  heightSize?: { min: number; max: number };
+  /**
    * 蛋的重量区间（判定这枚蛋孵出来是不是大块头 / 小不点）。
    * 大块头 = 蛋重 >= hugeMin，小不点 = 蛋重 <= miniMax；
    * 换成百分位就是 (蛋重 - min) / (max - min)，hugeMin 约在 98%、miniMax 约在 2% 处。
@@ -80,6 +86,12 @@ export interface OwnedPet {
   voiceDb: number;
   medalBody: string; // '大块头' | '小不点' | ''
   weightPercent?: number; // 体重在该物种内的百分位（0~100），判断"到底有多大"
+  /**
+   * 身高在该物种内的百分位（0~100，2026-10-26）。
+   * 100% 视同「能生大块头蛋」、0% 视同「能生小不点蛋」——**只用于合格判定**，
+   * 奖牌（medalBody）仍只看体重。老抓包没有身高字段时为空，判定退回原口径。
+   */
+  heightPercent?: number;
   isShiny: boolean;
   /** 炫彩（2026-10-05 直接从导入内容读取：备份 JSON 里同为平铺字段 isColorful，采集器导出就有） */
   isColorful?: boolean;

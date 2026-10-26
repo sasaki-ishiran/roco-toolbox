@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CATALOG_VERSION, eggGroupNames } from '../data/catalog';
 import {
   MOTHER_TARGET_BODIES,
@@ -8,6 +8,7 @@ import {
   studSlotSetIdOf,
   type GroupTargetConfig,
   type MotherTargetConfig,
+  type StudTargetConfig,
 } from '../shared/collectionGroups';
 import { activeNatureOverrides } from '../domain/recommendedNatures';
 import type { CollectionGroupsHook } from './useCollectionGroups';
@@ -44,29 +45,46 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
   const [requireNatures, setRequireNatures] = useState(false);
   const [natureEditorOpen, setNatureEditorOpen] = useState(false);
   const natureOverrides = useNatureOverrides();
+  const mountedRef = useRef(true);
+  /** 从个人配置导入的目标先预览，确认后才递增全组修订。 */
+  const [pendingTarget, setPendingTarget] = useState<GroupTargetConfig | null>(null);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
+  // 只在「换组 / 目标修订真的变了」时把服务器目标同步到本地编辑态。
+  // 不能依赖 target 对象本身：每 15 秒轮询都会解析出新对象，会把组长未保存的编辑悄悄重置。
+  const groupId = hook.currentGroup?.group.id ?? '';
+  const targetRevision = hook.currentGroup?.group.targetRevision ?? 0;
   useEffect(() => {
-    if (target?.kind !== 'mother') {
+    const current = hook.target;
+    if (current?.kind !== 'mother') {
       setMotherMode('perfect');
       setBodies(['大块头']);
       setVoices(['+100']);
       setRequireNatures(false);
       return;
     }
-    setMotherMode(target.mode);
-    setBodies(target.bodies);
-    setVoices(target.voices);
-    setRequireNatures(target.requireRecommendedNatures === true);
-  }, [target, hook.currentGroup?.group.id, hook.currentGroup?.group.targetRevision]);
+    setMotherMode(current.mode);
+    setBodies(current.bodies);
+    setVoices(current.voices);
+    setRequireNatures(current.requireRecommendedNatures === true);
+  }, [groupId, targetRevision]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const run = async (action: () => Promise<unknown>, success: string) => {
-    if (busy) return;
+  // 切组后不保留上一组的保存提示 / 错误 / 待确认目标
+  useEffect(() => {
+    setMessage('');
+    setError('');
+    setPendingTarget(null);
+  }, [groupId]);
+
+  const run = async (action: () => Promise<unknown>, success: string): Promise<boolean> => {
+    if (busy) return false;
     setBusy(true);
     setError('');
     setMessage('');
     try {
       await action();
-      setMessage(success);
+      if (mountedRef.current) setMessage(success);
+      return true;
     } catch (failure) {
       const text = failure instanceof Error ? failure.message : '操作失败，请稍后再试';
       if (/目标已被其他设备更新|状态已更新|刷新后再/.test(text)) {
@@ -75,12 +93,13 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
         } catch {
           // 刷新失败时保留原错误，用户可手动点刷新
         }
-        setError('已刷新到最新目标，请再保存一次');
-      } else {
+        if (mountedRef.current) setError('已刷新到最新目标，请再保存一次');
+      } else if (mountedRef.current) {
         setError(text);
       }
+      return false;
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   };
 
@@ -100,7 +119,15 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
       setError('个人覆盖目标为空：先在收集 · 覆盖矩阵里选择蛋组、性格与档位');
       return;
     }
-    void run(() => hook.updateTarget(next), '本组目标已更新，成员需要重新预览并发布');
+    // 先预览再确认：点一次就改目标会让全组成员全部重发
+    setPendingTarget(next);
+  };
+
+  const applyPendingTarget = async () => {
+    const next = pendingTarget;
+    if (!next) return;
+    const ok = await run(() => hook.updateTarget(next), '本组目标已更新，成员需要重新预览并发布');
+    if (ok && mountedRef.current) setPendingTarget(null);
   };
 
   const saveMother = () => {
@@ -149,6 +176,12 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
     setVoices(kept.length > 0 ? kept : allowed);
   };
 
+  const studSummaryOf = (value: StudTargetConfig): string => {
+    const groups = [...new Set(value.slots.map((slot) => eggGroupNames[slot.groupId] ?? `蛋组${slot.groupId}`))];
+    const natures = [...new Set(value.slots.map((slot) => slot.natureName))];
+    return `${TARGET_MODE_LABELS[value.mode]} · ${value.slots.length} 个槽位 · ${groups.slice(0, 2).join('/')}${groups.length > 2 ? '…' : ''} · ${natures.slice(0, 3).join('/')}${natures.length > 3 ? '…' : ''}`;
+  };
+
   const summary = (() => {
     if (!target) return '目标待确认';
     if (target.kind === 'mother') {
@@ -157,9 +190,7 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
       }`;
     }
     if (target.slots.length === 0) return '目标待确认';
-    const groups = [...new Set(target.slots.map((slot) => eggGroupNames[slot.groupId] ?? `蛋组${slot.groupId}`))];
-    const natures = [...new Set(target.slots.map((slot) => slot.natureName))];
-    return `${TARGET_MODE_LABELS[target.mode]} · ${target.slots.length} 个槽位 · ${groups.slice(0, 2).join('/')}${groups.length > 2 ? '…' : ''} · ${natures.slice(0, 3).join('/')}${natures.length > 3 ? '…' : ''}`;
+    return studSummaryOf(target);
   })();
 
   return (
@@ -187,6 +218,40 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
           </button>
         ) : null}
       </div>
+
+      {isOwner && isStud && pendingTarget && pendingTarget.kind === 'stud' ? (
+        <div
+          className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5"
+          data-testid="group-target-import-preview"
+        >
+          <p className="break-words text-[11px] text-amber-800">
+            将写入：{studSummaryOf(pendingTarget)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-amber-700">
+            更新后全组成员需要重新预览并发布，旧摘要只作历史。
+          </p>
+          <div className="mt-1 flex gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void applyPendingTarget()}
+              data-testid="group-target-import-confirm"
+              className="min-h-[28px] rounded-lg bg-amber-600 px-2.5 text-xs font-medium text-white disabled:opacity-50"
+            >
+              {busy ? '更新中…' : '确认更新目标'}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setPendingTarget(null)}
+              data-testid="group-target-import-cancel"
+              className="min-h-[28px] rounded-lg border border-amber-300 bg-white px-2.5 text-xs text-amber-800 disabled:opacity-50"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {isOwner && isMother ? (
         <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2" data-testid="mother-target-editor">

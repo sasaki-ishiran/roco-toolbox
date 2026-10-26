@@ -168,3 +168,25 @@ CREATE TABLE IF NOT EXISTS collection_group_tasks (
 CREATE INDEX IF NOT EXISTS idx_collection_group_tasks_owner
   ON collection_group_tasks (group_id, owner_account_id);
 -- <<< collection-groups (2026-10-25)
+
+-- >>> collection-demands (2026-10-26)
+-- 需求承接：成员发布「我要哪颗蛋 + 哪个性格」，组内其他人可以接单，完成后需求方确认。
+-- 一个性格算一条（nature 为空串表示不挑性格）。主键含 nature，接单按单条走。
+-- 增量文件 functions/migrations/2026-10-26-collection-demands.sql 必须与本区块一致。
+CREATE TABLE IF NOT EXISTS collection_group_demands (
+  group_id            TEXT NOT NULL,
+  demander_account_id TEXT NOT NULL,
+  egg_game_id         INTEGER NOT NULL,
+  nature              TEXT NOT NULL DEFAULT '',
+  status              TEXT NOT NULL DEFAULT 'open',
+  claimer_account_id  TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+  version             INTEGER NOT NULL DEFAULT 0,
+  created_at          INTEGER NOT NULL,
+  updated_at          INTEGER NOT NULL,
+  PRIMARY KEY (group_id, demander_account_id, egg_game_id, nature),
+  FOREIGN KEY (group_id, demander_account_id)
+    REFERENCES mother_group_members (group_id, account_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_collection_group_demands_claimer
+  ON collection_group_demands (group_id, claimer_account_id);
+-- <<< collection-demands (2026-10-26)

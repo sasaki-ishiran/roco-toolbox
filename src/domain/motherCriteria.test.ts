@@ -59,6 +59,18 @@ describe('母本达标口径（看板卡与母本页共用）', () => {
     expect(isQualifiedMother(pet({ medalBody: '' }), bigOnly)).toBe(false);
   });
 
+  test('身高到顶 / 到底视同大块头 / 小不点（奖牌本身仍按体重，不因身高改判）', () => {
+    const bigOnly: MotherCriteria = { voices: ['+100'], bodies: ['大块头'] };
+    const smallOnly: MotherCriteria = { voices: ['+100'], bodies: ['小不点'] };
+    // 没有奖牌、体重也够不上 98%，但身高 100% → 能生大块头蛋，算达标
+    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 90, heightPercent: 100 }), bigOnly)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 10, heightPercent: 0 }), smallOnly)).toBe(true);
+    // 身高在中间（不到顶 / 不到底）时仍是原来那套判定
+    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 90, heightPercent: 96.4 }), bigOnly)).toBe(false);
+    // 已经有奖牌就以奖牌为准：真·小不点不会因为身高 100% 被算成大块头
+    expect(isQualifiedMother(pet({ medalBody: '小不点', heightPercent: 100 }), bigOnly)).toBe(false);
+  });
+
   test('要求推荐性格时，性格不在推荐列表里的母本不算达标', () => {
     const criteria: MotherCriteria = {
       voices: ['+100'],

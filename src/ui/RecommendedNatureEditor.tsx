@@ -72,7 +72,7 @@ export function RecommendedNatureEditor({ open, onClose }: RecommendedNatureEdit
       closeTestId="nature-editor-close"
       backdropTestId="nature-editor-backdrop"
     >
-      <div className="space-y-2 p-3">
+      <div className="space-y-1.5 p-2">
         <p className="text-[11px] leading-snug text-slate-400">
           按蛋设置，最多 {NATURE_OVERRIDE_MAX_NATURES} 个。没改过的蛋用图鉴推荐；图鉴没收录的按种族值兜底。
           小组按组长这份表判定：改完请在「本组目标」里点一次保存，成员再重新发布。
@@ -88,7 +88,10 @@ export function RecommendedNatureEditor({ open, onClose }: RecommendedNatureEdit
         {filtered.length === 0 ? (
           <p className="py-4 text-center text-xs text-slate-400">没有匹配的蛋。</p>
         ) : (
-          <ul className="grid grid-cols-4 gap-1" data-testid="nature-editor-grid">
+          <ul
+            className="grid grid-cols-3 gap-1 sm:grid-cols-4"
+            data-testid="nature-editor-grid"
+          >
             {filtered.map((egg) => {
               const current = eggNatures(species, egg.gameId, overrides);
               const defaults = defaultEggNatures(species, egg.gameId);
@@ -97,7 +100,7 @@ export function RecommendedNatureEditor({ open, onClose }: RecommendedNatureEdit
               return (
                 <li
                   key={egg.gameId}
-                  className={`min-w-0 rounded-lg bg-slate-50 px-1.5 py-1.5 ${
+                  className={`min-w-0 rounded-md bg-slate-50 px-1 py-1 ${
                     expanded ? 'col-span-full' : ''
                   }`}
                   data-testid="nature-editor-row"
@@ -108,10 +111,10 @@ export function RecommendedNatureEditor({ open, onClose }: RecommendedNatureEdit
                     data-testid={`nature-editor-toggle-${egg.gameId}`}
                     className="w-full break-words text-left"
                   >
-                    <span className="block text-[11px] leading-tight text-slate-700">
+                    <span className="block text-[10px] leading-[1.2] text-slate-700">
                       {labelOf(egg)}
                     </span>
-                    <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">
+                    <span className="mt-0.5 block text-[9.5px] leading-[1.2] text-slate-500">
                       {current.join('/') || '无推荐'}
                       {customized ? ' · 已改' : ''}
                     </span>

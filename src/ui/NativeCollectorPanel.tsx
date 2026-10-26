@@ -38,10 +38,11 @@ const CLOUD_LABEL: Record<ImportOutcome['cloud'], string> = {
 };
 const uploadStatus = (upload: CaptureUpload) => {
   const uid = upload.gameId ? ` · 游戏 UID ${upload.gameId}` : '';
+  const detail = upload.message && upload.message !== '正在上传原始抓包' ? `：${upload.message}` : '';
   switch (upload.state) {
     case 'uploading': return `正在上传 ${upload.progress}%`;
-    case 'processing': return '蛋神助手云端处理中';
-    case 'pending': return '等待云端确认，可稍后继续查询';
+    case 'processing': return `蛋神助手云端处理中${detail}`;
+    case 'pending': return `等待云端确认，可稍后继续查询${detail}`;
     case 'persisted': return upload.deduplicated ? `已上传蛋神助手（云端已有相同数据）${uid}` : `已上传蛋神助手${uid}`;
     case 'failed': return `上传失败：${upload.message}`;
   }
@@ -125,17 +126,18 @@ export function NativeCollectorPanel() {
     finally { await refresh(); }
   };
   /** 等壳把文件真正保存完（阶段回到 idle 且能看到这个文件），再请求导入 */
-  const waitForSaved = async (session: string): Promise<boolean> => {
+  const waitForSaved = async (session: string): Promise<'saved' | 'failed' | 'timeout'> => {
     const deadline = Date.now() + SAVE_WAIT_MS;
     while (mounted.current && Date.now() < deadline) {
       try {
         const current = await readCollectorState();
         if (mounted.current) setState(current);
-        if (current && current.phase === 'idle' && current.files.some((file) => file.id === session)) return true;
+        if (current && current.phase === 'failed') return 'failed';
+        if (current && current.phase === 'idle' && current.files.some((file) => file.id === session)) return 'saved';
       } catch { /* 保存中读不到状态：继续等 */ }
       await delay(300);
     }
-    return false;
+    return 'timeout';
   };
   /**
    * 壳里的 importCapture 在「还在保存」时会被拒绝（请先停止采集并等待保存完成）。
@@ -186,10 +188,15 @@ export function NativeCollectorPanel() {
         return;
       }
       const saved = await waitForSaved(session);
-      if (!mounted.current) return;
-      if (!saved) {
+      // 等保存期间切页：记下待补的完成提示，回来后再导入/弹窗，不能静默丢掉这次采集
+      if (!mounted.current) { setPendingCompletion(session); return; }
+      if (saved !== 'saved') {
         setAutoStage('idle');
-        setActionError('采集已保存，但没等到文件就绪；请在文件列表里点「解析并导入」');
+        setActionError(
+          saved === 'failed'
+            ? '本次采集未完整保存，请重新采集；文件列表里仍可导出原包'
+            : '采集已保存，但没等到文件就绪；请在文件列表里点「解析并导入」',
+        );
         return;
       }
       if (hasAutoImported(session)) return;
@@ -289,9 +296,12 @@ export function NativeCollectorPanel() {
               <Button size="sm" disabled={busy || importing || !!error || !file.valid} onClick={() => action('importCapture', file.id)}>解析并导入</Button>
               {uploadSupported ? <Button size="sm" variant="secondary"
                 busy={file.upload?.state === 'uploading'}
-                disabled={busy || importing || !!error || !!state.uploadBusy || !file.valid || file.size > CAPTURE_UPLOAD_MAX_BYTES}
+                disabled={busy || importing || !!error || !!state.uploadBusy || !file.valid || file.size > CAPTURE_UPLOAD_MAX_BYTES
+                  || file.upload?.state === 'persisted'}
                 onClick={() => action('uploadCapture', file.id)}>
-                {file.upload?.state === 'pending' ? '继续查询' : file.upload?.state === 'failed' || file.upload?.state === 'persisted' ? '重新上传' : '上传蛋神助手'}
+                {file.upload?.state === 'persisted' ? '已上传'
+                  : file.upload?.state === 'pending' || file.upload?.state === 'processing' ? '继续查询'
+                    : file.upload?.state === 'failed' ? '重新上传' : '上传蛋神助手'}
               </Button> : null}
               <Button size="sm" variant="secondary" disabled={busy || importing || !!error || !!state.uploadBusy} onClick={() => action('shareCapture', file.id)}>导出原包</Button>
               <Button size="sm" variant="danger" disabled={busy || importing || !!error || !!state.uploadBusy} onClick={() => setDeleting(file.id)}>删除</Button>

@@ -49,10 +49,8 @@ export const STUD_RESOURCE_MAX_SLOTS_PER_ACCOUNT = 512;
 export const STUD_RESOURCE_MAX_ACCOUNTS = 50;
 /** 种公摘要请求体上限 256KiB。 */
 export const STUD_RESOURCE_MAX_BODY_BYTES = 256 * 1024;
-/** 组目标摘要展示用：最多展示的性格数。 */
-export const STUD_TARGET_NATURE_MAX = 8;
 
-/** 母本自选口径的 criteriaId：默认沿用固定的 v1，自选时用稳定的 FNV 短哈希。 */
+/** 母本自选口径的 criteriaId：默认沿用固定口径，自选时用稳定的 FNV 短哈希。 */
 export function motherCriteriaIdOf(input: {
   mode: CollectionTargetMode;
   bodies: readonly string[];
@@ -246,8 +244,6 @@ export interface CollectionGroupDetail {
   members: CollectionGroupMember[];
 }
 
-export const EMPTY_COLLECTION_TARGET = null;
-
 /* ---------- 认领任务 ---------- */
 
 export const TASK_STATUSES = ['open', 'claimed', 'closed'] as const;
@@ -271,6 +267,70 @@ export interface CollectionTaskView extends CollectionTaskRecord {
   confirmed: boolean;
   /** 未确认时的原因：有人未发布 / 版本不兼容。 */
   pendingMemberIds: string[];
+}
+
+/* ---------- 需求承接（2026-10-26） ---------- */
+
+/**
+ * 成员发布的需求：某颗蛋 + 一个性格。
+ *
+ * 2026-10-26 用户口径：**一个性格算一条需求**。发需求时勾了两个性格就成了两条，
+ * 接单也按单条（一个人可以接「固执」那条，另一个人接「平和」那条）。
+ * `nature === ''` 表示不挑性格。
+ */
+export const DEMAND_STATUSES = ['open', 'claimed', 'done'] as const;
+export type CollectionDemandStatus = (typeof DEMAND_STATUSES)[number];
+
+export const DEMAND_STATUS_LABELS: Record<CollectionDemandStatus, string> = {
+  open: '待承接',
+  claimed: '已接单',
+  done: '已完成',
+};
+
+/** 一条需求最多几个性格、单个性格名的长度上限（防异常请求体）。 */
+export const DEMAND_NATURE_MAX = 6;
+export const DEMAND_NATURE_LENGTH_MAX = 8;
+
+/**
+ * 需求 / 承接上限（2026-10-26 用户给的产能模型）：
+ * 20 人 × 约 5 蛋 ≈ 100 份供给，每人发 5 条需求正好闭环。
+ * 所以按「5 × 本人在本组发布的游戏账号数」算，多号多额度。
+ */
+export const DEMAND_LIMIT_PER_ACCOUNT = 5;
+/** 单成员绝对上限（防刷屏）。 */
+export const DEMAND_LIMIT_PER_MEMBER_CAP = 20;
+/** 单个小组需求总数上限（20 人 × 10）。 */
+export const DEMAND_LIMIT_PER_GROUP = 200;
+
+/** 某成员在当前小组的需求上限；账号数未发布时按 1 算。 */
+export function demandLimitPerMember(accountCount: number): number {
+  const accounts =
+    Number.isFinite(accountCount) && accountCount > 0 ? Math.floor(accountCount) : 1;
+  return Math.min(DEMAND_LIMIT_PER_ACCOUNT * accounts, DEMAND_LIMIT_PER_MEMBER_CAP);
+}
+
+export interface CollectionDemand {
+  groupId: string;
+  demanderAccountId: string;
+  eggGameId: number;
+  /** 这一条需求要的性格；空字符串 = 不挑性格。 */
+  nature: string;
+  status: CollectionDemandStatus;
+  claimerAccountId: string | null;
+  version: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 需求性格是否合法：0~6 个、非空、长度受限、去重后仍合法。 */
+export function isValidDemandNatures(value: unknown): value is string[] {
+  if (!Array.isArray(value) || value.length > DEMAND_NATURE_MAX) return false;
+  return value.every(
+    (nature) =>
+      typeof nature === 'string' &&
+      nature.trim().length > 0 &&
+      nature.length <= DEMAND_NATURE_LENGTH_MAX,
+  );
 }
 
 /* ---------- 校验辅助（前后端共用） ---------- */

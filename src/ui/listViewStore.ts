@@ -58,6 +58,8 @@ export interface GroupListState {
    */
   seekingMembers: string[];
   onlyOwned: boolean;
+  /** 只看我发过需求的蛋（2026-10-26）。 */
+  onlyDemanded: boolean;
 }
 
 const GROUP_DEFAULT: GroupListState = {
@@ -66,6 +68,7 @@ const GROUP_DEFAULT: GroupListState = {
   memberFilter: '',
   seekingMembers: [],
   onlyOwned: false,
+  onlyDemanded: false,
 };
 
 const keyOf = (accountId: string, groupId: string): string => `${accountId}|${groupId}`;

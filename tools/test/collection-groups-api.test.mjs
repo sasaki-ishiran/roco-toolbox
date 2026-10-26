@@ -57,17 +57,18 @@ const motherAccount = (uid, ids) => ({
 
 const motherDraft = (accounts) => ({
   schemaVersion: 1,
-  criteriaId: 'female-huge-voice100-v1',
+  criteriaId: 'female-huge-voice100-v2',
   catalogVersion: 'test-v1',
   accounts,
 });
 
-const studAccount = (uid, covered, breedable = []) => ({
+const studAccount = (uid, covered, breedable = [], patch = {}) => ({
   accountKey: `uid:${uid}`,
   accountName: `账号${uid}`,
   sourceExportedAt: TIME,
   covered: covered.map((slot) => ({ ...slot, gameId: 102 })),
   breedable: breedable.map((slot) => ({ ...slot, gameId: 102 })),
+  ...patch,
 });
 
 function fnv1a(text) {
@@ -159,7 +160,7 @@ test('新建母本组带目标；旧接口仍可读写', async () => {
     },
   });
   assert.equal(created.group.groupType, 'mother');
-  assert.equal(created.group.target.criteriaId, 'female-huge-voice100-v1');
+  assert.equal(created.group.target.criteriaId, 'female-huge-voice100-v2');
 
   const publish = await call(A.token, 'PUT', `/api/mother-groups/${created.id}/resources/me`, {
     baseRevision: 0,
@@ -526,11 +527,14 @@ test('共同寻找：全员确认后才能认领，并发只有一个成功；�
 });
 
 test('共同寻找：目标不属于本组当前目标时拒绝；种公组目标修订后旧任务不再可认领', async () => {
+  const slot2 = { ...SLOT, natureId: 12, natureName: '固执' };
+  const slot3 = { ...SLOT, natureId: 13, natureName: '胆小' };
+  const target = studTarget({ slots: [SLOT, slot2] });
   const created = await createGroup(A, {
     name: '种公任务组',
     displayName: 'A',
     groupType: 'stud',
-    target: studTarget(),
+    target,
   });
   const outside = await call(A.token, 'POST', `/api/collection-groups/${created.id}/tasks/claim`, {
     targetKey: 'stud:9:9:大婉',
@@ -538,9 +542,26 @@ test('共同寻找：目标不属于本组当前目标时拒绝；种公组目�
   assert.equal(outside.status, 404);
   assert.equal(outside.body.code, 'TASK_NOT_FOUND');
 
+  // 只覆盖第一格，第二格仍是确认过的缺口 → 可以认领，并产生一条旧修订任务
+  const published = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
+    baseRevision: 0,
+    baseTargetRevision: 0,
+    resource: studDraft([studAccount(1001, [SLOT])], {
+      targetRevision: 0,
+      targetId: targetIdOf(target),
+    }),
+  });
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  const claimed = await call(A.token, 'POST', `/api/collection-groups/${created.id}/tasks/claim`, {
+    targetKey: `stud:${slotKey(slot2)}`,
+  });
+  assert.equal(claimed.status, 200, JSON.stringify(claimed.body));
+  const beforeUpdate = await call(A.token, 'GET', `/api/collection-groups/${created.id}/tasks`);
+  assert.equal(beforeUpdate.body.tasks.length, 1);
+
   const update = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/target`, {
     baseTargetRevision: 0,
-    target: studTarget({ slots: [SLOT, { ...SLOT, natureId: 12, natureName: '固执' }] }),
+    target: studTarget({ slots: [SLOT, slot2, slot3] }),
   });
   assert.equal(update.status, 200);
   const tasks = await call(A.token, 'GET', `/api/collection-groups/${created.id}/tasks`);
@@ -571,30 +592,38 @@ test('种公摘要同组 UID 被占用时整批回滚；旧源时间被拒绝', 
   });
   assert.equal(b.status, 200);
 
+  // 先合法（1001 改名）+ 后冲突（1002 属于 B）：整批必须回滚
   const clash = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
     baseRevision: 1,
     baseTargetRevision: 0,
-    resource: studDraft([studAccount(1002, [SLOT])], { targetRevision: 0 }),
+    resource: studDraft([
+      studAccount(1001, [SLOT], [], { accountName: '账号改名' }),
+      studAccount(1002, [SLOT]),
+    ], { targetRevision: 0 }),
   });
   assert.equal(clash.status, 409);
   assert.equal(clash.body.code, 'GAME_ACCOUNT_ALREADY_SHARED');
+  const afterClash = await call(A.token, 'GET', `/api/collection-groups/${created.id}`);
+  const mine = afterClash.body.members.find((member) => member.accountId === A.accountId);
+  assert.equal(mine.studResource.accounts[0].accountName, '账号1001', '冲突时整批回滚，合法账号也不能写入');
 
+  // 同一账号用更早的导出时间重发 → 旧源时间被拒绝
   const stale = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
     baseRevision: 1,
     baseTargetRevision: 0,
     resource: studDraft([
-      studAccount(1001, [SLOT], [], { sourceExportedAt: LATER }),
-      { ...studAccount(1001, [SLOT]), sourceExportedAt: TIME },
+      studAccount(1001, [SLOT], [], { sourceExportedAt: '2026-10-22T00:00:00.000Z' }),
     ], { targetRevision: 0 }),
   });
-  assert.equal(stale.status, 400, '重复 UID 先被输入校验拦住');
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.code, 'STALE_SOURCE');
 
-  const stale2 = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
+  const same = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
     baseRevision: 1,
     baseTargetRevision: 0,
     resource: studDraft([
       { ...studAccount(1001, [SLOT]), sourceExportedAt: TIME },
     ], { targetRevision: 0 }),
   });
-  assert.equal(stale2.status, 200, '同一份数据同一覆盖允许重发');
+  assert.equal(same.status, 200, '同一份数据同一覆盖允许重发');
 });

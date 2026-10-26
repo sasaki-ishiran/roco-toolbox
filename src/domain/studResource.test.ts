@@ -195,4 +195,29 @@ describe('studResourceSignature / diffStudResources', () => {
     expect(diff.removedSlots).toEqual([]);
     expect(diff.unchanged).toBe(false);
   });
+
+  test('完全相同的摘要 unchanged=true', () => {
+    const previous = build([snapshot(1001, '甲', [male(102)])]);
+    const next = build([snapshot(1001, '甲', [male(102)])]);
+    expect(diffStudResources(previous, next).unchanged).toBe(true);
+  });
+
+  test('只改模式 / 修订 / 图鉴必须允许重新发布', () => {
+    const previous = build([snapshot(1001, '甲', [male(102)])]);
+    expect(diffStudResources(previous, { ...previous, mode: 'medal' }).unchanged).toBe(false);
+    expect(diffStudResources(previous, { ...previous, targetRevision: 4 }).unchanged).toBe(false);
+    expect(diffStudResources(previous, { ...previous, catalogVersion: 'test-v9' }).unchanged).toBe(false);
+  });
+
+  test('同一格从已覆盖变成仅可迭代要允许重新发布', () => {
+    const previous = build([snapshot(1001, '甲', [male(102)])]);
+    const next = build([
+      snapshot(1001, '甲', [mother(102, { nature: '开朗' }), male(101, { nature: '固执' })]),
+    ]);
+    const diff = diffStudResources(previous, next);
+    expect(diff.addedSlots).toEqual([]);
+    expect(diff.removedSlots).toEqual([]);
+    expect(diff.reclassifiedSlots).toEqual(['2:11:大婉']);
+    expect(diff.unchanged).toBe(false);
+  });
 });

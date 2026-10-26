@@ -7,6 +7,7 @@
 import { MotherInputError, parseMotherResource } from './motherGroupsValidation';
 import {
   MOTHER_CATALOG_VERSION_MAX,
+  MOTHER_DISPLAY_NAME_MAX,
   isCanonicalMotherAccountKey,
   isValidIsoTimestamp,
   type MotherResourceDraft,
@@ -78,8 +79,11 @@ export function parseCollectionCreateBody(body: unknown): ParsedCollectionCreate
 
   const displayName = record.displayName;
   if (typeof displayName !== 'string') invalid('昵称必须是字符串');
-  if (codePoints(displayName.trim()) < 1 || codePoints(displayName.trim()) > 20) {
-    invalid('昵称需要 1–20 个字符');
+  if (
+    codePoints(displayName.trim()) < 1 ||
+    codePoints(displayName.trim()) > MOTHER_DISPLAY_NAME_MAX
+  ) {
+    invalid(`昵称需要 1–${MOTHER_DISPLAY_NAME_MAX} 个字符`);
   }
 
   const target =
@@ -189,7 +193,8 @@ const parseStringList = (value: unknown, field: string): string[] => {
 
 export interface ParsedCollectionPublish {
   baseRevision: number;
-  baseTargetRevision: number;
+  /** null = 请求没带（旧客户端）；母本仍由 criteriaId 兜底。 */
+  baseTargetRevision: number | null;
   resource: MotherResourceDraft | StudResourceDraft;
 }
 
@@ -219,7 +224,7 @@ export function parseCollectionPublishBody(
   if (groupType === 'mother') {
     return {
       baseRevision,
-      baseTargetRevision: (baseTargetRevision as number | undefined) ?? 0,
+      baseTargetRevision: typeof baseTargetRevision === 'number' ? baseTargetRevision : null,
       resource: parseMotherResource(record.resource),
     };
   }

@@ -44,6 +44,7 @@ const sanitizePet = (value: unknown, accountName: string): OwnedPet | undefined 
     voiceDb: asNumber(item.voiceDb),
     medalBody: asString(item.medalBody),
     weightPercent: asOptionalNumber(item.weightPercent),
+    heightPercent: asOptionalNumber(item.heightPercent),
     isShiny: asBoolean(item.isShiny),
     isColorful: item.isColorful === true,
     account: accountName,

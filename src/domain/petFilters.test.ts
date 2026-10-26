@@ -232,6 +232,16 @@ describe('classifyGrade（档位判定随模式）', () => {
     expect(classifyGrade(noBody, 'medal')).toBeNull();
     expect(classifyGrade(noBody, 'perfect')).toBeNull();
   });
+
+  test('身高到顶 / 到底也算档位；已有奖牌时以奖牌为准', () => {
+    // 奖牌为空、但身高 100% → 能生大块头蛋，算大婉
+    expect(classifyGrade(pet({ medalBody: '', heightPercent: 100, voiceDb: 100 }), 'perfect')).toBe('大婉');
+    expect(classifyGrade(pet({ medalBody: '', heightPercent: 0, voiceDb: -100 }), 'perfect')).toBe('小粗');
+    // 身高在中间不算
+    expect(classifyGrade(pet({ medalBody: '', heightPercent: 96.4, voiceDb: 100 }), 'perfect')).toBeNull();
+    // 奖牌仍是体重口径：真·小不点不会因为身高 100% 变成大婉
+    expect(classifyGrade(pet({ medalBody: '小不点', heightPercent: 100, voiceDb: 100 }), 'perfect')).toBe('小婉');
+  });
 });
 
 describe('groupMothersByEgg（母本清单按「蛋」分组）', () => {

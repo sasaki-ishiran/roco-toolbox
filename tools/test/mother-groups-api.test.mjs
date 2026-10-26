@@ -17,7 +17,7 @@ if (!/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(BASE)) {
   );
 }
 
-const CRITERIA_ID = 'female-huge-voice100-v1';
+const CRITERIA_ID = 'female-huge-voice100-v2';
 const TIME = '2026-10-23T00:00:00.000Z';
 const LATER = '2026-10-24T00:00:00.000Z';
 const READ_LIMIT_PER_HOUR = 1800;
@@ -159,12 +159,12 @@ test('昵称与组名按 Unicode 码点计数', async () => {
   const group = await createGroup();
   const allowed = await call(B.token, 'POST', '/api/mother-groups/join', {
     inviteCode: group.inviteCode,
-    displayName: '🐣'.repeat(20),
+    displayName: '🐣'.repeat(6),
   });
   assert.equal(allowed.status, 200);
 
   const tooLongName = await call(B.token, 'PUT', `/api/mother-groups/${group.id}/profile/me`, {
-    displayName: '🐣'.repeat(21),
+    displayName: '🐣'.repeat(7),
   });
   assert.equal(tooLongName.status, 400);
 

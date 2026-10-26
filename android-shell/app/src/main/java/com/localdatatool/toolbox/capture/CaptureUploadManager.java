@@ -60,6 +60,8 @@ final class CaptureUploadManager {
         boolean resume = !captureId.isEmpty() && ("pending".equals(state) || "processing".equals(state));
         running.add(name);
         try {
+            // 非 resume 分支必须清掉旧任务号，否则上传中进程被杀后会被当成在途任务、查询旧任务
+            if (!resume) store.clearCaptureId(name);
             store.update(name, resume ? "processing" : "uploading", captureId, "",
                 resume ? "正在查询云端结果，原文件不会重复上传" : "正在上传原始抓包",
                 0, 0, false, true);
