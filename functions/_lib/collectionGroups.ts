@@ -34,6 +34,7 @@ import {
   readCollectionGroupDetail,
   releaseCollectionDemand,
   releaseCollectionTask,
+  removeCollectionGroupMember,
   transferCollectionTask,
   updateCollectionTarget,
   withdrawCollectionDemand,
@@ -48,8 +49,14 @@ import {
 } from './motherGroupsStore';
 import { type Env, authenticate, clientIp, json, newId, rateLimit, sha256Hex } from './util';
 import {
+  DEFAULT_DEMAND_BODY,
+  DEFAULT_DEMAND_GENDER,
+  DEFAULT_DEMAND_VOICE,
   DEMAND_NATURE_MAX,
   STUD_RESOURCE_MAX_BODY_BYTES,
+  isDemandBody,
+  isDemandGender,
+  isDemandVoice,
   isValidDemandNatures,
 } from '../../src/shared/collectionGroups';
 import { MOTHER_RESOURCE_MAX_BODY_BYTES } from '../../src/shared/motherGroups';
@@ -188,6 +195,9 @@ export async function handleCollectionGroups(
     }
     if (rest.length === 3 && rest[1] === 'members' && rest[2] === 'me' && method === 'DELETE') {
       return await handleLeave(env, origin, accountId, groupId);
+    }
+    if (rest.length === 3 && rest[1] === 'members' && method === 'DELETE') {
+      return await handleRemoveMember(env, origin, accountId, groupId, rest[2]);
     }
     if (rest.length === 2 && rest[1] === 'tasks' && method === 'GET') {
       return await handleTasks(env, origin, accountId, groupId);
@@ -470,8 +480,15 @@ async function handleTaskAction(
 
 const parseDemandEggGameId = (raw: unknown): number => {
   const id = typeof raw === 'number' ? raw : Number(raw);
-  if (!Number.isSafeInteger(id) || id <= 0) {
+  if (!Number.isSafeInteger(id) || id === 0) {
     throw new MotherInputError('INVALID_INPUT', 'eggGameId 无效');
+  }
+  // 负数 = 种公需求，绝对值是蛋组 id（2~15）；正数 = 母本需求的蛋 id。
+  if (id < 0) {
+    const groupId = -id;
+    if (groupId < 2 || groupId > 15) {
+      throw new MotherInputError('INVALID_INPUT', '蛋组 id 无效');
+    }
   }
   return id;
 };
@@ -531,11 +548,20 @@ async function handleDemandPublish(
   if (!isValidDemandNatures(natures)) {
     throw new MotherInputError('INVALID_INPUT', `性格最多 ${DEMAND_NATURE_MAX} 个，且不能为空`);
   }
+  const gender = body.gender ?? DEFAULT_DEMAND_GENDER;
+  const demandBody = body.body ?? DEFAULT_DEMAND_BODY;
+  const voice = body.voice ?? DEFAULT_DEMAND_VOICE;
+  if (!isDemandGender(gender)) throw new MotherInputError('INVALID_INPUT', '性别无效');
+  if (!isDemandBody(demandBody)) throw new MotherInputError('INVALID_INPUT', '体型无效');
+  if (!isDemandVoice(voice)) throw new MotherInputError('INVALID_INPUT', '声音无效');
   const demand = await publishCollectionDemand(env.DB, {
     groupId,
     accountId,
     eggGameId,
     natures: natures as string[],
+    gender,
+    body: demandBody,
+    voice,
   });
   return okJson(origin, { demands: demand });
 }
@@ -553,11 +579,27 @@ async function handleDemandWithdraw(
   const denied = await requireMember(env, origin, accountId, groupId);
   if (denied) return denied;
   const eggGameId = parseDemandEggGameId(rawEggGameId);
-  // 按性格单独撤回：`?nature=` 为空表示撤回「不挑性格」那一条
-  const nature = new URL(request.url).searchParams.get('nature') ?? '';
+  // 按「蛋 + 性格 + 性别 / 体型 / 声音」单独撤回：`?nature=` 为空表示撤回「不挑性格」那一条
+  const params = new URL(request.url).searchParams;
+  const nature = params.get('nature') ?? '';
   if (nature.length > 8) throw new MotherInputError('INVALID_INPUT', 'nature 无效');
-  await withdrawCollectionDemand(env.DB, groupId, accountId, eggGameId, nature);
-  return okJson(origin, { withdrawn: { eggGameId, nature } });
+  const gender = params.get('gender') ?? DEFAULT_DEMAND_GENDER;
+  const demandBody = params.get('body') ?? DEFAULT_DEMAND_BODY;
+  const voice = params.get('voice') ?? DEFAULT_DEMAND_VOICE;
+  if (!isDemandGender(gender)) throw new MotherInputError('INVALID_INPUT', '性别无效');
+  if (!isDemandBody(demandBody)) throw new MotherInputError('INVALID_INPUT', '体型无效');
+  if (!isDemandVoice(voice)) throw new MotherInputError('INVALID_INPUT', '声音无效');
+  await withdrawCollectionDemand(
+    env.DB,
+    groupId,
+    accountId,
+    eggGameId,
+    nature,
+    gender,
+    demandBody,
+    voice,
+  );
+  return okJson(origin, { withdrawn: { eggGameId, nature, gender, body: demandBody, voice } });
 }
 
 async function handleDemandAction(
@@ -583,8 +625,24 @@ async function handleDemandAction(
   if (typeof nature !== 'string' || nature.length > 8) {
     throw new MotherInputError('INVALID_INPUT', 'nature 无效');
   }
+  const gender = body.gender ?? DEFAULT_DEMAND_GENDER;
+  const demandBody = body.body ?? DEFAULT_DEMAND_BODY;
+  const voice = body.voice ?? DEFAULT_DEMAND_VOICE;
+  if (!isDemandGender(gender)) throw new MotherInputError('INVALID_INPUT', '性别无效');
+  if (!isDemandBody(demandBody)) throw new MotherInputError('INVALID_INPUT', '体型无效');
+  if (!isDemandVoice(voice)) throw new MotherInputError('INVALID_INPUT', '声音无效');
   const expectedVersion = parseOptionalVersion(body);
-  const base = { groupId, accountId, demanderAccountId, eggGameId, nature, expectedVersion };
+  const base = {
+    groupId,
+    accountId,
+    demanderAccountId,
+    eggGameId,
+    nature,
+    gender,
+    body: demandBody,
+    voice,
+    expectedVersion,
+  };
 
   if (action === 'claim') {
     return okJson(origin, { demand: await claimCollectionDemand(env.DB, base) });
@@ -655,6 +713,32 @@ async function handleLeave(
   }
   await leaveCollectionGroup(env.DB, groupId, accountId);
   return okJson(origin, {});
+}
+
+/** 组长移除组员：不能移除自己；会取消他未完成的需求，已完成保留用于已结单计数。 */
+async function handleRemoveMember(
+  env: Env,
+  origin: string | null,
+  accountId: string,
+  groupId: string,
+  memberAccountId: string,
+): Promise<Response> {
+  const deleteLimited = await limited(env, origin, `cg-delete:${accountId}`, DELETE_LIMIT);
+  if (deleteLimited) return deleteLimited;
+
+  const group = await findCollectionGroup(env.DB, groupId);
+  if (!group) return failCode(origin, 404, 'GROUP_NOT_FOUND', '小组不存在');
+  if (group.ownerAccountId !== accountId) {
+    return failCode(origin, 403, 'NOT_OWNER', '只有组长可以移除组员');
+  }
+  if (!memberAccountId || memberAccountId === accountId) {
+    return failCode(origin, 400, 'INVALID_INPUT', '不能移除组长自己；退出请用解散小组');
+  }
+  if (!(await isMember(env.DB, groupId, memberAccountId))) {
+    return failCode(origin, 404, 'NOT_MEMBER', '该成员已经不在小组');
+  }
+  await removeCollectionGroupMember(env.DB, groupId, memberAccountId);
+  return okJson(origin, { removed: memberAccountId });
 }
 
 async function handleDissolve(

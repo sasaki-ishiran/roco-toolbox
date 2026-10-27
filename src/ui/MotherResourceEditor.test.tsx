@@ -12,12 +12,12 @@ import {
   sharedAccount,
   snapshot,
 } from '../test/fixtures/motherSharing';
-import { MOTHER_CRITERIA_ID } from '../shared/motherGroups';
+import { ALL_MOTHERS_CRITERIA_ID } from '../shared/motherGroups';
 import { diffMotherResources } from '../domain/motherResource';
 
 const resource: MotherResourceDraft = {
   schemaVersion: 1,
-  criteriaId: MOTHER_CRITERIA_ID,
+  criteriaId: ALL_MOTHERS_CRITERIA_ID,
   catalogVersion: FIXTURE_CATALOG_VERSION,
   accounts: [sharedAccount(1001, [101])],
 };

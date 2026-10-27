@@ -1,4 +1,8 @@
-import { useImportOutcome } from './importOutcomeStore';
+import { useState } from 'react';
+import { completeCollectionDemand } from '../api/collectionGroups';
+import { useImportOutcome, updateImportOutcome } from './importOutcomeStore';
+import { saveLastGroupId } from './collectionGroupStore';
+import { setGroupList } from './listViewStore';
 import { Button } from './primitives/Button';
 import { StateNotice } from './primitives/StateNotice';
 
@@ -25,6 +29,9 @@ const CLOUD_TEXT: Record<
  */
 export function ImportOutcomeNotice({ onOpenGroups }: ImportOutcomeNoticeProps = {}) {
   const outcome = useImportOutcome();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
   if (outcome.local === 'idle') return null;
 
   const local =
@@ -34,6 +41,70 @@ export function ImportOutcomeNotice({ onOpenGroups }: ImportOutcomeNoticeProps =
         ? { kind: 'error' as const, title: '导入失败', description: outcome.message ?? undefined }
         : { kind: 'success' as const, title: '已保存到本机', description: outcome.message ?? undefined };
   const cloud = CLOUD_TEXT[outcome.cloud];
+  const totalClaims = outcome.claims.reduce((sum, claim) => sum + claim.count, 0);
+  const claimers = [...new Set(outcome.claims.flatMap((claim) => claim.claimers))];
+  const primaryClaim = outcome.claims[0];
+  const claimTitle =
+    claimers.length > 0
+      ? `${claimers.join('、')}接了你 ${totalClaims} 单，可以结单了`
+      : `${totalClaims} 单已经有人接了，可以结单了`;
+  const openClaimCenter = () => {
+    if (!primaryClaim) return;
+    saveLastGroupId(primaryClaim.accountId, 'mother', primaryClaim.groupId);
+    setGroupList(primaryClaim.accountId, primaryClaim.groupId, {
+      view: 'mine',
+      query: '',
+      memberFilter: '',
+    });
+    onOpenGroups?.();
+  };
+  const allItems = outcome.claims.flatMap((claim) =>
+    claim.items.map((item) => ({ ...item, groupId: claim.groupId })),
+  );
+  const visibleItems = allItems.slice(0, 5);
+  const completeAll = async () => {
+    if (busy || allItems.length === 0) return;
+    setBusy(true);
+    setMessage('');
+    setError('');
+    let completed = 0;
+    const remaining: typeof outcome.claims = [];
+    for (const claim of outcome.claims) {
+      const kept: typeof claim.items = [];
+      for (const item of claim.items) {
+        try {
+          await completeCollectionDemand(claim.groupId, {
+            demanderAccountId: claim.accountId,
+            eggGameId: item.eggGameId,
+            nature: item.nature,
+            gender: item.gender,
+            body: item.body,
+            voice: item.voice,
+            version: item.version,
+          });
+          completed += 1;
+        } catch {
+          kept.push(item);
+        }
+      }
+      if (kept.length > 0) {
+        remaining.push({
+          ...claim,
+          items: kept,
+          count: kept.length,
+          claimers: [...new Set(kept.map((item) => item.claimerName))],
+        });
+      }
+    }
+    updateImportOutcome(outcome.operationId, { claims: remaining });
+    if (completed > 0) setMessage(`已结单 ${completed} 单，对方已记上一笔`);
+    if (remaining.length > 0) {
+      setError(
+        `还有 ${remaining.reduce((sum, claim) => sum + claim.count, 0)} 单没结成功，去需求中心再试`,
+      );
+    }
+    setBusy(false);
+  };
 
   return (
     <section className="space-y-2" data-testid="import-outcome">
@@ -62,6 +133,66 @@ export function ImportOutcomeNotice({ onOpenGroups }: ImportOutcomeNoticeProps =
           ) : undefined
         }
       />
+      {outcome.local === 'saved' && totalClaims > 0 ? (
+        <div
+          className="rounded-xl bg-emerald-50 px-3 py-2 text-emerald-800"
+          data-testid="import-outcome-claims"
+        >
+          <p className="text-sm font-medium">{claimTitle}</p>
+          <p className="mt-0.5 text-xs opacity-90">
+            {outcome.claims.length === 1
+              ? `在「${primaryClaim?.groupName ?? '小组'}」里，`
+              : `共 ${outcome.claims.length} 个组，`}
+            确认完成后对方会多一笔「已结单」，大家都更愿意接着换蛋。
+          </p>
+          <ul className="mt-1.5 space-y-0.5 text-xs">
+            {visibleItems.map((item) => (
+              <li
+                key={`${item.groupId}:${item.eggGameId}:${item.nature}:${item.gender}:${item.body}:${item.voice}`}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {item.eggName}
+                  {item.nature ? ` · ${item.nature}` : ' · 不挑性格'}
+                  {` · ${item.gender || '性别不挑'} · ${item.body || '体型不限'} · ${
+                    item.voice || '声音不限'
+                  }`}
+                </span>
+                <span className="shrink-0 opacity-80">{item.claimerName} 接的</span>
+              </li>
+            ))}
+            {allItems.length > visibleItems.length ? (
+              <li className="opacity-80">还有 {allItems.length - visibleItems.length} 单…</li>
+            ) : null}
+          </ul>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              busy={busy}
+              onClick={() => void completeAll()}
+              data-testid="import-outcome-complete-all"
+            >
+              一键结单 {totalClaims} 单
+            </Button>
+            {onOpenGroups ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={openClaimCenter}
+                data-testid="import-outcome-open-claims"
+              >
+                去需求中心
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {message ? (
+        <StateNotice kind="success" title={message} testId="import-outcome-claims-done" />
+      ) : null}
+      {error ? (
+        <StateNotice kind="error" title={error} testId="import-outcome-claims-error" />
+      ) : null}
     </section>
   );
 }

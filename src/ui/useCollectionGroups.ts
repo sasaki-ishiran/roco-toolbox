@@ -20,6 +20,7 @@ import {
   publishCollectionResources,
   releaseCollectionDemand as releaseDemandApi,
   releaseCollectionTask as releaseTaskApi,
+  removeCollectionGroupMember as removeMemberApi,
   resetCollectionGroupInvite,
   transferCollectionTask as transferTaskApi,
   updateCollectionGroupProfile,
@@ -30,12 +31,11 @@ import {
 } from '../api/collectionGroups';
 import { readAccountId, subscribeSession } from '../api/session';
 import { diffMotherResources, buildMotherResource } from '../domain/motherResource';
-import type { MotherBody, MotherVoice } from '../domain/motherCriteria';
 import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
 import { buildStudResource, diffStudResources } from '../domain/studResource';
 import type { SpeciesEntry } from '../domain/types';
 import {
-  MOTHER_CRITERIA_ID,
+  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_RESOURCE_SCHEMA_VERSION,
   type MotherResourceDraft,
 } from '../shared/motherGroups';
@@ -140,8 +140,15 @@ export interface CollectionGroupsHook {
   demandsLoading: boolean;
   demandsError: string;
   refreshDemands: () => Promise<void>;
-  addDemand: (eggGameId: number, natures: string[]) => Promise<CollectionDemand[]>;
-  withdrawDemand: (eggGameId: number, nature: string) => Promise<void>;
+  addDemand: (
+    eggGameId: number,
+    natures: string[],
+    criteria: Pick<CollectionDemand, 'gender' | 'body' | 'voice'>,
+  ) => Promise<CollectionDemand[]>;
+  withdrawDemand: (
+    eggGameId: number,
+    criteria: Pick<CollectionDemand, 'nature' | 'gender' | 'body' | 'voice'>,
+  ) => Promise<void>;
   claimDemand: (demand: CollectionDemand) => Promise<CollectionDemand>;
   releaseDemand: (demand: CollectionDemand) => Promise<CollectionDemand>;
   completeDemand: (demand: CollectionDemand) => Promise<CollectionDemand>;
@@ -163,6 +170,8 @@ export interface CollectionGroupsHook {
   updateTarget: (target: GroupTargetConfig) => Promise<number>;
   updateProfile: (displayName: string) => Promise<void>;
   resetInvite: () => Promise<string>;
+  /** 组长移除组员（2026-10-26）：会取消对方未完成的需求，已完成保留。 */
+  removeMember: (memberAccountId: string) => Promise<void>;
   leave: () => Promise<void>;
   dissolve: () => Promise<void>;
   clearError: () => void;
@@ -191,7 +200,7 @@ const selectionOf = (detail: CollectionGroupDetail | null, accountId: string | n
 
 const emptyMotherDraft = (
   catalogVersion: string,
-  criteriaId: string = MOTHER_CRITERIA_ID,
+  criteriaId: string = ALL_MOTHERS_CRITERIA_ID,
 ): MotherResourceDraft => ({
   schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
   criteriaId,
@@ -221,12 +230,13 @@ const bootState = (): Boot => {
   const accountId = readAccountId();
   const prefs = readCollectionGroupPrefs(accountId);
   const cache = readCollectionGroupCache(accountId);
-  const groups = cache?.groups ?? [];
+  // 2026-10-27 起小组只剩母本组：缓存里残留的种公组不能再用来恢复页面。
+  const groups = (cache?.groups ?? []).filter((group) => group.groupType === 'mother');
+  const lastMother = readLastGroupId(accountId, 'mother');
   const stored = prefs.mode === 'group'
-    ? readLastGroupId(accountId, prefs.personalType) ??
-      groups.find((group) => group.groupType === prefs.personalType)?.id ??
-      groups[0]?.id ??
-      null
+    ? (lastMother && (groups.length === 0 || groups.some((group) => group.id === lastMother))
+        ? lastMother
+        : groups[0]?.id ?? null)
     : null;
   const detail = stored ? cache?.details[stored] ?? null : null;
   return {
@@ -378,44 +388,63 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
           !(
             item.demanderAccountId === next.demanderAccountId &&
             item.eggGameId === next.eggGameId &&
-            item.nature === next.nature
+            item.nature === next.nature &&
+            item.gender === next.gender &&
+            item.body === next.body &&
+            item.voice === next.voice
           ),
       ),
     ]);
   }, []);
 
   const addDemand = useCallback(
-    async (eggGameId: number, natures: string[]) => {
+    async (
+      eggGameId: number,
+      natures: string[],
+      criteria: Pick<CollectionDemand, 'gender' | 'body' | 'voice'>,
+    ) => {
       const groupId = groupRef.current;
       if (!groupId) throw new Error('还没有打开小组');
-      const saved = await publishDemandApi(groupId, { eggGameId, natures });
+      const saved = await publishDemandApi(groupId, { eggGameId, natures, ...criteria });
       saved.forEach(mergeDemand);
       return saved;
     },
     [mergeDemand],
   );
 
-  const withdrawDemand = useCallback(async (eggGameId: number, nature: string) => {
-    const groupId = groupRef.current;
-    const account = accountRef.current;
-    if (!groupId) throw new Error('还没有打开小组');
-    await withdrawDemandApi(groupId, eggGameId, nature);
-    setDemands((list) =>
-      list.filter(
-        (item) =>
-          !(
-            item.demanderAccountId === account &&
-            item.eggGameId === eggGameId &&
-            item.nature === nature
-          ),
-      ),
-    );
-  }, []);
+  const withdrawDemand = useCallback(
+    async (
+      eggGameId: number,
+      criteria: Pick<CollectionDemand, 'nature' | 'gender' | 'body' | 'voice'>,
+    ) => {
+      const groupId = groupRef.current;
+      const account = accountRef.current;
+      if (!groupId) throw new Error('还没有打开小组');
+      await withdrawDemandApi(groupId, eggGameId, criteria);
+      setDemands((list) =>
+        list.filter(
+          (item) =>
+            !(
+              item.demanderAccountId === account &&
+              item.eggGameId === eggGameId &&
+              item.nature === criteria.nature &&
+              item.gender === criteria.gender &&
+              item.body === criteria.body &&
+              item.voice === criteria.voice
+            ),
+        ),
+      );
+    },
+    [],
+  );
 
   const demandAction = useCallback(
     async (
       action: 'claim' | 'release' | 'complete',
-      demand: Pick<CollectionDemand, 'demanderAccountId' | 'eggGameId' | 'nature' | 'version'>,
+      demand: Pick<
+        CollectionDemand,
+        'demanderAccountId' | 'eggGameId' | 'nature' | 'gender' | 'body' | 'voice' | 'version'
+      >,
     ) => {
       const groupId = groupRef.current;
       if (!groupId) throw new Error('还没有打开小组');
@@ -425,6 +454,9 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         demanderAccountId: demand.demanderAccountId,
         eggGameId: demand.eggGameId,
         nature: demand.nature,
+        gender: demand.gender,
+        body: demand.body,
+        voice: demand.voice,
         version: demand.version,
       });
       mergeDemand(saved);
@@ -444,8 +476,9 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         accountRef.current = next;
         const prefs = readCollectionGroupPrefs(next);
         const cache = readCollectionGroupCache(next);
+        const cachedGroups = (cache?.groups ?? []).filter((group) => group.groupType === 'mother');
         const nextGroupId = prefs.mode === 'group'
-          ? readLastGroupId(next, prefs.personalType) ?? cache?.groups[0]?.id ?? null
+          ? readLastGroupId(next, 'mother') ?? cachedGroups[0]?.id ?? null
           : null;
         const detail = nextGroupId ? cache?.details[nextGroupId] ?? null : null;
         const selection = selectionOf(detail, next);
@@ -457,7 +490,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         setAccountId(next);
         setPageMode(prefs.mode);
         setPersonalTypeState(prefs.personalType);
-        setGroups(cache?.groups ?? []);
+        setGroups(cachedGroups);
         setGroupsLoaded(cache != null);
         setCurrentGroupId(nextGroupId);
         setCurrentGroup(detail);
@@ -491,24 +524,17 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
   }, [scope]);
 
   const applyGroupList = useCallback((list: CollectionGroupSummary[], account: string) => {
-    const prefs = readCollectionGroupPrefs(account);
-    const preferredType = prefs.personalType;
+    // 小组只剩母本组：旧种公组 id 即使还在本地记忆里，也不能再被选中。
     const lastMother = readLastGroupId(account, 'mother');
-    const lastStud = readLastGroupId(account, 'stud');
-    const lastPreferred = preferredType === 'mother' ? lastMother : lastStud;
+    const mothers = list.filter((group) => group.groupType === 'mother');
     const target =
-      list.find((group) => group.id === lastPreferred)?.id ??
-      list.find((group) => group.groupType === preferredType)?.id ??
-      list.find((group) => group.id === lastMother)?.id ??
-      list.find((group) => group.id === lastStud)?.id ??
-      list[0]?.id ??
+      mothers.find((group) => group.id === lastMother)?.id ??
+      mothers[0]?.id ??
       null;
     if (groupRef.current !== target) groupEpochRef.current += 1;
     groupRef.current = target;
     setCurrentGroupId(target);
-    // 按组自己的类型记住，不能写成「个人求蛋当前类型」，否则母本/种公互相污染
-    const targetGroup = list.find((group) => group.id === target);
-    if (target && targetGroup) saveLastGroupId(account, targetGroup.groupType, target);
+    if (target) saveLastGroupId(account, 'mother', target);
   }, []);
 
   useEffect(() => {
@@ -579,12 +605,29 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
           setDraftDirty(false);
           setCurrentGroupId(null);
           setCurrentGroup(null);
-          setPageMode('personal');
-          savePageMode(accountRef.current, 'personal');
           clearTasks();
           clearCollectionGroupCacheDetail(accountRef.current, groupId);
-          setError(failure.message);
-          void refreshGroups().catch(() => {});
+          // 旧种公组 / 已被解散的组：静默丢掉本地记忆，自动落到另一个母本组或个人模式，
+          // 不再进页面就弹「小组不存在」（2026-10-27）。
+          saveLastGroupId(accountRef.current, 'mother', null);
+          setError('');
+          void refreshGroups()
+            .then((list) => {
+              if (!list) return;
+              // 不要再选回刚才 404 的组，否则会反复请求同一个不存在的组。
+              const next = list.find(
+                (group) => group.groupType === 'mother' && group.id !== groupId,
+              );
+              if (next) {
+                setPageMode('group');
+                savePageMode(accountRef.current, 'group');
+                applyGroupList([next], accountRef.current ?? '');
+              } else {
+                setPageMode('personal');
+                savePageMode(accountRef.current, 'personal');
+              }
+            })
+            .catch(() => {});
           return;
         }
         if (isMotherGroupsApiError(failure) && failure.status === 429) {
@@ -606,7 +649,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
           request === detailRequestRef.current) setLoading(false);
       }
     },
-    [applySelection, clearTasks, loadDemands, loadTasks, refreshGroups],
+    [applyGroupList, applySelection, clearTasks, loadDemands, loadTasks, refreshGroups],
   );
 
   useEffect(() => {
@@ -778,29 +821,14 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     try {
       if (groupType === 'mother') {
         const motherTarget = target?.kind === 'mother' ? target : null;
-        if (motherTarget?.catalogVersion && motherTarget.catalogVersion !== catalogVersion) {
-          return {
-            kind: 'mother',
-            resource: null,
-            diff: null,
-            missingAccountKeys: [],
-            error: '图鉴已更新，请先在「本组目标」里更新口径',
-          };
-        }
         const resource = buildMotherResource({
           snapshots,
           selectedAccountKeys: draftSelection,
           species,
           catalogVersion,
-          criteria: motherTarget
-            ? {
-                bodies: motherTarget.bodies as MotherBody[],
-                voices: motherTarget.voices as MotherVoice[],
-              }
-            : undefined,
-          criteriaId: motherTarget?.criteriaId ?? MOTHER_CRITERIA_ID,
-          requireRecommendedNatures: motherTarget?.requireRecommendedNatures === true,
-          natureOverrides: motherTarget?.natureOverrides,
+          criteriaId: ALL_MOTHERS_CRITERIA_ID,
+          // 母本口径已去掉；模式只用于产线档位。
+          mode: motherTarget?.mode ?? 'perfect',
         });
         const base = myMember?.resource ?? emptyMotherDraft(catalogVersion);
         return {
@@ -912,10 +940,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         accounts: [],
       });
     } else {
-      const criteriaId = currentGroup?.group.target?.kind === 'mother'
-        ? currentGroup.group.target.criteriaId
-        : MOTHER_CRITERIA_ID;
-      await publishResource(emptyMotherDraft(catalogVersion, criteriaId));
+      await publishResource(emptyMotherDraft(catalogVersion));
     }
     // 记住「主动停止共享」：之后导入触发的自动发布要跳过这个组
     setGroupSharingOff(account, groupId, true);
@@ -1084,6 +1109,19 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     return code;
   }, [scope]);
 
+  const removeMember = useCallback(
+    async (memberAccountId: string) => {
+      const groupId = groupRef.current;
+      if (!groupId) throw new Error('还没有打开小组');
+      const active = scope(true);
+      await removeMemberApi(groupId, memberAccountId);
+      if (!active()) throw new Error('身份或小组已切换，请在原身份中查看操作结果');
+      await reloadCurrent();
+      await refreshGroups().catch(() => {});
+    },
+    [reloadCurrent, refreshGroups, scope],
+  );
+
   const leave = useCallback(async () => {
     const groupId = groupRef.current;
     const account = accountRef.current;
@@ -1163,6 +1201,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     updateTarget,
     updateProfile,
     resetInvite,
+    removeMember,
     leave,
     dissolve,
     clearError: () => setError(''),

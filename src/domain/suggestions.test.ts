@@ -52,6 +52,7 @@ describe('computeStudRecommendations（优质种公推荐的结构化待办）',
         id: '3301|沉默|大婉|2',
         natureName: '沉默', // 缺口要沉默 → 显示沉默（此前会错显示成该精灵自己的推荐性格）
         displayName: '白发懒人',
+        groupIds: [2],
         groupLabels: ['巨灵组'],
         grade: '大婉',
         gameId: 3301,
@@ -73,6 +74,7 @@ describe('computeStudRecommendations（优质种公推荐的结构化待办）',
         id: '3302|固执|大婉|2+9',
         natureName: '固执',
         displayName: '雪豆丁',
+        groupIds: [2, 9],
         groupLabels: ['巨灵组', '拟人组'],
         grade: '大婉',
         gameId: 3302,
@@ -86,6 +88,7 @@ describe('computeStudRecommendations（优质种公推荐的结构化待办）',
       wish({ groupLabels: ['拟人组'], fillGroups: [9] }),
     ]);
     expect(result).toHaveLength(1);
+    expect(result[0]?.groupIds).toEqual([2, 9]);
     expect(result[0]?.groupLabels).toEqual(['巨灵组', '拟人组']);
   });
 

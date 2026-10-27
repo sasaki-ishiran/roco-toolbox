@@ -216,7 +216,7 @@ export function GenderRatioSpecies({ owned }: { owned: OwnedPet[] }) {
                   <span className={`inline-block h-1.5 w-1.5 rounded-full ${meta.dot}`} aria-hidden />
                   {meta.label}（{pets.length}）
                 </p>
-                <div className="mt-1 grid grid-cols-2 gap-2">
+                <div className="mt-1 grid grid-cols-4 gap-1.5">
                   {pets.map((pet, index) => (
                     <PetCard
                       key={`${pet.account}-${pet.captureId ?? pet.gameId}-${index}`}

@@ -1,4 +1,4 @@
-﻿﻿import { expect, test } from '@playwright/test';
+﻿﻿﻿﻿﻿﻿﻿import { expect, test } from '@playwright/test';
 import { enterGroup, loginAs, mockMotherGroups } from './helpers/motherGroupsMock';
 
 const openGroups = async (page: import('@playwright/test').Page) => {
@@ -32,7 +32,7 @@ test('已登录且本机无数据：能浏览小组资源，不能发布自己�
 
   await expect(page.getByTestId('group-card')).toContainText('周末互换');
   await expect(page.getByTestId('group-card')).toContainText('3 人');
-  await expect(page.getByTestId('group-type-label')).toContainText('母本收集');
+  await expect(page.getByTestId('group-type-label')).toContainText('收集小组');
   await expect(page.getByTestId('group-target-summary')).toContainText('母 · 大块头 · +100');
   await expect(page.getByTestId('mother-resource-editor')).toHaveCount(0);
   await page.getByTestId('group-edit-resources').click();
@@ -41,35 +41,35 @@ test('已登录且本机无数据：能浏览小组资源，不能发布自己�
   await expect(page.getByTestId('mother-missing-accounts')).toContainText('uid:1001');
   await expect(page.getByTestId('mother-publish')).toBeDisabled();
 
-  // 未知成员不能算成「缺所有母本」
+  // 有人还没发布：组内没人有的行只能标「数据不全」，不能判死
   const cat = page.getByTestId('mother-resource-row').filter({ hasText: '喵喵' });
-  await expect(cat).toContainText('已发布成员均无，另 1 人待发布/更新');
+  await expect(cat).toHaveAttribute('data-incomplete', 'true');
+  await expect(page.getByTestId('mother-incomplete-section')).toContainText('数据不全');
 });
 
-test('小组资源：显示拥有者昵称、缺口与未知人数；可切换视图与按血脉搜索', async ({ page }) => {
+test('小组资源：卡片只显示头像 / 名称 / 性格；可切换视图与按血脉搜索', async ({ page }) => {
   await loginAs(page);
   await enterGroup(page);
   await mockMotherGroups(page);
   await page.goto('/');
   await openGroups(page);
 
-  await page.getByTestId('mother-view-mine').click();
+  // 搜索 / 筛选 / 发需求同一行：搜索框仍保留可输入宽度
   const searchBox = await page.getByTestId('mother-search').boundingBox();
-  expect(searchBox?.width ?? 0).toBeGreaterThan(260);
-  const fire = page.getByTestId('mother-resource-row').filter({ hasText: '火花' });
-  await expect(fire).toContainText('有：阿甲');
-  await expect(fire).toContainText('缺：阿乙，另 1 人待发布/更新');
+  expect(searchBox?.width ?? 0).toBeGreaterThan(170);
+  const water = page.getByTestId('mother-resource-row').filter({ hasText: '水蓝蓝' });
+  // 2026-10-27：卡里不再写「谁有」，只留头像 + 名称 + 性格
+  await expect(water.locator('[data-testid="pet-avatar"], [data-testid="pet-avatar-fallback"]')).toBeVisible();
+  await expect(water.getByTestId('mother-resource-holders')).toHaveCount(0);
 
-  // 搜「火神」能命中「火花」那颗蛋（按蛋聚合，识别同血脉的其它形态）
-  await page.getByTestId('mother-search').fill('火神');
+  await page.getByTestId('mother-search').fill('水蓝');
   await expect(page.getByTestId('mother-resource-row')).toHaveCount(1);
-  await expect(page.getByTestId('mother-resource-row')).toContainText('火花');
+  await expect(page.getByTestId('mother-resource-row')).toContainText('水蓝蓝');
 
+  // 需求中心：mock 下没有需求时给出空态
   await page.getByTestId('mother-search').fill('');
-  await page.getByTestId('mother-view-missing').click();
-  await expect(page.getByTestId('mother-resource-row').filter({ hasText: '水蓝蓝' })).toContainText(
-    '有：阿乙',
-  );
+  await page.getByTestId('mother-view-mine').click();
+  await expect(page.getByTestId('mother-intake-empty')).toContainText('当前没有组员发布需求');
 });
 
 test('共同寻找：确认后可以认领与释放，状态来自服务器', async ({ page }) => {

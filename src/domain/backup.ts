@@ -1,5 +1,5 @@
 import type { TargetMode } from './petFilters';
-import { accountKeyOf, type AccountSnapshot } from './parseBackup';
+import { accountKeyOf, parseHomeSnapshot, type AccountSnapshot } from './parseBackup';
 import type { OwnedPet } from './types';
 
 type UnknownRecord = Record<string, unknown>;
@@ -131,6 +131,7 @@ export function parseToolboxBackup(raw: unknown): ToolboxBackup {
     .map((account) => {
       const raw = account as unknown as Record<string, unknown>;
       const gameId = asNumber(raw.gameId);
+      const home = parseHomeSnapshot(raw.home);
       return {
         accountName: account.accountName,
         gameId,
@@ -141,6 +142,7 @@ export function parseToolboxBackup(raw: unknown): ToolboxBackup {
           .map((pet) => sanitizePet(pet, account.accountName))
           .filter((pet): pet is OwnedPet => pet !== undefined),
         eggs: Array.isArray(raw.eggs) ? (raw.eggs as AccountSnapshot['eggs']) : [],
+        ...(home ? { home } : {}),
       };
     });
   if (accounts.length === 0) {

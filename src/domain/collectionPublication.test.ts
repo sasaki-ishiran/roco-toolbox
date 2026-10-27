@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MOTHER_CRITERIA_ID, type PublishedMotherResource } from '../shared/motherGroups';
+import { ALL_MOTHERS_CRITERIA_ID, type PublishedMotherResource } from '../shared/motherGroups';
 import { studSlotSetIdOf, type PublishedStudResource, type StudTargetConfig } from '../shared/collectionGroups';
 import { groupPublicationStatus } from './collectionPublication';
 
@@ -7,7 +7,7 @@ const CATALOG = 'cat-1';
 
 const motherResource = (patch: Partial<PublishedMotherResource> = {}): PublishedMotherResource => ({
   schemaVersion: 1,
-  criteriaId: MOTHER_CRITERIA_ID,
+  criteriaId: ALL_MOTHERS_CRITERIA_ID,
   catalogVersion: CATALOG,
   accounts: [],
   revision: 1,
@@ -75,9 +75,28 @@ describe('小组共享资源发布状态', () => {
     expect(motherStatus({ mother: motherResource() })).toBe('已发布');
   });
 
-  test('母本：图鉴变了 / 口径变了 → 需更新', () => {
+  test('母本：图鉴变了 / 旧口径摘要 → 需更新', () => {
     expect(motherStatus({ mother: motherResource(), catalogVersion: 'cat-0' })).toBe('需更新');
     expect(motherStatus({ mother: motherResource({ criteriaId: 'mother-v2-x' }) })).toBe('需更新');
+    // 组目标里残留的旧口径不再影响：只要摘要自己是「全部母本」就算已发布
+    expect(
+      groupPublicationStatus({
+        type: 'mother',
+        mother: motherResource(),
+        stud: null,
+        target: {
+          kind: 'mother',
+          criteriaId: 'mother-v2-legacy',
+          mode: 'perfect',
+          bodies: ['大块头'],
+          voices: ['+100'],
+          catalogVersion: CATALOG,
+        },
+        targetRevision: 1,
+        catalogVersion: CATALOG,
+        unchanged: true,
+      }),
+    ).toBe('已发布');
   });
 
   test('导入新数据后本机重建内容不一致 → 需更新（即使口径没变）', () => {

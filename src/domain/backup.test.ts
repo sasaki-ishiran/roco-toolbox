@@ -55,6 +55,41 @@ describe('buildBackup / parseToolboxBackup', () => {
     expect(backupFileName('2026-09-26T10:00:00.000Z')).toBe('洛克工具箱备份-2026-09-26.json');
   });
 
+  test('家园快照跟着导出/导入保留', () => {
+    const withHome: AccountSnapshot = {
+      ...snapshot('测试甲', 1),
+      home: {
+        schemaVersion: 1,
+        gameId: String(gameIdOf('测试甲')),
+        capturedAt: '2026-10-27T00:00:00.000Z',
+        couplesStale: false,
+        residents: [
+          {
+            instanceId: '11',
+            baseId: '22',
+            furnitureGuid: '88',
+            actorId: '77',
+            name: '母本甲',
+            gender: '母',
+            nest: { furnitureGuid: '88', configId: 1001072, nestType: 'academy', nestName: '学院小窝' },
+          },
+        ],
+        nests: [{ furnitureGuid: '88', configId: 1001072, nestType: 'academy', nestName: '学院小窝', residentIds: ['11'] }],
+        layEggCouples: [{ femaleActorId: '77', maleActorIds: ['78'] }],
+        sceneEggs: [{ actorId: '99', furnitureGuid: '88', npcConfigId: 301 }],
+      },
+    };
+    const parsed = parseToolboxBackup(
+      JSON.parse(
+        JSON.stringify(
+          buildBackup([withHome], { exportedAt: '2026-10-27T00:00:00.000Z', catalogVersion: 's4' }),
+        ),
+      ),
+    );
+    expect(parsed.accounts[0].home?.residents[0].name).toBe('母本甲');
+    expect(parsed.accounts[0].home?.sceneEggs).toHaveLength(1);
+  });
+
   test('抓包文件会被明确拒绝（给出可读错误）', () => {
     expect(() => parseToolboxBackup({ meta: { type: 'hatch-backup' } })).toThrow(/备份文件/);
   });

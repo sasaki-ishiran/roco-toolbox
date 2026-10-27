@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>小组页方案 v2 · 结构对照</title>
+<style>
+  :root{
+    --emerald:#059669; --emerald-bg:#ecfdf5; --emerald-border:#10b981;
+    --slate-700:#334155; --slate-500:#64748b; --slate-400:#94a3b8; --slate-300:#cbd5e1;
+    --rose:#e11d48; --rose-bg:#fff1f2; --rose-border:#fda4af;
+    --line:#e2e8f0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:#f1f5f9; color:var(--slate-700);
+    font-family:-apple-system,"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{width:820px; margin:0 auto; padding:18px;}
+  h1{font-size:16px; margin:0 0 4px; color:#0f172a;}
+  .sub{font-size:11px; color:var(--slate-500); margin-bottom:14px;}
+  .cols{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .col-title{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;}
+  .col-title b{font-size:13px;}
+  .col-title span{font-size:10px; color:var(--slate-400);}
+  .stack{display:flex; flex-direction:column; gap:6px;}
+  .block{border-radius:10px; padding:8px 10px; background:#fff; border:1px solid var(--line); position:relative;}
+  .block .name{font-size:11px; font-weight:600; color:var(--slate-700);}
+  .block .desc{font-size:9px; color:var(--slate-400); margin-top:2px; line-height:1.4;}
+  .block.tall{padding-bottom:18px;}
+  .block.taller{padding-bottom:30px;}
+  .block.list{background:#f8fafc;}
+  .block.list .name{color:#0f172a;}
+  .block.dup{border-color:var(--rose-border); background:var(--rose-bg);}
+  .block.dup .name{color:#be123c;}
+  .tag{position:absolute; right:8px; bottom:6px; font-size:8px; padding:1px 4px; border-radius:3px; background:#f1f5f9; color:var(--slate-500);}
+  .tag.red{background:#ffe4e6; color:#be123c;}
+  .tag.green{background:var(--emerald-bg); color:#047857;}
+  .block.merged{border-color:var(--emerald-border); background:#fff; box-shadow:inset 0 0 0 1px var(--emerald-border);}
+  .block.fold{background:#f8fafc; border-style:dashed;}
+  .arrow{text-align:center; font-size:16px; color:var(--slate-300); margin:10px 0 2px;}
+  .notes{margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .note{background:#fff; border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:10px; line-height:1.6; color:var(--slate-500);}
+  .note b{color:var(--slate-700);}
+  .note.red b{color:#be123c;}
+  .note.green b{color:#047857;}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>小组页结构对照（改前 / 改后）</h1>
+  <div class="sub">同样的内容，改成 4 块；主体从第 5 屏提到第 2 屏，重复项合并。</div>
+
+  <div class="cols">
+    <!-- 改前 -->
+    <div>
+      <div class="col-title"><b>现在</b><span>8 块 · 主体在第 5 屏</span></div>
+      <div class="stack">
+        <div class="block dup">
+          <div class="name">1 收集范围</div>
+          <div class="desc">母本收集 · 周末互换 · 5 人</div>
+          <span class="tag red">组名/人数重复 ×3</span>
+        </div>
+        <div class="block dup">
+          <div class="name">2 组名卡</div>
+          <div class="desc">类型 / 组名 / 人数 / 组长 / 刷新 / 每 15 秒自动更新</div>
+          <span class="tag red">常驻噪音</span>
+        </div>
+        <div class="block taller dup">
+          <div class="name">3 本组目标</div>
+          <div class="desc">摘要 + 组长编辑区常展（模式 / 体型 / 声音 / 推荐性格 / 保存 / 口径标识）</div>
+          <span class="tag red">与「小组口径」重复</span>
+        </div>
+        <div class="block dup">
+          <div class="name">4 我的共享资源</div>
+          <div class="desc">状态说 3 遍：标题 + 摘要 + 提示 + 按钮</div>
+          <span class="tag red">重复</span>
+        </div>
+        <div class="block tall">
+          <div class="name">5 选号编辑器（展开页）</div>
+          <div class="desc">收起后要滚回第 3 块才能再打开</div>
+        </div>
+        <div class="block list taller">
+          <div class="name">6 我缺的（主体）</div>
+          <div class="desc">三视图 + 搜索 + 筛选 + 43 张卡片</div>
+          <span class="tag">被压到第 5 屏</span>
+        </div>
+        <div class="block taller">
+          <div class="name">7 成员</div>
+          <div class="desc">成员列表 + 昵称 + 邀请码 + 重置 / 解散 / 退出</div>
+          <span class="tag">默认全展开</span>
+        </div>
+        <div class="block taller">
+          <div class="name">8 新建 / 加入小组</div>
+          <div class="desc">已入组时完全用不到，却永远占最底部</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 改后 -->
+    <div>
+      <div class="col-title"><b>改后</b><span>4 块 · 主体在第 2 屏</span></div>
+      <div class="stack">
+        <div class="block">
+          <div class="name">1 收集范围</div>
+          <div class="desc">个人求蛋 + 各组 chip（横滑）+ ＋新建 / 加入</div>
+          <span class="tag green">chip 精简</span>
+        </div>
+        <div class="block merged">
+          <div class="name">2 组头卡</div>
+          <div class="desc">组名 / 人数 / 组长<br>口径摘要 + 改口径（展开）<br>我的资源状态 + 管理选号（展开）</div>
+          <span class="tag green">3 块合 1</span>
+        </div>
+        <div class="block fold">
+          <div class="name">3 成员与邀请</div>
+          <div class="desc">默认收起：5 人 · 邀请码 · 管理</div>
+          <span class="tag">上移 + 可收起</span>
+        </div>
+        <div class="block fold">
+          <div class="name">4 新建 / 加入小组</div>
+          <div class="desc">默认收起；未入组时默认展开</div>
+          <span class="tag">上移 + 可收起</span>
+        </div>
+        <div class="block list taller merged">
+          <div class="name">5 我缺的（主体）</div>
+          <div class="desc">
+            可补 · N<br>
+            有母缺公 · N（红边沉底）<br>
+            组内没有母本 · N（红边沉底）
+          </div>
+          <span class="tag green">分区 + 禁发需求</span>
+        </div>
+      </div>
+      <div class="arrow">↑</div>
+      <div class="note green">
+        <b>去重清单</b><br>
+        组名 / 人数：chip、组头卡各一次；口径摘要只留组头卡；发布状态只留徽标 + 一行摘要 + 一个按钮；
+        「每 15 秒自动更新」正常时不显示。
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note red">
+      <b>现在的问题</b><br>
+      组名和人数在 3 个地方出现；口径摘要出现 2 次；发布状态用 4 句话表达同一件事；
+      成员区默认全展开，是整页最长的一块。
+    </div>
+    <div class="note">
+      <b>改后的取舍</b><br>
+      折叠不等于隐藏：成员、邀请码、新建 / 加入都还有一行入口，点一下展开；
+      收纳的是低频编辑区，常用状态仍然常显。
+    </div>
+  </div>
+</div>
+</body>
+</html>

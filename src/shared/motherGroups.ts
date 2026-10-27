@@ -15,6 +15,12 @@
  * 否则组内会把实际已有的资源当成「已确认缺口」。旧摘要统一显示「需更新」。
  */
 export const MOTHER_CRITERIA_ID = 'female-huge-voice100-v2' as const;
+
+/**
+ * 2026-10-28：小组不再有母本口径，共享全部母本/产线。
+ * 这是一个固定标识，老摘要的旧口径会因此变成「需更新」，由成员重新导入发布。
+ */
+export const ALL_MOTHERS_CRITERIA_ID = 'all-mothers-v1' as const;
 /** 口径标识是稳定字符串：一期固定值 + 二期自选的 `mother-v2-<8hex>`。 */
 export type MotherCriteriaId = string;
 
@@ -43,6 +49,26 @@ export const MOTHER_DISPLAY_NAME_MAX = 6;
 /** 邀请码长度（明文只返回一次）。 */
 export const MOTHER_INVITE_CODE_LENGTH = 8;
 
+/** 产线档位：与领域层的 PetGrade 同名字面量。 */
+export const PRODUCTION_LINE_GRADES = ['大婉', '小婉', '大粗', '小粗'] as const;
+export type ProductionLineGrade = (typeof PRODUCTION_LINE_GRADES)[number];
+
+/** 单账号最多共享多少条产线；超过显式拒绝，不静默截断。 */
+export const PRODUCTION_LINE_MAX_PER_ACCOUNT = 1024;
+/** 单条产线最多多少个性格（母本 + 可配公）。 */
+export const PRODUCTION_LINE_MAX_NATURES = 30;
+
+/**
+ * 一条可共享的产线：同账号、双方同档位、能产出的蛋 × 性格。
+ * 这是从完整精灵库算出来的派生数据，不上传整箱精灵。
+ */
+export interface SharedProductionLine {
+  eggGameId: number;
+  grade: ProductionLineGrade;
+  /** 去重、排序；母本性格 ∪ 同档位可配公的性格。 */
+  natures: string[];
+}
+
 /** 一个共享的游戏账号（按游戏 UID 识别，不靠显示名）。 */
 export interface SharedMotherAccount {
   /** 规范形式 `uid:<正整数>`，服务端校验。 */
@@ -52,7 +78,44 @@ export interface SharedMotherAccount {
   sourceExportedAt: string;
   /** 去重、升序；只含达标母本的蛋血脉 ID。 */
   eggGameIds: number[];
+  /**
+   * 同账号产线（2026-10-27）。
+   * `undefined` = 旧摘要没带（未知，需要重新发布）；`[]` = 已发布但确实没有产线。
+   */
+  lines?: SharedProductionLine[];
 }
+
+/** 按蛋 + 档位聚合产线，合并性格并稳定排序；不做合法性校验。 */
+export function canonicalProductionLines(
+  lines: readonly SharedProductionLine[],
+): SharedProductionLine[] {
+  const byKey = new Map<string, Set<string>>();
+  for (const line of lines) {
+    const key = `${line.eggGameId}|${line.grade}`;
+    const natures = byKey.get(key) ?? new Set<string>();
+    for (const nature of line.natures) {
+      if (typeof nature === 'string' && nature.trim()) natures.add(nature);
+    }
+    byKey.set(key, natures);
+  }
+  return [...byKey.entries()]
+    .map(([key, natures]) => {
+      const [eggGameId, grade] = key.split('|');
+      return {
+        eggGameId: Number(eggGameId),
+        grade: grade as ProductionLineGrade,
+        natures: [...natures].sort((a, b) => a.localeCompare(b, 'zh-Hans-CN')),
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.eggGameId - b.eggGameId ||
+        PRODUCTION_LINE_GRADES.indexOf(a.grade) - PRODUCTION_LINE_GRADES.indexOf(b.grade),
+    );
+}
+
+export const isProductionLineGrade = (value: unknown): value is ProductionLineGrade =>
+  typeof value === 'string' && (PRODUCTION_LINE_GRADES as readonly string[]).includes(value);
 
 export interface MotherResourceDraft {
   schemaVersion: typeof MOTHER_RESOURCE_SCHEMA_VERSION;

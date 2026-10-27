@@ -14,11 +14,16 @@ import {
   MOTHER_RESOURCE_MAX_BODY_BYTES,
   MOTHER_RESOURCE_MAX_EGGS_PER_ACCOUNT,
   MOTHER_RESOURCE_SCHEMA_VERSION,
+  PRODUCTION_LINE_MAX_NATURES,
+  PRODUCTION_LINE_MAX_PER_ACCOUNT,
   canonicalEggGameIds,
+  canonicalProductionLines,
   isCanonicalMotherAccountKey,
+  isProductionLineGrade,
   isValidIsoTimestamp,
   type MotherResourceDraft,
   type SharedMotherAccount,
+  type SharedProductionLine,
 } from '../../src/shared/motherGroups';
 
 export class MotherInputError extends Error {
@@ -116,7 +121,7 @@ export function parseMotherResource(value: unknown): MotherResourceDraft {
   const criteriaId = record.criteriaId;
   if (
     typeof criteriaId !== 'string' ||
-    !/^(female-huge-voice100-v2|mother-v2-[0-9a-f]{8})$/.test(criteriaId)
+    !/^(all-mothers-v1|female-huge-voice100-v2|mother-v2-[0-9a-f]{8})$/.test(criteriaId)
   ) {
     invalid('criteriaId 不受支持');
   }
@@ -179,10 +184,47 @@ function parseSharedAccount(value: unknown): SharedMotherAccount {
     }
   }
 
+  const rawLines = record.lines;
+  let lines: SharedProductionLine[] | undefined;
+  if (rawLines !== undefined) {
+    if (!Array.isArray(rawLines)) invalid('lines 必须是数组');
+    if (rawLines.length > PRODUCTION_LINE_MAX_PER_ACCOUNT) {
+      invalid(`每个账号最多 ${PRODUCTION_LINE_MAX_PER_ACCOUNT} 条产线`);
+    }
+    const parsed = rawLines.map((item) => parseProductionLine(item));
+    lines = canonicalProductionLines(parsed);
+    if (lines.length !== parsed.length) invalid('同一账号的产线不能重复（蛋 + 档位）');
+  }
+
   return {
     accountKey,
     accountName,
     sourceExportedAt,
     eggGameIds: canonicalEggGameIds(rawIds),
+    ...(lines === undefined ? {} : { lines }),
   };
+}
+
+function parseProductionLine(value: unknown): SharedProductionLine {
+  const record = asRecord(value, '产线');
+  const eggGameId = record.eggGameId;
+  if (typeof eggGameId !== 'number' || !Number.isSafeInteger(eggGameId) || eggGameId <= 0) {
+    invalid('产线的 eggGameId 必须是正安全整数');
+  }
+  const grade = record.grade;
+  if (!isProductionLineGrade(grade)) invalid('产线的 grade 不受支持');
+  const rawNatures = record.natures;
+  if (!Array.isArray(rawNatures)) invalid('产线的 natures 必须是数组');
+  if (rawNatures.length === 0 || rawNatures.length > PRODUCTION_LINE_MAX_NATURES) {
+    invalid(`产线性格需要 1–${PRODUCTION_LINE_MAX_NATURES} 个`);
+  }
+  const natures = rawNatures.map((nature) => {
+    if (typeof nature !== 'string' || nature.trim().length === 0 || nature.length > 8) {
+      invalid('产线性格必须是非空短字符串');
+    }
+    return nature;
+  });
+  const unique = [...new Set(natures)].sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  if (unique.length !== natures.length) invalid('产线性格不能重复');
+  return { eggGameId, grade, natures: unique };
 }

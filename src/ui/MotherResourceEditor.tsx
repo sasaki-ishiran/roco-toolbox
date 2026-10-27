@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isBreedableGroup } from '../domain/eggs';
-import { isQualifiedMother, type MotherCriteria } from '../domain/motherCriteria';
-import { SHARED_MOTHER_CRITERIA } from '../domain/motherResource';
 import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
 import type { SpeciesEntry } from '../domain/types';
 import type { MotherGroupsHook } from './useMotherGroups';
@@ -14,11 +12,6 @@ export interface MotherResourceEditorProps {
   snapshots: AccountSnapshot[];
   species: SpeciesEntry[];
   onGoAccount?: () => void;
-  /** 本组口径；不传时按一期固定口径（母 · 大块头 · +100dB）。 */
-  criteria?: MotherCriteria;
-  /** 推荐性格解析器：开启「要求推荐性格」时用于每个账号的达标计数，必须与发布同源。 */
-  naturesOf?: (gameId: number) => readonly string[];
-  criteriaLabel?: string;
 }
 
 /**
@@ -32,9 +25,6 @@ export function MotherResourceEditor({
   snapshots,
   species,
   onGoAccount,
-  criteria = SHARED_MOTHER_CRITERIA,
-  naturesOf,
-  criteriaLabel = '母 · 大块头 · +100dB',
 }: MotherResourceEditorProps) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -50,7 +40,7 @@ export function MotherResourceEditor({
   const preview = hook.publishPreview;
   const selection = hook.draftSelection;
 
-  /** 每个本机账号在**本组口径**下的达标母本种数（只用于展示，不参与发布）。 */
+  /** 每个本机账号的母本种数（全部母本；缺口由小组页的本地筛选决定）。 */
   const coverageOf = useMemo(() => {
     const byGameId = new Map(species.map((entry) => [entry.gameId, entry]));
     const eggIds = new Set(
@@ -64,13 +54,13 @@ export function MotherResourceEditor({
     return (snapshot: AccountSnapshot): number => {
       const ids = new Set<number>();
       for (const pet of snapshot.pets) {
-        if (!isQualifiedMother(pet, criteria, naturesOf)) continue;
+        if (pet.gender !== '母') continue;
         const eggGameId = byGameId.get(pet.gameId)?.eggGameId;
         if (eggGameId != null && eggIds.has(eggGameId)) ids.add(eggGameId);
       }
       return ids.size;
     };
-  }, [species, criteria, naturesOf]);
+  }, [species]);
 
   // 有未发布的选号修改时，关闭/刷新页面前提醒（发布成功或草稿回到服务器状态后自动解除）
   useEffect(() => {
@@ -153,7 +143,7 @@ export function MotherResourceEditor({
         </span>
       </div>
       <p className="mt-1 text-[11px] text-slate-400">
-        只统计「{criteriaLabel}」的达标母本；按人汇总，一个号有就算有。
+        共享全部母本与产线；具体缺什么由你在小组页的本地筛选决定。按人汇总，一个号有就算有。
       </p>
 
       {snapshots.length === 0 ? (
@@ -248,14 +238,29 @@ export function MotherResourceEditor({
               : '还没有选号。勾选你要共享的游戏账号。'}
           </p>
         ) : (
-          <p className="text-xs text-slate-500">
-            本次共享 {selection.length} 个账号 · 覆盖 {coverageTotal} 种母本
-            {preview.diff && !preview.diff.unchanged ? (
-              <span className="ml-1" data-testid="mother-preview-diff">
-                （新增 {preview.diff.addedEggGameIds.length} 种、移除 {preview.diff.removedEggGameIds.length} 种）
-              </span>
+          <>
+            <p className="text-xs text-slate-500">
+              本次共享 {selection.length} 个账号 · 覆盖 {coverageTotal} 种母本
+              {preview.diff && !preview.diff.unchanged ? (
+                <span className="ml-1" data-testid="mother-preview-diff">
+                  （新增 {preview.diff.addedEggGameIds.length} 种、移除{' '}
+                  {preview.diff.removedEggGameIds.length} 种
+                  {(preview.diff.addedLines?.length ?? 0) + (preview.diff.removedLines?.length ?? 0) > 0
+                    ? `；产线（蛋 × 档位）+${preview.diff.addedLines?.length ?? 0} / -${
+                        preview.diff.removedLines?.length ?? 0
+                      }`
+                    : ''}
+                  ）
+                </span>
+              ) : null}
+            </p>
+            {preview.diff &&
+            (preview.diff.addedLines?.length ?? 0) + (preview.diff.removedLines?.length ?? 0) > 0 ? (
+              <p className="mt-0.5 text-[10px] leading-snug text-slate-400" data-testid="mother-preview-line-hint">
+                产线按「蛋 × 档位」计；同一颗蛋可能有多个档位 / 性格，所以条数会多于母本数。
+              </p>
             ) : null}
-          </p>
+          </>
         )}
         {!hook.draftDirty && preview.diff && !preview.diff.unchanged ? (
           <p className="mt-1 text-[11px] text-amber-700" data-testid="mother-local-changed">

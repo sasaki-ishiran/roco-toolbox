@@ -5,6 +5,7 @@ import { NEST_PREFIX, type NestKind } from '../domain/swapPlan';
 import { useTargetMode } from './targetModeStore';
 import { setSwapSelected, useSwapView } from './swapViewStore';
 import { CopySheet, isCopyPreviewOff } from './CopySheet';
+import { PetAvatar } from './PetAvatar';
 import { SegmentedControl } from './primitives/SegmentedControl';
 
 export interface SwapWishCardProps {
@@ -199,6 +200,7 @@ export function SwapWishCard({ recommendations, emptyNote, pageSize = 20 }: Swap
                       data-testid="swap-wish-select"
                       className="mt-1 h-4 w-4 shrink-0 accent-emerald-600"
                     />
+                    <PetAvatar gameId={rec.gameId} name={rec.displayName} size={32} />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate text-sm font-medium text-slate-900">

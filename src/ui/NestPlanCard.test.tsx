@@ -10,6 +10,7 @@ import { NestPlanCard } from './NestPlanCard';
 
 const nestPet = (key: string, name: string): NestPet => ({
   key,
+  gameId: 3001,
   name,
   account: '账号甲',
   gender: '公',

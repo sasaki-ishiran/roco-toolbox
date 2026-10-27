@@ -5,6 +5,7 @@ import { groupRecommendedNatures } from '../domain/coverageTargets';
 import { gradeLabel } from '../domain/petFilters';
 import { targetNatures } from '../data/catalog';
 import { GenderMark } from './GenderMark';
+import { PetAvatar } from './PetAvatar';
 import { useTargetMode } from './targetModeStore';
 
 /** 推荐性格（数据推导）：只在组内筛选里做标注，不决定矩阵规模 */
@@ -143,6 +144,7 @@ function PetRow({ label, pet, testId }: { label: string; pet: PetRef; testId?: s
           {label}
         </span>
       </span>
+      <PetAvatar gameId={pet.gameId} name={pet.name} size={20} />
       <span className="font-medium">{pet.name}</span>
       <GenderMark gender={pet.gender} />
       <span className="rounded bg-amber-50 px-1 py-0.5 text-[10px] leading-none text-amber-700">

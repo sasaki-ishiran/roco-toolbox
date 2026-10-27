@@ -47,8 +47,9 @@ export function readCollectionGroupPrefs(accountId: string | null): CollectionGr
     const lastGroupIds: Partial<Record<CollectionGroupType, string>> = {};
     if (typeof parsed.lastGroupIds === 'object' && parsed.lastGroupIds !== null) {
       for (const [key, value] of Object.entries(parsed.lastGroupIds as Record<string, unknown>)) {
-        if ((key === 'mother' || key === 'stud') && typeof value === 'string') {
-          lastGroupIds[key] = value;
+        // 2026-10-27 起小组只剩母本组；旧种公组已在服务端删除，不能再用它恢复页面。
+        if (key === 'mother' && typeof value === 'string') {
+          lastGroupIds.mother = value;
         }
       }
     }
@@ -66,7 +67,8 @@ export function readCollectionGroupPrefs(accountId: string | null): CollectionGr
     }
     return {
       mode: parsed.mode === 'group' ? 'group' : 'personal',
-      personalType: parsed.personalType === 'stud' ? 'stud' : 'mother',
+      // 小组只剩母本组：旧值 stud 统一归到 mother，避免进入已删除的种公组。
+      personalType: 'mother',
       lastGroupIds,
       inviteCodes,
       sharingOff,
@@ -89,8 +91,9 @@ export function savePageMode(accountId: string | null, mode: GroupPageMode): voi
   write(accountId, { ...readCollectionGroupPrefs(accountId), mode });
 }
 
-export function savePersonalType(accountId: string | null, personalType: CollectionGroupType): void {
-  write(accountId, { ...readCollectionGroupPrefs(accountId), personalType });
+export function savePersonalType(accountId: string | null, _personalType: CollectionGroupType): void {
+  // 小组只剩母本组；保留参数是为了旧调用方兼容。
+  write(accountId, { ...readCollectionGroupPrefs(accountId), personalType: 'mother' });
 }
 
 export function readLastGroupId(
@@ -105,10 +108,12 @@ export function saveLastGroupId(
   groupType: CollectionGroupType,
   groupId: string | null,
 ): void {
+  // 种公组已下线：不再记住 stud 的当前组，避免下次启动指向已删除的组。
+  if (groupType !== 'mother') return;
   const prefs = readCollectionGroupPrefs(accountId);
   const lastGroupIds = { ...prefs.lastGroupIds };
-  if (groupId) lastGroupIds[groupType] = groupId;
-  else delete lastGroupIds[groupType];
+  if (groupId) lastGroupIds.mother = groupId;
+  else delete lastGroupIds.mother;
   write(accountId, { ...prefs, lastGroupIds });
 }
 

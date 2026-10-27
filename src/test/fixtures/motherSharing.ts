@@ -2,7 +2,7 @@ import type { AccountSnapshot } from '../../domain/parseBackup';
 import { accountKeyOf } from '../../domain/parseBackup';
 import type { OwnedPet, SpeciesEntry } from '../../domain/types';
 import {
-  MOTHER_CRITERIA_ID,
+  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_RESOURCE_SCHEMA_VERSION,
   type MotherGroupMember,
   type PublishedMotherResource,
@@ -20,7 +20,10 @@ import {
  * 另一颗蛋 201、纯母物种的蛋 301、未发现组的蛋 401，以及无蛋血脉 501。
  */
 
-export const FIXTURE_TIME = '2026-10-23T00:00:00.000Z';
+/**
+ * 「2 天前」：数据新鲜度按导出时间算（超过 7 天算旧），写死日期会随运行时间失效。
+ */
+export const FIXTURE_TIME = new Date(Date.now() - 2 * 86_400_000).toISOString();
 export const FIXTURE_CATALOG_VERSION = 'test-v1';
 
 const species = (patch: SpeciesEntry): SpeciesEntry => patch;
@@ -102,7 +105,7 @@ export function resourceWith(
 ): PublishedMotherResource {
   return {
     schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
-    criteriaId: MOTHER_CRITERIA_ID,
+    criteriaId: ALL_MOTHERS_CRITERIA_ID,
     catalogVersion: FIXTURE_CATALOG_VERSION,
     accounts: [sharedAccount(9001, ids)],
     revision: 1,

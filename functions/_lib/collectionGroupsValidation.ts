@@ -19,7 +19,6 @@ import {
   STUD_RESOURCE_MAX_SLOTS_PER_ACCOUNT,
   STUD_TARGET_MAX_SLOTS,
   defaultMotherTarget,
-  isCollectionGroupType,
   isTargetGrade,
   isTargetMode,
   isValidMotherTarget,
@@ -67,11 +66,14 @@ export interface ParsedCollectionCreate {
   target: GroupTargetConfig;
 }
 
-/** 创建：类型 + 组名 + 昵称；种公组允许先建组、目标留空（稍后确认）。 */
+/** 创建：组名 + 昵称。2026-10-27 起只有一种收集小组，类型固定为 mother。 */
 export function parseCollectionCreateBody(body: unknown): ParsedCollectionCreate {
   const record = asRecord(body, '请求体');
-  const groupType = record.groupType;
-  if (!isCollectionGroupType(groupType)) invalid('groupType 必须是 mother 或 stud');
+  // 老客户端可能不带 groupType；带了也只接受 mother（种公组已删库）
+  if (record.groupType !== undefined && record.groupType !== null && record.groupType !== 'mother') {
+    invalid('小组只剩一种收集小组，不再支持创建种公组');
+  }
+  const groupType = 'mother' as const;
 
   const name = record.name;
   if (typeof name !== 'string') invalid('组名必须是字符串');
@@ -88,10 +90,8 @@ export function parseCollectionCreateBody(body: unknown): ParsedCollectionCreate
 
   const target =
     record.target === undefined || record.target === null
-      ? groupType === 'mother'
-        ? defaultMotherTarget('')
-        : { kind: 'stud' as const, mode: 'perfect' as const, catalogVersion: '', slots: [] }
-      : parseCollectionTarget(record.target, groupType, { allowEmptyStud: true });
+      ? defaultMotherTarget('')
+      : parseCollectionTarget(record.target, groupType);
 
   return {
     name: name.trim(),

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  MOTHER_CRITERIA_ID,
+  ALL_MOTHERS_CRITERIA_ID,
   type MotherResourceDraft,
   type SharedMotherAccount,
 } from '../shared/motherGroups';
@@ -31,7 +31,7 @@ const build = (
 
 const draft = (accounts: SharedMotherAccount[]): MotherResourceDraft => ({
   schemaVersion: 1,
-  criteriaId: MOTHER_CRITERIA_ID,
+  criteriaId: ALL_MOTHERS_CRITERIA_ID,
   catalogVersion: FIXTURE_CATALOG_VERSION,
   accounts,
 });
@@ -45,54 +45,36 @@ const errorOf = (fn: () => unknown): MotherResourceError | null => {
   }
 };
 
-describe('buildMotherResource：推荐性格口径（2026-10-25）', () => {
-  const speciesWithNatures = catalog.map((entry) =>
-    entry.gameId === 101 ? { ...entry, recommendedNatures: ['固执'] } : entry,
-  );
-
-  const buildWithNatures = (
-    snapshots: Parameters<typeof buildMotherResource>[0]['snapshots'],
-    input: { require?: boolean; overrides?: Record<string, string[]> },
-  ) =>
-    buildMotherResource({
-      snapshots,
-      selectedAccountKeys: ['uid:1001'],
-      species: speciesWithNatures,
-      catalogVersion: FIXTURE_CATALOG_VERSION,
-      criteriaId: 'mother-test-natures',
-      requireRecommendedNatures: input.require,
-      natureOverrides: input.overrides,
-    });
-
-  test('开启后只收录「推荐性格」的母本', () => {
-    const opened = buildWithNatures([snapshot(1001, '甲', [mother(101, { nature: '开朗' })])], {
-      require: true,
-    });
-    expect(opened.accounts[0].eggGameIds).toEqual([]);
-
-    const matched = buildWithNatures([snapshot(1001, '甲', [mother(101, { nature: '固执' })])], {
-      require: true,
-    });
-    expect(matched.accounts[0].eggGameIds).toEqual([101]);
+describe('buildMotherResource：共享全部母本（2026-10-28 去掉小组口径）', () => {
+  test('产线：同账号双方大婉才生成，性格取母本和公的并集', () => {
+    const resource = build(
+      [
+        snapshot(1001, '甲', [
+          mother(101, { nature: '固执' }),
+          mother(101, { gender: '公', nature: '开朗' }),
+        ]),
+      ],
+      ['uid:1001'],
+    );
+    expect(resource.accounts[0].lines).toHaveLength(1);
+    expect(resource.accounts[0].lines?.[0].eggGameId).toBe(101);
+    expect(resource.accounts[0].lines?.[0].grade).toBe('大婉');
+    expect(new Set(resource.accounts[0].lines?.[0].natures)).toEqual(new Set(['固执', '开朗']));
   });
 
-  test('不开启时性格不参与判定', () => {
-    const resource = buildWithNatures([snapshot(1001, '甲', [mother(101, { nature: '开朗' })])], {
-      require: false,
-    });
-    expect(resource.accounts[0].eggGameIds).toEqual([101]);
+  test('产线：公不是大婉时不生成', () => {
+    const resource = build(
+      [
+        snapshot(1001, '甲', [
+          mother(101, { nature: '固执' }),
+          mother(101, { gender: '公', nature: '开朗', medalBody: '', voiceDb: 0 }),
+        ]),
+      ],
+      ['uid:1001'],
+    );
+    expect(resource.accounts[0].lines).toEqual([]);
   });
 
-  test('组长那份推荐性格覆盖优先于图鉴推荐', () => {
-    const resource = buildWithNatures([snapshot(1001, '甲', [mother(101, { nature: '开朗' })])], {
-      require: true,
-      overrides: { '101': ['开朗'] },
-    });
-    expect(resource.accounts[0].eggGameIds).toEqual([101]);
-  });
-});
-
-describe('buildMotherResource：从原始账号快照提取固定口径母本', () => {
   test('进化形态归蛋且重名账号保留不同来源', () => {
     const resource = build(
       [snapshot(1001, '同名', [mother(102)]), snapshot(1002, '同名', [mother(101)])],
@@ -105,11 +87,11 @@ describe('buildMotherResource：从原始账号快照提取固定口径母本', 
     // 重名不合并：两个来源账号各自保留，名字相同也不影响身份
     expect(resource.accounts.map((account) => account.accountName)).toEqual(['同名', '同名']);
     expect(resource.schemaVersion).toBe(1);
-    expect(resource.criteriaId).toBe(MOTHER_CRITERIA_ID);
+    expect(resource.criteriaId).toBe(ALL_MOTHERS_CRITERIA_ID);
     expect(resource.catalogVersion).toBe(FIXTURE_CATALOG_VERSION);
   });
 
-  test('排除公、未知性别、小不点、+99；+100 不限性格', () => {
+  test('只排除非母：体型 / 声音 / 性格不再过滤', () => {
     const resource = build(
       [
         snapshot(1001, '甲', [
@@ -122,7 +104,7 @@ describe('buildMotherResource：从原始账号快照提取固定口径母本', 
       ],
       ['uid:1001'],
     );
-    expect(resource.accounts[0].eggGameIds).toEqual([101]);
+    expect(resource.accounts[0].eggGameIds).toEqual([101, 201]);
   });
 
   test('纯母物种计入，未发现组 / 无蛋血脉 / 图鉴未知不计入', () => {
@@ -163,8 +145,7 @@ describe('buildMotherResource：从原始账号快照提取固定口径母本', 
     );
   });
 
-  test('自选口径：按传入 criteria 过滤，并使用对应 criteriaId', () => {
-    const customId = 'mother-v2-deadbeef';
+  test('旧的自选口径参数不再参与过滤，criteriaId 固定为全部母本', () => {
     const resource = buildMotherResource({
       snapshots: [
         snapshot(1001, '甲', [
@@ -176,9 +157,9 @@ describe('buildMotherResource：从原始账号快照提取固定口径母本', 
       species: catalog,
       catalogVersion: FIXTURE_CATALOG_VERSION,
       criteria: { bodies: ['小不点'], voices: ['婉转声'] },
-      criteriaId: customId,
+      criteriaId: 'mother-v2-deadbeef',
     });
-    expect(resource.criteriaId).toBe(customId);
+    expect(resource.criteriaId).toBe(ALL_MOTHERS_CRITERIA_ID);
     expect(resource.accounts[0].eggGameIds).toEqual([101]);
   });
 
@@ -208,8 +189,20 @@ describe('motherResourceSignature / diffMotherResources：稳定序列化与变�
     expect(diff.addedAccounts).toEqual([]);
     expect(diff.removedAccounts).toEqual([]);
     expect(diff.changedAccounts).toEqual([
-      { accountKey: 'uid:1', addedEggGameIds: [], removedEggGameIds: [201] },
-      { accountKey: 'uid:2', addedEggGameIds: [401], removedEggGameIds: [] },
+      {
+        accountKey: 'uid:1',
+        addedEggGameIds: [],
+        removedEggGameIds: [201],
+        addedLines: [],
+        removedLines: [],
+      },
+      {
+        accountKey: 'uid:2',
+        addedEggGameIds: [401],
+        removedEggGameIds: [],
+        addedLines: [],
+        removedLines: [],
+      },
     ]);
     expect(diff.unchanged).toBe(false);
   });
@@ -229,8 +222,32 @@ describe('motherResourceSignature / diffMotherResources：稳定序列化与变�
       addedAccounts: [],
       removedAccounts: [],
       changedAccounts: [],
+      addedLines: [],
+      removedLines: [],
       unchanged: true,
     });
+  });
+
+  test('产线变化也算变化，并能单独列出', () => {
+    const previous = draft([sharedAccount(1, [101], { lines: [] })]);
+    const next = draft([
+      sharedAccount(1, [101], {
+        lines: [{ eggGameId: 101, grade: '大婉', natures: ['固执'] }],
+      }),
+    ]);
+    const diff = diffMotherResources(previous, next);
+    expect(diff.addedLines).toEqual(['101|大婉|固执']);
+    expect(diff.removedLines).toEqual([]);
+    expect(diff.changedAccounts).toEqual([
+      {
+        accountKey: 'uid:1',
+        addedEggGameIds: [],
+        removedEggGameIds: [],
+        addedLines: ['101|大婉|固执'],
+        removedLines: [],
+      },
+    ]);
+    expect(diff.unchanged).toBe(false);
   });
 
   test('账号增加与移除单独列出', () => {

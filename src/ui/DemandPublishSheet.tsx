@@ -1,17 +1,44 @@
 import { useEffect, useState } from 'react';
 import { allNatureNames, targetNaturePool } from '../data/catalog';
-import { DEMAND_NATURE_MAX } from '../shared/collectionGroups';
+import {
+  DEFAULT_DEMAND_BODY,
+  DEFAULT_DEMAND_GENDER,
+  DEFAULT_DEMAND_VOICE,
+  DEMAND_BODIES,
+  DEMAND_GENDERS,
+  DEMAND_NATURE_MAX,
+  DEMAND_VOICES,
+  type DemandBody,
+  type DemandGender,
+  type DemandVoice,
+} from '../shared/collectionGroups';
 import { ModalSurface } from './primitives/ModalSurface';
 
 /** 八大性格放前面，其余收进「更多性格」（2026-10-26 用户口径）。 */
 const PRIMARY_NATURES = targetNaturePool.map((nature) => nature.name);
 const EXTRA_NATURES = allNatureNames.filter((nature) => !PRIMARY_NATURES.includes(nature));
 
+const GENDER_LABELS: Record<DemandGender, string> = { 母: '母', 公: '公', '': '不挑' };
+const BODY_LABELS: Record<DemandBody, string> = { 大块头: '大块头', 小不点: '小不点', '': '不限' };
+const VOICE_LABELS: Record<DemandVoice, string> = {
+  '+100': '+100',
+  '-100': '-100',
+  婉转声: '婉转声',
+  粗嗓门: '粗嗓门',
+  '': '不限',
+};
+
 export interface DemandPublishItem {
   eggGameId: number;
   name: string;
-  /** 默认性格（本组口径 / 图鉴推荐），进来时可被改。 */
+  /** 默认性格（本地推荐），进来时可被改。 */
   natures: string[];
+}
+
+export interface DemandCriteriaDraft {
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
 }
 
 export interface DemandPublishSheetProps {
@@ -19,33 +46,45 @@ export interface DemandPublishSheetProps {
   items: DemandPublishItem[];
   busy?: boolean;
   error?: string;
+  /** 数据不全 / 组内暂时无法确认时的提示；不阻断发布。 */
+  warning?: string;
+  defaultCriteria?: DemandCriteriaDraft;
   onClose: () => void;
-  onConfirm: (items: Array<{ eggGameId: number; natures: string[] }>) => void;
+  onConfirm: (items: Array<{ eggGameId: number; natures: string[] }>, criteria: DemandCriteriaDraft) => void;
 }
 
 /**
- * 发需求确认弹层（2026-10-26 用户补的口径）：选中卡片后先在这里挑性格，再发布。
+ * 发需求确认弹层：先挑性格，再挑性别 / 体型 / 声音。
  *
- * 每颗蛋默认带本组口径的性格（没有就留空 = 不挑），点性格标签增删；
- * 一条需求最多 DEMAND_NATURE_MAX 个，和服务器校验一致。
+ * 一条需求 = 一颗蛋 + 一个性格 + 性别 + 体型 + 声音；
+ * 勾 2 个性格就是 2 条。空值表示不挑 / 不限，服务端按「跳过该字段」处理。
  */
 export function DemandPublishSheet({
   open,
   items,
   busy = false,
   error = '',
+  warning = '',
+  defaultCriteria,
   onClose,
   onConfirm,
 }: DemandPublishSheetProps) {
   const [draft, setDraft] = useState<Record<number, string[]>>({});
   const [showAll, setShowAll] = useState(false);
+  const [gender, setGender] = useState<DemandGender>(defaultCriteria?.gender ?? DEFAULT_DEMAND_GENDER);
+  const [body, setBody] = useState<DemandBody>(defaultCriteria?.body ?? DEFAULT_DEMAND_BODY);
+  const [voice, setVoice] = useState<DemandVoice>(defaultCriteria?.voice ?? DEFAULT_DEMAND_VOICE);
 
-  // 每次打开按 items 的默认性格重置草稿，避免带上一次的选择
+  // 每次打开按 items 的默认性格与当前目标口径重置草稿，避免带上一次的选择。
+  // 依赖按字段拆开：父组件每次渲染都会新建 defaultCriteria 对象，用对象当依赖会把草稿重置掉。
   useEffect(() => {
     if (!open) return;
     setShowAll(false);
     setDraft(Object.fromEntries(items.map((item) => [item.eggGameId, [...item.natures]])));
-  }, [open, items]);
+    setGender(defaultCriteria?.gender ?? DEFAULT_DEMAND_GENDER);
+    setBody(defaultCriteria?.body ?? DEFAULT_DEMAND_BODY);
+    setVoice(defaultCriteria?.voice ?? DEFAULT_DEMAND_VOICE);
+  }, [open, items, defaultCriteria?.gender, defaultCriteria?.body, defaultCriteria?.voice]);
 
   const toggle = (eggGameId: number, nature: string) => {
     setDraft((current) => {
@@ -61,6 +100,35 @@ export function DemandPublishSheet({
   const totalCount = items.reduce(
     (sum, item) => sum + Math.max(1, (draft[item.eggGameId] ?? item.natures).length),
     0,
+  );
+
+  const optionRow = <T extends string>(
+    label: string,
+    values: readonly T[],
+    current: T,
+    labels: Record<T, string>,
+    onPick: (value: T) => void,
+    testPrefix: string,
+  ) => (
+    <div className="flex items-center gap-1">
+      <span className="w-8 shrink-0 text-[11px] text-slate-400">{label}</span>
+      {values.map((value) => (
+        <button
+          key={`${testPrefix}:${value || 'any'}`}
+          type="button"
+          aria-pressed={current === value}
+          onClick={() => onPick(value)}
+          data-testid={`${testPrefix}-${value || 'any'}`}
+          className={`min-h-[26px] rounded-md border px-1.5 text-xs ${
+            current === value
+              ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
+              : 'border-slate-200 bg-white text-slate-500'
+          }`}
+        >
+          {labels[value]}
+        </button>
+      ))}
+    </div>
   );
 
   return (
@@ -91,6 +159,7 @@ export function DemandPublishSheet({
                   eggGameId: item.eggGameId,
                   natures: draft[item.eggGameId] ?? item.natures,
                 })),
+                { gender, body, voice },
               )
             }
             data-testid="demand-publish-confirm"
@@ -103,9 +172,19 @@ export function DemandPublishSheet({
     >
       <div className="space-y-2 p-3" data-testid="demand-publish-body">
         <p className="text-[11px] leading-snug text-slate-400">
-          给每颗蛋选性格，一个性格算一条需求（勾 2 个就是 2 条，占 2 个额度）；
-          不选表示不挑性格。发布后组员能在「我能补的」里看到并接单。
+          给每颗蛋选性格，一个性格算一条需求；性别 / 体型 / 声音对本次选中的蛋统一生效。
+          不选表示不挑 / 不限，只会校验你选了的字段。
         </p>
+        <div className="space-y-1 rounded-lg bg-slate-50 px-2 py-1.5" data-testid="demand-publish-criteria">
+          {optionRow('性别', DEMAND_GENDERS, gender, GENDER_LABELS, setGender, 'demand-gender')}
+          {optionRow('体型', DEMAND_BODIES, body, BODY_LABELS, setBody, 'demand-body')}
+          {optionRow('声音', DEMAND_VOICES, voice, VOICE_LABELS, setVoice, 'demand-voice')}
+        </div>
+        {warning ? (
+          <p className="rounded-lg bg-amber-50 px-2 py-1 text-[11px] leading-snug text-amber-800" data-testid="demand-publish-warning">
+            {warning}
+          </p>
+        ) : null}
         {items.map((item) => {
           const picked = draft[item.eggGameId] ?? item.natures;
           const visible = showAll ? [...PRIMARY_NATURES, ...EXTRA_NATURES] : PRIMARY_NATURES;

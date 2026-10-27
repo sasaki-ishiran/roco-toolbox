@@ -1,7 +1,9 @@
 -- 增量迁移：需求承接（2026-10-26）
 --
 -- 只新增一张表与一个索引，不重建、不删除、不修改任何旧表。可重复执行。
--- 与 functions/schema.sql 的 `>>> collection-demands (2026-10-26)` 区块定义必须逐字一致
+-- 注意：需求口径在 2026-10-27 扩展到「蛋 + 性格 + 性别 + 体型 + 声音」，
+-- 由 `2026-10-27-collection-demand-criteria.sql` 重建本表；本文件按历史顺序先建旧结构，
+-- 最终结构与 functions/schema.sql 的 `>>> collection-demands (2026-10-26)` 区块一致
 -- （tools/test/verify-mother-groups-schema.mjs 会逐列比较）。
 --
 -- 应用（在仓库根执行）：

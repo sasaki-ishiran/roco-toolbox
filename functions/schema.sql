@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS mother_group_accounts (
   account_name      TEXT NOT NULL,
   source_exported_at TEXT NOT NULL,
   egg_game_ids      TEXT NOT NULL,
+  -- 同账号产线（2026-10-27）：JSON 数组；NULL = 旧摘要没带（未知）
+  lines_json        TEXT,
   PRIMARY KEY (group_id, game_account_key),
   FOREIGN KEY (group_id, member_account_id)
     REFERENCES mother_group_members (group_id, account_id) ON DELETE CASCADE
@@ -170,20 +172,24 @@ CREATE INDEX IF NOT EXISTS idx_collection_group_tasks_owner
 -- <<< collection-groups (2026-10-25)
 
 -- >>> collection-demands (2026-10-26)
--- 需求承接：成员发布「我要哪颗蛋 + 哪个性格」，组内其他人可以接单，完成后需求方确认。
--- 一个性格算一条（nature 为空串表示不挑性格）。主键含 nature，接单按单条走。
--- 增量文件 functions/migrations/2026-10-26-collection-demands.sql 必须与本区块一致。
+-- 需求承接：成员发布「我要哪颗蛋 + 哪个性格 + 性别 / 体型 / 声音」，组内其他人可以接单，完成后需求方确认。
+-- 一个性格算一条；空字符串统一表示「不挑 / 不限」，不参与匹配。
+-- 主键含性别 / 体型 / 声音，同蛋同性格的母、公需求可以并存，发布不会覆盖已接单的行。
+-- 增量文件 functions/migrations/2026-10-27-collection-demand-criteria.sql 必须与本区块一致。
 CREATE TABLE IF NOT EXISTS collection_group_demands (
   group_id            TEXT NOT NULL,
   demander_account_id TEXT NOT NULL,
   egg_game_id         INTEGER NOT NULL,
   nature              TEXT NOT NULL DEFAULT '',
+  gender              TEXT NOT NULL DEFAULT '母',
+  body                TEXT NOT NULL DEFAULT '大块头',
+  voice               TEXT NOT NULL DEFAULT '+100',
   status              TEXT NOT NULL DEFAULT 'open',
   claimer_account_id  TEXT REFERENCES accounts(id) ON DELETE SET NULL,
   version             INTEGER NOT NULL DEFAULT 0,
   created_at          INTEGER NOT NULL,
   updated_at          INTEGER NOT NULL,
-  PRIMARY KEY (group_id, demander_account_id, egg_game_id, nature),
+  PRIMARY KEY (group_id, demander_account_id, egg_game_id, nature, gender, body, voice),
   FOREIGN KEY (group_id, demander_account_id)
     REFERENCES mother_group_members (group_id, account_id) ON DELETE CASCADE
 );

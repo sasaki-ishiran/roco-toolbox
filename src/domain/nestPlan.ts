@@ -53,6 +53,8 @@ export function averageVoice(fatherDb: number, motherDb: number): number {
 export interface NestPet {
   /** 唯一标识（用于判断「学院小窝那只」是母本还是配对方） */
   key: string;
+  /** 形态 gameId：只用于取头像，不参与配对判断 */
+  gameId: number;
   name: string;
   account: string;
   gender: '公' | '母';
@@ -231,6 +233,7 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
     // 个体身份用「账号 + 账号内序号」：同名同内容的两只精灵也是两个个体，不能按内容指纹去重
     const toNestPet = (pet: OwnedPet): NestPet => ({
       key: `${pet.account}#${keyOf(pet)}`,
+      gameId: pet.gameId,
       name: speciesDisplayName(speciesByGameId.get(pet.gameId), pet.name),
       account: pet.account,
       gender: pet.gender === '公' ? '公' : '母',

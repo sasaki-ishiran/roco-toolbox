@@ -1,4 +1,5 @@
 import { createModuleStore } from './createModuleStore';
+import type { PendingDemandClaim } from './groupAutoPublish';
 
 /**
  * 一次导入的三个阶段反馈（2026-10-24 重构任务 6）。
@@ -20,6 +21,8 @@ export interface ImportOutcome {
    */
   group: 'unverified' | 'updated';
   groupCount: number;
+  /** 组员接了我发布的需求（还没结单）：导入后提醒去结单（2026-10-26）。 */
+  claims: PendingDemandClaim[];
   message: string | null;
 }
 
@@ -29,6 +32,7 @@ const INITIAL: ImportOutcome = {
   cloud: 'not-enabled',
   group: 'unverified',
   groupCount: 0,
+  claims: [],
   message: null,
 };
 

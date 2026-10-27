@@ -83,6 +83,7 @@ describe('MotherSharing 入口与状态', () => {
   test('当前小组摘要和成员角色统一称为组长', () => {
     render(<MotherSharing />);
     expect(screen.getByTestId('mother-group-card')).toHaveTextContent('组长 A');
+    fireEvent.click(screen.getByTestId('mother-members-toggle'));
     expect(screen.getByTestId('mother-members')).toHaveTextContent('组长');
     expect(screen.queryByText(/组主/)).not.toBeInTheDocument();
   });
@@ -116,7 +117,7 @@ describe('MotherSharing 入口与状态', () => {
     expect(screen.getByTestId('mother-no-local-data')).toBeVisible();
     expect(screen.getByTestId('mother-resources')).toBeVisible();
     expect(screen.getByTestId('mother-members')).toBeVisible();
-    expect(screen.getByTestId('mother-criteria')).toHaveTextContent('母 · 大块头 · +100dB');
+    expect(screen.getByTestId('mother-members-toggle')).toBeVisible();
   });
 
   test('日常浏览先显示发布状态，管理选号后才展开编辑器', () => {

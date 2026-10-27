@@ -22,11 +22,12 @@ const resource = (
   accounts: Array<{ accountKey: string; accountName: string; eggGameIds: number[] }>,
 ) => ({
   schemaVersion: 1,
-  criteriaId: 'female-huge-voice100-v2',
+  criteriaId: 'all-mothers-v1',
   catalogVersion: CATALOG_VERSION,
   accounts: accounts.map((account) => ({
     ...account,
-    sourceExportedAt: '2026-10-23T00:00:00.000Z',
+    // 新鲜度按导出时间算（超过 7 天为旧）；写死日期会让 mock 随运行时间失效
+    sourceExportedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
   })),
   revision,
   publishedAt: 1_760_000_000_000,
@@ -43,7 +44,7 @@ export const groupDetail = {
     resourceEpoch: 1,
     target: {
       kind: 'mother',
-      criteriaId: 'female-huge-voice100-v2',
+      criteriaId: 'all-mothers-v1',
       mode: 'perfect',
       bodies: ['大块头'],
       voices: ['+100'],
@@ -99,6 +100,8 @@ const fulfill = (route: Route, body: unknown, status = 200) =>
 export interface MockOptions {
   /** 发布接口返回 409（模拟另一台设备刚改过） */
   publishConflict?: boolean;
+  /** 需求中心用的需求列表；不传 = 空。 */
+  demands?: Array<Record<string, unknown>>;
 }
 
 export async function mockMotherGroups(page: Page, options: MockOptions = {}): Promise<void> {
@@ -124,6 +127,9 @@ export async function mockMotherGroups(page: Page, options: MockOptions = {}): P
         pendingMemberIds: [],
         tasks,
       });
+    }
+    if (method === 'GET' && path === `/api/collection-groups/${GROUP_ID}/demands`) {
+      return fulfill(route, { ok: true, demands: options.demands ?? [] });
     }
     if (method === 'POST' && path === `/api/collection-groups/${GROUP_ID}/tasks/claim`) {
       const body = request.postDataJSON() as { targetKey: string };

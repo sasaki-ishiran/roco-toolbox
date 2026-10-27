@@ -4,23 +4,17 @@ import { groupPublicationStatus } from '../domain/collectionPublication';
 import { CATALOG_VERSION, eggGroupNames, species } from '../data/catalog';
 import {
   GROUP_TYPE_LABELS,
-  defaultMotherTarget,
-  motherCriteriaIdOf,
   type CollectionGroupType,
-  type GroupTargetConfig,
 } from '../shared/collectionGroups';
-import { activeNatureOverrides, createNaturesResolver } from '../domain/recommendedNatures';
-import { getNatureOverrides } from './natureOverrideStore';
+import { ALL_MOTHERS_CRITERIA_ID } from '../shared/motherGroups';
+import { useNatureOverrides } from './natureOverrideStore';
 import { CollectionGroupSetup } from './CollectionGroupSetup';
 import { useCollectionGroups } from './useCollectionGroups';
-import { GroupTargetEditor } from './GroupTargetEditor';
 import { MotherGroupMembers } from './MotherGroupMembers';
 import { MotherGroupResources } from './MotherGroupResources';
 import { MotherResourceEditor } from './MotherResourceEditor';
 import { MotherView } from './MotherView';
 import { SegmentedControl } from './primitives/SegmentedControl';
-import { StudGroupResources } from './StudGroupResources';
-import { StudResourceEditor } from './StudResourceEditor';
 import { Swap } from './Swap';
 import { useCollectionSummary } from './useCollectionSummary';
 import { useSnapshots } from './useSnapshots';
@@ -47,19 +41,13 @@ export interface CollectionGroupsProps {
 export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: CollectionGroupsProps) {
   const { snapshots } = useSnapshots();
   const summary = useCollectionSummary();
+  const personalNatures = useNatureOverrides();
   const hook = useCollectionGroups({ snapshots, species, catalogVersion: CATALOG_VERSION });
   const { confirmLeave, leaveConfirmation } = useDraftLeaveGuard(hook.draftDirty);
   const [pendingCode, setPendingCode] = useState(() => readPendingInviteCode());
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
 
   const searchIndex = useMemo(() => buildEggSearchIndex(species), []);
-  // 选号页的「达标 N 种」必须与发布同源：开启推荐性格时也要按组长那份覆盖表判定
-  const motherOverrides = hook.target?.kind === 'mother' ? hook.target.natureOverrides : undefined;
-  const motherOverridesKey = JSON.stringify(motherOverrides ?? {});
-  const motherNaturesOf = useMemo(
-    () => createNaturesResolver({ species, overrides: motherOverrides }),
-    [species, motherOverridesKey], // eslint-disable-line react-hooks/exhaustive-deps
-  );
   const editing = hook.currentGroupId != null && editingGroupId === hook.currentGroupId;
   const inGroup = hook.pageMode === 'group' && hook.currentGroup != null;
   /** 组模式但详情还没回来：显示加载态，不能先渲染个人求蛋（切组时会闪一屏无关内容）。 */
@@ -95,6 +83,28 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
     hook.currentGroup?.members.find(
       (member) => member.accountId === hook.currentGroup?.group.ownerAccountId,
     )?.displayName ?? '组长';
+
+  /** 新建 / 加入小组：个人模式默认展开，已入组时放在成员区下面并默认收起。 */
+  const setupNode = (defaultOpen: boolean) => (
+    <CollectionGroupSetup
+      key={`setup:${hook.pageMode}:${hook.currentGroupId ?? ''}:${hook.accountId}`}
+      defaultOpen={defaultOpen}
+      onCreate={async (name, displayName, groupType) => {
+        if (!(await confirmLeave())) return false;
+        // 小组不再设母本口径；共享全部母本/产线，缺口由各自的本地筛选决定。
+        return hook.createGroup(name, displayName, groupType);
+      }}
+      onJoin={async (inviteCode, displayName) => {
+        if (!(await confirmLeave())) return false;
+        const joined = await hook.joinGroup(inviteCode, displayName);
+        savePendingInviteCode('');
+        setPendingCode('');
+        return joined;
+      }}
+      preflightInvite={hook.preflightInvite}
+      initialInviteCode={pendingCode}
+    />
+  );
 
   return (
     <section className="mx-auto max-w-md space-y-2 p-4" data-testid="collection-groups">
@@ -151,7 +161,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
                   </h2>
                 </div>
                 <p className="mt-0.5 text-[11px] text-slate-400">
-                  {hook.currentGroup.members.length} 人 · 组长 {ownerName} · 按已共享账号汇总
+                  {hook.currentGroup.members.length} 人 · 组长 {ownerName}
                 </p>
               </div>
               <button
@@ -164,108 +174,33 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
                 {hook.refreshing ? '刷新中…' : '刷新'}
               </button>
             </div>
-            <p className="mt-0.5 text-[11px] text-slate-400" data-testid="group-sync-status">
-              {hook.offline
-                ? '离线，显示上次获取的数据'
-                : hook.nextPollAt
-                  ? '已触发限流，稍后自动重试'
-                  : hook.loading
-                    ? '正在更新小组数据…'
-                    : '每 15 秒自动更新'}
-            </p>
+
+            <div className="mt-1.5 border-t border-slate-100 pt-1.5">
+              <PublicationCard
+                hook={hook}
+                editing={editing}
+                onToggle={() => setEditingGroupId(editing ? null : hook.currentGroupId)}
+                onGoAccount={onGoAccount}
+                snapshots={snapshots}
+              />
+            </div>
+
+            {hook.offline || hook.nextPollAt ? (
+              <p className="mt-1 text-[10px] text-amber-700" data-testid="group-sync-status">
+                {hook.offline ? '离线，显示上次获取的数据' : '已触发限流，稍后自动重试'}
+              </p>
+            ) : null}
           </div>
 
-          <GroupTargetEditor hook={hook} />
-
-          <PublicationCard
-            hook={hook}
-            editing={editing}
-            onToggle={() => setEditingGroupId(editing ? null : hook.currentGroupId)}
-            onGoAccount={onGoAccount}
-            snapshots={snapshots}
-          />
-
           {editing ? (
-            hook.groupType === 'stud' ? (
-              <StudResourceEditor
-                key={`stud-editor:${hook.currentGroup.group.id}:${hook.accountId}`}
-                hook={hook}
-                snapshots={snapshots}
-                species={species}
-                onGoAccount={onGoAccount}
-              />
-            ) : (
-              <MotherResourceEditor
-                key={`mother-editor:${hook.currentGroup.group.id}:${hook.accountId}`}
-                hook={hook as never}
-                snapshots={snapshots}
-                species={species}
-                onGoAccount={onGoAccount}
-                criteria={
-                  hook.target?.kind === 'mother'
-                    ? {
-                        bodies: hook.target.bodies as never,
-                        voices: hook.target.voices as never,
-                        recommendedNatures: hook.target.requireRecommendedNatures === true,
-                      }
-                    : undefined
-                }
-                naturesOf={motherNaturesOf}
-                criteriaLabel={
-                  hook.target?.kind === 'mother'
-                    ? `母 · ${hook.target.bodies.join('/')} · ${hook.target.voices.join('/')}${
-                        hook.target.requireRecommendedNatures ? ' · 推荐性格' : ''
-                      }`
-                    : undefined
-                }
-              />
-            )
-          ) : null}
-
-          {hook.groupType === 'stud' ? (
-            <StudGroupResources
-              key={`stud-resources:${hook.currentGroup.group.id}:${hook.accountId}`}
-              group={hook.currentGroup}
-              viewerAccountId={hook.accountId ?? ''}
-              catalogVersion={CATALOG_VERSION}
-              tasks={hook.tasks}
-              tasksConfirmed={hook.tasksConfirmed}
-              tasksPendingMemberIds={hook.tasksPendingMemberIds}
-              tasksLoading={hook.tasksLoading}
-              tasksError={hook.tasksError}
-              isOwner={hook.currentGroup.group.ownerAccountId === hook.accountId}
-              onClaimTask={hook.claimTask}
-              onReleaseTask={hook.releaseTask}
-              onTransferTask={hook.transferTask}
-            />
-          ) : (
-            <MotherGroupResources
-              key={`mother-resources:${hook.currentGroup.group.id}:${hook.accountId}`}
-              group={hook.currentGroup}
-              viewerAccountId={hook.accountId ?? ''}
+            <MotherResourceEditor
+              key={`mother-editor:${hook.currentGroup.group.id}:${hook.accountId}`}
+              hook={hook as never}
+              snapshots={snapshots}
               species={species}
-              catalogVersion={CATALOG_VERSION}
-              criteriaId={
-                hook.target?.kind === 'mother' ? hook.target.criteriaId : undefined
-              }
-              target={hook.target?.kind === 'mother' ? hook.target : null}
-              tasks={hook.tasks}
-              tasksConfirmed={hook.tasksConfirmed}
-              tasksPendingMemberIds={hook.tasksPendingMemberIds}
-              tasksLoading={hook.tasksLoading}
-              tasksError={hook.tasksError}
-              isOwner={hook.currentGroup.group.ownerAccountId === hook.accountId}
-              onClaimTask={hook.claimTask}
-              onReleaseTask={hook.releaseTask}
-              onTransferTask={hook.transferTask}
-              demands={hook.demands}
-              onPublishDemand={hook.addDemand}
-              onWithdrawDemand={hook.withdrawDemand}
-              onClaimDemand={hook.claimDemand}
-              onReleaseDemand={hook.releaseDemand}
-              onCompleteDemand={hook.completeDemand}
+              onGoAccount={onGoAccount}
             />
-          )}
+          ) : null}
 
           <MotherGroupMembers
             key={`members:${hook.currentGroup.group.id}:${hook.accountId}`}
@@ -273,18 +208,52 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             accountId={hook.accountId ?? ''}
             catalogVersion={CATALOG_VERSION}
             groupType={hook.currentGroup.group.groupType}
-            targetCriteriaId={hook.target?.kind === 'mother' ? hook.target.criteriaId : undefined}
+            targetCriteriaId={ALL_MOTHERS_CRITERIA_ID}
             inviteCode={
               hook.accountId ? readCollectionInviteCode(hook.accountId, hook.currentGroup.group.id) : null
             }
+            demands={hook.demands}
             onRename={hook.updateProfile}
             onResetInvite={hook.resetInvite}
+            onRemove={hook.removeMember}
             onLeave={async () => {
               await hook.leave();
             }}
             onDissolve={async () => {
               await hook.dissolve();
             }}
+          />
+
+          {hook.accountId ? setupNode(false) : null}
+
+          <MotherGroupResources
+            key={`mother-resources:${hook.currentGroup.group.id}:${hook.accountId}`}
+            group={hook.currentGroup}
+            viewerAccountId={hook.accountId ?? ''}
+            species={species}
+            catalogVersion={CATALOG_VERSION}
+            snapshots={snapshots}
+            criteriaId={ALL_MOTHERS_CRITERIA_ID}
+            target={null}
+            recommendations={summary.recommendations}
+            targetMode={summary.mode}
+            natureOverrides={personalNatures}
+            studGroupCount={summary.stud.groupCount}
+            tasks={hook.tasks}
+            tasksConfirmed={hook.tasksConfirmed}
+            tasksPendingMemberIds={hook.tasksPendingMemberIds}
+            tasksLoading={hook.tasksLoading}
+            tasksError={hook.tasksError}
+            isOwner={hook.currentGroup.group.ownerAccountId === hook.accountId}
+            onClaimTask={hook.claimTask}
+            onReleaseTask={hook.releaseTask}
+            onTransferTask={hook.transferTask}
+            demands={hook.demands}
+            onPublishDemand={hook.addDemand}
+            onWithdrawDemand={hook.withdrawDemand}
+            onClaimDemand={hook.claimDemand}
+            onReleaseDemand={hook.releaseDemand}
+            onCompleteDemand={hook.completeDemand}
           />
         </>
       ) : (
@@ -322,40 +291,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
       ) : null}
 
       {hook.accountId ? (
-        <CollectionGroupSetup
-          key={hook.accountId}
-          onCreate={async (name, displayName, groupType, options) => {
-            if (!(await confirmLeave())) return false;
-            // 创建时就要求推荐性格：用组长的默认口径 + 当前这份推荐性格表
-            let target: GroupTargetConfig | undefined;
-            if (groupType === 'mother' && options?.requireRecommendedNatures) {
-              const base = defaultMotherTarget(CATALOG_VERSION);
-              const overrides = activeNatureOverrides(getNatureOverrides());
-              target = {
-                ...base,
-                criteriaId: motherCriteriaIdOf({
-                  mode: base.mode,
-                  bodies: base.bodies,
-                  voices: base.voices,
-                  requireRecommendedNatures: true,
-                  natureOverrides: overrides,
-                }),
-                requireRecommendedNatures: true,
-                ...(Object.keys(overrides).length > 0 ? { natureOverrides: overrides } : {}),
-              };
-            }
-            return hook.createGroup(name, displayName, groupType, target);
-          }}
-          onJoin={async (inviteCode, displayName) => {
-            if (!(await confirmLeave())) return false;
-            const joined = await hook.joinGroup(inviteCode, displayName);
-            savePendingInviteCode('');
-            setPendingCode('');
-            return joined;
-          }}
-          preflightInvite={hook.preflightInvite}
-          initialInviteCode={pendingCode}
-        />
+        hook.pageMode === 'personal' ? setupNode(true) : null
       ) : (
         <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-login-hint">
           <p className="text-xs text-slate-500">
@@ -404,13 +340,13 @@ function GroupSwitcher({
   return (
     <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-list">
       <h2 className="text-xs font-medium text-slate-500">收集范围</h2>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
+      <div className="mt-1.5 flex gap-1.5 overflow-x-auto pb-1">
         <button
           type="button"
           onClick={onSelectPersonal}
           aria-pressed={pageMode === 'personal'}
           data-testid="group-personal"
-          className={`min-h-[28px] rounded-md border px-2 text-xs ${
+          className={`min-h-[28px] shrink-0 rounded-md border px-2 text-xs ${
             pageMode === 'personal'
               ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
               : 'border-slate-200 bg-white text-slate-500'
@@ -425,13 +361,14 @@ function GroupSwitcher({
             onClick={() => onSelect(group.id)}
             aria-pressed={group.id === currentGroupId}
             data-testid={`group-chip-${group.id}`}
-            className={`min-h-[28px] rounded-md border px-2 text-xs ${
+            className={`min-h-[28px] shrink-0 rounded-md border px-2 text-xs ${
               group.id === currentGroupId
                 ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
                 : 'border-slate-200 bg-white text-slate-500'
             }`}
           >
-            {GROUP_TYPE_LABELS[group.groupType]} · {group.name} · {group.memberCount} 人
+            {group.name}
+            <span className="ml-1 text-[10px] font-normal text-slate-400">{group.memberCount}</span>
           </button>
         ))}
       </div>
@@ -524,42 +461,61 @@ function PublicationCard({
       ? `${stud.accounts.length} 个账号 · ${new Set(stud.accounts.flatMap((account) => account.covered.map((slot) => `${slot.groupId}:${slot.natureId}:${slot.grade}`))).size} 个覆盖格`
       : '尚未向本小组发布资源，选号并预览后再手动发布。'
     : mother
-      ? `已发布 ${new Set(mother.accounts.flatMap((account) => account.eggGameIds)).size} 种母本 · ${mother.accounts.length} 个账号。`
+      ? `${new Set(mother.accounts.flatMap((account) => account.eggGameIds)).size} 种母本 · ${mother.accounts.length} 个账号。`
       : '尚未向本小组发布资源，选号并预览后再手动发布。';
 
+  const badgeClass =
+    status === '需更新'
+      ? 'bg-amber-50 text-amber-700'
+      : status === '已发布'
+        ? 'bg-emerald-50 text-emerald-700'
+        : 'bg-slate-100 text-slate-500';
+
   return (
-    <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-publication-status">
-      <h2 className="text-sm font-medium text-slate-700">我的共享资源 · {status}</h2>
-      <p className="mt-1 text-xs text-slate-500">{summary}</p>
-      {status === '需更新' ? (
-        <p className="mt-1 text-[11px] text-amber-700" data-testid="group-publish-needed">
-          本机数据有更新，发布更新后组员才能看到最新资源。
-        </p>
-      ) : null}
-      {!hasLocalData ? (
+    <div data-testid="group-publication-status">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-slate-500">我的资源</span>
+            <span
+              className={`rounded px-1 text-[10px] leading-[1.4] ${badgeClass}`}
+              data-testid="group-publication-badge"
+            >
+              {status}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{summary}</p>
+          {status === '需更新' ? (
+            <p className="mt-0.5 text-[10px] text-amber-700" data-testid="group-publish-needed">
+              本机数据有更新，发布后组员才能看到最新资源。
+            </p>
+          ) : null}
+          {!hasLocalData ? (
+            <button
+              type="button"
+              onClick={onGoAccount}
+              className="mt-1 min-h-[24px] text-[11px] font-medium text-emerald-700"
+              data-testid="group-go-import"
+            >
+              去导入数据
+            </button>
+          ) : null}
+          {hook.draftDirty && !editing ? (
+            <p className="mt-1 text-[10px] text-amber-700" data-testid="group-draft-collapsed">
+              有未发布的修改，点右侧按钮继续编辑。
+            </p>
+          ) : null}
+        </div>
         <button
           type="button"
-          onClick={onGoAccount}
-          className="mt-1 min-h-[28px] text-xs font-medium text-emerald-700"
-          data-testid="group-go-import"
+          className="min-h-[28px] shrink-0 rounded-lg border border-emerald-500 px-2 text-[11px] font-medium text-emerald-700"
+          data-testid="group-edit-resources"
+          aria-expanded={editing}
+          onClick={onToggle}
         >
-          去导入数据
+          {editing ? '收起选号' : status === '需更新' ? '去发布更新' : status === '已发布' ? '管理选号' : '选号并发布'}
         </button>
-      ) : null}
-      <button
-        type="button"
-        className="mt-1 min-h-[28px] text-xs font-medium text-emerald-700"
-        data-testid="group-edit-resources"
-        aria-expanded={editing}
-        onClick={onToggle}
-      >
-        {editing ? '收起选号' : status === '需更新' ? '去发布更新' : status === '已发布' ? '管理选号' : '选号并发布'}
-      </button>
-      {hook.draftDirty && !editing ? (
-        <p className="mt-1 text-[11px] text-amber-700" data-testid="group-draft-collapsed">
-          选号有未发布的修改，点上面的按钮继续编辑。
-        </p>
-      ) : null}
-    </section>
+      </div>
+    </div>
   );
 }

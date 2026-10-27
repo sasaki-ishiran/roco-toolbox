@@ -12,6 +12,7 @@ import {
   type MotherGroupSummary,
   type MotherResourceDraft,
   type PublishedMotherResource,
+  type SharedProductionLine,
 } from '../shared/motherGroups';
 import { authFetch } from './session';
 
@@ -52,6 +53,20 @@ const asString = (value: unknown, field: string): string =>
 const asNumber = (value: unknown, field: string): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : bad(`${field} 不是数字`);
 
+const parseProductionLine = (value: unknown, field: string): SharedProductionLine => {
+  const record = asRecord(value, field);
+  const natures = Array.isArray(record.natures)
+    ? (record.natures as unknown[]).map((nature, index) =>
+        asString(nature, `${field}.natures[${index}]`),
+      )
+    : bad(`${field}.natures 不是数组`);
+  return {
+    eggGameId: asNumber(record.eggGameId, `${field}.eggGameId`),
+    grade: asString(record.grade, `${field}.grade`) as SharedProductionLine['grade'],
+    natures,
+  };
+};
+
 function parseResource(value: unknown): PublishedMotherResource | null {
   if (value === null || value === undefined) return null;
   const record = asRecord(value, 'resource');
@@ -72,6 +87,11 @@ function parseResource(value: unknown): PublishedMotherResource | null {
               asNumber(id, `eggGameIds[${idIndex}]`),
             )
           : bad('eggGameIds 不是数组'),
+        lines: Array.isArray(account.lines)
+          ? (account.lines as unknown[]).map((line, lineIndex) =>
+              parseProductionLine(line, `lines[${lineIndex}]`),
+            )
+          : undefined,
       };
     }),
     revision: asNumber(record.revision, 'revision'),

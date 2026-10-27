@@ -8,6 +8,7 @@ import guluBallProtocol from "../../../miniprogram/utils/guluBallProtocol";
 import eggProtocol from "../../../miniprogram/utils/eggProtocol";
 import eggPetFormMap from "../../../miniprogram/utils/eggPetFormMap";
 import petAdventureProtocol from "../../../scripts/lib/petAdventureProtocol";
+import { decodeHomePayload, decodeHomeScene } from "./home";
 import { createFirstFieldProbe } from "./loose-probe";
 import { resolveBodySize, bodyMedalOf } from "../../../../shared/bodySize.js";
 
@@ -597,6 +598,11 @@ function createAccountCapture(profile = null) {
     petMedals: [],
     grassMedals: [],
     grassTrials: [],
+    homeScene: null,
+    latestHome: null,
+    homeEvents: [],
+    foreignScene: false,
+    capturedAt: new Date().toISOString(),
     batchStarted: false,
     tailSeen: false,
     hasKey: false,
@@ -1086,19 +1092,66 @@ function wordArrayToBytes(wordArray) {
   return result;
 }
 
-function decryptAesCbc(encrypted, key) {
+function decryptAesCbc(encrypted, key, iv = null) {
   const ciphertext = CryptoJS.lib.WordArray.create(encrypted);
   const keyWords = CryptoJS.lib.WordArray.create(key);
   const decrypted = CryptoJS.AES.decrypt(
     { ciphertext },
     keyWords,
     {
-      iv: CryptoJS.lib.WordArray.create(new Uint8Array(16)),
+      iv: CryptoJS.lib.WordArray.create(iv || new Uint8Array(16)),
       mode: CryptoJS.mode.CBC,
       padding: CryptoJS.pad.NoPadding
     }
   );
   return wordArrayToBytes(decrypted);
+}
+
+function stripPadding(value) {
+  const length = value.length;
+  if (length >= 6 && value[length - 6] === 0x74 && value[length - 5] === 0x73
+    && value[length - 4] === 0x66 && value[length - 3] === 0x34
+    && value[length - 2] === 0x67) {
+    const padding = value[length - 1];
+    if (padding >= 6 && padding <= 64 && padding <= length) return value.subarray(0, length - padding);
+  }
+  return value;
+}
+
+/** 0x55aa 业务帧头：返回去掉帧头的 payload 与 opcode。 */
+function businessPayload(plaintext) {
+  if (plaintext.length >= 30 && readU16BE(plaintext, 4) === 0x55aa && readU16BE(plaintext, 24) === 0x3963) {
+    const payload = stripPadding(plaintext.subarray(30));
+    const version = readU32BE(plaintext, 12);
+    if (readU16BE(plaintext, 10) === 0 && (version === 0 || version === 1)
+      && readU32BE(plaintext, 6) === 26 + payload.length
+      && (readU32BE(plaintext, 16) & 0xffff) !== 0) {
+      return { payload, opcode: readU32BE(plaintext, 16) & 0xffff };
+    }
+  }
+  if (plaintext.length >= 10 && readU16BE(plaintext, 4) === 0x55aa) {
+    const opcode = readU32BE(plaintext, 0);
+    if (opcode > 0 && opcode <= 0xffff) {
+      return { payload: stripPadding(plaintext.subarray(10)), opcode };
+    }
+  }
+  return null;
+}
+
+/**
+ * 同一帧解两次：
+ * - legacy：零 IV 解整段（现有字段扫描都吃这个形态）
+ * - business：当前协议用前 16 字节做 IV，解出 0x55aa 业务帧（家园用）
+ */
+function resolveFramePayload(encrypted, key) {
+  const legacy = decryptAesCbc(encrypted, key);
+  if (encrypted.length >= 32) {
+    const exact = decryptAesCbc(encrypted.subarray(16), key, encrypted.subarray(0, 16));
+    const business = businessPayload(exact);
+    if (business) return { legacy, business };
+  }
+  const fallback = businessPayload(legacy.subarray(Math.min(16, legacy.length)));
+  return { legacy, business: fallback };
 }
 
 function decodeFlow(flow, flowIndex) {
@@ -1119,7 +1172,7 @@ function decodeFlow(flow, flowIndex) {
     const headerLength = frame[16];
     const encrypted = frame.subarray(headerLength);
     if (!encrypted.length || encrypted.length % 16) return;
-    const plaintext = decryptAesCbc(encrypted, aesKey);
+    const { legacy, business } = resolveFramePayload(encrypted, aesKey);
     decryptedFrames += 1;
     events.push({
       flowKey: flow.key,
@@ -1127,8 +1180,10 @@ function decodeFlow(flow, flowIndex) {
       frameIndex,
       packetIndex: Number(entry.packetIndex || flow.firstPacket || 0),
       hasKey: Boolean(aesKey),
-      profile: decodeProfile(plaintext),
-      plaintext
+      profile: decodeProfile(legacy),
+      plaintext: legacy,
+      opcode: business ? business.opcode : -1,
+      homePayload: business ? business.payload : null
     });
   });
   return {
@@ -1139,6 +1194,33 @@ function decodeFlow(flow, flowIndex) {
 
 function applyPlaintextToAccount(event, capture, retainRawProtocol = true) {
   const { plaintext } = event;
+  const homeGameId = String((capture.profile && capture.profile.game_id) || "");
+  if (event.homePayload && homeGameId) {
+    const opcode = Number(event.opcode);
+    const scene = decodeHomeScene(event.homePayload, opcode);
+    if (scene) {
+      capture.foreignScene = scene.foreign;
+      capture.homeScene = null;
+    }
+    const home = decodeHomePayload(
+      event.homePayload,
+      opcode,
+      homeGameId,
+      capture.homeScene,
+      capture.foreignScene,
+      capture.capturedAt
+    );
+    if (opcode === 330 && !home) capture.homeScene = null;
+    if (home) {
+      capture.homeScene = home;
+      capture.latestHome = home;
+      capture.homeEvents.push({
+        type: "home.snapshot",
+        occurredAt: capture.capturedAt,
+        data: JSON.parse(JSON.stringify(home))
+      });
+    }
+  }
   capture.hasKey = capture.hasKey || Boolean(event.hasKey);
   capture.lastDataPacket = Math.max(capture.lastDataPacket, Number(event.packetIndex || 0));
   capture.lastDataOrder = Math.max(capture.lastDataOrder, Number(event.order || 0));
@@ -1318,6 +1400,8 @@ export function extractPcap(bytesLike, options = {}) {
       .sort((left, right) => left[0] - right[0])
       .map(([number, slots]) => ({ number, slots })),
     eggInventory: capture.eggInventory,
+    captureHome: capture.latestHome,
+    captureNestEvents: capture.homeEvents,
     rawProtocolMessages: capture.rawProtocolMessages,
     rawProtocolMessageCount: capture.rawProtocolMessageKeys.size,
     guluInventory: capture.guluInventory,
@@ -2009,6 +2093,8 @@ export function buildBackpack(records, metadata = {}) {
        grassMedals: Array.isArray(metadata.grassMedals) ? metadata.grassMedals : [],
        petMedals: Array.isArray(metadata.petMedals) ? metadata.petMedals : [],
        grassTrials: Array.isArray(metadata.grassTrials) ? metadata.grassTrials : [],
+       captureHome: metadata.captureHome || null,
+       captureNestEvents: Array.isArray(metadata.captureNestEvents) ? metadata.captureNestEvents : [],
        rawProtocol: {
          format: rawProtocol.format,
          encoding: rawProtocol.encoding,
@@ -2117,6 +2203,8 @@ export function convertExtractedPcap(extracted, fileName = "capture.pcap") {
     playerName: extracted.profile && extracted.profile.player_name,
     source: fileName,
     eggInventory: extracted.eggInventory,
+    captureHome: extracted.captureHome,
+    captureNestEvents: extracted.captureNestEvents,
     guluInventory: extracted.guluInventory,
     fruits: extracted.fruits,
     fashions: extracted.fashions,

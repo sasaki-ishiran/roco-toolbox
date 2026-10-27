@@ -2,8 +2,9 @@
  * 小组收集二期：真实本地 Functions + D1 的 API 集成测试。
  *
  * 由 `tools/test/run-mother-groups-local.mjs` 启动服务后调用，只接受 loopback 地址。
- * 覆盖：旧组默认迁移、旧接口类型门禁、种公目标修订、种公摘要往返、
- * 组目标修改与并发、加入前确认、UID 抢占。
+ * 覆盖：旧组默认迁移、旧接口类型门禁、母本目标修订、摘要往返、组目标修改与并发、
+ * 加入前确认、UID 抢占、需求承接。
+ * 种公组已于 2026-10-27 下线，创建请求必须被拒绝。
  */
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
@@ -17,7 +18,6 @@ if (!/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(BASE)) {
 
 const TIME = '2026-10-23T00:00:00.000Z';
 const LATER = '2026-10-24T00:00:00.000Z';
-const SLOT = { groupId: 2, natureId: 11, natureName: '开朗', grade: '大婉' };
 
 let ipCounter = 0;
 const uniqueIp = () => `10.${(ipCounter >> 16) & 255}.${(ipCounter >> 8) & 255}.${++ipCounter & 255}`;
@@ -57,18 +57,9 @@ const motherAccount = (uid, ids) => ({
 
 const motherDraft = (accounts) => ({
   schemaVersion: 1,
-  criteriaId: 'female-huge-voice100-v2',
+  criteriaId: 'all-mothers-v1',
   catalogVersion: 'test-v1',
   accounts,
-});
-
-const studAccount = (uid, covered, breedable = [], patch = {}) => ({
-  accountKey: `uid:${uid}`,
-  accountName: `账号${uid}`,
-  sourceExportedAt: TIME,
-  covered: covered.map((slot) => ({ ...slot, gameId: 102 })),
-  breedable: breedable.map((slot) => ({ ...slot, gameId: 102 })),
-  ...patch,
 });
 
 function fnv1a(text) {
@@ -79,29 +70,6 @@ function fnv1a(text) {
   }
   return hash.toString(16).padStart(8, '0');
 }
-
-const slotKey = (slot) => `${slot.groupId}:${slot.natureId}:${slot.grade}`;
-const targetIdOf = (target) =>
-  `stud-${fnv1a(`${target.mode}|${target.slots.map(slotKey).sort().join(',')}`)}`;
-
-const studTarget = (patch = {}) => ({
-  kind: 'stud',
-  mode: 'perfect',
-  catalogVersion: 'test-v1',
-  slots: [SLOT],
-  ...patch,
-});
-
-const studDraft = (accounts, patch = {}) => ({
-  schemaVersion: 1,
-  kind: 'stud',
-  mode: 'perfect',
-  catalogVersion: 'test-v1',
-  targetId: targetIdOf(studTarget()),
-  targetRevision: 1,
-  accounts,
-  ...patch,
-});
 
 let A;
 let B;
@@ -173,184 +141,31 @@ test('新建母本组带目标；旧接口仍可读写', async () => {
   assert.deepEqual(legacyDetail.body.members[0].resource.accounts[0].eggGameIds, [101]);
 });
 
-test('种公组：目标未确认时不能发布；组长确认后修订递增', async () => {
-  const created = await createGroup(A, {
+test('种公组已下线：创建请求被拒绝', async () => {
+  const rejected = await call(A.token, 'POST', '/api/collection-groups', {
     name: '种公组',
     displayName: 'A',
     groupType: 'stud',
   });
-  assert.equal(created.group.groupType, 'stud');
-  assert.deepEqual(created.group.target.slots, []);
-
-  const beforeReady = await call(
-    A.token,
-    'PUT',
-    `/api/collection-groups/${created.id}/resources/me`,
-    {
-      baseRevision: 0,
-      baseTargetRevision: 0,
-      resource: studDraft([studAccount(1001, [SLOT])], { targetRevision: 0 }),
-    },
-  );
-  assert.equal(beforeReady.status, 409);
-  assert.equal(beforeReady.body.code, 'TARGET_NOT_READY');
-
-  const targetUpdate = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/target`, {
-    baseTargetRevision: 0,
-    target: studTarget(),
-  });
-  assert.equal(targetUpdate.status, 200);
-  assert.equal(targetUpdate.body.targetRevision, 1);
-
-  const byOther = await call(B.token, 'PUT', `/api/collection-groups/${created.id}/target`, {
-    baseTargetRevision: 1,
-    target: studTarget(),
-  });
-  assert.equal(byOther.status, 403);
-  assert.equal(byOther.body.code, 'NOT_OWNER');
-
-  const stale = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/target`, {
-    baseTargetRevision: 0,
-    target: studTarget(),
-  });
-  assert.equal(stale.status, 409);
-  assert.equal(stale.body.code, 'REVISION_CONFLICT');
+  assert.equal(rejected.status, 400);
+  assert.equal(rejected.body.code, 'INVALID_INPUT');
+  assert.match(rejected.body.error, /种公/);
 });
 
-test('种公摘要往返：covered / breedable 分开保存，停止共享后清空', async () => {
-  const created = await createGroup(A, {
-    name: '种公组二',
-    displayName: 'A',
-    groupType: 'stud',
-    target: studTarget(),
-  });
-  const joined = await join(B, created.inviteCode);
-  assert.equal(joined.status, 200);
-  assert.equal(joined.body.groupType, 'stud');
-
-  const published = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
-    baseRevision: 0,
-    baseTargetRevision: 0,
-    resource: studDraft([studAccount(1001, [SLOT], [])], { targetRevision: 0 }),
-  });
-  assert.equal(published.status, 200, JSON.stringify(published.body));
-  assert.equal(published.body.resourceRevision, 1);
-
-  const detail = await call(B.token, 'GET', `/api/collection-groups/${created.id}`);
-  assert.equal(detail.status, 200);
-  const mine = detail.body.members.find((member) => member.accountId === A.accountId);
-  assert.equal(mine.resource, null);
-  assert.equal(mine.studResource.kind, 'stud');
-  assert.deepEqual(mine.studResource.accounts[0].covered[0], {
-    groupId: SLOT.groupId,
-    natureId: SLOT.natureId,
-    grade: SLOT.grade,
-    gameId: 102,
-  });
-  assert.deepEqual(mine.studResource.accounts[0].breedable, []);
-
-  const stopped = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
-    baseRevision: 1,
-    baseTargetRevision: 0,
-    resource: studDraft([], { targetRevision: 0 }),
-  });
-  assert.equal(stopped.status, 200);
-  assert.equal(stopped.body.publishedAt, null);
-  const after = await call(B.token, 'GET', `/api/collection-groups/${created.id}`);
-  assert.equal(
-    after.body.members.find((member) => member.accountId === A.accountId).studResource,
-    null,
-  );
-});
-
-test('种公组目标改变后，旧修订的发布被拒绝', async () => {
-  const created = await createGroup(A, {
-    name: '改目标',
-    displayName: 'A',
-    groupType: 'stud',
-    target: studTarget(),
-  });
-  const update = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/target`, {
-    baseTargetRevision: 0,
-    target: studTarget({ slots: [SLOT, { ...SLOT, natureId: 12, natureName: '固执' }] }),
-  });
-  assert.equal(update.status, 200);
-
-  const oldRevision = await call(
-    A.token,
-    'PUT',
-    `/api/collection-groups/${created.id}/resources/me`,
-    {
-      baseRevision: 0,
-      baseTargetRevision: 0,
-      resource: studDraft([studAccount(1001, [SLOT])], { targetRevision: 0 }),
-    },
-  );
-  assert.equal(oldRevision.status, 409);
-  assert.equal(oldRevision.body.code, 'TARGET_CHANGED');
-
-  const newTarget = studTarget({ slots: [SLOT, { ...SLOT, natureId: 12, natureName: '固执' }] });
-  const current = await call(
-    A.token,
-    'PUT',
-    `/api/collection-groups/${created.id}/resources/me`,
-    {
-      baseRevision: 0,
-      baseTargetRevision: 1,
-      resource: studDraft([studAccount(1001, [SLOT])], {
-        targetRevision: 1,
-        targetId: targetIdOf(newTarget),
-      }),
-    },
-  );
-  assert.equal(current.status, 200, JSON.stringify(current.body));
-});
-
-test('旧接口看不到、也写不进种公组；旧邀请码不能加入种公组', async () => {
-  const created = await createGroup(A, {
-    name: '隔离组',
-    displayName: 'A',
-    groupType: 'stud',
-    target: studTarget(),
-  });
-
-  const oldList = await call(A.token, 'GET', '/api/mother-groups');
-  assert.equal(oldList.body.groups.some((item) => item.id === created.id), false);
-
-  const oldDetail = await call(A.token, 'GET', `/api/mother-groups/${created.id}`);
-  assert.equal(oldDetail.status, 404);
-
-  const oldPublish = await call(A.token, 'PUT', `/api/mother-groups/${created.id}/resources/me`, {
-    baseRevision: 0,
-    resource: motherDraft([motherAccount(1001, [101])]),
-  });
-  assert.equal(oldPublish.status, 404);
-
-  const oldJoin = await call(B.token, 'POST', '/api/mother-groups/join', {
-    inviteCode: created.inviteCode,
-    displayName: 'B',
-  });
-  assert.equal(oldJoin.status, 404);
-
-  const newList = await call(A.token, 'GET', '/api/collection-groups');
-  assert.equal(newList.body.groups.some((item) => item.id === created.id), true);
-});
-
-test('加入前确认展示组名、类型与目标', async () => {
+test('加入前确认展示组名与目标', async () => {
   const created = await createGroup(A, {
     name: '确认组',
     displayName: 'A',
-    groupType: 'stud',
-    target: studTarget(),
+    groupType: 'mother',
   });
   const preview = await call(C.token, 'POST', '/api/collection-groups/invite/preview', {
     inviteCode: created.inviteCode,
   });
   assert.equal(preview.status, 200);
   assert.equal(preview.body.name, '确认组');
-  assert.equal(preview.body.groupType, 'stud');
+  assert.equal(preview.body.groupType, 'mother');
   assert.equal(preview.body.targetReady, true);
-  assert.equal(preview.body.target.slots.length, 1);
+  assert.deepEqual(preview.body.target.bodies, ['大块头']);
 
   const bad = await call(C.token, 'POST', '/api/collection-groups/invite/preview', {
     inviteCode: 'ZZZZZZZZ',
@@ -358,7 +173,7 @@ test('加入前确认展示组名、类型与目标', async () => {
   assert.equal(bad.status, 404);
 });
 
-test('母本组自选口径：新口径可发布，旧固定口径被拒绝', async () => {
+test('母本发布不再校验口径；过期 baseTargetRevision 仍拒绝', async () => {
   const created = await createGroup(A, {
     name: '自选口径组',
     displayName: 'A',
@@ -391,21 +206,29 @@ test('母本组自选口径：新口径可发布，旧固定口径被拒绝', as
   });
   assert.equal(published.status, 200, JSON.stringify(published.body));
 
+  // 组目标口径不再参与发布校验：用别的 criteriaId 也能发布
   const legacyDraft = motherDraft([motherAccount(1001, [101])]);
-  const byNew = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
+  const byOther = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
     baseRevision: 1,
     baseTargetRevision: 1,
     resource: legacyDraft,
   });
-  assert.equal(byNew.status, 409);
-  assert.equal(byNew.body.code, 'TARGET_CHANGED');
+  assert.equal(byOther.status, 200, JSON.stringify(byOther.body));
 
-  const byOld = await call(A.token, 'PUT', `/api/mother-groups/${created.id}/resources/me`, {
-    baseRevision: 1,
+  const byOldApi = await call(A.token, 'PUT', `/api/mother-groups/${created.id}/resources/me`, {
+    baseRevision: 2,
     resource: legacyDraft,
   });
-  assert.equal(byOld.status, 409);
-  assert.equal(byOld.body.code, 'TARGET_CHANGED');
+  assert.equal(byOldApi.status, 200, JSON.stringify(byOldApi.body));
+
+  // 但带了过期的 baseTargetRevision 仍要报冲突（CAS 语义保留）
+  const staleTarget = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
+    baseRevision: 3,
+    baseTargetRevision: 0,
+    resource: legacyDraft,
+  });
+  assert.equal(staleTarget.status, 409);
+  assert.equal(staleTarget.body.code, 'TARGET_CHANGED');
 });
 
 test('旧接口创建的组也能保存自选口径（自动补配置行）', async () => {
@@ -526,104 +349,255 @@ test('共同寻找：全员确认后才能认领，并发只有一个成功；�
   assert.equal(claimCovered.body.code, 'TASK_ALREADY_COVERED');
 });
 
-test('共同寻找：目标不属于本组当前目标时拒绝；种公组目标修订后旧任务不再可认领', async () => {
-  const slot2 = { ...SLOT, natureId: 12, natureName: '固执' };
-  const slot3 = { ...SLOT, natureId: 13, natureName: '胆小' };
-  const target = studTarget({ slots: [SLOT, slot2] });
+test('共同寻找：目标不属于本组当前目标时拒绝', async () => {
   const created = await createGroup(A, {
-    name: '种公任务组',
+    name: '任务校验组',
     displayName: 'A',
-    groupType: 'stud',
-    target,
+    groupType: 'mother',
   });
+  // 母本组只认 mother:<蛋血脉>；种公槽位键不属于本组目标
   const outside = await call(A.token, 'POST', `/api/collection-groups/${created.id}/tasks/claim`, {
     targetKey: 'stud:9:9:大婉',
   });
   assert.equal(outside.status, 404);
   assert.equal(outside.body.code, 'TASK_NOT_FOUND');
-
-  // 只覆盖第一格，第二格仍是确认过的缺口 → 可以认领，并产生一条旧修订任务
-  const published = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
-    baseRevision: 0,
-    baseTargetRevision: 0,
-    resource: studDraft([studAccount(1001, [SLOT])], {
-      targetRevision: 0,
-      targetId: targetIdOf(target),
-    }),
-  });
-  assert.equal(published.status, 200, JSON.stringify(published.body));
-  const claimed = await call(A.token, 'POST', `/api/collection-groups/${created.id}/tasks/claim`, {
-    targetKey: `stud:${slotKey(slot2)}`,
-  });
-  assert.equal(claimed.status, 200, JSON.stringify(claimed.body));
-  const beforeUpdate = await call(A.token, 'GET', `/api/collection-groups/${created.id}/tasks`);
-  assert.equal(beforeUpdate.body.tasks.length, 1);
-
-  const update = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/target`, {
-    baseTargetRevision: 0,
-    target: studTarget({ slots: [SLOT, slot2, slot3] }),
-  });
-  assert.equal(update.status, 200);
-  const tasks = await call(A.token, 'GET', `/api/collection-groups/${created.id}/tasks`);
-  assert.equal(tasks.status, 200);
-  assert.equal(tasks.body.targetRevision, 1);
-  assert.deepEqual(tasks.body.tasks, []);
 });
 
-test('种公摘要同组 UID 被占用时整批回滚；旧源时间被拒绝', async () => {
+test('需求承接：组员可接单、放弃，别人接过的不能再接', async () => {
   const created = await createGroup(A, {
-    name: '冲突组',
+    name: '需求承接组',
     displayName: 'A',
-    groupType: 'stud',
-    target: studTarget(),
+    groupType: 'mother',
+    target: {
+      kind: 'mother',
+      mode: 'perfect',
+      bodies: ['大块头'],
+      voices: ['+100'],
+      catalogVersion: 'test-v1',
+    },
   });
   assert.equal((await join(B, created.inviteCode)).status, 200);
+  assert.equal((await join(C, created.inviteCode)).status, 200);
 
-  const a = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
-    baseRevision: 0,
-    baseTargetRevision: 0,
-    resource: studDraft([studAccount(1001, [SLOT])], { targetRevision: 0 }),
+  // 不挑性格：nature 为空串
+  const published = await call(A.token, 'POST', `/api/collection-groups/${created.id}/demands`, {
+    eggGameId: 3454,
+    natures: [],
   });
-  assert.equal(a.status, 200);
-  const b = await call(B.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
-    baseRevision: 0,
-    baseTargetRevision: 0,
-    resource: studDraft([studAccount(1002, [SLOT])], { targetRevision: 0 }),
-  });
-  assert.equal(b.status, 200);
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  const demand = published.body.demands[0];
+  assert.equal(demand.nature, '');
+  assert.equal(demand.status, 'open');
 
-  // 先合法（1001 改名）+ 后冲突（1002 属于 B）：整批必须回滚
-  const clash = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
-    baseRevision: 1,
-    baseTargetRevision: 0,
-    resource: studDraft([
-      studAccount(1001, [SLOT], [], { accountName: '账号改名' }),
-      studAccount(1002, [SLOT]),
-    ], { targetRevision: 0 }),
-  });
-  assert.equal(clash.status, 409);
-  assert.equal(clash.body.code, 'GAME_ACCOUNT_ALREADY_SHARED');
-  const afterClash = await call(A.token, 'GET', `/api/collection-groups/${created.id}`);
-  const mine = afterClash.body.members.find((member) => member.accountId === A.accountId);
-  assert.equal(mine.studResource.accounts[0].accountName, '账号1001', '冲突时整批回滚，合法账号也不能写入');
+  const path = `/api/collection-groups/${created.id}/demands/3454`;
+  const body = { demanderAccountId: A.accountId, eggGameId: 3454, nature: '' };
 
-  // 同一账号用更早的导出时间重发 → 旧源时间被拒绝
-  const stale = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
-    baseRevision: 1,
-    baseTargetRevision: 0,
-    resource: studDraft([
-      studAccount(1001, [SLOT], [], { sourceExportedAt: '2026-10-22T00:00:00.000Z' }),
-    ], { targetRevision: 0 }),
-  });
-  assert.equal(stale.status, 409);
-  assert.equal(stale.body.code, 'STALE_SOURCE');
+  const claim = await call(B.token, 'POST', `${path}/claim`, { ...body, version: demand.version });
+  assert.equal(claim.status, 200, JSON.stringify(claim.body));
+  assert.equal(claim.body.demand.status, 'claimed');
+  assert.equal(claim.body.demand.claimerAccountId, B.accountId);
 
-  const same = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
-    baseRevision: 1,
-    baseTargetRevision: 0,
-    resource: studDraft([
-      { ...studAccount(1001, [SLOT]), sourceExportedAt: TIME },
-    ], { targetRevision: 0 }),
+  const taken = await call(C.token, 'POST', `${path}/claim`, { ...body, version: claim.body.demand.version });
+  assert.equal(taken.status, 409);
+  assert.equal(taken.body.code, 'DEMAND_TAKEN');
+
+  const release = await call(B.token, 'POST', `${path}/release`, {
+    ...body,
+    version: claim.body.demand.version,
   });
-  assert.equal(same.status, 200, '同一份数据同一覆盖允许重发');
+  assert.equal(release.status, 200, JSON.stringify(release.body));
+  assert.equal(release.body.demand.status, 'open');
+  assert.equal(release.body.demand.claimerAccountId, null);
+
+  // 带性格的一条：按性格单独接单
+  const named = await call(A.token, 'POST', `/api/collection-groups/${created.id}/demands`, {
+    eggGameId: 3455,
+    natures: ['胆小'],
+  });
+  assert.equal(named.status, 200, JSON.stringify(named.body));
+  const namedClaim = await call(C.token, 'POST', `${path.replace('3454', '3455')}/claim`, {
+    demanderAccountId: A.accountId,
+    eggGameId: 3455,
+    nature: '胆小',
+    version: named.body.demands[0].version,
+  });
+  assert.equal(namedClaim.status, 200, JSON.stringify(namedClaim.body));
+  assert.equal(namedClaim.body.demand.nature, '胆小');
+  assert.equal(namedClaim.body.demand.claimerAccountId, C.accountId);
+});
+
+test('已完成需求不能撤回；组长移除组员会释放承接、取消未完成需求并保留已完成', async () => {
+  const created = await createGroup(A, {
+    name: '移除组员组',
+    displayName: 'A',
+    groupType: 'mother',
+    target: {
+      kind: 'mother',
+      mode: 'perfect',
+      bodies: ['大块头'],
+      voices: ['+100'],
+      catalogVersion: 'test-v1',
+    },
+  });
+  assert.equal((await join(B, created.inviteCode)).status, 200);
+  assert.equal((await join(C, created.inviteCode)).status, 200);
+
+  const base = `/api/collection-groups/${created.id}`;
+  const aOne = await call(A.token, 'POST', `${base}/demands`, { eggGameId: 3466, natures: [] });
+  const aTwo = await call(A.token, 'POST', `${base}/demands`, {
+    eggGameId: 3467,
+    natures: ['胆小'],
+  });
+  assert.equal(aOne.status, 200, JSON.stringify(aOne.body));
+  assert.equal(aTwo.status, 200, JSON.stringify(aTwo.body));
+  const one = aOne.body.demands[0];
+  const two = aTwo.body.demands[0];
+
+  // A 的 3466 由 B 接并确认完成
+  const claimOne = await call(B.token, 'POST', `${base}/demands/3466/claim`, {
+    demanderAccountId: A.accountId,
+    eggGameId: 3466,
+    nature: '',
+    version: one.version,
+  });
+  assert.equal(claimOne.status, 200, JSON.stringify(claimOne.body));
+  const done = await call(A.token, 'POST', `${base}/demands/3466/complete`, {
+    demanderAccountId: A.accountId,
+    eggGameId: 3466,
+    nature: '',
+    version: claimOne.body.demand.version,
+  });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.demand.status, 'done');
+
+  // 已完成的单是已结单凭据，不能撤回
+  const withdrawDone = await call(A.token, 'DELETE', `${base}/demands/3466?nature=`);
+  assert.equal(withdrawDone.status, 409);
+  assert.equal(withdrawDone.body.code, 'DEMAND_ALREADY_DONE');
+
+  // C 接住 A 的另一条（未完成）
+  const claimTwo = await call(C.token, 'POST', `${base}/demands/3467/claim`, {
+    demanderAccountId: A.accountId,
+    eggGameId: 3467,
+    nature: '胆小',
+    version: two.version,
+  });
+  assert.equal(claimTwo.status, 200, JSON.stringify(claimTwo.body));
+
+  // C 自己发一条，B 接住：移除 C 时这条未完成需求应被删除
+  const cPublished = await call(C.token, 'POST', `${base}/demands`, {
+    eggGameId: 3468,
+    natures: [],
+  });
+  assert.equal(cPublished.status, 200, JSON.stringify(cPublished.body));
+  const cClaim = await call(B.token, 'POST', `${base}/demands/3468/claim`, {
+    demanderAccountId: C.accountId,
+    eggGameId: 3468,
+    nature: '',
+    version: cPublished.body.demands[0].version,
+  });
+  assert.equal(cClaim.status, 200, JSON.stringify(cClaim.body));
+
+  const notOwner = await call(B.token, 'DELETE', `${base}/members/${C.accountId}`);
+  assert.equal(notOwner.status, 403);
+  assert.equal(notOwner.body.code, 'NOT_OWNER');
+  const removeSelf = await call(A.token, 'DELETE', `${base}/members/${A.accountId}`);
+  assert.equal(removeSelf.status, 400);
+  const ghost = await call(A.token, 'DELETE', `${base}/members/not-a-member`);
+  assert.equal(ghost.status, 404);
+
+  const removed = await call(A.token, 'DELETE', `${base}/members/${C.accountId}`);
+  assert.equal(removed.status, 200, JSON.stringify(removed.body));
+
+  const listed = await call(A.token, 'GET', `${base}/demands`);
+  assert.equal(listed.status, 200, JSON.stringify(listed.body));
+  const byEgg = new Map(listed.body.demands.map((item) => [item.eggGameId, item]));
+  // 已完成保留（承接人的已结单计数不会倒退）
+  assert.equal(byEgg.get(3466).status, 'done');
+  assert.equal(byEgg.get(3466).claimerAccountId, B.accountId);
+  // C 接住的那条被释放回待承接
+  assert.equal(byEgg.get(3467).status, 'open');
+  assert.equal(byEgg.get(3467).claimerAccountId, null);
+  // C 自己发的未完成需求被取消
+  assert.equal(byEgg.has(3468), false);
+
+  const detail = await call(A.token, 'GET', base);
+  assert.equal(detail.status, 200, JSON.stringify(detail.body));
+  assert.equal(
+    detail.body.members.some((member) => member.accountId === C.accountId),
+    false,
+  );
+});
+
+test('收集组接口：产线随母本摘要发布并可读回（发布预览不再反复提示变化）', async () => {
+  const created = await createGroup(A, {
+    name: '产线往返组',
+    displayName: 'A',
+    groupType: 'mother',
+    target: {
+      kind: 'mother',
+      mode: 'perfect',
+      bodies: ['大块头'],
+      voices: ['+100'],
+      catalogVersion: 'test-v1',
+    },
+  });
+  const lines = [
+    { eggGameId: 101, grade: '大婉', natures: ['固执', '开朗'] },
+    { eggGameId: 201, grade: '小婉', natures: ['胆小'] },
+  ];
+  const resource = motherDraft([
+    { ...motherAccount(1001, [101, 201]), lines },
+  ]);
+  const published = await call(
+    A.token,
+    'PUT',
+    `/api/collection-groups/${created.id}/resources/me`,
+    { baseRevision: 0, resource },
+  );
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+
+  const detail = await call(A.token, 'GET', `/api/collection-groups/${created.id}`);
+  assert.equal(detail.status, 200, JSON.stringify(detail.body));
+  const mine = detail.body.members.find((member) => member.accountId === A.accountId);
+  assert.deepEqual(mine.resource.accounts[0].lines, lines);
+});
+
+test('种公需求：负数蛋组 id 可发布、可读回；非法蛋组拒绝', async () => {
+  const created = await createGroup(A, {
+    name: '种公需求组',
+    displayName: 'A',
+    groupType: 'mother',
+    target: {
+      kind: 'mother',
+      mode: 'perfect',
+      bodies: ['大块头'],
+      voices: ['+100'],
+      catalogVersion: 'test-v1',
+    },
+  });
+  const base = `/api/collection-groups/${created.id}`;
+  const published = await call(A.token, 'POST', `${base}/demands`, {
+    eggGameId: -12,
+    natures: ['踏实'],
+    gender: '公',
+    body: '大块头',
+    voice: '+100',
+  });
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  assert.equal(published.body.demands[0].eggGameId, -12);
+  assert.equal(published.body.demands[0].nature, '踏实');
+
+  const listed = await call(A.token, 'GET', `${base}/demands`);
+  assert.equal(listed.status, 200, JSON.stringify(listed.body));
+  assert.ok(
+    listed.body.demands.some((item) => item.eggGameId === -12 && item.nature === '踏实'),
+  );
+
+  const bad = await call(A.token, 'POST', `${base}/demands`, {
+    eggGameId: -1,
+    natures: ['踏实'],
+  });
+  assert.equal(bad.status, 400, JSON.stringify(bad.body));
+  assert.equal(bad.body.code, 'INVALID_INPUT');
 });

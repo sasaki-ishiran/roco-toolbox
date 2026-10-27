@@ -11,7 +11,7 @@ import type { CollectionGroupType } from '../shared/collectionGroups';
  * 这里只放纯函数：App 持有唯一状态，页面只发意图（`NavigationIntent`），
  * 不直接改别页内部状态。新视图记忆放内存，不扩展云同步键。
  */
-export type AppPage = 'dashboard' | 'collection' | 'groups' | 'profile';
+export type AppPage = 'dashboard' | 'home' | 'collection' | 'groups' | 'profile';
 
 export type CollectionLocation =
   | { kind: 'mothers'; status: 'missing' | 'collected' | 'plan'; eggGameId?: number }
@@ -69,6 +69,8 @@ export function initialNavigation(lastTab: string | null, swapView: string | nul
   switch (lastTab) {
     case 'dashboard':
       return { ...BASE, page: 'dashboard' };
+    case 'home':
+      return { ...BASE, page: 'home' };
     case 'myPets':
       return { ...BASE, page: 'collection', collection: { kind: 'inventory', view: 'all' } };
     case 'coverage':
@@ -137,7 +139,7 @@ export function focusPending(state: AppNavigation): boolean {
 }
 
 export interface LegacyLocation {
-  lastTab: 'dashboard' | 'myPets' | 'coverage' | 'swap' | 'import';
+  lastTab: 'dashboard' | 'home' | 'myPets' | 'coverage' | 'swap' | 'import';
   swapView: 'eggs' | 'sharing';
 }
 
@@ -151,6 +153,7 @@ export function legacyLocation(state: AppNavigation): LegacyLocation {
     return { lastTab: 'swap', swapView: state.groupType === 'stud' ? 'eggs' : 'sharing' };
   }
   if (state.page === 'profile') return { lastTab: 'import', swapView: 'eggs' };
+  if (state.page === 'home') return { lastTab: 'home', swapView: 'eggs' };
   if (state.page === 'dashboard') return { lastTab: 'dashboard', swapView: 'eggs' };
   if (state.collection.kind === 'studs') {
     return state.collection.view === 'eggs'

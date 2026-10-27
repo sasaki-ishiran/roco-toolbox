@@ -14,6 +14,7 @@ import { species } from '../data/catalog';
 import type { OwnedPet } from '../domain/types';
 import { AccountSection } from './AccountSection';
 import { GenderMark } from './GenderMark';
+import { PetAvatar } from './PetAvatar';
 import { InlineSelect } from './primitives/InlineSelect';
 
 export interface MotherGradeInventoryProps {
@@ -74,13 +75,20 @@ export function MotherGradeInventory({ motherGroups, owned, mode }: MotherGradeI
   }): ReactNode => (
     <li
       key={group.chainKey}
-      className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"
+      className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"
       data-testid="mother-filter-row"
     >
       {mother ? (
         <>
-          {speciesDisplayName(speciesByGameId.get(mother.gameId), mother.name)}{' '}
-          <GenderMark gender={mother.gender} />（{boxLabel(mother)}）
+          <PetAvatar
+            gameId={mother.gameId}
+            name={speciesDisplayName(speciesByGameId.get(mother.gameId), mother.name)}
+            size={20}
+          />
+          <span className="min-w-0 break-words">
+            {speciesDisplayName(speciesByGameId.get(mother.gameId), mother.name)}{' '}
+            <GenderMark gender={mother.gender} />（{boxLabel(mother)}）
+          </span>
         </>
       ) : (
         group.formLabel || '未知精灵'

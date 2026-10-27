@@ -46,7 +46,12 @@ public final class CaptureController {
             JSONArray rows = new JSONArray();
             CaptureFiles files = CaptureVpnService.files(activity);
             CaptureUploadManager uploadManager = uploads();
+            // 正在写的文件带 .incomplete 标记，属正常状态；忙碌时不要把它当成「残缺文件」返回，
+            // 否则刚点开始采集就会出现「未完整保存或没有可用数据」。
+            boolean writing = "starting".equals(state.phase) || "capturing".equals(state.phase)
+                || "stopping".equals(state.phase);
             for (File file : files.list()) {
+                if (writing && file.getName().equals(state.fileId)) continue;
                 JSONObject row = new JSONObject().put("id", file.getName()).put("name", file.getName())
                     .put("size", file.length()).put("createdAt", Long.parseLong(file.getName().substring(8, file.getName().length() - 5)))
                     .put("valid", files.valid(file));

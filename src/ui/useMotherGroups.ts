@@ -17,7 +17,7 @@ import { motherResourceSignature, buildMotherResource, diffMotherResources } fro
 import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
 import type { SpeciesEntry } from '../domain/types';
 import {
-  MOTHER_CRITERIA_ID,
+  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_RESOURCE_SCHEMA_VERSION,
   type MotherGroupDetail,
   type MotherGroupMember,
@@ -102,7 +102,7 @@ const selectionOf = (detail: MotherGroupDetail | null, accountId: string | null)
 
 const emptyDraft = (catalogVersion: string): MotherResourceDraft => ({
   schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
-  criteriaId: MOTHER_CRITERIA_ID,
+  criteriaId: ALL_MOTHERS_CRITERIA_ID,
   catalogVersion,
   accounts: [],
 });

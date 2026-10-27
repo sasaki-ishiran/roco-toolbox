@@ -6,6 +6,8 @@ import { Field } from './Field';
 import { FilterPanel } from './FilterPanel';
 import { InlineSelect } from './InlineSelect';
 import { ModalSurface } from './ModalSurface';
+import { NatureSelect } from './NatureSelect';
+import { targetNaturePool } from '../../data/catalog';
 import { ScopeSummary } from './ScopeSummary';
 import { SearchField } from './SearchField';
 import { SegmentedControl } from './SegmentedControl';
@@ -105,6 +107,34 @@ describe('InlineSelect', () => {
     fireEvent.click(screen.getByTestId('member-select'));
     fireEvent.click(screen.getByRole('radio', { name: '禁用项' }));
     expect(onValueChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('NatureSelect', () => {
+  test('先展示常用性格，搜索能直达全部性格', () => {
+    const onValueChange = vi.fn();
+    const firstPrimary = targetNaturePool[0].name;
+    render(
+      <NatureSelect
+        label="性格"
+        value=""
+        onValueChange={onValueChange}
+        testId="nature-trigger"
+        menuTestId="nature-menu"
+        optionTestId={(value) => `nature-${value || 'any'}`}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('nature-trigger'));
+    expect(screen.getByTestId('nature-menu')).toBeInTheDocument();
+    expect(screen.getByTestId('nature-any')).toHaveTextContent('不挑');
+    expect(screen.getByTestId(`nature-${firstPrimary}`)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索性格' }), {
+      target: { value: '胆' },
+    });
+    fireEvent.click(screen.getByTestId('nature-胆小'));
+    expect(onValueChange).toHaveBeenCalledWith('胆小');
+    expect(screen.queryByTestId('nature-menu')).toBeNull();
   });
 });
 

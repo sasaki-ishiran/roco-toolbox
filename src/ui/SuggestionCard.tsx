@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { StudRecommendation } from '../domain/suggestions';
+import { PetAvatar } from './PetAvatar';
 import { CHIP_BASE, CHIP_OFF, CHIP_ON } from './primitives/styles';
 import {
   setSuggestionDoneOpen,
@@ -121,6 +122,7 @@ export function SuggestionCard({ title, items, emptyNote, onOpenSwap }: Suggesti
                     data-testid="recommend-item-check"
                     aria-label={`标记 ${item.natureName}${item.displayName} 已换到`}
                   />
+                  <PetAvatar gameId={item.gameId} name={item.displayName} size={24} />
                   <span>
                     {item.natureName}
                     {item.displayName}（{item.groupLabels.join(' × ')}）
@@ -158,6 +160,7 @@ export function SuggestionCard({ title, items, emptyNote, onOpenSwap }: Suggesti
                         data-testid="recommend-item-check"
                         aria-label={`还原 ${item.natureName}${item.displayName}`}
                       />
+                      <PetAvatar gameId={item.gameId} name={item.displayName} size={24} />
                       <span>
                         {item.natureName}
                         {item.displayName}（{item.groupLabels.join(' × ')}）

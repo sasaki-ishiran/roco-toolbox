@@ -17,8 +17,9 @@ export const COLLECTION_GROUP_SCHEMA_VERSION = 1 as const;
 export const COLLECTION_GROUP_TYPES = ['mother', 'stud'] as const;
 export type CollectionGroupType = (typeof COLLECTION_GROUP_TYPES)[number];
 
+/** 2026-10-27 起小组只剩一种，展示统一叫「收集小组」；stud 仅保留旧数据映射。 */
 export const GROUP_TYPE_LABELS: Record<CollectionGroupType, string> = {
-  mother: '母本收集',
+  mother: '收集小组',
   stud: '种公收集',
 };
 
@@ -309,17 +310,58 @@ export function demandLimitPerMember(accountCount: number): number {
   return Math.min(DEMAND_LIMIT_PER_ACCOUNT * accounts, DEMAND_LIMIT_PER_MEMBER_CAP);
 }
 
-export interface CollectionDemand {
+/* ---------- 需求口径（2026-10-27 目标口径统一） ---------- */
+
+/**
+ * 需求单：蛋 + 性格 + 性别 + 体型 + 声音。
+ * 空字符串统一表示「不挑 / 不限」，**不参与匹配**，不是去找一个空值个体。
+ */
+export const DEMAND_GENDERS = ['母', '公', ''] as const;
+export type DemandGender = (typeof DEMAND_GENDERS)[number];
+export const DEMAND_BODIES = ['大块头', '小不点', ''] as const;
+export type DemandBody = (typeof DEMAND_BODIES)[number];
+export const DEMAND_VOICES = ['+100', '-100', '婉转声', '粗嗓门', ''] as const;
+export type DemandVoice = (typeof DEMAND_VOICES)[number];
+
+export const DEFAULT_DEMAND_GENDER: DemandGender = '母';
+export const DEFAULT_DEMAND_BODY: DemandBody = '大块头';
+export const DEFAULT_DEMAND_VOICE: DemandVoice = '+100';
+
+export const isDemandGender = (value: unknown): value is DemandGender =>
+  typeof value === 'string' && (DEMAND_GENDERS as readonly string[]).includes(value);
+export const isDemandBody = (value: unknown): value is DemandBody =>
+  typeof value === 'string' && (DEMAND_BODIES as readonly string[]).includes(value);
+export const isDemandVoice = (value: unknown): value is DemandVoice =>
+  typeof value === 'string' && (DEMAND_VOICES as readonly string[]).includes(value);
+
+export interface DemandCriteria {
+  eggGameId: number;
+  /** 空字符串 = 不挑性格。 */
+  nature: string;
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
+}
+
+export interface CollectionDemand extends DemandCriteria {
   groupId: string;
   demanderAccountId: string;
-  eggGameId: number;
-  /** 这一条需求要的性格；空字符串 = 不挑性格。 */
-  nature: string;
   status: CollectionDemandStatus;
   claimerAccountId: string | null;
   version: number;
   createdAt: number;
   updatedAt: number;
+}
+
+/** 需求行的唯一标识（前端选择 / 撤回 / 接单共用，不依赖行号）。 */
+export function demandKeyOf(demand: DemandCriteria): string {
+  return [
+    demand.eggGameId,
+    demand.nature,
+    demand.gender,
+    demand.body,
+    demand.voice,
+  ].join(':');
 }
 
 /** 需求性格是否合法：0~6 个、非空、长度受限、去重后仍合法。 */

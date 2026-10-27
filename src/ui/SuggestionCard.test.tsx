@@ -7,6 +7,7 @@ const ITEM: StudRecommendation = {
   id: 'r1',
   natureName: '平和',
   displayName: '白发懒人',
+  groupIds: [6],
   groupLabels: ['动物组'],
   grade: '大婉',
   gameId: 1,

@@ -44,6 +44,8 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
   const [voices, setVoices] = useState<string[]>(['+100']);
   const [requireNatures, setRequireNatures] = useState(false);
   const [natureEditorOpen, setNatureEditorOpen] = useState(false);
+  /** 口径编辑默认收起：组头卡只留一行摘要（2026-10-26 小组页精简）。 */
+  const [open, setOpen] = useState(false);
   const natureOverrides = useNatureOverrides();
   const mountedRef = useRef(true);
   /** 从个人配置导入的目标先预览，确认后才递增全组修订。 */
@@ -194,17 +196,21 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
   })();
 
   return (
-    <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-target">
+    <div className="space-y-1.5" data-testid="group-target">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="text-xs font-medium text-slate-500">本组目标</h2>
-          <p className="mt-0.5 break-words text-xs text-slate-700" data-testid="group-target-summary">
-            {summary}
+          <p className="break-words text-[11px] leading-snug text-slate-500">
+            口径{' '}
+            <span className="text-slate-700" data-testid="group-target-summary">
+              {summary}
+            </span>
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-400">
-            修订 {hook.currentGroup?.group.targetRevision ?? 0}
-            {isStud && !hook.targetReady ? ' · 待组长确认后才能发布' : ''}
-          </p>
+          {isStud ? (
+            <p className="mt-0.5 text-[10px] text-slate-400">
+              修订 {hook.currentGroup?.group.targetRevision ?? 0}
+              {!hook.targetReady ? ' · 待组长确认后才能发布' : ''}
+            </p>
+          ) : null}
         </div>
         {isOwner && isStud ? (
           <button
@@ -212,9 +218,20 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
             disabled={busy}
             onClick={confirmFromPersonal}
             data-testid="group-target-confirm"
-            className="min-h-[30px] shrink-0 rounded-lg border border-emerald-500 px-2.5 text-xs font-medium text-emerald-700 disabled:opacity-50"
+            className="min-h-[28px] shrink-0 rounded-lg border border-emerald-500 px-2 text-[11px] font-medium text-emerald-700 disabled:opacity-50"
           >
             {target && target.kind === 'stud' && target.slots.length > 0 ? '用我的目标更新' : '确认本组目标'}
+          </button>
+        ) : null}
+        {isOwner && isMother ? (
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            data-testid="group-target-toggle"
+            aria-expanded={open}
+            className="min-h-[28px] shrink-0 rounded-lg border border-slate-200 px-2 text-[11px] text-slate-500"
+          >
+            {open ? '收起' : '改口径'}
           </button>
         ) : null}
       </div>
@@ -253,7 +270,7 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
         </div>
       ) : null}
 
-      {isOwner && isMother ? (
+      {isOwner && isMother && open ? (
         <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2" data-testid="mother-target-editor">
           <div className="flex gap-0.5 rounded-lg bg-slate-100 p-0.5">
             {(['perfect', 'medal'] as const).map((value) => (
@@ -353,6 +370,9 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
               natureOverrides: requireNatures ? activeNatureOverrides(natureOverrides) : undefined,
             })}
           </p>
+          <p className="text-[10px] text-slate-400">
+            修订 {hook.currentGroup?.group.targetRevision ?? 0}
+          </p>
         </div>
       ) : null}
 
@@ -371,6 +391,6 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
         </p>
       ) : null}
       <RecommendedNatureEditor open={natureEditorOpen} onClose={() => setNatureEditorOpen(false)} />
-    </section>
+    </div>
   );
 }

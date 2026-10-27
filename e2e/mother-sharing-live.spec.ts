@@ -44,7 +44,7 @@ async function register(label: string): Promise<Identity> {
 
 const resourceOf = (uid: number, eggGameId: number) => ({
   schemaVersion: 1,
-  criteriaId: 'female-huge-voice100-v2',
+  criteriaId: 'all-mothers-v1',
   catalogVersion: CATALOG_VERSION,
   accounts: [
     {
@@ -138,7 +138,7 @@ test('真实 Functions + D1：三个身份、A 两设备共享同一成员与资
   await openSharing(pageA);
   await expect(pageA.getByTestId('group-card')).toContainText('真实联调组');
   await expect(pageA.getByTestId('group-card')).toContainText('3 人');
-  await expect(pageA.getByTestId('group-type-label')).toContainText('母本收集');
+  await expect(pageA.getByTestId('group-type-label')).toContainText('收集小组');
 
   await pageA.getByTestId('mother-view-mine').click();
   await expect(

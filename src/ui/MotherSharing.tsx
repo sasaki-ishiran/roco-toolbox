@@ -193,6 +193,7 @@ export function MotherSharing({ onGoAccount, onDraftDirtyChange }: MotherSharing
                 viewerAccountId={hook.accountId}
                 species={species}
                 catalogVersion={CATALOG_VERSION}
+                snapshots={snapshots}
               />
 
               <MotherGroupMembers

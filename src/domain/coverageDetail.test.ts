@@ -47,6 +47,7 @@ describe('describeCoverageCells', () => {
     });
 
     expect(detail.mother).toEqual({
+      gameId: 901,
       name: '母方兽',
       account: '测试甲',
       box: '盒子03 第5位',

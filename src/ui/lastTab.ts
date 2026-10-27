@@ -5,10 +5,10 @@
  * `navigation.legacyLocation()` 换成旧版能理解的五个值——旧版安装升级 / 降级
  * 都不会落到未知页签。读取时这些旧值再由 `initialNavigation()` 映射回新页面。
  */
-export type LegacyTab = 'dashboard' | 'myPets' | 'coverage' | 'swap' | 'import';
+export type LegacyTab = 'dashboard' | 'home' | 'myPets' | 'coverage' | 'swap' | 'import';
 
 const KEY = 'roco.lastTab';
-const TABS: LegacyTab[] = ['dashboard', 'myPets', 'coverage', 'swap', 'import'];
+const TABS: LegacyTab[] = ['dashboard', 'home', 'myPets', 'coverage', 'swap', 'import'];
 
 export function readLastTab(): LegacyTab {
   if (typeof window === 'undefined') return 'import';

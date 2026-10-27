@@ -1,18 +1,21 @@
 import {
+  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_CATALOG_VERSION_MAX,
-  MOTHER_CRITERIA_ID,
   MOTHER_RESOURCE_MAX_ACCOUNTS,
   MOTHER_RESOURCE_MAX_EGGS_PER_ACCOUNT,
   MOTHER_RESOURCE_SCHEMA_VERSION,
   canonicalEggGameIds,
+  canonicalProductionLines,
   isCanonicalMotherAccountKey,
   isValidIsoTimestamp,
   type MotherResourceDraft,
   type SharedMotherAccount,
 } from '../shared/motherGroups';
 import { isBreedableGroup } from './eggs';
-import { isQualifiedMother, type MotherCriteria } from './motherCriteria';
-import { createNaturesResolver, type NatureOverrides } from './recommendedNatures';
+import type { MotherCriteria } from './motherCriteria';
+import type { TargetMode } from './petFilters';
+import { buildProductionLines } from './productionLines';
+import type { NatureOverrides } from './recommendedNatures';
 import { accountKeyOf, type AccountSnapshot } from './parseBackup';
 import type { SpeciesEntry } from './types';
 
@@ -61,6 +64,8 @@ export interface BuildMotherResourceInput {
   requireRecommendedNatures?: boolean;
   /** 这份口径用的推荐性格覆盖（组长那一份）；不传 = 图鉴推荐 + 种族值兜底。 */
   natureOverrides?: NatureOverrides;
+  /** 组目标模式；产线按双方同档位计算。不传按追满分。 */
+  mode?: TargetMode;
 }
 
 /**
@@ -69,12 +74,11 @@ export interface BuildMotherResourceInput {
  */
 export function buildMotherResource(input: BuildMotherResourceInput): MotherResourceDraft {
   const { snapshots, selectedAccountKeys, species, catalogVersion } = input;
-  const criteria = input.criteria ?? SHARED_MOTHER_CRITERIA;
-  const criteriaId = input.criteriaId ?? MOTHER_CRITERIA_ID;
-  const effectiveCriteria: MotherCriteria = input.requireRecommendedNatures
-    ? { ...criteria, recommendedNatures: true }
-    : criteria;
-  const naturesOf = createNaturesResolver({ species, overrides: input.natureOverrides });
+  /**
+   * 2026-10-28：小组不再设母本口径，共享全部母本 + 产线。
+   * 具体缺什么由每个成员在自己的本地筛选里决定。
+   */
+  const criteriaId = ALL_MOTHERS_CRITERIA_ID;
 
   if (catalogVersion.trim().length === 0 || catalogVersion.length > MOTHER_CATALOG_VERSION_MAX) {
     throw new MotherResourceError('INVALID_CATALOG_VERSION', '图鉴版本无效');
@@ -98,6 +102,14 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
     snapshotsByKey.set(snapshot.accountKey ?? accountKeyOf(snapshot), snapshot);
   }
 
+  const linesByAccount = new Map(
+    buildProductionLines({
+      snapshots,
+      species,
+      mode: input.mode ?? 'perfect',
+    }).map((account) => [account.accountKey, canonicalProductionLines(account.lines)]),
+  );
+
   // 目标全集：`eggGameId === gameId` 且至少有一个可孵蛋组的图鉴蛋物种。
   const byGameId = new Map<number, SpeciesEntry>();
   const eggSpeciesIds = new Set<number>();
@@ -119,9 +131,9 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
 
     const eggGameIds = new Set<number>();
     for (const pet of snapshot.pets) {
+      if (pet.gender !== '母') continue;
       const eggGameId = byGameId.get(pet.gameId)?.eggGameId;
       if (eggGameId == null || !eggSpeciesIds.has(eggGameId)) continue;
-      if (!isQualifiedMother(pet, effectiveCriteria, naturesOf)) continue;
       eggGameIds.add(eggGameId);
     }
     if (eggGameIds.size > MOTHER_RESOURCE_MAX_EGGS_PER_ACCOUNT) {
@@ -133,6 +145,7 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
       accountName: snapshot.accountName,
       sourceExportedAt: snapshot.exportedAt,
       eggGameIds: canonicalEggGameIds([...eggGameIds]),
+      lines: linesByAccount.get(key) ?? [],
     };
   });
 
@@ -156,6 +169,9 @@ export interface MotherResourceAccountDiff {
   accountKey: string;
   addedEggGameIds: number[];
   removedEggGameIds: number[];
+  /** 产线变化（稳定键：`蛋|档位|性格/性格`）。 */
+  addedLines?: string[];
+  removedLines?: string[];
 }
 
 export interface MotherResourceDiff {
@@ -166,12 +182,21 @@ export interface MotherResourceDiff {
   removedAccounts: string[];
   /** 账号仍在、但覆盖变了。 */
   changedAccounts: MotherResourceAccountDiff[];
+  /** 产线变化（顶层并集），用于发布预览。 */
+  addedLines?: string[];
+  removedLines?: string[];
   /**
-   * 覆盖完全没变（账号键集合与各自蛋 ID 集合都一致）。
+   * 覆盖完全没变（账号键集合、各自蛋 ID 集合与产线都一致）。
    * 只改账号名或导出时间不算变化——「摘要未变不重复提示」。
    */
   unchanged: boolean;
 }
+
+const lineKeyOf = (line: {
+  eggGameId: number;
+  grade: string;
+  natures: readonly string[];
+}): string => `${line.eggGameId}|${line.grade}|${[...line.natures].sort().join('/')}`;
 
 /** 对比两份摘要的**覆盖**（忽略 revision / publishedAt / 账号名 / 导出时间）。 */
 export function diffMotherResources(
@@ -180,6 +205,8 @@ export function diffMotherResources(
 ): MotherResourceDiff {
   const prev = byAccount(previous);
   const after = byAccount(next);
+  const prevLines = linesByAccount(previous);
+  const afterLines = linesByAccount(next);
 
   const addedAccounts = [...after.keys()]
     .filter((key) => !prev.has(key))
@@ -194,8 +221,18 @@ export function diffMotherResources(
     const current = after.get(key) ?? new Set<number>();
     const added = [...current].filter((id) => !before.has(id)).sort((a, b) => a - b);
     const removed = [...before].filter((id) => !current.has(id)).sort((a, b) => a - b);
-    if (added.length > 0 || removed.length > 0) {
-      changedAccounts.push({ accountKey: key, addedEggGameIds: added, removedEggGameIds: removed });
+    const beforeLineSet = prevLines.get(key) ?? new Set<string>();
+    const currentLineSet = afterLines.get(key) ?? new Set<string>();
+    const addedLines = [...currentLineSet].filter((line) => !beforeLineSet.has(line)).sort();
+    const removedLines = [...beforeLineSet].filter((line) => !currentLineSet.has(line)).sort();
+    if (added.length > 0 || removed.length > 0 || addedLines.length > 0 || removedLines.length > 0) {
+      changedAccounts.push({
+        accountKey: key,
+        addedEggGameIds: added,
+        removedEggGameIds: removed,
+        addedLines,
+        removedLines,
+      });
     }
   }
 
@@ -203,6 +240,10 @@ export function diffMotherResources(
   const afterIds = unionIds(after);
   const addedEggGameIds = [...afterIds].filter((id) => !beforeIds.has(id)).sort((a, b) => a - b);
   const removedEggGameIds = [...beforeIds].filter((id) => !afterIds.has(id)).sort((a, b) => a - b);
+  const beforeLineUnion = unionLines(prevLines);
+  const afterLineUnion = unionLines(afterLines);
+  const addedLines = [...afterLineUnion].filter((line) => !beforeLineUnion.has(line)).sort();
+  const removedLines = [...beforeLineUnion].filter((line) => !afterLineUnion.has(line)).sort();
 
   return {
     addedEggGameIds,
@@ -210,12 +251,16 @@ export function diffMotherResources(
     addedAccounts,
     removedAccounts,
     changedAccounts,
+    addedLines,
+    removedLines,
     unchanged:
       addedEggGameIds.length === 0 &&
       removedEggGameIds.length === 0 &&
       addedAccounts.length === 0 &&
       removedAccounts.length === 0 &&
-      changedAccounts.length === 0,
+      changedAccounts.length === 0 &&
+      addedLines.length === 0 &&
+      removedLines.length === 0,
   };
 }
 
@@ -224,9 +269,23 @@ const byAccount = (resource: MotherResourceDraft): Map<string, Set<number>> =>
     resource.accounts.map((account) => [account.accountKey, new Set(canonicalEggGameIds(account.eggGameIds))]),
   );
 
+const linesByAccount = (resource: MotherResourceDraft): Map<string, Set<string>> =>
+  new Map(
+    resource.accounts.map((account) => [
+      account.accountKey,
+      new Set(canonicalProductionLines(account.lines ?? []).map(lineKeyOf)),
+    ]),
+  );
+
 const unionIds = (accounts: Map<string, Set<number>>): Set<number> => {
   const union = new Set<number>();
   for (const ids of accounts.values()) for (const id of ids) union.add(id);
+  return union;
+};
+
+const unionLines = (accounts: Map<string, Set<string>>): Set<string> => {
+  const union = new Set<string>();
+  for (const lines of accounts.values()) for (const line of lines) union.add(line);
   return union;
 };
 
@@ -245,6 +304,7 @@ export function motherResourceSignature(resource: MotherResourceDraft): string {
         accountName: account.accountName,
         sourceExportedAt: account.sourceExportedAt,
         eggGameIds: canonicalEggGameIds(account.eggGameIds),
+        lines: account.lines === undefined ? null : canonicalProductionLines(account.lines),
       }))
       .sort((a, b) => compareAccountKey(a.accountKey, b.accountKey)),
   });

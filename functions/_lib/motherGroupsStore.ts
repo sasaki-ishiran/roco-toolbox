@@ -11,6 +11,7 @@ import {
   MOTHER_GROUP_MAX_MEMBERS,
   MOTHER_RESOURCE_SCHEMA_VERSION,
   canonicalEggGameIds,
+  canonicalProductionLines,
   type MotherApiSuccess,
   type MotherCriteriaId,
   type MotherGroupDetail,
@@ -19,6 +20,7 @@ import {
   type MotherGroupSummary,
   type MotherResourceDraft,
   type SharedMotherAccount,
+  type SharedProductionLine,
 } from '../../src/shared/motherGroups';
 
 export type MotherStoreErrorCode =
@@ -95,6 +97,7 @@ interface AccountRow {
   account_name: string;
   source_exported_at: string;
   egg_game_ids: string;
+  lines_json: string | null;
 }
 
 const toGroupInfo = (row: GroupRow): MotherGroupInfo => ({
@@ -343,7 +346,7 @@ export async function readMotherGroup(
     db
       .prepare(
         `SELECT member_account_id, game_account_key, account_name,
-                source_exported_at, egg_game_ids
+                source_exported_at, egg_game_ids, lines_json
            FROM mother_group_accounts
           WHERE group_id = ?
           ORDER BY member_account_id ASC, game_account_key ASC`,
@@ -357,12 +360,14 @@ export async function readMotherGroup(
   const accountsByMember = new Map<string, SharedMotherAccount[]>();
   for (const row of accountResult.results as AccountRow[]) {
     const ids = parseStoredIds(row.egg_game_ids);
+    const lines = parseStoredLines(row.lines_json);
     const list = accountsByMember.get(row.member_account_id) ?? [];
     list.push({
       accountKey: row.game_account_key,
       accountName: row.account_name,
       sourceExportedAt: row.source_exported_at,
       eggGameIds: ids,
+      ...(lines === undefined ? {} : { lines }),
     });
     accountsByMember.set(row.member_account_id, list);
   }
@@ -397,6 +402,19 @@ function parseStoredIds(raw: string): number[] {
     return Array.isArray(parsed) ? canonicalEggGameIds(parsed) : [];
   } catch {
     return [];
+  }
+}
+
+/** `null` = 旧摘要没带产线（未知）；`[]` = 已发布但确实没有产线。 */
+function parseStoredLines(raw: string | null): SharedProductionLine[] | undefined {
+  if (raw == null || raw === '') return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? canonicalProductionLines(parsed as SharedProductionLine[])
+      : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -492,8 +510,8 @@ export async function publishMemberResource(
       db
         .prepare(
           `INSERT INTO mother_group_accounts
-             (group_id, game_account_key, member_account_id, account_name, source_exported_at, egg_game_ids)
-           SELECT ?, ?, ?, ?, ?, ?
+             (group_id, game_account_key, member_account_id, account_name, source_exported_at, egg_game_ids, lines_json)
+           SELECT ?, ?, ?, ?, ?, ?, ?
             WHERE EXISTS (SELECT 1 FROM mother_group_members
                            WHERE group_id = ? AND account_id = ? AND write_token = ?)`,
         )
@@ -504,6 +522,7 @@ export async function publishMemberResource(
           account.accountName,
           account.sourceExportedAt,
           JSON.stringify(account.eggGameIds),
+          account.lines === undefined ? null : JSON.stringify(account.lines),
           groupId,
           accountId,
           writeToken,

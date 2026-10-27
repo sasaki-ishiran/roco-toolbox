@@ -53,6 +53,12 @@ describe('内置采集入口', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '导出原包' })); });
     expect(bridge.shareCapture).toHaveBeenCalledWith(file.id);
   });
+  test('采集中不把正在写的当前文件当成残缺文件提示', async () => {
+    setup({ phase: 'capturing', fileId: file.id, files: [{ ...file, valid: false }] });
+    await waitFor(() => expect(screen.getByText('还没有本机采集文件')).toBeTruthy());
+    expect(screen.queryByText(/未完整保存/)).toBeNull();
+    expect(screen.queryByRole('button', { name: '解析并导入' })).toBeNull();
+  });
   test('删除取消保留文件，确认才调用删除', async () => {
     const bridge = setup();
     await waitFor(() => expect(screen.getByRole('button', { name: '删除' })).toBeTruthy());

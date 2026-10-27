@@ -6,6 +6,8 @@ import type { CoverageCell, CoverageState } from './studCoverage';
 import type { OwnedPet, SpeciesEntry } from './types';
 
 export interface PetRef {
+  /** 形态 gameId：只用于取头像 */
+  gameId: number;
   name: string;
   account: string;
   /** 如「盒子01 第3位」；缺字段时为「位置未知」 */
@@ -46,6 +48,7 @@ export const boxLabel = (pet: OwnedPet): string => {
 };
 
 const toRef = (pet: OwnedPet, label: string): PetRef => ({
+  gameId: pet.gameId,
   name: label,
   account: pet.account,
   box: boxLabel(pet),

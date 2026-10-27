@@ -1,19 +1,15 @@
 import type { OwnedPet, SpeciesEntry } from '../domain/types';
+import { bodyMedalIcon, rarityIcon, voiceMedalIcon, voiceMedalName } from '../domain/petIcons';
 import { speciesDisplayName } from '../domain/speciesName';
 import { GenderMark } from './GenderMark';
+import { PetAvatar } from './PetAvatar';
 
-/** 稀有度文字（2026-10-05 回退：图标 → 文字，统一放卡片右上角） */
+/** 稀有度名字：图标的 title / alt 用（界面本身不再写文字标签） */
 const RARITY_TEXT: Record<string, string> = {
   shiny: '异色',
   colorful: '炫彩',
   'shiny-colorful': '异色炫彩',
   'shiny-bw': '异色黑白',
-};
-const RARITY_CLASS: Record<string, string> = {
-  shiny: 'bg-teal-100 text-teal-700',
-  colorful: 'bg-fuchsia-100 text-fuchsia-700',
-  'shiny-colorful': 'bg-emerald-100 text-emerald-700',
-  'shiny-bw': 'bg-slate-200 text-slate-600',
 };
 
 export interface PetCardProps {
@@ -23,57 +19,79 @@ export interface PetCardProps {
 }
 
 /**
- * 精灵卡。移动端一行放两张，做成紧凑版。
+ * 精灵卡。**一行四张**的紧凑卡，头像是主体（56px，约占卡宽 2/3），文字只保留必要信息。
  *
- * 2026-10-05 排版重做：改用**固定槽位**（标题行 → 性别+性格 → 声音/体型 两列 → 蛋组 → 位置），
- * 每张卡的槽位数量与顺序完全一致，配合 `truncate` 不再因标签换行而参差不齐、同排也能对齐。
- * 账号由上层 AccountSection 分组标题承担（卡内只在「位置」里带账号）；图鉴编号不展示。
+ * 2026-10-27 重做（用户要求）：头像放大为主体；稀有度从文字标签改成图标（叠在头像右上角）；
+ * 体型/声音在满分时显示游戏奖牌图标；名称最多两行，其余行全部单行截断，保证同排等高。
+ * 账号仍由上层 AccountSection 分组标题承担，卡内「位置」只在有账号时带上账号名。
  */
 export function PetCard({ pet, species, eggGroupNames }: PetCardProps) {
   const displayName = speciesDisplayName(species, pet.name);
+  // 头像按形态 gameId 取；异色 / 炫彩 / 异色炫彩都用异色图，官方没收录时逐级兜底（见 PetAvatar）
+  const avatarGameId = species?.gameId ?? pet.gameId;
+  const shinyAvatar = Boolean(pet.isShiny || pet.isColorful);
   const eggGroups = (species?.eggGroups ?? [])
     .filter((group) => group >= 2 && group <= 15)
     .map((group) => eggGroupNames[group] ?? `蛋组${group}`)
-    .join(' × ');
+    .join('×');
   const position = pet.account
     ? pet.boxGroup
-      ? `${pet.account} · ${pet.boxGroup}${pet.slotOrder != null ? ` · ${pet.slotOrder}` : ''}`
+      ? `${pet.account}·${pet.boxGroup}${pet.slotOrder != null ? `·${pet.slotOrder}` : ''}`
       : pet.account
     : '';
-  // 稀有度：文字标签，统一在卡片右上角（2026-10-05 回退图标方案）
   const rarityKind = pet.isShiny && pet.isColorful ? 'shiny-colorful' : pet.isColorful ? 'colorful' : pet.isShiny ? 'shiny' : null;
+  const raritySrc = rarityIcon(rarityKind);
+  const rarityName = rarityKind ? RARITY_TEXT[rarityKind] : null;
+  const bodyIcon = bodyMedalIcon(pet.medalBody);
+  const voiceIcon = voiceMedalIcon(pet.voiceDb);
+  const voiceName = voiceMedalName(pet.voiceDb);
 
   return (
-    <article className="flex h-full flex-col rounded-xl bg-white p-2 shadow-sm">
-      <div className="flex min-h-[22px] items-start justify-between gap-1">
-        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-slate-900">
-          {displayName}
-        </h3>
-        {rarityKind ? (
-          <span
-            className={`shrink-0 rounded px-1 py-0.5 text-[10px] leading-none font-medium ${RARITY_CLASS[rarityKind]}`}
-          >
-            {RARITY_TEXT[rarityKind]}
-          </span>
+    <article className="flex h-full flex-col items-center rounded-xl bg-white p-1.5 shadow-sm">
+      <div className="relative">
+        <PetAvatar gameId={avatarGameId} name={displayName} shiny={shinyAvatar} size={56} />
+        {raritySrc ? (
+          <img
+            src={raritySrc}
+            alt={rarityName ?? ''}
+            title={rarityName ?? ''}
+            className="absolute -right-1 -top-1 h-4 w-4 drop-shadow-sm"
+          />
         ) : null}
       </div>
-      {/* 性别 + 性格（性别用 ♂/♀ 符号，2026-10-05 用户拍板） */}
-      <p className="mt-0.5 truncate text-xs text-slate-700">
+
+      <h3
+        className="mt-1 line-clamp-2 w-full text-center text-[11px] font-semibold leading-tight text-slate-900"
+        title={displayName}
+        data-testid="pet-card-name"
+      >
+        {displayName}
+      </h3>
+
+      <p className="mt-0.5 truncate text-[10px] leading-tight text-slate-700">
         <GenderMark gender={pet.gender} /> {pet.nature}
       </p>
-      {/* 固定 4 个槽位（2 列）：所有卡等高、同排对齐。不写「声音/体型/蛋组/位置」前缀——
-          值本身已经说明是什么，前缀是噪音（2026-10-05 用户要求）。体型带百分比。 */}
-      <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] leading-tight text-slate-500">
-        <span className="truncate">{pet.voiceDb}dB</span>
-        {/* 体型：比例常驻；有体型牌就带上牌名（没牌只写比例） */}
-        <span className="truncate">
-          {[pet.medalBody, pet.weightPercent != null ? `${pet.weightPercent}%` : '']
-            .filter(Boolean)
-            .join(' ')}
-        </span>
-        <span className="col-span-2 truncate">{eggGroups || '—'}</span>
-        <span className="col-span-2 truncate">{position || '—'}</span>
+
+      {/* 体型 / 声音奖牌：只有「大块头 / 小不点」「±100」才有官方图标，其他情况留空保持等高 */}
+      <div className="mt-0.5 flex h-4 items-center justify-center gap-0.5">
+        {bodyIcon ? <img src={bodyIcon} alt={pet.medalBody} title={pet.medalBody} className="h-4 w-4" /> : null}
+        {voiceIcon ? (
+          <img src={voiceIcon} alt={voiceName ?? ''} title={voiceName ?? ''} className="h-4 w-4" />
+        ) : null}
       </div>
+
+      <p className="truncate text-[10px] leading-tight text-slate-500">
+        {pet.weightPercent != null ? `${Math.round(pet.weightPercent)}%` : '—'} · {pet.voiceDb}dB
+      </p>
+      <p className="mt-0.5 w-full truncate text-center text-[10px] leading-tight text-slate-500">
+        {eggGroups || '—'}
+      </p>
+      <p
+        className="mt-auto w-full truncate pt-0.5 text-center text-[10px] leading-tight text-slate-400"
+        title={position || undefined}
+      >
+        {position || '—'}
+      </p>
     </article>
   );
 }

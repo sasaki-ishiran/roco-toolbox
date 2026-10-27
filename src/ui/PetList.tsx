@@ -82,8 +82,8 @@ export function PetList({ pets, speciesByGameId, eggGroupNames, resetKey = '' }:
         ))}
       </div>
 
-      {/* 一行两张：手机宽度下一张约 170px，比一行一张的信息密度高一倍 */}
-      <ul className="grid grid-cols-2 gap-2">
+      {/* 一行四张（2026-10-27 用户拍板）：手机宽度下一张约 85px，头像 56px 当主体 */}
+      <ul className="grid grid-cols-4 gap-1.5">
         {visible.map((pet, index) => (
           <li key={`${pet.account}-${pet.gameId}-${start + index}`}>
             <PetCard

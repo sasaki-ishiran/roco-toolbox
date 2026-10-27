@@ -73,6 +73,59 @@ describe('parseBackup', () => {
     expect(JSON.stringify(snapshot)).not.toContain('runtime-should-be-dropped');
   });
 
+  test('家园场景随抓包进入快照：住户、小窝、实际配对、地上的蛋', () => {
+    const snapshot = parseBackup(
+      {
+        meta: {
+          type: 'hatch-backup',
+          gameId: 1001,
+          captureHome: {
+            gameId: '1001',
+            capturedAt: '2026-10-27T00:00:00.000Z',
+            homeLevel: 2,
+            roomLevel: 3,
+            couplesStale: false,
+            snapshotKind: 'full',
+            residents: [
+              {
+                instanceId: '11',
+                baseId: '22',
+                furnitureGuid: '88',
+                actorId: '77',
+                name: '母本甲',
+                gender: '母',
+                nature: '固执',
+                nest: { furnitureGuid: '88', configId: 1001072, nestType: 'academy', nestName: '学院小窝' },
+              },
+              { instanceId: '', baseId: '0', furnitureGuid: '', actorId: '', name: '坏条目' },
+            ],
+            nests: [{ furnitureGuid: '88', configId: 1001072, nestType: 'academy', nestName: '学院小窝', residentIds: ['11'] }],
+            layEggCouples: [{ femaleActorId: '77', maleActorIds: ['78'] }],
+            sceneEggs: [{ actorId: '99', furnitureGuid: '88', npcConfigId: 301 }],
+          },
+        },
+        collections: { petBackpack: { items: [] } },
+      },
+      'now',
+    );
+
+    expect(snapshot.home?.homeLevel).toBe(2);
+    expect(snapshot.home?.residents).toHaveLength(1);
+    expect(snapshot.home?.residents[0]).toMatchObject({
+      instanceId: '11',
+      name: '母本甲',
+      gender: '母',
+      nest: { nestType: 'academy', nestName: '学院小窝' },
+    });
+    expect(snapshot.home?.nests[0].residentIds).toEqual(['11']);
+    expect(snapshot.home?.layEggCouples).toEqual([{ femaleActorId: '77', maleActorIds: ['78'] }]);
+    expect(snapshot.home?.sceneEggs).toEqual([{ actorId: '99', furnitureGuid: '88', npcConfigId: 301 }]);
+  });
+
+  test('没有家园字段时不生成 home', () => {
+    expect(parseBackup(fixture, 'now').home).toBeUndefined();
+  });
+
   test('保留盒子位置字段；缺失时返回 undefined', () => {
     const snapshot = parseBackup(fixture, 'now');
     const first = snapshot.pets[0];

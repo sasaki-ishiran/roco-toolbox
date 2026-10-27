@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>小组页方案 v2 · 整页</title>
+<style>
+  :root{
+    --emerald:#059669; --emerald-bg:#ecfdf5; --emerald-border:#10b981;
+    --slate-900:#0f172a; --slate-700:#334155; --slate-500:#64748b; --slate-400:#94a3b8; --slate-300:#cbd5e1;
+    --rose:#e11d48; --rose-ring:#fda4af; --rose-bg:#fff1f2;
+    --amber:#b45309; --amber-bg:#fffbeb; --amber-border:#fcd34d;
+    --line:#e2e8f0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:#f1f5f9; color:var(--slate-700);
+    font-family:-apple-system,"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{width:390px; margin:0 auto; padding:14px; display:flex; flex-direction:column; gap:8px;}
+  .card{background:#fff; border-radius:16px; padding:12px; box-shadow:0 1px 2px rgba(15,23,42,.08);}
+  .row{display:flex; align-items:center;}
+  .between{justify-content:space-between;}
+  .gap6{gap:6px;}
+  .mt6{margin-top:6px;}
+  .mt8{margin-top:8px;}
+  .muted{color:var(--slate-400); font-size:11px; line-height:1.4;}
+  .body{font-size:12px; color:var(--slate-700);}
+  .title{font-size:16px; font-weight:600; color:#1e293b;}
+  .h2{font-size:12px; font-weight:500; color:var(--slate-500); margin:0;}
+  .link{border:0; background:none; color:var(--emerald); font-size:11px; font-weight:500; padding:4px 0; cursor:pointer;}
+  .badge{font-size:10px; line-height:1.4; padding:2px 6px; border-radius:5px; white-space:nowrap;}
+  .badge.emerald{background:var(--emerald-bg); color:#047857; font-weight:500;}
+  .badge.amber{background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-border);}
+  .btn{border:1px solid var(--line); background:#fff; color:var(--slate-500); border-radius:8px; padding:0 10px; height:30px; font-size:11px; cursor:pointer;}
+  .btn.sm{height:28px; padding:0 8px;}
+  .btn.outline{border-color:var(--emerald-border); color:#047857; font-weight:500;}
+  .btn.primary{background:var(--emerald); border-color:var(--emerald); color:#fff; font-weight:500;}
+  .chips{display:flex; gap:6px; margin-top:8px; overflow-x:auto; padding-bottom:2px;}
+  .chip{flex:0 0 auto; height:28px; padding:0 8px; border-radius:6px; border:1px solid var(--line); background:#fff; color:var(--slate-500); font-size:11px; cursor:pointer;}
+  .chip.active{border-color:var(--emerald-border); background:var(--emerald-bg); color:#047857; font-weight:500;}
+  .count{color:var(--slate-400); font-weight:400;}
+  .chip.active .count{color:#059669;}
+  .divider{height:1px; background:#f1f5f9; margin:10px 0;}
+  .collapsed{min-height:44px;}
+  .seg{display:flex; background:#f1f5f9; border-radius:8px; padding:2px;}
+  .seg button{flex:1; height:30px; border:0; border-radius:6px; background:none; color:var(--slate-500); font-size:11px; cursor:pointer;}
+  .seg button.active{background:#fff; color:var(--slate-900); font-weight:600; box-shadow:0 1px 2px rgba(15,23,42,.08);}
+  .search{flex:1; min-width:0; height:32px; border:1px solid var(--line); border-radius:8px; padding:0 8px; font-size:11px; color:var(--slate-500); background:#fff;}
+  .search::placeholder{color:var(--slate-300);}
+  .select{height:32px; border:1px solid var(--line); background:#fff; border-radius:8px; color:var(--slate-500); font-size:11px; padding:0 6px; flex:0 0 auto;}
+  .check{display:flex; align-items:center; gap:4px; font-size:10px; color:var(--slate-500);}
+  .check input{width:11px; height:11px; accent-color:var(--emerald);}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:6px;}
+  .pet{min-height:56px; border-radius:6px; background:#f8fafc; padding:4px 5px; display:flex; flex-direction:column; gap:2px; position:relative;}
+  .pet .name{font-size:11px; font-weight:500; color:var(--slate-700); line-height:1.25; word-break:break-all; padding-right:32px;}
+  .pet .name small{font-size:9px; font-weight:400; color:var(--slate-400);}
+  .pet .who{font-size:9px; line-height:1.25; color:#047857; word-break:break-all;}
+  .pet .who.red{color:var(--rose);}
+  .pet .holder{color:var(--slate-500); font-weight:500;}
+  .pet .who.gray{color:var(--slate-400);}
+  .pet .nature{position:absolute; top:4px; right:4px; background:var(--emerald-bg); color:#047857; font-size:9px; line-height:1.2; padding:1px 3px; border-radius:3px;}
+  .pet .demand{font-size:9px; color:var(--slate-500);}
+  .pet .demand b{color:#047857; font-weight:500;}
+  .pet.blocked{background:#fff; box-shadow:inset 0 0 0 1px var(--rose-ring);}
+  .pet.blocked .name{color:#475569;}
+  .pet.blocked .hint{font-size:9px; color:var(--rose); line-height:1.2;}
+  .pet.selected{background:var(--emerald-bg); box-shadow:inset 0 0 0 1px var(--emerald-border);}
+  .pet.selected .pick{font-size:9px; color:#047857; font-weight:500;}
+  .section-head{margin:12px 0 2px; padding-top:8px; border-top:1px dashed #e2e8f0; display:flex; align-items:baseline; gap:6px;}
+  .section-title{font-size:11px; font-weight:600; color:var(--rose);}
+  .section-title.neutral{color:var(--slate-500);}
+  .section-sub{font-size:9px; color:var(--slate-400); line-height:1.3;}
+  .callout{font-size:10px; color:var(--emerald); background:var(--emerald-bg); border-radius:8px; padding:6px 8px; line-height:1.45;}
+  .legend{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; font-size:9px; color:var(--slate-500);}
+  .dot{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:3px; vertical-align:-1px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- 收集范围 -->
+  <div class="card">
+    <div class="row between">
+      <h2 class="h2">收集范围</h2>
+      <button class="link">＋ 新建 / 加入</button>
+    </div>
+    <div class="chips">
+      <button class="chip">个人求蛋</button>
+      <button class="chip active">母 · 周末互换 <span class="count">5</span></button>
+      <button class="chip">母 · 夜班车 <span class="count">4</span></button>
+      <button class="chip">公 · 周四局 <span class="count">2</span></button>
+    </div>
+  </div>
+
+  <!-- 组头卡：组名 + 口径 + 我的资源 -->
+  <div class="card">
+    <div class="row between" style="align-items:flex-start;">
+      <div style="min-width:0;">
+        <div class="row gap6">
+          <span class="badge emerald">母本收集</span>
+          <strong class="title">周末互换</strong>
+        </div>
+        <div class="muted" style="margin-top:2px;">5 人 · 组长 阿甲</div>
+        <div class="muted" style="margin-top:2px;">
+          口径 母 · 大块头 · +100 · 推荐性格
+          <button class="link" style="font-size:10px;">改口径</button>
+        </div>
+      </div>
+      <button class="btn sm">刷新</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="row between" style="align-items:flex-start;">
+      <div style="min-width:0;">
+        <div class="row gap6">
+          <span class="badge amber">需更新</span>
+          <span class="body">我的资源 · 已发布 12 种母本 · 2 个账号</span>
+        </div>
+        <div class="muted" style="margin-top:3px;">本机数据有更新，发布后组员才能看到最新资源。</div>
+      </div>
+      <button class="btn outline sm">管理选号</button>
+    </div>
+  </div>
+
+  <!-- 成员与邀请：默认收起 -->
+  <div class="card row between collapsed">
+    <div class="row gap6"><strong class="body">成员与邀请</strong><span class="muted">5 人</span></div>
+    <span class="muted">邀请码 · 管理 ▾</span>
+  </div>
+
+  <!-- 新建 / 加入：默认收起 -->
+  <div class="card row between collapsed">
+    <strong class="body">新建 / 加入小组</strong>
+    <span class="muted">▾</span>
+  </div>
+
+  <!-- 三视图 -->
+  <div class="card">
+    <div class="seg">
+      <button class="active">我缺的</button>
+      <button>需求中心</button>
+      <button>共同寻找</button>
+    </div>
+
+    <div class="row gap6 mt8">
+      <input class="search" placeholder="搜母本 / 同血脉名称 / 图鉴号">
+      <button class="select">全部成员 ▾</button>
+      <button class="btn primary sm">发需求</button>
+    </div>
+
+    <div class="row between mt6">
+      <label class="check"><input type="checkbox" checked> 只看组内有人拥有</label>
+      <span class="muted">当前页 43 项</span>
+    </div>
+
+    <div class="grid3">
+      <div class="pet"><span class="name">布鲁斯</span><span class="who">有 阿甲</span><span class="nature">固执</span></div>
+      <div class="pet"><span class="name">脆甜甜</span><span class="who">有 阿甲 · 阿乙</span><span class="nature">胆小</span></div>
+      <div class="pet"><span class="name">圣剑侍从</span><span class="who">有 阿甲</span><span class="nature">淘气</span></div>
+      <div class="pet selected"><span class="name">阿米亚特</span><span class="who">有 阿乙</span><span class="pick">已选</span><span class="nature">固执</span></div>
+      <div class="pet"><span class="name">矮脚爬爬</span><span class="who">有 阿甲</span><span class="nature">固执</span></div>
+      <div class="pet"><span class="name">白发懒人</span><span class="who">有 阿乙</span><span class="nature">平和</span></div>
+      <div class="pet"><span class="name">斑斑</span><span class="who">有 阿甲</span><span class="nature">固执</span></div>
+      <div class="pet"><span class="name">板板壳</span><span class="who">有 阿乙</span><span class="nature">沉默</span></div>
+      <div class="pet"><span class="name">苋米仔</span><span class="who">有 阿甲</span><span class="nature">踏实</span></div>
+    </div>
+
+    <div class="section-head">
+      <div class="section-title">组内暂时没来源 · 5</div>
+    </div>
+    <div class="grid3">
+      <div class="pet blocked">
+        <span class="name">宝藏小狐</span>
+        <span class="nature">固执</span>
+      </div>
+      <div class="pet blocked">
+        <span class="name">蹦蹦种子<small> 彩玉球</small></span>
+        <span class="nature">聪明</span>
+      </div>
+      <div class="pet blocked">
+        <span class="name">波波螺</span>
+        <span class="demand">平和 · <b>待承接</b> [撤回]</span>
+      </div>
+      <div class="pet blocked">
+        <span class="name">布是石</span>
+        <span class="nature">平和</span>
+      </div>
+      <div class="pet blocked">
+        <span class="name">柴渣虫</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    整页从上到下只剩 4 块：收集范围 → 组头卡（组名 / 口径 / 我的资源）→ 成员与邀请、新建加入（收起）→ 我缺的。
+    主体从第 5 屏提到第 2 屏。
+  </div>
+
+</div>
+</body>
+</html>

@@ -29,10 +29,8 @@ export function groupPublicationStatus(input: {
     input.type === 'stud'
       ? input.target?.kind === 'stud' &&
         isStudResourceComparable(input.stud, input.target, input.targetRevision, input.catalogVersion)
-      : isMotherResourceComparable(
-          input.mother,
-          input.catalogVersion,
-          input.target?.kind === 'mother' ? input.target.criteriaId : undefined,
-        );
+      : // 2026-10-28：母本组不再有口径，忽略旧组目标里的 criteriaId；
+        // 旧口径摘要由 isMotherResourceComparable 的默认「全部母本」判成需更新。
+        isMotherResourceComparable(input.mother, input.catalogVersion);
   return comparable && input.unchanged ? '已发布' : '需更新';
 }

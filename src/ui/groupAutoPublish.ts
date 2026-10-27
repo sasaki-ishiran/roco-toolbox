@@ -1,17 +1,25 @@
-import { getCollectionGroup, listCollectionGroups, publishCollectionResources } from '../api/collectionGroups';
+import {
+  getCollectionDemands,
+  getCollectionGroup,
+  listCollectionGroups,
+  publishCollectionResources,
+} from '../api/collectionGroups';
 import { isMotherGroupsApiError } from '../api/motherGroups';
 import { readAccountId } from '../api/session';
 import { diffMotherResources, buildMotherResource } from '../domain/motherResource';
+import { hasStockForDemand } from '../domain/demandCriteria';
 import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
+import { speciesDisplayName } from '../domain/speciesName';
 import { buildStudResource, diffStudResources } from '../domain/studResource';
 import type { SpeciesEntry } from '../domain/types';
 import {
   defaultMotherTarget,
+  type CollectionDemand,
   type CollectionGroupDetail,
   type MotherTargetConfig,
   type StudTargetConfig,
 } from '../shared/collectionGroups';
-import type { MotherResourceDraft } from '../shared/motherGroups';
+import { ALL_MOTHERS_CRITERIA_ID, type MotherResourceDraft } from '../shared/motherGroups';
 import type { StudResourceDraft } from '../shared/collectionGroups';
 import { isGroupSharingOff } from './collectionGroupStore';
 
@@ -41,6 +49,111 @@ export function autoPublishGroups(input: AutoPublishInput): Promise<number> {
 }
 
 let inFlight: Promise<number> | null = null;
+
+/**
+ * 导入后顺带看一眼：有没有人接了我发布的需求（还没结单）。
+ *
+ * 只读、尽力而为；任何组失败都跳过。返回按组汇总的结果，供导入结果卡提醒「可以结单了」。
+ */
+export interface PendingDemandItem {
+  eggGameId: number;
+  eggName: string;
+  /** 原始性格；空字符串 = 不挑。 */
+  nature: string;
+  gender: CollectionDemand['gender'];
+  body: CollectionDemand['body'];
+  voice: CollectionDemand['voice'];
+  claimerAccountId: string;
+  claimerName: string;
+  version: number;
+}
+
+export interface PendingDemandClaim {
+  groupId: string;
+  groupName: string;
+  accountId: string;
+  count: number;
+  claimers: string[];
+  items: PendingDemandItem[];
+}
+
+export interface PendingClaimInput {
+  /** 导入后的完整本机快照：用来确认「我真的已经拿到这颗蛋了」。 */
+  snapshots?: readonly AccountSnapshot[];
+  species?: readonly SpeciesEntry[];
+}
+
+export async function collectPendingDemandClaims(
+  input: PendingClaimInput = {},
+): Promise<PendingDemandClaim[]> {
+  const accountId = readAccountId();
+  if (!accountId) return [];
+  let groups: Awaited<ReturnType<typeof listCollectionGroups>>;
+  try {
+    groups = await listCollectionGroups();
+  } catch {
+    return [];
+  }
+
+  // 只有本机确实已经有一只完全匹配的个体，才提示可以结单（避免还没收到就被催）
+  const eggNameOf = new Map<number, string>();
+  for (const entry of input.species ?? []) {
+    if (entry.eggGameId != null && entry.eggGameId === entry.gameId) {
+      eggNameOf.set(entry.gameId, speciesDisplayName(entry, entry.name));
+    }
+  }
+  const requireOwned = Boolean(input.snapshots && input.species);
+
+  const claims: PendingDemandClaim[] = [];
+  for (const summary of groups) {
+    if (summary.groupType !== 'mother') continue;
+    try {
+      const [detail, demands] = await Promise.all([
+        getCollectionGroup(summary.id),
+        getCollectionDemands(summary.id),
+      ]);
+      const nameOf = (id: string): string =>
+        detail.members.find((member) => member.accountId === id)?.displayName ?? id.slice(0, 6);
+      const items: PendingDemandItem[] = [];
+      for (const demand of demands) {
+        if (demand.demanderAccountId !== accountId || demand.status !== 'claimed') continue;
+        if (!demand.claimerAccountId) continue;
+        if (
+          requireOwned &&
+          input.snapshots &&
+          input.species &&
+          !hasStockForDemand(input.snapshots, demand, input.species)
+        ) {
+          continue;
+        }
+        items.push({
+          eggGameId: demand.eggGameId,
+          eggName: eggNameOf.get(demand.eggGameId) ?? `蛋 ${demand.eggGameId}`,
+          nature: demand.nature,
+          gender: demand.gender,
+          body: demand.body,
+          voice: demand.voice,
+          claimerAccountId: demand.claimerAccountId,
+          claimerName: nameOf(demand.claimerAccountId),
+          version: demand.version,
+        });
+      }
+      if (items.length === 0) continue;
+      claims.push({
+        groupId: summary.id,
+        groupName: summary.name,
+        accountId,
+        count: items.length,
+        claimers: [...new Set(items.map((item) => item.claimerName))],
+        items,
+      });
+    } catch {
+      // 单个组读不到就跳过，不影响其它组与导入本身
+    }
+  }
+  return claims;
+}
+
 
 async function run(input: AutoPublishInput): Promise<number> {
   const accountId = readAccountId();
@@ -133,13 +246,8 @@ function buildResource(
     selectedAccountKeys: keys,
     species: input.species,
     catalogVersion: input.catalogVersion,
-    criteria: {
-      bodies: target.bodies as never,
-      voices: target.voices as never,
-    },
-    criteriaId: target.criteriaId,
-    requireRecommendedNatures: target.requireRecommendedNatures === true,
-    natureOverrides: target.natureOverrides,
+    criteriaId: ALL_MOTHERS_CRITERIA_ID,
+    mode: target.mode,
   });
 }
 

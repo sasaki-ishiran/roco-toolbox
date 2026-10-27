@@ -3,6 +3,7 @@ import { NEST_SIZE } from '../domain/nestGeometry';
 import { gradeLabel, type PetGrade } from '../domain/petFilters';
 import type { NestPairing, NestPet, NestPlan, NestTier } from '../domain/nestPlan';
 import { GenderMark } from './GenderMark';
+import { PetAvatar } from './PetAvatar';
 import { useTargetMode } from './targetModeStore';
 
 const TIER_NAME: Record<NestTier, string> = {
@@ -285,14 +286,16 @@ function PairingCard({ view, testId }: { view: PairingView; testId: string }) {
           grade={view.grade}
         />
       </div>
-      <p className="mt-1 text-[13px] text-slate-700">
+      <p className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[13px] text-slate-700">
+        <PetAvatar gameId={view.left.gameId} name={view.left.name} size={20} />
         <span className="font-medium">{view.left.name}</span> <GenderMark gender={view.left.gender} />
         {view.academyParent ? (
           <span className="ml-1 text-[11px] font-medium text-emerald-600">学院小窝</span>
         ) : null}
         <span className="mx-1 text-slate-300">×</span>
         {view.partners.map((partner, index) => (
-          <span key={`${partner.key}-${index}`}>
+          <span key={`${partner.key}-${index}`} className="inline-flex items-center gap-x-1">
+            <PetAvatar gameId={partner.gameId} name={partner.name} size={20} />
             <span className="font-medium">{partner.name}</span> <GenderMark gender={partner.gender} />
             {index < view.partners.length - 1 ? <span className="text-slate-400"> / </span> : null}
           </span>

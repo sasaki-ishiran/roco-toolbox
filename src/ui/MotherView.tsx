@@ -13,6 +13,7 @@ import {
 import { AccountSection } from './AccountSection';
 import { CollectionTargetEditor } from './CollectionTargetEditor';
 import { FilterAccordion } from './FilterAccordion';
+import { PetAvatar } from './PetAvatar';
 import { FilterPanel } from './primitives/FilterPanel';
 import { ScopeSummary } from './primitives/ScopeSummary';
 import { SearchField } from './primitives/SearchField';
@@ -669,6 +670,7 @@ function MotherEggRow({
               data-testid="mother-chain-mother"
             >
               <div className="flex items-center gap-1">
+                <PetAvatar gameId={mother.gameId} name={mother.name} size={20} />
                 <span className="font-medium text-slate-700">{mother.name}</span>
                 <GenderMark gender={mother.gender} />
                 <span

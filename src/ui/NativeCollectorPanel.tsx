@@ -254,6 +254,10 @@ export function NativeCollectorPanel() {
   const busy = state != null && ['starting', 'capturing', 'stopping'].includes(state.phase);
   const uploadSupported = typeof window.RocoCapture?.uploadCapture === 'function';
   const completedFile = completed ? state?.files.find((file) => file.id === completed) : undefined;
+  // 采集中创建的当前文件还带着 .incomplete 标记，不能当成「残缺文件」提示。
+  // 旧版壳仍会把它放进 files，这里在忙碌时先不展示，停止保存后再自然出现。
+  const activeFileId = busy ? state?.fileId : undefined;
+  const visibleFiles = state ? state.files.filter((file) => file.id !== activeFileId) : [];
   /** 弹窗只在导入结束后出现；失败 / 超时 / 导入报错都算「未完成」，要继续给出可操作提示 */
   const importFailed = autoStage === 'failed' || outcome.local === 'failed' || completionError != null;
   const popupTitle = importFailed ? '导入未完成' : outcome.local === 'importing' ? '正在导入' : '导入完成';
@@ -284,8 +288,8 @@ export function NativeCollectorPanel() {
         {busy ? <p className="text-xs text-slate-500">已记录 {state.packets} 包 · {sizeLabel(state.bytes)}。数量不代表数据已收齐。</p> : null}
         <p className="text-xs text-slate-500">最多保留 10 个原包，每次上限 128 MiB；导入后仍保留，不会自动清理。</p>
         {!uploadSupported ? <p className="text-xs text-slate-500">更新安卓安装包后可直接上传蛋神助手。</p> : null}
-        {state.files.length === 0 ? <p className="text-sm text-slate-500">还没有本机采集文件</p> : <ul className="space-y-1.5">
-          {state.files.map((file) => <li key={file.id} className="space-y-1.5 rounded-xl border border-slate-100 p-2.5">
+        {visibleFiles.length === 0 ? <p className="text-sm text-slate-500">还没有本机采集文件</p> : <ul className="space-y-1.5">
+          {visibleFiles.map((file) => <li key={file.id} className="space-y-1.5 rounded-xl border border-slate-100 p-2.5">
             <p className="break-all text-sm text-slate-700">{file.name}</p>
             <p className="text-xs text-slate-500">{new Date(file.createdAt).toLocaleString()} · {sizeLabel(file.size)}</p>
             {!file.valid ? <p className="text-xs text-amber-800">未完整保存或没有可用数据，请重新采集；仍可导出原包。</p> : null}

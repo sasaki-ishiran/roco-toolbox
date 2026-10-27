@@ -1,4 +1,4 @@
-﻿﻿import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { TARGET_MODE_LABELS, gradeLabel, type TargetMode } from '../domain/petFilters';
 import { effectiveMotherVoices, isChainCollected, type MotherCriteria } from '../domain/motherCriteria';
 import { findUncataloguedCount, studEmptyNote } from '../domain/suggestions';
@@ -200,6 +200,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         items={recommendations}
         emptyNote={suggestionEmptyNote}
         onOpenSwap={() =>
+          // 看板的完整求蛋清单仍走个人求种公；小组里的「种公」页是另一条入口。
           onNavigate({ type: 'open-groups', groupType: 'stud' })
         }
       />

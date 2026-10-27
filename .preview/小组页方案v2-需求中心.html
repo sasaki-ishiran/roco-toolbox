@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>小组页方案 v3 · 需求中心 + 成员管理</title>
+<style>
+  :root{
+    --emerald:#059669; --emerald-bg:#ecfdf5; --emerald-border:#10b981;
+    --slate-900:#0f172a; --slate-700:#334155; --slate-500:#64748b; --slate-400:#94a3b8; --slate-300:#cbd5e1;
+    --rose:#e11d48; --rose-bg:#fff1f2; --rose-border:#fda4af;
+    --line:#e2e8f0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:#f1f5f9; color:var(--slate-700);
+    font-family:-apple-system,"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{width:390px; margin:0 auto; padding:14px; display:flex; flex-direction:column; gap:10px;}
+  .card{background:#fff; border-radius:16px; padding:12px; box-shadow:0 1px 2px rgba(15,23,42,.08);}
+  .seg{display:flex; background:#f1f5f9; border-radius:8px; padding:2px;}
+  .seg button{flex:1; height:30px; border:0; border-radius:6px; background:none; color:var(--slate-500); font-size:11px; cursor:pointer;}
+  .seg button.active{background:#fff; color:var(--slate-900); font-weight:600; box-shadow:0 1px 2px rgba(15,23,42,.08);}
+  .row{display:flex; align-items:center;}
+  .between{justify-content:space-between;}
+  .meta{font-size:10px; color:var(--slate-400); line-height:1.35;}
+  .search{flex:1; min-width:0; height:32px; border:1px solid var(--line); border-radius:8px; padding:0 8px; font-size:11px; color:var(--slate-500); background:#fff;}
+  .search::placeholder{color:var(--slate-300);}
+  .section{margin-top:10px; padding-top:8px; border-top:1px dashed #e2e8f0;}
+  .section:first-of-type{border-top:0; padding-top:2px;}
+  .section-title{display:flex; align-items:baseline; gap:6px; font-size:11px; font-weight:600; color:var(--slate-700);}
+  .section-title span{font-weight:400; color:var(--slate-400); font-size:9px;}
+  .section-note{font-size:9px; color:var(--slate-400); margin-top:2px;}
+  .grid2{display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin-top:6px;}
+  .demand{border-radius:8px; background:#f8fafc; padding:6px 7px; display:flex; flex-direction:column; gap:3px; min-height:62px;}
+  .demand.mine{background:var(--emerald-bg); box-shadow:inset 0 0 0 1px #a7f3d0;}
+  .demand .top{display:flex; align-items:flex-start; justify-content:space-between; gap:4px;}
+  .demand .egg{font-size:12px; font-weight:500; color:var(--slate-700); line-height:1.25; word-break:break-all;}
+  .demand .nature{flex:0 0 auto; background:var(--emerald-bg); color:#047857; font-size:9px; line-height:1.2; padding:2px 4px; border-radius:3px;}
+  .demand .who{font-size:10px; color:var(--slate-500); line-height:1.3;}
+  .demand .status{font-size:9px; color:var(--slate-400); line-height:1.3;}
+  .demand .status b{color:#047857; font-weight:500;}
+  .demand .actions{display:flex; gap:4px; margin-top:auto;}
+  .demand button{height:20px; border-radius:4px; border:1px solid var(--line); background:#fff; color:var(--slate-500); font-size:9px; padding:0 5px; cursor:pointer;}
+  .demand button.primary{border-color:var(--emerald-border); color:#047857; font-weight:500;}
+  .group-head{display:flex; align-items:baseline; gap:6px; margin-top:8px; font-size:11px; font-weight:600; color:var(--slate-600,#475569);}
+  .group-head .count{font-size:9px; font-weight:400; color:#047857; background:var(--emerald-bg); border-radius:4px; padding:1px 5px;}
+  .member-row{display:flex; align-items:flex-start; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid #f1f5f9;}
+  .member-row:last-child{border-bottom:0; padding-bottom:0;}
+  .member-name{font-size:12px; color:var(--slate-700);}
+  .member-name .badge{font-size:9px; color:#047857; background:#d1fae5; border-radius:4px; padding:1px 4px; margin-left:4px;}
+  .member-meta{font-size:9px; color:var(--slate-400); margin-top:2px; line-height:1.4;}
+  .member-meta .stale{color:var(--rose);}
+  .member-side{text-align:right; flex:0 0 auto;}
+  .done-count{font-size:9px; color:#047857; background:var(--emerald-bg); border-radius:4px; padding:1px 5px; white-space:nowrap;}
+  .member-actions{display:flex; gap:4px; margin-top:4px; justify-content:flex-end;}
+  .member-actions button{height:20px; border-radius:4px; border:1px solid var(--line); background:#fff; color:var(--slate-500); font-size:9px; padding:0 5px;}
+  .member-actions button.danger{border-color:var(--rose-border); color:var(--rose);}
+  .note{font-size:10px; color:var(--slate-500); background:#fff; border-radius:10px; padding:8px 10px; line-height:1.55; border:1px solid var(--line);}
+  .note b{color:var(--slate-700);}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- 需求中心 -->
+  <div class="card">
+    <div class="seg">
+      <button>我缺的</button>
+      <button class="active">需求中心</button>
+      <button>共同寻找</button>
+    </div>
+
+    <div class="row" style="gap:6px; margin-top:8px;">
+      <input class="search" placeholder="搜需求 / 图鉴号">
+      <span class="meta">共 9 条</span>
+    </div>
+
+    <div class="section">
+      <div class="section-title">我接的 <span>2</span></div>
+      <div class="grid2">
+        <div class="demand mine">
+          <div class="top"><span class="egg">布鲁斯</span><span class="nature">固执</span></div>
+          <div class="who">阿甲 想要</div>
+          <div class="status"><b>我接了</b></div>
+          <div class="actions"><button>放弃</button></div>
+        </div>
+        <div class="demand mine">
+          <div class="top"><span class="egg">脆甜甜</span><span class="nature">胆小</span></div>
+          <div class="who">阿乙 想要</div>
+          <div class="status"><b>我接了</b></div>
+          <div class="actions"><button>放弃</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">我能接的 <span>3</span></div>
+      <div class="section-note">你能孵、目前还没人接的需求</div>
+      <div class="grid2">
+        <div class="demand">
+          <div class="top"><span class="egg">圣剑侍从</span><span class="nature">淘气</span></div>
+          <div class="who">阿甲 想要</div>
+          <div class="status">待承接</div>
+          <div class="actions"><button class="primary">接单</button></div>
+        </div>
+        <div class="demand">
+          <div class="top"><span class="egg">阿米亚特</span><span class="nature">固执</span></div>
+          <div class="who">阿丁 想要</div>
+          <div class="status">待承接</div>
+          <div class="actions"><button class="primary">接单</button></div>
+        </div>
+        <div class="demand">
+          <div class="top"><span class="egg">矮脚爬爬</span><span class="nature">固执</span></div>
+          <div class="who">阿乙 想要</div>
+          <div class="status">待承接</div>
+          <div class="actions"><button class="primary">接单</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">其他人接的 <span>3</span></div>
+      <div class="section-note">按成员分组，名字后面是他已结单数</div>
+
+      <div class="group-head">阿乙 <span class="count">已结 3 单</span></div>
+      <div class="grid2">
+        <div class="demand">
+          <div class="top"><span class="egg">布鲁斯</span><span class="nature">固执</span></div>
+          <div class="who">我 想要 · 阿乙接了</div>
+          <div class="actions"><button class="primary">完成</button></div>
+        </div>
+        <div class="demand">
+          <div class="top"><span class="egg">板板壳</span><span class="nature">沉默</span></div>
+          <div class="who">阿甲 想要 · 阿乙接了</div>
+        </div>
+      </div>
+
+      <div class="group-head">阿丙 <span class="count">已结 1 单</span></div>
+      <div class="grid2">
+        <div class="demand">
+          <div class="top"><span class="egg">白发懒人</span><span class="nature">平和</span></div>
+          <div class="who">阿丁 想要 · 阿丙接了</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">发布了没人接的 <span>1</span></div>
+      <div class="grid2">
+        <div class="demand">
+          <div class="top"><span class="egg">斑斑</span><span class="nature">固执</span></div>
+          <div class="who">我 发的</div>
+          <div class="status">待承接</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 成员与邀请（展开态） -->
+  <div class="card">
+    <div class="row between">
+      <div class="row" style="gap:6px;">
+        <strong style="font-size:12px;">成员与邀请</strong>
+        <span class="meta">5 人</span>
+      </div>
+      <span class="meta">收起 ▴</span>
+    </div>
+
+    <div style="margin-top:6px;">
+      <div class="member-row">
+        <div>
+          <div class="member-name">阿甲 <span class="badge">组长</span></div>
+          <div class="member-meta">已发布 12 种 · 更新于 10/25</div>
+        </div>
+        <div class="member-side"><span class="done-count">已结 0 单</span></div>
+      </div>
+
+      <div class="member-row">
+        <div>
+          <div class="member-name">阿乙 <span class="badge" style="background:#e0f2fe;color:#0369a1;">我</span></div>
+          <div class="member-meta">已发布 8 种 · 更新于 10/25</div>
+        </div>
+        <div class="member-side">
+          <span class="done-count">已结 3 单</span>
+          <div class="member-actions"><button>展开</button></div>
+        </div>
+      </div>
+
+      <div class="member-row">
+        <div>
+          <div class="member-name">阿丙</div>
+          <div class="member-meta">已发布 5 种 · <span class="stale">10 天未更新</span></div>
+        </div>
+        <div class="member-side">
+          <span class="done-count">已结 1 单</span>
+          <div class="member-actions"><button class="danger">移除</button></div>
+        </div>
+      </div>
+
+      <div class="member-row">
+        <div>
+          <div class="member-name">阿丁</div>
+          <div class="member-meta"><span class="stale">尚未发布</span> · 加入 10 天</div>
+        </div>
+        <div class="member-side">
+          <span class="done-count" style="background:#f1f5f9;color:#94a3b8;">已结 0 单</span>
+          <div class="member-actions"><button class="danger">移除</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top:10px;">
+      组长可移除长期不更新、不贡献的成员。移除后他的未完成需求会取消；已结单的接单记录保留，计数不会倒退。
+    </div>
+  </div>
+
+  <div class="note">
+    <b>需求中心顺序</b>：我接的 → 我能接的 → 其他人接的（按成员分组，名字后带已结单数）→ 发布了没人接的。
+    空的分类不显示。
+  </div>
+
+</div>
+</body>
+</html>

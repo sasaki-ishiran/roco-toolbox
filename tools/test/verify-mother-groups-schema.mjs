@@ -41,8 +41,21 @@ const MIGRATIONS = [
     end: '-- <<< collection-demands (2026-10-26)',
     tables: ['collection_group_demands'],
   },
+  {
+    // 重建表：同一张表扩主键到「蛋 + 性格 + 性别 + 体型 + 声音」。
+    // schema.sql 的区块由上面那条负责剥离；这个文件**只执行一次**，不参与重复执行校验。
+    label: 'collection-demand-criteria',
+    file: path.join(root, 'functions/migrations/2026-10-27-collection-demand-criteria.sql'),
+    repeat: 1,
+  },
+  {
+    // 母本账号增加产线字段；ADD COLUMN 不支持 IF NOT EXISTS，只执行一次。
+    label: 'mother-production-lines',
+    file: path.join(root, 'functions/migrations/2026-10-27-mother-production-lines.sql'),
+    repeat: 1,
+  },
 ];
-const NEW_TABLES = MIGRATIONS.flatMap((item) => item.tables);
+const NEW_TABLES = MIGRATIONS.flatMap((item) => item.tables ?? []);
 
 const [schemaSql, ...migrationSqls] = await Promise.all([
   readFile(SCHEMA_FILE, 'utf8'),
@@ -89,9 +102,10 @@ for (const table of NEW_TABLES) {
   assert.ok(tableNames(full).includes(table), `完整 schema 缺少 ${table}`);
 }
 
-/* ---------- 2. 旧 schema（去掉两期新表）+ 增量迁移两次 ---------- */
+/* ---------- 2. 旧 schema（去掉新表）+ 增量迁移 ---------- */
 let legacySql = schemaSql;
 for (const item of MIGRATIONS) {
+  if (!item.start || !item.end) continue;
   const start = legacySql.indexOf(item.start);
   const end = legacySql.indexOf(item.end);
   assert.ok(start >= 0 && end > start, `schema.sql 里缺少 ${item.label} 区块标记`);
@@ -107,10 +121,11 @@ requireLegacySchema(migrated, '旧 schema 初始化');
 for (const table of NEW_TABLES) {
   assert.ok(!tableNames(migrated).includes(table), `旧 schema 不应预先包含 ${table}`);
 }
-for (const sql of migrationSqls) {
-  migrated.exec(sql);
-  migrated.exec(sql); // 必须可重复执行
-}
+MIGRATIONS.forEach((item, index) => {
+  const sql = migrationSqls[index];
+  const times = item.repeat ?? 2; // 默认必须可重复执行；重建表迁移显式声明只跑一次
+  for (let run = 0; run < times; run += 1) migrated.exec(sql);
+});
 
 for (const table of NEW_TABLES) {
   assert.deepEqual(
@@ -203,8 +218,23 @@ assert.throws(
   /UNIQUE|constraint/i,
 );
 
+// 需求：同蛋同性格的母 / 公可以并存；完全相同的口径被主键拒绝
+const insertDemand = full.prepare(
+  `INSERT INTO collection_group_demands
+     (group_id, demander_account_id, egg_game_id, nature, gender, body, voice,
+      status, claimer_account_id, version, created_at, updated_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+);
+insertDemand.run('g1', 'acc-a', 101, '固执', '母', '大块头', '+100', 'open', null, 0, now, now);
+insertDemand.run('g1', 'acc-a', 101, '固执', '公', '大块头', '+100', 'claimed', 'acc-b', 1, now, now);
+assert.throws(
+  () => insertDemand.run('g1', 'acc-a', 101, '固执', '母', '大块头', '+100', 'open', null, 0, now, now),
+  /UNIQUE|constraint/i,
+);
+
 const count = (sql, ...params) => full.prepare(sql).get(...params).count;
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_accounts'), 3);
+assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_demands'), 2);
 
 // 删普通成员 → 其共享账号与种公摘要级联删除，别的成员不受影响
 full.prepare('DELETE FROM mother_group_members WHERE group_id = ? AND account_id = ?').run('g1', 'acc-b');
@@ -222,13 +252,15 @@ assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_accounts'), 0);
 assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_configs'), 0);
 assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_stud_accounts'), 0);
 assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_tasks'), 0);
+assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_demands'), 0);
 
 const fkCheck = full.prepare('PRAGMA foreign_key_check').all();
 assert.deepEqual(fkCheck, [], 'foreign_key_check 应无结果');
 
 console.log('schema 校验通过：');
-console.log('  - 完整 schema 与两期增量迁移的表/索引定义一致，迁移可重复执行');
+console.log('  - 完整 schema 与增量迁移的表/索引定义一致（可重复的迁移会跑两次）');
 console.log('  - 空库迁移被拒绝（不依赖 SQLite 的外键报错）');
 console.log('  - 同组重复游戏 UID 被拒绝，不同组同 UID 允许');
 console.log('  - 组配置唯一、任务按「修订 + 目标键 + 轮次」唯一');
+console.log('  - 需求按「蛋 + 性格 + 性别 + 体型 + 声音」唯一，同蛋母/公可并存');
 console.log('  - 删成员 / 注销账号的级联行为正确，foreign_key_check 无结果');

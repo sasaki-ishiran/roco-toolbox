@@ -8,19 +8,27 @@
  * - 旧 `/api/mother-groups` 只能看到、写入母本组，类型门禁在 HTTP 层。
  */
 import {
-  MOTHER_CRITERIA_ID,
+  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_GROUP_MAX_MEMBERS,
   MOTHER_RESOURCE_SCHEMA_VERSION,
   canonicalEggGameIds,
+  canonicalProductionLines,
   type MotherCriteriaId,
   type MotherResourceDraft,
   type PublishedMotherResource,
   type SharedMotherAccount,
+  type SharedProductionLine,
 } from '../../src/shared/motherGroups';
 import {
   COLLECTION_GROUP_SCHEMA_VERSION,
+  DEFAULT_DEMAND_BODY,
+  DEFAULT_DEMAND_GENDER,
+  DEFAULT_DEMAND_VOICE,
   DEMAND_LIMIT_PER_GROUP,
   demandLimitPerMember,
+  isDemandBody,
+  isDemandGender,
+  isDemandVoice,
   isTargetReady,
   motherTargetKey,
   studSlotSetIdOf,
@@ -38,6 +46,9 @@ import {
   type CollectionTargetMode,
   type CollectionTaskRecord,
   type CollectionTaskStatus,
+  type DemandBody,
+  type DemandGender,
+  type DemandVoice,
   type GroupTargetConfig,
   type PublishedStudResource,
   type SharedStudAccount,
@@ -78,6 +89,7 @@ interface MotherAccountRow {
   account_name: string;
   source_exported_at: string;
   egg_game_ids: string;
+  lines_json: string | null;
 }
 
 interface StudAccountRow {
@@ -401,7 +413,7 @@ export async function readCollectionGroupDetail(
     db
       .prepare(
         `SELECT member_account_id, game_account_key, account_name,
-                source_exported_at, egg_game_ids
+                source_exported_at, egg_game_ids, lines_json
            FROM mother_group_accounts
           WHERE group_id = ?
           ORDER BY member_account_id ASC, game_account_key ASC`,
@@ -440,11 +452,13 @@ export async function readCollectionGroupDetail(
   const motherByMember = new Map<string, SharedMotherAccount[]>();
   for (const row of motherResult.results as MotherAccountRow[]) {
     const list = motherByMember.get(row.member_account_id) ?? [];
+    const lines = parseStoredLines(row.lines_json);
     list.push({
       accountKey: row.game_account_key,
       accountName: row.account_name,
       sourceExportedAt: row.source_exported_at,
       eggGameIds: parseStoredIds(row.egg_game_ids),
+      ...(lines === undefined ? {} : { lines }),
     });
     motherByMember.set(row.member_account_id, list);
   }
@@ -530,6 +544,19 @@ function parseStoredIds(raw: string): number[] {
     return Array.isArray(parsed) ? canonicalEggGameIds(parsed) : [];
   } catch {
     return [];
+  }
+}
+
+/** `null` = 旧摘要没带产线（未知）；`[]` = 已发布但确实没有产线。 */
+function parseStoredLines(raw: string | null): SharedProductionLine[] | undefined {
+  if (raw == null || raw === '') return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? canonicalProductionLines(parsed as SharedProductionLine[])
+      : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -898,14 +925,15 @@ export async function updateCollectionTarget(
   return { targetRevision: baseTargetRevision + 1 };
 }
 
-/** 普通成员退出：释放自己认领的任务与需求，删成员（种公摘要随外键级联删除），并递增资源版本。 */
-export async function leaveCollectionGroup(
+/** 退出 / 被移除的公共清理：释放承接、递增资源版本、删成员（共享资源随外键级联删除）。 */
+async function removeMemberCleanup(
   db: D1Database,
   groupId: string,
   accountId: string,
+  cancelUnfinishedDemands: boolean,
 ): Promise<void> {
   const now = Date.now();
-  const result = await db.batch([
+  const statements = [
     db
       .prepare(
         `UPDATE collection_group_tasks
@@ -934,10 +962,40 @@ export async function leaveCollectionGroup(
     db
       .prepare('DELETE FROM mother_group_members WHERE group_id = ? AND account_id = ?')
       .bind(groupId, accountId),
-  ]);
+  ];
+  if (cancelUnfinishedDemands) {
+    // 被移除的人未完成的需求一并取消，避免还在需求中心挂着；已完成保留用于已结单计数
+    statements.push(
+      db
+        .prepare(
+          `DELETE FROM collection_group_demands
+            WHERE group_id = ? AND demander_account_id = ? AND status != 'done'`,
+        )
+        .bind(groupId, accountId),
+    );
+  }
+  const result = await db.batch(statements);
   if ((result[3]?.meta.changes ?? 0) === 0) {
     throw new MotherStoreError('NOT_MEMBER', '不是该组成员');
   }
+}
+
+/** 普通成员退出：释放自己认领的任务与需求，删成员（种公摘要随外键级联删除），并递增资源版本。 */
+export async function leaveCollectionGroup(
+  db: D1Database,
+  groupId: string,
+  accountId: string,
+): Promise<void> {
+  await removeMemberCleanup(db, groupId, accountId, false);
+}
+
+/** 组长移除组员：在退出清理之外，取消他未完成的需求（已完成保留）。 */
+export async function removeCollectionGroupMember(
+  db: D1Database,
+  groupId: string,
+  accountId: string,
+): Promise<void> {
+  await removeMemberCleanup(db, groupId, accountId, true);
 }
 
 /** 供 handler 判断旧接口能否操作该组：非母本组一律当作不存在。 */
@@ -965,18 +1023,7 @@ export async function publishMotherResourceToGroup(
   if (input.baseTargetRevision != null && input.baseTargetRevision !== config.targetRevision) {
     throw new MotherStoreError('TARGET_CHANGED', '本组口径已更新，请重新预览再发布');
   }
-  const expectedCriteria =
-    config.target?.kind === 'mother' ? config.target.criteriaId : MOTHER_CRITERIA_ID;
-  if (input.resource.criteriaId !== expectedCriteria) {
-    throw new MotherStoreError('TARGET_CHANGED', '本组口径已更新，请重新预览再发布');
-  }
-  if (
-    config.target?.kind === 'mother' &&
-    config.target.catalogVersion &&
-    input.resource.catalogVersion !== config.target.catalogVersion
-  ) {
-    throw new MotherStoreError('TARGET_CHANGED', '图鉴已更新，请先更新本组目标');
-  }
+  // 2026-10-28：小组不再按母本口径过滤，发布不再校验口径 / 组目标的图鉴版本。
   const result = await publishMemberResource(db, input);
   const keys = new Set(
     input.resource.accounts.flatMap((account) => account.eggGameIds.map(motherTargetKey)),
@@ -1008,9 +1055,13 @@ export interface CollectionTasksView {
 }
 
 const expectedCriteriaOf = (config: CollectionGroupConfig): string => {
-  if (config.target?.kind === 'mother') return config.target.criteriaId;
+  // 2026-10-28：母本组不再有口径，所有成员统一按「全部母本」摘要比较；
+  // 旧口径摘要一律视为待更新，成员重新发布后才算可比。
+  if (config.groupType === 'mother' || config.target?.kind === 'mother') {
+    return ALL_MOTHERS_CRITERIA_ID;
+  }
   if (config.target?.kind === 'stud') return studSlotSetIdOf(config.target);
-  return MOTHER_CRITERIA_ID;
+  return ALL_MOTHERS_CRITERIA_ID;
 };
 
 const targetCatalogOf = (config: CollectionGroupConfig): string =>
@@ -1019,6 +1070,9 @@ const targetCatalogOf = (config: CollectionGroupConfig): string =>
 const isMemberComparableForTarget = (row: MemberRow, config: CollectionGroupConfig): boolean => {
   if (row.published_at == null || row.criteria_id == null || row.catalog_version == null) return false;
   if (row.criteria_id !== expectedCriteriaOf(config)) return false;
+  // 母本组不再绑定组目标的图鉴版本：各成员按自己导入的图鉴发布即可，
+  // 旧组遗留的 target.catalogVersion 不能把所有人永远卡在「待确认」。
+  if (config.groupType === 'mother' || config.target?.kind === 'mother') return true;
   const catalog = targetCatalogOf(config);
   return catalog.length === 0 || row.catalog_version === catalog;
 };
@@ -1432,13 +1486,16 @@ async function closeCoveredTasks(
   }
 }
 
-/* ---------- 需求承接（2026-10-26） ---------- */
+/* ---------- 需求承接（2026-10-26 / 口径 2026-10-27） ---------- */
 
 interface DemandRow {
   group_id: string;
   demander_account_id: string;
   egg_game_id: number;
   nature: string;
+  gender: string;
+  body: string;
+  voice: string;
   status: string;
   claimer_account_id: string | null;
   version: number;
@@ -1446,11 +1503,21 @@ interface DemandRow {
   updated_at: number;
 }
 
+const normalizeDemandGender = (value: unknown): DemandGender =>
+  isDemandGender(value) ? value : DEFAULT_DEMAND_GENDER;
+const normalizeDemandBody = (value: unknown): DemandBody =>
+  isDemandBody(value) ? value : DEFAULT_DEMAND_BODY;
+const normalizeDemandVoice = (value: unknown): DemandVoice =>
+  isDemandVoice(value) ? value : DEFAULT_DEMAND_VOICE;
+
 const toDemand = (row: DemandRow): CollectionDemand => ({
   groupId: row.group_id,
   demanderAccountId: row.demander_account_id,
   eggGameId: row.egg_game_id,
   nature: row.nature ?? '',
+  gender: normalizeDemandGender(row.gender),
+  body: normalizeDemandBody(row.body),
+  voice: normalizeDemandVoice(row.voice),
   status: (row.status === 'claimed' || row.status === 'done' ? row.status : 'open') as CollectionDemandStatus,
   claimerAccountId: row.claimer_account_id,
   version: row.version,
@@ -1459,7 +1526,7 @@ const toDemand = (row: DemandRow): CollectionDemand => ({
 });
 
 const DEMAND_COLUMNS = `group_id, demander_account_id, egg_game_id, nature,
-  status, claimer_account_id, version, created_at, updated_at`;
+  gender, body, voice, status, claimer_account_id, version, created_at, updated_at`;
 
 /** 组内全部需求（不分状态），按更新时间倒序。 */
 export async function listCollectionDemands(
@@ -1476,19 +1543,35 @@ export async function listCollectionDemands(
   return results.map(toDemand);
 }
 
+export interface DemandCriteriaInput {
+  demanderAccountId: string;
+  eggGameId: number;
+  nature: string;
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
+}
+
 async function findDemand(
   db: D1Database,
   groupId: string,
-  demanderAccountId: string,
-  eggGameId: number,
-  nature: string,
+  criteria: DemandCriteriaInput,
 ): Promise<DemandRow | null> {
   return db
     .prepare(
       `SELECT ${DEMAND_COLUMNS} FROM collection_group_demands
-        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?`,
+        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ?
+          AND nature = ? AND gender = ? AND body = ? AND voice = ?`,
     )
-    .bind(groupId, demanderAccountId, eggGameId, nature)
+    .bind(
+      groupId,
+      criteria.demanderAccountId,
+      criteria.eggGameId,
+      criteria.nature,
+      criteria.gender,
+      criteria.body,
+      criteria.voice,
+    )
     .first<DemandRow>();
 }
 
@@ -1521,25 +1604,37 @@ export interface PublishDemandInput {
   eggGameId: number;
   /** 要发布的性格；空数组 = 不挑性格（记成一条空性格）。 */
   natures: string[];
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
 }
 
 /**
- * 发布 / 更新需求：**一个性格一条**（2026-10-26 用户口径）。
+ * 发布需求：**一个性格一条**。
  *
  * - 勾 2 个性格 = 2 条需求，占 2 个额度；
- * - 同一颗蛋 + 同一性格重复发布视为更新（覆盖为待承接）；
+ * - 同蛋 + 同性格 + 同性别 / 体型 / 声音 视为同一条，重复发布**不覆盖**已有行，
+ *   避免把「已接单」重置成「待承接」；
  * - 不勾性格时记一条 `nature = ''`，表示不挑。
  */
 export async function publishCollectionDemand(
   db: D1Database,
   input: PublishDemandInput,
 ): Promise<CollectionDemand[]> {
-  const { groupId, accountId, eggGameId } = input;
+  const { groupId, accountId, eggGameId, gender, body, voice } = input;
   await assertMotherGroup(db, groupId);
   const natures = input.natures.length > 0 ? [...new Set(input.natures)] : [''];
+  const criteriaOf = (nature: string): DemandCriteriaInput => ({
+    demanderAccountId: accountId,
+    eggGameId,
+    nature,
+    gender,
+    body,
+    voice,
+  });
 
   const existing = await Promise.all(
-    natures.map((nature) => findDemand(db, groupId, accountId, eggGameId, nature)),
+    natures.map((nature) => findDemand(db, groupId, criteriaOf(nature))),
   );
   const newRows = existing.filter((row) => row === null).length;
   if (newRows > 0) {
@@ -1576,43 +1671,55 @@ export async function publishCollectionDemand(
       db
         .prepare(
           `INSERT INTO collection_group_demands
-            (group_id, demander_account_id, egg_game_id, nature, status,
+            (group_id, demander_account_id, egg_game_id, nature, gender, body, voice, status,
              claimer_account_id, version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'open', NULL, 0, ?, ?)
-           ON CONFLICT (group_id, demander_account_id, egg_game_id, nature) DO UPDATE SET
-             status = 'open',
-             claimer_account_id = NULL,
-             version = collection_group_demands.version + 1,
-             updated_at = excluded.updated_at`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'open', NULL, 0, ?, ?)
+           ON CONFLICT (group_id, demander_account_id, egg_game_id, nature, gender, body, voice)
+           DO NOTHING`,
         )
-        .bind(groupId, accountId, eggGameId, nature, now, now),
+        .bind(groupId, accountId, eggGameId, nature, gender, body, voice, now, now),
     ),
   );
 
   const saved = await Promise.all(
-    natures.map((nature) => findDemand(db, groupId, accountId, eggGameId, nature)),
+    natures.map((nature) => findDemand(db, groupId, criteriaOf(nature))),
   );
   return saved.filter((row): row is DemandRow => row !== null).map(toDemand);
 }
 
-/** 撤回自己的某一条需求（按性格单独撤回，2026-10-26）。 */
+/** 撤回自己的某一条需求（按蛋 + 性格 + 性别 / 体型 / 声音单独撤回）。 */
 export async function withdrawCollectionDemand(
   db: D1Database,
   groupId: string,
   accountId: string,
   eggGameId: number,
   nature: string,
+  gender: DemandGender,
+  body: DemandBody,
+  voice: DemandVoice,
 ): Promise<void> {
-  const existing = await findDemand(db, groupId, accountId, eggGameId, nature);
+  const existing = await findDemand(db, groupId, {
+    demanderAccountId: accountId,
+    eggGameId,
+    nature,
+    gender,
+    body,
+    voice,
+  });
   if (!existing) {
     throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  }
+  // 已完成的单是「已结单」计数的凭据，不能撤回（否则承接人的贡献会倒退）
+  if (existing.status === 'done') {
+    throw new MotherStoreError('DEMAND_ALREADY_DONE', '已完成的需求不能撤回');
   }
   await db
     .prepare(
       `DELETE FROM collection_group_demands
-        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?`,
+        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+          AND gender = ? AND body = ? AND voice = ?`,
     )
-    .bind(groupId, accountId, eggGameId, nature)
+    .bind(groupId, accountId, eggGameId, nature, gender, body, voice)
     .run();
 }
 
@@ -1623,19 +1730,32 @@ export interface DemandActionInput {
   eggGameId: number;
   /** 接的是哪个性格的那一条（空字符串 = 不挑）。 */
   nature: string;
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
   expectedVersion?: number;
 }
+
+const actionCriteria = (input: DemandActionInput): DemandCriteriaInput => ({
+  demanderAccountId: input.demanderAccountId,
+  eggGameId: input.eggGameId,
+  nature: input.nature,
+  gender: input.gender,
+  body: input.body,
+  voice: input.voice,
+});
 
 /** 接单：不能接自己的；同一需求只能有一个承接人。 */
 export async function claimCollectionDemand(
   db: D1Database,
   input: DemandActionInput,
 ): Promise<CollectionDemand> {
-  const { groupId, accountId, demanderAccountId, eggGameId, nature, expectedVersion } = input;
+  const { groupId, accountId, demanderAccountId, expectedVersion } = input;
   if (accountId === demanderAccountId) {
     throw new MotherStoreError('DEMAND_SELF', '不能接自己的需求');
   }
-  const existing = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  const criteria = actionCriteria(input);
+  const existing = await findDemand(db, groupId, criteria);
   if (!existing) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   if (existing.status === 'done') {
     throw new MotherStoreError('DEMAND_ALREADY_DONE', '这条需求已经完成了');
@@ -1653,15 +1773,27 @@ export async function claimCollectionDemand(
       `UPDATE collection_group_demands
           SET status = 'claimed', claimer_account_id = ?, version = version + 1, updated_at = ?
         WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+          AND gender = ? AND body = ? AND voice = ?
           AND (status = 'open' OR (status = 'claimed' AND claimer_account_id IS NULL))
           AND version = ?`,
     )
-    .bind(now, groupId, demanderAccountId, eggGameId, nature, expectedVersion ?? existing.version)
+    .bind(
+      accountId,
+      now,
+      groupId,
+      demanderAccountId,
+      input.eggGameId,
+      input.nature,
+      input.gender,
+      input.body,
+      input.voice,
+      expectedVersion ?? existing.version,
+    )
     .run();
   if ((result.meta?.changes ?? 0) === 0) {
     throw new MotherStoreError('DEMAND_TAKEN', '这条需求刚被抢走了，刷新后再看');
   }
-  const saved = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  const saved = await findDemand(db, groupId, criteria);
   if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   return toDemand(saved);
 }
@@ -1671,8 +1803,9 @@ export async function releaseCollectionDemand(
   db: D1Database,
   input: DemandActionInput,
 ): Promise<CollectionDemand> {
-  const { groupId, accountId, demanderAccountId, eggGameId, nature, expectedVersion } = input;
-  const existing = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  const { groupId, accountId, demanderAccountId, expectedVersion } = input;
+  const criteria = actionCriteria(input);
+  const existing = await findDemand(db, groupId, criteria);
   if (!existing) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   if (existing.status !== 'claimed' || existing.claimer_account_id !== accountId) {
     throw new MotherStoreError('DEMAND_NOT_YOURS', '只有接单的人可以放弃');
@@ -1683,20 +1816,32 @@ export async function releaseCollectionDemand(
       `UPDATE collection_group_demands
           SET status = 'open', claimer_account_id = NULL, version = version + 1, updated_at = ?
         WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+          AND gender = ? AND body = ? AND voice = ?
           AND status = 'claimed' AND claimer_account_id = ? AND version = ?`,
     )
-    .bind(now, groupId, demanderAccountId, eggGameId, nature, accountId, expectedVersion ?? existing.version)
+    .bind(
+      now,
+      groupId,
+      demanderAccountId,
+      input.eggGameId,
+      input.nature,
+      input.gender,
+      input.body,
+      input.voice,
+      accountId,
+      expectedVersion ?? existing.version,
+    )
     .run();
   if ((result.meta.changes ?? 0) === 0) {
     // 0 行更新不能当作成功：需求可能刚被需求方确认完成，或状态被别人改过
-    const latest = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+    const latest = await findDemand(db, groupId, criteria);
     if (!latest) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
     if (latest.status === 'done') {
       throw new MotherStoreError('DEMAND_ALREADY_DONE', '这条需求已经完成了');
     }
     throw new MotherStoreError('DEMAND_TAKEN', '需求状态已更新，刷新后再看');
   }
-  const saved = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  const saved = await findDemand(db, groupId, criteria);
   if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   return toDemand(saved);
 }
@@ -1706,11 +1851,12 @@ export async function completeCollectionDemand(
   db: D1Database,
   input: DemandActionInput & { isOwner: boolean },
 ): Promise<CollectionDemand> {
-  const { groupId, accountId, demanderAccountId, eggGameId, nature, isOwner } = input;
+  const { groupId, accountId, demanderAccountId, isOwner } = input;
   if (accountId !== demanderAccountId && !isOwner) {
     throw new MotherStoreError('DEMAND_NOT_YOURS', '只有需求方或组长可以确认完成');
   }
-  const existing = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  const criteria = actionCriteria(input);
+  const existing = await findDemand(db, groupId, criteria);
   if (!existing) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   if (existing.status === 'done') return toDemand(existing);
   if (existing.status !== 'claimed') {
@@ -1722,11 +1868,21 @@ export async function completeCollectionDemand(
       `UPDATE collection_group_demands
           SET status = 'done', version = version + 1, updated_at = ?
         WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+          AND gender = ? AND body = ? AND voice = ?
           AND status = 'claimed'`,
     )
-    .bind(now, groupId, demanderAccountId, eggGameId, nature)
+    .bind(
+      now,
+      groupId,
+      demanderAccountId,
+      input.eggGameId,
+      input.nature,
+      input.gender,
+      input.body,
+      input.voice,
+    )
     .run();
-  const saved = await findDemand(db, groupId, demanderAccountId, eggGameId, nature);
+  const saved = await findDemand(db, groupId, criteria);
   if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   return toDemand(saved);
 }

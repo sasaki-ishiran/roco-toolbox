@@ -34,7 +34,7 @@ describe('个人清单搜索（仅本次会话）', () => {
 });
 
 describe('小组清单临时状态', () => {
-  test('默认未收集、无关键词、无成员筛选', () => {
+  test('默认未收集、无关键词、无成员筛选；目标筛选条默认母 / 不挑性格 / 大块头 / +100', () => {
     const hook = renderHook(() => useGroupList('A', 'g1'));
     expect(hook.result.current).toEqual({
       query: '',
@@ -43,6 +43,12 @@ describe('小组清单临时状态', () => {
       seekingMembers: [],
       onlyOwned: false,
       onlyDemanded: false,
+      targetGender: '母',
+      targetNature: '',
+      targetBody: '大块头',
+      targetVoice: '+100',
+      targetKind: 'mother',
+      onlyGroupLine: false,
     });
   });
 

@@ -27,6 +27,7 @@ const motherGroup = (index: number) =>
 
 const nestPet = (key: string, name: string, gender: '公' | '母'): NestPet => ({
   key,
+  gameId: 3001,
   name,
   account: '测试甲',
   gender,
@@ -93,6 +94,7 @@ beforeEach(() => {
         id: 'r1',
         natureName: '固执',
         displayName: '火花',
+        groupIds: [2],
         groupLabels: ['巨灵组'],
         grade: '大婉',
         gameId: 1,

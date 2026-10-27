@@ -7,6 +7,8 @@ export interface StudRecommendation {
   natureName: string;
   /** 建议去要的精灵显示名（有形态时带形态） */
   displayName: string;
+  /** 这条推荐能补的蛋组 id（1~2 个）。 */
+  groupIds: number[];
   groupLabels: string[];
   /** 想换的这个性格蛋产出的档位 */
   grade: PetGrade;
@@ -40,12 +42,16 @@ export function computeStudRecommendations(wishes: SwapWish[]): StudRecommendati
       for (const label of wish.groupLabels) {
         if (!existing.groupLabels.includes(label)) existing.groupLabels.push(label);
       }
+      for (const groupId of wish.fillGroups) {
+        if (!existing.groupIds.includes(groupId)) existing.groupIds.push(groupId);
+      }
       continue;
     }
     byPair.set(key, {
       id: `${gameId}|${natureName}|${wish.grade}|${wish.fillGroups.join('+')}`,
       natureName,
       displayName: wish.suggested.displayName,
+      groupIds: [...wish.fillGroups],
       groupLabels: [...wish.groupLabels],
       grade: wish.grade,
       gameId,

@@ -1,9 +1,5 @@
 import { useState } from 'react';
-import {
-  GROUP_TYPE_LABELS,
-  type CollectionGroupType,
-  type GroupTargetConfig,
-} from '../shared/collectionGroups';
+import type { CollectionGroupType, GroupTargetConfig } from '../shared/collectionGroups';
 
 export interface InvitePreviewShape {
   name: string;
@@ -18,45 +14,33 @@ export interface CollectionGroupSetupProps {
     name: string,
     displayName: string,
     groupType: CollectionGroupType,
-    options?: { requireRecommendedNatures?: boolean },
   ) => Promise<unknown>;
   onJoin: (inviteCode: string, displayName: string) => Promise<unknown>;
   preflightInvite: (inviteCode: string) => Promise<InvitePreviewShape>;
   initialInviteCode?: string;
+  /** 已入组时默认收起（2026-10-26 小组页精简）；个人求蛋模式默认展开。 */
+  defaultOpen?: boolean;
 }
 
-const targetText = (target: GroupTargetConfig | null): string => {
-  if (!target) return '目标待确认';
-  if (target.kind === 'mother') {
-    return `母 · ${target.bodies.join('/')} · ${target.voices.join('/')}${
-      target.requireRecommendedNatures ? ' · 推荐性格' : ''
-    }`;
-  }
-  if (target.slots.length === 0) return '目标待确认';
-  const natures = [...new Set(target.slots.map((slot) => slot.natureName))];
-  return `${target.mode === 'perfect' ? '追满分' : '追双牌'} · ${target.slots.length} 个槽位 · ${natures.slice(0, 3).join('/')}${natures.length > 3 ? '…' : ''}`;
-};
-
-const TYPE_OPTIONS: Array<{ value: CollectionGroupType; label: string; hint: string }> = [
-  { value: 'mother', label: '母本收集', hint: '按蛋血脉收集达标母本；口径由组长维护' },
-  { value: 'stud', label: '种公收集', hint: '按蛋组 × 性格 × 档位收集真实种公' },
-];
+/** 小组不再设母本口径：加入后每个人按自己的本地筛选查看缺口。 */
+const JOIN_TARGET_TEXT = '加入后按各自的本地筛选查看缺口';
 
 /**
  * 新建 / 加入小组。
  *
- * 新建时先选类型（创建后不可改）；组名不承担类型识别，列表与组页始终显示类型标签。
- * 加入时先展示组名、类型与目标，确认后才提交，避免进组后才发现目标不符。
+ * 2026-10-27 起小组只剩一种「收集小组」，不再让用户选母本组 / 种公组；
+ * 类型参数保留在回调签名里，固定传 `mother`，服务端也只接受这一种。
+ * 加入时先展示组名与目标，确认后才提交，避免进组后才发现目标不符。
  */
 export function CollectionGroupSetup({
   onCreate,
   onJoin,
   preflightInvite,
   initialInviteCode = '',
+  defaultOpen = true,
 }: CollectionGroupSetupProps) {
+  const [open, setOpen] = useState(defaultOpen);
   const [mode, setMode] = useState<'create' | 'join'>(initialInviteCode ? 'join' : 'create');
-  const [groupType, setGroupType] = useState<CollectionGroupType>('mother');
-  const [requireNatures, setRequireNatures] = useState(false);
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [inviteCode, setInviteCode] = useState(initialInviteCode);
@@ -87,6 +71,20 @@ export function CollectionGroupSetup({
   return (
     <section className="space-y-2" data-testid="group-setup">
       <div className="rounded-2xl bg-white p-3 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-medium text-slate-500">新建 / 加入小组</h2>
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+            data-testid="group-setup-toggle"
+            className="min-h-[26px] text-[11px] text-slate-500"
+          >
+            {open ? '收起' : '展开'}
+          </button>
+        </div>
+        {open ? (
+          <>
         <div className="flex gap-0.5 rounded-lg bg-slate-100 p-0.5" role="tablist">
           {([
             ['create', '新建小组'],
@@ -111,50 +109,6 @@ export function CollectionGroupSetup({
             </button>
           ))}
         </div>
-
-        {mode === 'create' ? (
-          <div className="mt-2 grid grid-cols-2 gap-1.5" data-testid="group-type-options">
-            {TYPE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={groupType === option.value}
-                onClick={() => setGroupType(option.value)}
-                data-testid={`group-type-${option.value}`}
-                className={`rounded-lg border px-2 py-1.5 text-left ${
-                  groupType === option.value
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
-                    : 'border-slate-200 bg-white text-slate-600'
-                }`}
-              >
-                <span className="block text-xs font-medium">{option.label}</span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-slate-400">{option.hint}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {mode === 'create' && groupType === 'mother' ? (
-          <div className="mt-2 space-y-1" data-testid="group-create-nature-option">
-            <button
-              type="button"
-              aria-pressed={requireNatures}
-              onClick={() => setRequireNatures((value) => !value)}
-              data-testid="group-create-require-natures"
-              className={`min-h-[30px] w-full rounded-lg border px-2 text-xs ${
-                requireNatures
-                  ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
-                  : 'border-slate-200 bg-white text-slate-500'
-              }`}
-            >
-              {requireNatures ? '母本要求推荐性格：开' : '母本要求推荐性格：关'}
-            </button>
-            <p className="text-[11px] leading-snug text-slate-400">
-              开启后，母本还要符合「推荐性格」才算达标；小组用组长那份推荐性格表（默认图鉴推荐，
-              图鉴没收录的按种族值兜底）。创建后也可以在「本组目标」里改。
-            </p>
-          </div>
-        ) : null}
 
         <input
           value={displayName}
@@ -194,15 +148,13 @@ export function CollectionGroupSetup({
             disabled={busy !== '' || displayName.trim().length === 0 || name.trim().length === 0}
             onClick={() =>
               void run('create', () =>
-                onCreate(name.trim(), displayName.trim(), groupType, {
-                  requireRecommendedNatures: groupType === 'mother' && requireNatures,
-                }),
+                onCreate(name.trim(), displayName.trim(), 'mother'),
               )
             }
             data-testid="group-create-submit"
             className="mt-2 min-h-[36px] w-full rounded-lg bg-emerald-600 text-sm font-medium text-white disabled:opacity-50"
           >
-            {busy === 'create' ? '处理中…' : `创建${GROUP_TYPE_LABELS[groupType]}小组`}
+            {busy === 'create' ? '处理中…' : '创建收集小组'}
           </button>
         ) : (
           <>
@@ -218,10 +170,7 @@ export function CollectionGroupSetup({
             {preview ? (
               <div className="mt-2 rounded-xl bg-slate-50 px-2.5 py-2" data-testid="group-join-confirm">
                 <p className="text-sm font-medium text-slate-700">{preview.name}</p>
-                <p className="mt-0.5 text-[11px] text-slate-500">
-                  {GROUP_TYPE_LABELS[preview.groupType]} · {targetText(preview.target)}
-                  {preview.targetReady ? '' : ' · 目标待确认'}
-                </p>
+                <p className="mt-0.5 text-[11px] text-slate-500">{JOIN_TARGET_TEXT}</p>
                 <button
                   type="button"
                   disabled={busy !== ''}
@@ -231,13 +180,15 @@ export function CollectionGroupSetup({
                   data-testid="group-join-submit"
                   className="mt-2 min-h-[32px] w-full rounded-lg bg-emerald-600 text-xs font-medium text-white disabled:opacity-50"
                 >
-                  {busy === 'join' ? '处理中…' : `加入${GROUP_TYPE_LABELS[preview.groupType]}小组`}
+                  {busy === 'join' ? '处理中…' : '加入小组'}
                 </button>
               </div>
             ) : null}
           </>
         )}
         {error ? <p className="mt-2 text-xs text-rose-600" data-testid="group-setup-error">{error}</p> : null}
+          </>
+        ) : null}
       </div>
     </section>
   );

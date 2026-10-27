@@ -41,7 +41,7 @@ import { beginImport, updateImportOutcome, useImportOutcome } from './importOutc
 import { setSyncConflict, setSyncNotice, useSyncFeedback } from './syncNoticeStore';
 import { resetImportedData } from './resetImportedData';
 import { recordSyncedPets } from './syncAdditions';
-import { autoPublishGroups } from './groupAutoPublish';
+import { autoPublishGroups, collectPendingDemandClaims } from './groupAutoPublish';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -241,16 +241,22 @@ export function ImportPanel() {
       });
       // 导入后直接把资源同步到已加入的小组（发布不再是用户必须记得的一步）。
       // 尽力而为：失败不影响本机与云同步，也不打断用户操作。
-      void autoPublishGroups({
-        snapshots: working,
-        species,
-        catalogVersion: CATALOG_VERSION,
-        touchedAccountKeys: [...touched],
-      })
-        .then((count) => {
-          if (count > 0) updateImportOutcome(operationId, { group: 'updated', groupCount: count });
-        })
-        .catch(() => {});
+      void Promise.all([
+        autoPublishGroups({
+          snapshots: working,
+          species,
+          catalogVersion: CATALOG_VERSION,
+          touchedAccountKeys: [...touched],
+        }).catch(() => 0),
+        // 顺带看看有没有人接了我的需求，且这次导入的数据里确实已经有这颗蛋
+        collectPendingDemandClaims({ snapshots: working, species }).catch(() => []),
+      ]).then(([count, claims]) => {
+        if (count === 0 && claims.length === 0) return;
+        updateImportOutcome(operationId, {
+          ...(count > 0 ? { group: 'updated' as const, groupCount: count } : {}),
+          ...(claims.length > 0 ? { claims } : {}),
+        });
+      });
       return imported;
     } catch (error) {
       updateImportOutcome(operationId, {

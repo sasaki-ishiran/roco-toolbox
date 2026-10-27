@@ -1,4 +1,4 @@
-import type { OwnedPet } from './types';
+import type { HomeEgg, HomeNest, HomePair, HomePosition, HomeResident, HomeSnapshot, OwnedPet } from './types';
 import { species } from '../data/catalog';
 import { bodyMedalOf, heightPercentOf } from '../shared/bodySize.js';
 
@@ -38,6 +38,8 @@ export interface AccountSnapshot {
   importedAt: string;
   pets: OwnedPet[];
   eggs: BackupEgg[];
+  /** 家园场景快照（抓包里带出来的住户/小窝/配对/地上的蛋）；没有采集过家园时为空。 */
+  home?: HomeSnapshot;
 }
 
 /**
@@ -68,6 +70,116 @@ const asOptionalString = (value: unknown): string | undefined =>
 
 const asOptionalNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const asPosition = (value: unknown): HomePosition | undefined => {
+  const item = asRecord(value);
+  if (!item) return undefined;
+  const x = asOptionalNumber(item.x);
+  const y = asOptionalNumber(item.y);
+  const z = asOptionalNumber(item.z);
+  if (x === undefined || y === undefined || z === undefined) return undefined;
+  return { x, y, z };
+};
+
+const asNestType = (value: unknown): HomeNest['nestType'] =>
+  value === 'ordinary' || value === 'academy' ? value : null;
+
+/**
+ * 家园快照清洗：只接受「有住户或有小窝」的对象。
+ * 外部备份 / 云端旧快照都走这里，坏条目逐条丢弃，不让整份导入失败。
+ */
+export function parseHomeSnapshot(value: unknown): HomeSnapshot | undefined {
+  const raw = asRecord(value);
+  if (!raw) return undefined;
+  const residentsRaw = Array.isArray(raw.residents) ? raw.residents : [];
+  const nestsRaw = Array.isArray(raw.nests) ? raw.nests : [];
+  if (residentsRaw.length === 0 && nestsRaw.length === 0) return undefined;
+
+  const nests: HomeNest[] = nestsRaw
+    .map((item) => asRecord(item))
+    .filter((item): item is UnknownRecord => item != null)
+    .map((item) => ({
+      furnitureGuid: asString(item.furnitureGuid),
+      configId: asNumber(item.configId),
+      nestType: asNestType(item.nestType),
+      nestName: asString(item.nestName),
+      residentIds: Array.isArray(item.residentIds)
+        ? item.residentIds.map((id) => String(id)).filter(Boolean)
+        : [],
+      roomId: asOptionalNumber(item.roomId),
+      roomName: asOptionalString(item.roomName),
+      position: asPosition(item.position),
+    }))
+    .filter((item) => item.furnitureGuid);
+
+  const residents: HomeResident[] = residentsRaw
+    .map((item) => asRecord(item))
+    .filter((item): item is UnknownRecord => item != null)
+    .map((item) => {
+      const nestRaw = asRecord(item.nest);
+      return {
+        instanceId: asString(item.instanceId) || asString(item.gid),
+        baseId: asString(item.baseId),
+        confId: asOptionalNumber(item.confId),
+        furnitureGuid: asString(item.furnitureGuid),
+        actorId: asString(item.actorId),
+        name: asString(item.name) || asString(item.petName),
+        nature: asOptionalString(item.nature),
+        gender: asString(item.gender) === '公' || asString(item.gender) === '母'
+          ? (asString(item.gender) as '公' | '母')
+          : undefined,
+        position: asPosition(item.position),
+        nest: nestRaw
+          ? {
+              furnitureGuid: asString(nestRaw.furnitureGuid),
+              configId: asNumber(nestRaw.configId),
+              nestType: asNestType(nestRaw.nestType),
+              nestName: asString(nestRaw.nestName),
+              roomId: asOptionalNumber(nestRaw.roomId),
+              roomName: asOptionalString(nestRaw.roomName),
+              position: asPosition(nestRaw.position),
+            }
+          : null,
+      };
+    })
+    .filter((item) => item.instanceId);
+
+  const layEggCouples: HomePair[] = (Array.isArray(raw.layEggCouples) ? raw.layEggCouples : [])
+    .map((item) => asRecord(item))
+    .filter((item): item is UnknownRecord => item != null)
+    .map((item) => ({
+      femaleActorId: asString(item.femaleActorId),
+      maleActorIds: Array.isArray(item.maleActorIds)
+        ? item.maleActorIds.map((id) => String(id)).filter(Boolean)
+        : [],
+    }))
+    .filter((item) => item.femaleActorId && item.maleActorIds.length > 0);
+
+  const sceneEggs: HomeEgg[] = (Array.isArray(raw.sceneEggs) ? raw.sceneEggs : [])
+    .map((item) => asRecord(item))
+    .filter((item): item is UnknownRecord => item != null)
+    .map((item) => ({
+      actorId: asString(item.actorId),
+      furnitureGuid: asString(item.furnitureGuid),
+      npcConfigId: asOptionalNumber(item.npcConfigId) ?? null,
+    }))
+    .filter((item) => item.actorId);
+
+  return {
+    schemaVersion: 1,
+    gameId: asString(raw.gameId),
+    capturedAt: asString(raw.capturedAt),
+    homeLevel: asOptionalNumber(raw.homeLevel) ?? null,
+    roomLevel: asOptionalNumber(raw.roomLevel) ?? null,
+    residents,
+    nests,
+    layEggCouples,
+    sceneEggs,
+    couplesStale: asBoolean(raw.couplesStale),
+    snapshotKind:
+      raw.snapshotKind === 'delta' ? 'delta' : raw.snapshotKind === 'full' ? 'full' : undefined,
+  };
+}
 
 export function parseBackup(raw: unknown, importedAt: string): AccountSnapshot {
   const root = asRecord(raw);
@@ -140,6 +252,7 @@ export function parseBackup(raw: unknown, importedAt: string): AccountSnapshot {
         }))
     : [];
 
+  const home = parseHomeSnapshot(meta.captureHome ?? meta.home);
   return {
     accountName,
     gameId,
@@ -148,6 +261,7 @@ export function parseBackup(raw: unknown, importedAt: string): AccountSnapshot {
     importedAt,
     pets,
     eggs,
+    ...(home ? { home } : {}),
   };
 }
 

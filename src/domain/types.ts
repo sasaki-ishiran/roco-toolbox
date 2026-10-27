@@ -107,3 +107,72 @@ export interface PlannerSettings {
   naturesPerGroup: number;
   selectedAccounts: string[];
 }
+
+export interface HomePosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface HomeNest {
+  furnitureGuid: string;
+  configId: number;
+  nestType: 'ordinary' | 'academy' | null;
+  nestName: string;
+  residentIds: string[];
+  roomId?: number;
+  roomName?: string;
+  position?: HomePosition;
+}
+
+export interface HomeResident {
+  instanceId: string;
+  baseId: string;
+  confId?: number;
+  furnitureGuid: string;
+  actorId: string;
+  name: string;
+  nature?: string;
+  gender?: OwnedPet['gender'];
+  position?: HomePosition;
+  nest?: {
+    furnitureGuid: string;
+    configId: number;
+    nestType: 'ordinary' | 'academy' | null;
+    nestName: string;
+    roomId?: number;
+    roomName?: string;
+    position?: HomePosition;
+  } | null;
+}
+
+export interface HomeEgg {
+  actorId: string;
+  furnitureGuid: string;
+  npcConfigId?: number | null;
+}
+
+export interface HomePair {
+  femaleActorId: string;
+  maleActorIds: string[];
+}
+
+/**
+ * 家园快照（来自抓包的 TCP/8195 场景数据，不是实时查询）。
+ *
+ * 只保留当前家园需要的：住户、小窝、游戏给出的实际配对、地上的蛋。
+ * 坐标是游戏世界坐标，本版不做摆位图，只用于「哪个窝/哪一层」展示。
+ */
+export interface HomeSnapshot {
+  schemaVersion: 1;
+  gameId: string;
+  capturedAt: string;
+  homeLevel?: number | null;
+  roomLevel?: number | null;
+  residents: HomeResident[];
+  nests: HomeNest[];
+  layEggCouples: HomePair[];
+  sceneEggs: HomeEgg[];
+  couplesStale: boolean;
+  snapshotKind?: 'full' | 'delta';
+}

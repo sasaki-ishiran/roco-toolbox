@@ -409,6 +409,21 @@ test('非法输入不落库：字段、数量、UID、时间、版本与未知�
     ['空图鉴版本', draftOf([accountOf(1001, [101])], { catalogVersion: '' })],
     ['超过 50 个账号', draftOf(Array.from({ length: 51 }, (_, index) => accountOf(5000 + index, [101])))],
     ['单账号超过 1024 个蛋', draftOf([accountOf(1001, Array.from({ length: 1025 }, (_, index) => index + 1))])],
+    ['产线档位未知', draftOf([accountOf(1001, [101], { lines: [{ eggGameId: 101, grade: '神级', natures: ['固执'] }] })])],
+    ['产线性格为空', draftOf([accountOf(1001, [101], { lines: [{ eggGameId: 101, grade: '大婉', natures: [] }] })])],
+    ['产线性格重复', draftOf([accountOf(1001, [101], { lines: [{ eggGameId: 101, grade: '大婉', natures: ['固执', '固执'] }] })])],
+    ['产线蛋 ID 非法', draftOf([accountOf(1001, [101], { lines: [{ eggGameId: 0, grade: '大婉', natures: ['固执'] }] })])],
+    [
+      '产线重复（蛋 + 档位）',
+      draftOf([
+        accountOf(1001, [101], {
+          lines: [
+            { eggGameId: 101, grade: '大婉', natures: ['固执'] },
+            { eggGameId: 101, grade: '大婉', natures: ['开朗'] },
+          ],
+        }),
+      ]),
+    ],
   ];
   for (const [label, resource] of cases) {
     const result = await publish(A.token, group.id, 1, resource);
@@ -436,6 +451,24 @@ test('非法输入不落库：字段、数量、UID、时间、版本与未知�
   const resource = memberOf(detail, A.accountId).resource;
   assert.equal(resource.revision, 1, '非法输入不能推进版本');
   assert.deepEqual(resource.accounts[0].eggGameIds, [101]);
+});
+
+test('产线随摘要发布并可读回', async () => {
+  const group = await groupWithMembers([B]);
+  const lines = [
+    { eggGameId: 101, grade: '大婉', natures: ['固执', '开朗'] },
+    { eggGameId: 201, grade: '小婉', natures: ['胆小'] },
+  ];
+  const result = await publish(
+    A.token,
+    group.id,
+    0,
+    draftOf([accountOf(1001, [101, 201], { lines })]),
+  );
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  const detail = await detailOf(A.token, group.id);
+  const saved = memberOf(detail, A.accountId).resource;
+  assert.deepEqual(saved.accounts[0].lines, lines);
 });
 
 test('超过 128KiB 的请求体返回 413', async () => {

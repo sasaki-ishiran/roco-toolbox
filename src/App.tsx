@@ -6,6 +6,7 @@ import { ChangelogModal } from './ui/ChangelogModal';
 import { GuideModal } from './ui/GuideModal';
 import { guidePending, markGuideSeen } from './ui/guide';
 import { Dashboard } from './ui/Dashboard';
+import { HomeLand } from './ui/Home';
 import { Collection } from './ui/Collection';
 import { CollectionGroups } from './ui/CollectionGroups';
 import { Profile } from './ui/Profile';
@@ -173,6 +174,8 @@ export default function App() {
           改成条件渲染：组件引用稳定，只有切页签才挂/卸。 */}
       {navigation.page === 'dashboard' ? (
         <Dashboard onNavigate={navigate} />
+      ) : navigation.page === 'home' ? (
+        <HomeLand onGoImport={() => navigate({ type: 'open-profile', section: 'data' })} />
       ) : navigation.page === 'profile' ? (
         <Profile
           section={navigation.profileSection}

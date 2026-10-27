@@ -8,6 +8,7 @@ const RECOMMENDATIONS: StudRecommendation[] = [
     id: 'r1',
     natureName: '平和',
     displayName: '白发懒人',
+    groupIds: [6],
     groupLabels: ['动物组'],
     grade: '大婉',
     gameId: 1,
@@ -83,8 +84,8 @@ describe('SwapWishCard 复制提示', () => {
 
 /** 另一批推荐（同样 2 条，但个体不同），用来模拟「筛选后清单变了」 */
 const OTHER_RECOMMENDATIONS: StudRecommendation[] = [
-  { id: 'r2', natureName: '固执', displayName: '火花', groupLabels: ['天空组'], grade: '大婉', gameId: 2 },
-  { id: 'r3', natureName: '开朗', displayName: '焰火', groupLabels: ['天空组'], grade: '大婉', gameId: 3 },
+  { id: 'r2', natureName: '固执', displayName: '火花', groupIds: [5], groupLabels: ['天空组'], grade: '大婉', gameId: 2 },
+  { id: 'r3', natureName: '开朗', displayName: '焰火', groupIds: [5], groupLabels: ['天空组'], grade: '大婉', gameId: 3 },
 ];
 
 describe('SwapWishCard 全选状态', () => {

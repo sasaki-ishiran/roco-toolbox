@@ -1,4 +1,12 @@
 import { createModuleStore } from './createModuleStore';
+import {
+  DEFAULT_DEMAND_BODY,
+  DEFAULT_DEMAND_GENDER,
+  DEFAULT_DEMAND_VOICE,
+  type DemandBody,
+  type DemandGender,
+  type DemandVoice,
+} from '../shared/collectionGroups';
 
 /**
  * 清单的临时查看状态（2026-10-24 重构任务 4）。
@@ -47,8 +55,8 @@ export function resetPersonalListViewsForTest(): void {
 export interface GroupListState {
   query: string;
   /**
-   * `help` / `all` 是一期遗留值：新界面改成「我缺的 / 我能补的 / 共同寻找」，
-   * 读到旧值时按「我能补的」处理（见 MotherGroupResources）。
+   * `help` / `all` 是一期遗留值：新界面改成「我缺的 / 需求中心 / 共同寻找」，
+   * 读到旧值时按「需求中心」处理（见 MotherGroupResources）。
    */
   view: 'missing' | 'mine' | 'seeking' | 'help' | 'all';
   memberFilter: string;
@@ -60,6 +68,15 @@ export interface GroupListState {
   onlyOwned: boolean;
   /** 只看我发过需求的蛋（2026-10-26）。 */
   onlyDemanded: boolean;
+  /** 「我缺的」目标口径：只影响查看与下一次发需求的默认值，不改已发需求。 */
+  targetGender: DemandGender;
+  targetNature: string;
+  targetBody: DemandBody;
+  targetVoice: DemandVoice;
+  /** 我缺的类型：母本（按蛋）或种公（按蛋组）。 */
+  targetKind: 'mother' | 'stud';
+  /** 种公页只显示「组内有人能产」的推荐。 */
+  onlyGroupLine: boolean;
 }
 
 const GROUP_DEFAULT: GroupListState = {
@@ -69,6 +86,12 @@ const GROUP_DEFAULT: GroupListState = {
   seekingMembers: [],
   onlyOwned: false,
   onlyDemanded: false,
+  targetGender: DEFAULT_DEMAND_GENDER,
+  targetNature: '',
+  targetBody: DEFAULT_DEMAND_BODY,
+  targetVoice: DEFAULT_DEMAND_VOICE,
+  targetKind: 'mother',
+  onlyGroupLine: false,
 };
 
 const keyOf = (accountId: string, groupId: string): string => `${accountId}|${groupId}`;

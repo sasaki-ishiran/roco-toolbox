@@ -12,8 +12,14 @@ import {
   type SharedMotherAccount,
 } from '../shared/motherGroups';
 import {
+  DEFAULT_DEMAND_BODY,
+  DEFAULT_DEMAND_GENDER,
+  DEFAULT_DEMAND_VOICE,
   MOTHER_TARGET_BODIES,
   isCollectionGroupType,
+  isDemandBody,
+  isDemandGender,
+  isDemandVoice,
   isTargetGrade,
   isTargetMode,
   type CollectionDemand,
@@ -27,6 +33,9 @@ import {
   type CollectionTargetMode,
   type CollectionTaskRecord,
   type CollectionTaskStatus,
+  type DemandBody,
+  type DemandGender,
+  type DemandVoice,
   type GroupTargetConfig,
   type MotherTargetConfig,
   type PublishedStudResource,
@@ -451,11 +460,20 @@ function parseDemand(value: unknown): CollectionDemand {
     bad('demand.status 不受支持');
   }
   const claimer = record.claimerAccountId;
+  const gender = record.gender ?? DEFAULT_DEMAND_GENDER;
+  const body = record.body ?? DEFAULT_DEMAND_BODY;
+  const voice = record.voice ?? DEFAULT_DEMAND_VOICE;
+  if (!isDemandGender(gender)) bad('demand.gender 不受支持');
+  if (!isDemandBody(body)) bad('demand.body 不受支持');
+  if (!isDemandVoice(voice)) bad('demand.voice 不受支持');
   return {
     groupId: asString(record.groupId, 'groupId'),
     demanderAccountId: asString(record.demanderAccountId, 'demanderAccountId'),
     eggGameId: asNumber(record.eggGameId, 'eggGameId'),
     nature: typeof record.nature === 'string' ? record.nature : bad('demand.nature 必须是字符串'),
+    gender: gender as DemandGender,
+    body: body as DemandBody,
+    voice: voice as DemandVoice,
     status: status as CollectionDemandStatus,
     claimerAccountId:
       claimer === null || claimer === undefined ? null : asString(claimer, 'claimerAccountId'),
@@ -479,9 +497,22 @@ export async function getCollectionDemands(
   return asArray(data.demands, 'demands').map(parseDemand);
 }
 
+export interface DemandRequestCriteria {
+  nature: string;
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
+}
+
 export async function publishCollectionDemand(
   groupId: string,
-  input: { eggGameId: number; natures: string[] },
+  input: {
+    eggGameId: number;
+    natures: string[];
+    gender: DemandGender;
+    body: DemandBody;
+    voice: DemandVoice;
+  },
   signal?: AbortSignal,
 ): Promise<CollectionDemand[]> {
   const data = asRecord(
@@ -497,11 +528,17 @@ export async function publishCollectionDemand(
 export async function withdrawCollectionDemand(
   groupId: string,
   eggGameId: number,
-  nature: string,
+  criteria: DemandRequestCriteria,
   signal?: AbortSignal,
 ): Promise<void> {
+  const params = new URLSearchParams({
+    nature: criteria.nature,
+    gender: criteria.gender,
+    body: criteria.body,
+    voice: criteria.voice,
+  });
   await request(
-    `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${eggGameId}?nature=${encodeURIComponent(nature)}`,
+    `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${eggGameId}?${params.toString()}`,
     jsonInit('DELETE', undefined, signal),
   );
 }
@@ -525,19 +562,43 @@ async function demandAction(
 
 export const claimCollectionDemand = (
   groupId: string,
-  input: { demanderAccountId: string; eggGameId: number; nature: string; version?: number },
+  input: {
+    demanderAccountId: string;
+    eggGameId: number;
+    nature: string;
+    gender: DemandGender;
+    body: DemandBody;
+    voice: DemandVoice;
+    version?: number;
+  },
   signal?: AbortSignal,
 ) => demandAction(groupId, input.eggGameId, 'claim', input, signal);
 
 export const releaseCollectionDemand = (
   groupId: string,
-  input: { demanderAccountId: string; eggGameId: number; nature: string; version?: number },
+  input: {
+    demanderAccountId: string;
+    eggGameId: number;
+    nature: string;
+    gender: DemandGender;
+    body: DemandBody;
+    voice: DemandVoice;
+    version?: number;
+  },
   signal?: AbortSignal,
 ) => demandAction(groupId, input.eggGameId, 'release', input, signal);
 
 export const completeCollectionDemand = (
   groupId: string,
-  input: { demanderAccountId: string; eggGameId: number; nature: string; version?: number },
+  input: {
+    demanderAccountId: string;
+    eggGameId: number;
+    nature: string;
+    gender: DemandGender;
+    body: DemandBody;
+    voice: DemandVoice;
+    version?: number;
+  },
   signal?: AbortSignal,
 ) => demandAction(groupId, input.eggGameId, 'complete', input, signal);
 
@@ -568,6 +629,18 @@ export async function resetCollectionGroupInvite(
 export async function leaveCollectionGroup(groupId: string, signal?: AbortSignal): Promise<void> {
   await request(
     `/api/collection-groups/${encodeURIComponent(groupId)}/members/me`,
+    jsonInit('DELETE', undefined, signal),
+  );
+}
+
+/** 组长移除组员：会取消对方未完成的需求，已完成的接单记录保留。 */
+export async function removeCollectionGroupMember(
+  groupId: string,
+  memberAccountId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await request(
+    `/api/collection-groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberAccountId)}`,
     jsonInit('DELETE', undefined, signal),
   );
 }
