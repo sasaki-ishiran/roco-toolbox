@@ -10,6 +10,7 @@ import {
   type MotherResourceDraft,
   type PublishedMotherResource,
   type SharedMotherAccount,
+  type SharedProductionLine,
 } from '../shared/motherGroups';
 import {
   DEFAULT_DEMAND_BODY,
@@ -64,6 +65,17 @@ const asNumber = (value: unknown, field: string): number =>
 
 const asArray = (value: unknown, field: string): unknown[] =>
   Array.isArray(value) ? value : bad(`${field} 不是数组`);
+
+const parseProductionLine = (value: unknown, field: string): SharedProductionLine => {
+  const record = asRecord(value, field);
+  return {
+    eggGameId: asNumber(record.eggGameId, `${field}.eggGameId`),
+    grade: asString(record.grade, `${field}.grade`) as SharedProductionLine['grade'],
+    natures: asArray(record.natures, `${field}.natures`).map((nature, index) =>
+      asString(nature, `${field}.natures[${index}]`),
+    ),
+  };
+};
 
 const asGroupType = (value: unknown): CollectionGroupType => {
   if (!isCollectionGroupType(value)) bad('groupType 不受支持');
@@ -192,6 +204,13 @@ function parseMotherResource(value: unknown): PublishedMotherResource | null {
         eggGameIds: asArray(account.eggGameIds, 'eggGameIds').map((id, idIndex) =>
           asNumber(id, `eggGameIds[${idIndex}]`),
         ),
+        // 产线必须原样保留：丢掉它会让本地预览永远认为「线上没有产线」，
+        // 于是每次打开都提示「本地数据有变化」（2026-10-28）。
+        lines: Array.isArray(account.lines)
+          ? (account.lines as unknown[]).map((line, lineIndex) =>
+              parseProductionLine(line, `lines[${lineIndex}]`),
+            )
+          : undefined,
       };
     },
   );

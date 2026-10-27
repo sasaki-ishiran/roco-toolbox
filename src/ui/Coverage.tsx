@@ -26,6 +26,8 @@ import {
 } from './CoverageMatrix';
 import { EmptyState } from './EmptyState';
 import { SourceNotice } from './SourceNotice';
+import { StudMatrix } from './StudMatrix';
+import { useCoverageSlots } from './useCoverageSlots';
 
 export interface CoverageProps {
   expandedGroupId?: number | null;
@@ -41,6 +43,11 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
   const [editorOpen, setEditorOpen] = useState(false);
 
   const filter = useCoverageFilter();
+  const slots = useCoverageSlots();
+  const speciesByGameId = useMemo(
+    () => new Map(species.map((entry) => [entry.gameId, entry])),
+    [],
+  );
   const details = useMemo(
     () => describeCoverageCells({ cells: stud.cells, species, owned, mode }),
     [stud, owned, mode],
@@ -162,6 +169,18 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
             </p>
           ) : null}
 
+          {/* 种公阵列（2026-10-28，参考蛋神）：蛋组 × 目标性格，档位做 tab；
+              下方保留原来的按蛋组明细（可迭代 / 缺什么） */}
+          <StudMatrix
+            slots={slots}
+            owned={owned}
+            species={species}
+            speciesByGameId={speciesByGameId}
+            eggGroupNames={eggGroupNames}
+            mode={mode}
+          />
+
+          <h2 className="px-1 text-sm font-medium text-slate-500">缺口明细（按蛋组）</h2>
           <CoverageMatrix
             stud={stud}
             eggGroupNames={eggGroupNames}

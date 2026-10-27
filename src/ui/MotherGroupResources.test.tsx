@@ -510,6 +510,91 @@ describe('MotherGroupResources 三视图', () => {
     );
   });
 
+  test('我缺的：多颗蛋同时发布，不逐条等上一颗完成', async () => {
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const publish = vi.fn(async () => {
+      // 第一颗故意挂住：串行实现会卡在这里，第二颗永远不会发出
+      if (publish.mock.calls.length === 1) await firstGate;
+    });
+    // B 同时有 201 / 301：对 A 来说两颗都是「有来源但自己没有」的可发需求
+    const twoMissing: MotherGroupDetail = {
+      ...groupAllPublished,
+      members: [
+        member('A', resourceWith([101], { accounts: [sharedAccount(1001, [101])] })),
+        member('B', resourceWith([201, 301], { accounts: [sharedAccount(1002, [201, 301])] })),
+        member('C', resourceWith([], { accounts: [sharedAccount(1003, [])] })),
+      ],
+    };
+    render(
+      <MotherGroupResources
+        group={twoMissing}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        onPublishDemand={publish}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('mother-select-action'));
+    const rowOf = (name: string) =>
+      screen.getAllByTestId('mother-resource-row').find((item) => item.textContent?.includes(name));
+    fireEvent.click(rowOf('水蓝蓝')!);
+    fireEvent.click(rowOf('纯母种')!);
+    fireEvent.click(screen.getByTestId('mother-select-action'));
+    fireEvent.click(await screen.findByTestId('demand-publish-confirm'));
+
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
+    releaseFirst();
+    await waitFor(() => expect(screen.queryByTestId('demand-publish')).toBeNull());
+  });
+
+  test('我缺的：一页 6 行（4 列共 24 项），可以翻页', () => {
+    const extraIds = Array.from({ length: 30 }, (_, index) => 601 + index);
+    const manySpecies: SpeciesEntry[] = [
+      // 只留火花这一颗蛋，避免其它图鉴蛋变成「组内暂时孵不了」把总数算乱
+      ...catalog.filter((entry) => entry.eggGameId === 101),
+      ...extraIds.map((eggGameId, index) => ({
+        key: `extra-${eggGameId}`,
+        gameId: eggGameId,
+        name: `测试蛋${index + 1}`,
+        number: String(100 + index),
+        eggGameId,
+        eggGroups: [2],
+        stage: 1,
+      })),
+    ];
+    const manyMissing: MotherGroupDetail = {
+      ...groupAllPublished,
+      members: [
+        member('A', resourceWith([101], { accounts: [sharedAccount(1001, [101])] })),
+        member('B', resourceWith(extraIds, { accounts: [sharedAccount(1002, extraIds)] })),
+        member('C', resourceWith([], { accounts: [sharedAccount(1003, [])] })),
+      ],
+    };
+    render(
+      <MotherGroupResources
+        group={manyMissing}
+        viewerAccountId="A"
+        species={manySpecies}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+      />,
+    );
+
+    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(24);
+    expect(screen.getByTestId('mother-page-indicator')).toHaveTextContent('第 1 / 2 页');
+
+    fireEvent.click(screen.getByTestId('mother-page-next'));
+    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(6);
+    expect(screen.getByTestId('mother-page-indicator')).toHaveTextContent('第 2 / 2 页');
+    expect(screen.getByTestId('mother-page-next')).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId('mother-page-prev'));
+    expect(screen.getAllByTestId('mother-resource-row')).toHaveLength(24);
+    expect(screen.getByTestId('mother-page-indicator')).toHaveTextContent('第 1 / 2 页');
+  });
+
   test('我缺的：没有公母筛选；母本需求默认要母', async () => {
     const publish = vi.fn().mockResolvedValue(undefined);
     render(

@@ -61,6 +61,14 @@ const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: 'seeking', label: '共同寻找' },
 ];
 
+/** 批量发需求时最多同时发几条：比串行快很多，又不至于触发服务端写限流。 */
+const DEMAND_PUBLISH_CONCURRENCY = 4;
+
+/** 我缺的卡片网格固定 4 列；一页 6 行 = 24 项。 */
+const RESOURCE_GRID_COLUMNS = 4;
+const MISSING_PAGE_ROWS = 6;
+const MISSING_PAGE_SIZE = RESOURCE_GRID_COLUMNS * MISSING_PAGE_ROWS;
+
 export interface MotherGroupResourcesProps {
   group: MotherGroupDetail;
   viewerAccountId: string;
@@ -174,10 +182,26 @@ export function MotherGroupResources({
    * 用户可能刚拿到蛋、还没重新采集导入。值为 demandKey。
    */
   const [confirmComplete, setConfirmComplete] = useState<string | null>(null);
+  /** 「我缺的」分页：一页 6 行（4 列）；筛选 / 切视图后回到第 1 页。 */
+  const [missingPage, setMissingPage] = useState(1);
 
   useEffect(() => {
     ensureGroupSession(viewerAccountId);
   }, [viewerAccountId]);
+
+  useEffect(() => {
+    setMissingPage(1);
+  }, [
+    effectiveView,
+    targetKind,
+    targetNature,
+    targetBody,
+    targetVoice,
+    memberFilter,
+    query,
+    onlyOwned,
+    onlyDemanded,
+  ]);
 
   useEffect(() => {
     if (memberFilter && !group.members.some((member) => member.accountId === memberFilter)) {
@@ -406,6 +430,15 @@ export function MotherGroupResources({
     effectiveView === 'missing'
       ? [...publishableRows, ...dataIncompleteRows, ...blockedRows]
       : filtered;
+
+  // 「我缺的」一页 6 行；页码越界时（筛选后条数变少）自动落到最后一页。
+  const missingTotalPages = Math.max(1, Math.ceil(listRows.length / MISSING_PAGE_SIZE));
+  const missingCurrentPage = Math.min(missingPage, missingTotalPages);
+  const missingPageOffset = (missingCurrentPage - 1) * MISSING_PAGE_SIZE;
+  const pageRows =
+    effectiveView === 'missing'
+      ? listRows.slice(missingPageOffset, missingPageOffset + MISSING_PAGE_SIZE)
+      : listRows;
 
   const taskKeyOf = (row: MotherCoverageRow): string => `mother:${row.eggGameId}`;
   const taskOf = (row: MotherCoverageRow): CollectionTaskRecord | undefined =>
@@ -786,7 +819,12 @@ export function MotherGroupResources({
     }
   };
 
-  /** 性格 / 目标口径确认后真正发布需求。 */
+  /**
+   * 性格 / 目标口径确认后真正发布需求。
+   *
+   * 每颗蛋是一条独立请求；之前逐条 `await`，选 10 颗蛋就要排队 10 个来回，
+   * 手机上会卡在「发布中…」很久。这里最多同时发 4 条，既快又不会打爆写限流。
+   */
   const confirmPublish = async (
     items: Array<{ eggGameId: number; natures: string[] }>,
     criteria: DemandCriteriaDraft,
@@ -794,8 +832,28 @@ export function MotherGroupResources({
     setDemandBusy(true);
     setPublishError('');
     try {
-      for (const item of items) {
-        await onPublishDemand?.(item.eggGameId, item.natures, criteria);
+      const failures: unknown[] = [];
+      let next = 0;
+      const worker = async () => {
+        while (next < items.length) {
+          const item = items[next];
+          next += 1;
+          try {
+            await onPublishDemand?.(item.eggGameId, item.natures, criteria);
+          } catch (failure) {
+            failures.push(failure);
+          }
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(DEMAND_PUBLISH_CONCURRENCY, items.length) }, () => worker()),
+      );
+      if (failures.length > 0) {
+        const reason = failures[0] instanceof Error ? failures[0].message : '发布失败，请稍后再试';
+        setPublishError(
+          `${failures.length} 颗蛋发布失败：${reason}。已成功的不会重复，可以直接重试。`,
+        );
+        return;
       }
       const total = items.reduce((count, item) => count + Math.max(1, item.natures.length), 0);
       setDemandMessage(`已发布 ${total} 条需求`);
@@ -803,8 +861,6 @@ export function MotherGroupResources({
       setPublishWarning('');
       setSelecting(false);
       setSelected([]);
-    } catch (failure) {
-      setPublishError(failure instanceof Error ? failure.message : '发布失败，请稍后再试');
     } finally {
       setDemandBusy(false);
     }
@@ -1499,7 +1555,9 @@ export function MotherGroupResources({
             </p>
           ) : (
         <ul className="grid grid-cols-4 items-stretch gap-1">
-          {listRows.map((row, index) => {
+          {pageRows.map((row, index) => {
+            // 分页后 index 是页内序号；分区标题要按整个列表的绝对位置判断。
+            const absoluteIndex = (effectiveView === 'missing' ? missingPageOffset : 0) + index;
             const natures = requiredNaturesOf(row.eggGameId);
             const { base, form } = splitDisplayName(row.name);
             const selectionKey = selectionKeyOf(row.eggGameId);
@@ -1511,9 +1569,9 @@ export function MotherGroupResources({
             const incomplete =
               effectiveView === 'missing' && dataIncompleteEggIds.has(row.eggGameId);
             const showIncompleteDivider =
-              incomplete && index === publishableRows.length;
+              incomplete && absoluteIndex === publishableRows.length;
             const showBlockedDivider =
-              blocked && index === publishableRows.length + dataIncompleteRows.length;
+              blocked && absoluteIndex === publishableRows.length + dataIncompleteRows.length;
             return (
             <Fragment key={row.eggGameId}>
             {showIncompleteDivider ? (
@@ -1712,6 +1770,36 @@ export function MotherGroupResources({
           })}
         </ul>
           )}
+          {effectiveView === 'missing' && missingTotalPages > 1 ? (
+            <nav
+              className="mt-2 flex items-center justify-center gap-2 text-[11px] text-slate-500"
+              data-testid="mother-pagination"
+            >
+              <button
+                type="button"
+                disabled={missingCurrentPage === 1}
+                onClick={() => setMissingPage(Math.max(1, missingCurrentPage - 1))}
+                data-testid="mother-page-prev"
+                className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 disabled:opacity-40"
+              >
+                上一页
+              </button>
+              <span data-testid="mother-page-indicator">
+                第 {missingCurrentPage} / {missingTotalPages} 页
+              </span>
+              <button
+                type="button"
+                disabled={missingCurrentPage === missingTotalPages}
+                onClick={() =>
+                  setMissingPage(Math.min(missingTotalPages, missingCurrentPage + 1))
+                }
+                data-testid="mother-page-next"
+                className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 disabled:opacity-40"
+              >
+                下一页
+              </button>
+            </nav>
+          ) : null}
         </>
       ) : null}
       <DemandPublishSheet
