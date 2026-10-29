@@ -25,6 +25,18 @@ const normalizeGender = (value: string): OwnedPet['gender'] =>
   value === '公' || value === '母' || value === '未知' ? value : '未知';
 
 /**
+ * 早期工具箱备份可能没写 `medalBody`（但一般已有 `weightPercent`）：
+ * 用与 `shared/bodySize.bodyMedalOf` 相同的 98% / 2% 阈值补回，
+ * 避免恢复备份后「达标母本 / 档位」比抓包导入少（2026-10-29 代码审查 B2-L02）。
+ */
+const medalFromWeightPercent = (percent: number | undefined): string => {
+  if (typeof percent !== 'number' || !Number.isFinite(percent)) return '';
+  if (percent >= 98) return '大块头';
+  if (percent <= 2) return '小不点';
+  return '';
+};
+
+/**
  * 单只宠物条目清洗（2026-10-06 修复 m3）：备份 JSON 是外部输入，单条损坏
  * （null / 数字 / 缺 name）不能整组 pets 全部跟着失效，也不能把坏对象
  * 原样塞进领域层。字段口径与 parseBackup 完全一致；无 name 的条目丢弃
@@ -35,6 +47,7 @@ const sanitizePet = (value: unknown, accountName: string): OwnedPet | undefined 
   if (!item) return undefined;
   const name = asString(item.name);
   if (!name) return undefined;
+  const weightPercent = asOptionalNumber(item.weightPercent);
   return {
     gameId: asNumber(item.gameId),
     name,
@@ -42,8 +55,8 @@ const sanitizePet = (value: unknown, accountName: string): OwnedPet | undefined 
     gender: normalizeGender(asString(item.gender)),
     nature: asString(item.nature),
     voiceDb: asNumber(item.voiceDb),
-    medalBody: asString(item.medalBody),
-    weightPercent: asOptionalNumber(item.weightPercent),
+    medalBody: asString(item.medalBody) || medalFromWeightPercent(weightPercent),
+    weightPercent,
     heightPercent: asOptionalNumber(item.heightPercent),
     isShiny: asBoolean(item.isShiny),
     isColorful: item.isColorful === true,

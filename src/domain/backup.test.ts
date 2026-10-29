@@ -38,6 +38,30 @@ const at = (name: string, when: string, count = 1): AccountSnapshot => ({
 });
 
 describe('buildBackup / parseToolboxBackup', () => {
+  test('早期备份缺奖牌时，用体重百分位按 98% / 2% 补回（与抓包导入同口径）', () => {
+    const parsed = parseToolboxBackup({
+      type: BACKUP_TYPE,
+      version: 1,
+      exportedAt: '2026-09-26T10:00:00.000Z',
+      catalogVersion: 's4',
+      accounts: [
+        {
+          accountName: '测试甲',
+          gameId: 1001,
+          exportedAt: '2026-09-25T12:00:00.000Z',
+          importedAt: '2026-09-26T00:00:00.000Z',
+          pets: [
+            { gameId: 1, name: '甲', gender: '母', nature: '固执', voiceDb: 100, weightPercent: 99 },
+            { gameId: 2, name: '乙', gender: '母', nature: '固执', voiceDb: 100, weightPercent: 1 },
+            { gameId: 3, name: '丙', gender: '母', nature: '固执', voiceDb: 100, weightPercent: 50 },
+          ],
+          eggs: [],
+        },
+      ],
+    });
+    expect(parsed.accounts[0].pets.map((pet) => pet.medalBody)).toEqual(['大块头', '小不点', '']);
+  });
+
   test('导出的备份带有类型标记，能被自己解析回来', () => {
     const backup = buildBackup([snapshot('测试甲', 2), snapshot('测试丙', 3)], {
       exportedAt: '2026-09-26T10:00:00.000Z',
