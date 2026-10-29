@@ -197,21 +197,50 @@ export interface MotherCoverageRow {
   unknownMemberIds: string[];
 }
 
-export type MotherApiErrorCode =
-  | 'UNAUTHENTICATED'
-  | 'NOT_MEMBER'
-  | 'NOT_OWNER'
-  | 'GROUP_NOT_FOUND'
-  | 'GROUP_FULL'
-  | 'INVALID_INPUT'
-  | 'PAYLOAD_TOO_LARGE'
-  | 'RATE_LIMITED'
-  | 'REVISION_CONFLICT'
-  | 'STALE_SOURCE'
-  | 'SOURCE_MISMATCH'
-  | 'GAME_ACCOUNT_ALREADY_SHARED'
-  | 'OWNER_MUST_DISSOLVE'
-  | 'INTERNAL';
+/**
+ * 后端可能返回的错误码。
+ *
+ * 与 `functions/_lib/motherGroupsStore.ts` 的 `MotherStoreErrorCode` 以及 handler / util 的
+ * 通用码（未登录、限流、请求体过大等）保持并集；后端新增码时必须同步这里，
+ * 否则前端只能靠 `as` 断言吞掉，按 `code` 分支的地方会静默漏判（2026-10-29 代码审查 B9-M01）。
+ */
+export const MOTHER_API_ERROR_CODES = [
+  'UNAUTHENTICATED',
+  'NOT_MEMBER',
+  'NOT_OWNER',
+  'GROUP_NOT_FOUND',
+  'GROUP_FULL',
+  'INVALID_INPUT',
+  'PAYLOAD_TOO_LARGE',
+  'RATE_LIMITED',
+  'REVISION_CONFLICT',
+  'STALE_SOURCE',
+  'SOURCE_MISMATCH',
+  'GAME_ACCOUNT_ALREADY_SHARED',
+  'OWNER_MUST_DISSOLVE',
+  'TARGET_CHANGED',
+  'TARGET_NOT_READY',
+  'TASK_TAKEN',
+  'TASK_ALREADY_COVERED',
+  'TASKS_NOT_CONFIRMED',
+  'TASK_NOT_FOUND',
+  'TASK_NOT_YOURS',
+  'DEMAND_UNSUPPORTED',
+  'DEMAND_NOT_FOUND',
+  'DEMAND_LIMIT',
+  'DEMAND_TAKEN',
+  'DEMAND_SELF',
+  'DEMAND_ALREADY_DONE',
+  'DEMAND_NOT_CLAIMED',
+  'DEMAND_NOT_YOURS',
+  'INTERNAL',
+] as const;
+
+export type MotherApiErrorCode = (typeof MOTHER_API_ERROR_CODES)[number];
+
+/** 服务端返回的 `code` 是否是已知错误码；未知值不硬塞进窄联合。 */
+export const isMotherApiErrorCode = (value: unknown): value is MotherApiErrorCode =>
+  typeof value === 'string' && (MOTHER_API_ERROR_CODES as readonly string[]).includes(value);
 
 export interface MotherApiError {
   ok: false;

@@ -6,7 +6,7 @@
  */
 import {
   MOTHER_CRITERIA_ID,
-  type MotherApiErrorCode,
+  isMotherApiErrorCode,
   type MotherResourceDraft,
   type PublishedMotherResource,
   type SharedMotherAccount,
@@ -100,7 +100,7 @@ async function request(path: string, init: RequestInit = {}): Promise<unknown> {
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const record = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
-    const code = typeof record.code === 'string' ? (record.code as MotherApiErrorCode) : 'HTTP_ERROR';
+    const code = isMotherApiErrorCode(record.code) ? record.code : 'HTTP_ERROR';
     const message = typeof record.error === 'string' ? record.error : `请求失败（${response.status}）`;
     throw new MotherGroupsApiError(
       response.status,
