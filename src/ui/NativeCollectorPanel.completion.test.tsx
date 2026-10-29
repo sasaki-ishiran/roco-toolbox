@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { CollectorState } from '../collector/nativeCollector';
 import { resetCaptureSessionMarks } from '../collector/captureSessionStore';
@@ -112,5 +112,43 @@ describe('采集完成自动停止与自动导入', () => {
     const dialog = await screen.findByRole('dialog', { name: '导入完成' });
     expect(within(dialog).getByTestId('capture-complete-cloud')).toHaveTextContent('私有云已同步');
     expect(within(dialog).getByTestId('capture-complete-group')).toHaveTextContent('2 个小组');
+  });
+
+  test('等待文件保存时切页：回来只提示「尚未导入」，不谎报导入完成', async () => {
+    // 停止成功但文件还没落盘：waitForSaved 会一直轮询，此时用户切页卸载面板
+    let state: CollectorState = {
+      version: 1, supported: true, phase: 'capturing', message: '采集中', packets: 2, bytes: 1234,
+      files: [file], progressVersion: 1, fileId: file.id, savedBytes: 1234,
+    };
+    const bridge = {
+      getState: () => JSON.stringify(state),
+      stopCapture: vi.fn(() => {
+        state = { ...state, phase: 'idle', message: '已停止并保存', files: [] };
+        return '';
+      }),
+      importCapture: vi.fn(() => { finishImport(); return ''; }),
+      shareCapture: vi.fn(() => ''),
+      startCapture: vi.fn(() => ''),
+      openGame: vi.fn(() => ''),
+      deleteCapture: vi.fn(() => ''),
+      uploadCapture: vi.fn(() => ''),
+    };
+    window.RocoCapture = bridge;
+
+    const view = render(<NativeCollectorPanel />);
+    fireEvent.click(await screen.findByRole('button', { name: '模拟进度走满' }));
+    await waitFor(() => expect(bridge.stopCapture).toHaveBeenCalledTimes(1));
+
+    view.unmount();
+    // 等 waitForSaved 轮询到卸载标记并写入待补提示
+    await act(async () => { await new Promise((resolve) => { window.setTimeout(resolve, 400); }); });
+
+    render(<NativeCollectorPanel />);
+    const dialog = await screen.findByRole('dialog', { name: '采集已保存，尚未导入' });
+    expect(within(dialog).getByTestId('capture-complete-outcome')).toHaveTextContent(
+      '这次采集还没有导入工具箱',
+    );
+    expect(dialog).not.toHaveTextContent('导入完成，游戏数据已保存到本机');
+    expect(bridge.importCapture).not.toHaveBeenCalled();
   });
 });
