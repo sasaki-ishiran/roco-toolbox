@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildEggSearchIndex, type TargetMode } from '../domain/petFilters';
 import { groupPublicationStatus } from '../domain/collectionPublication';
 import { CATALOG_VERSION, eggGroupNames, species } from '../data/catalog';
@@ -110,13 +110,27 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
     return () => onDraftDirtyChange?.(false);
   }, [hook.draftDirty, onDraftDirtyChange]);
 
-  // 直达：优先进入同类型的组；没有兼容组时才落到个人求蛋
+  // 直达：优先进入同类型的组；没有兼容组时才落到个人求蛋。
+  // 同一次 focus 只消费一次：依赖 currentGroup 会让详情回来后重跑，把用户手动打开的
+  // 收集小组又踢回个人模式（2026-10-29 审查 B6-H01）。
+  const appliedFocusRef = useRef<string | null>(null);
   useEffect(() => {
     const type = focus?.groupType;
-    if (!type) return;
-    if (hook.currentGroup?.group.groupType === type) return;
+    if (!type) {
+      appliedFocusRef.current = null;
+      return;
+    }
+    const key = `${type}:${focus?.eggGameId ?? ''}`;
+    if (appliedFocusRef.current === key) return;
+    // 组列表（缓存或接口）还没读到：等它回来再决定，别把 focus 消费成「没有兼容组」
+    if (!hook.groupsLoaded) return;
+    if (hook.currentGroup?.group.groupType === type) {
+      appliedFocusRef.current = key;
+      return;
+    }
     if (hook.pageMode === 'group' && hook.currentGroupId && hook.currentGroup == null) return;
     const compatible = hook.groups.find((group) => group.groupType === type);
+    appliedFocusRef.current = key;
     if (compatible) {
       hook.selectGroup(compatible.id, type);
       return;
@@ -124,7 +138,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
     hook.selectPersonal();
     hook.setPersonalType(type);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus?.groupType, focus?.eggGameId, hook.groups.length, hook.currentGroup?.group.id]);
+  }, [focus?.groupType, focus?.eggGameId, hook.groupsLoaded, hook.currentGroup?.group.id]);
 
   const selectGroup = async (groupId: string) => {
     if (groupId === hook.currentGroupId && hook.pageMode === 'group') return;
