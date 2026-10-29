@@ -385,6 +385,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
       next,
       ...list.filter(
         (item) =>
+          item.status === 'done' ||
           !(
             item.demanderAccountId === next.demanderAccountId &&
             item.eggGameId === next.eggGameId &&
@@ -424,6 +425,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
       setDemands((list) =>
         list.filter(
           (item) =>
+            item.status === 'done' ||
             !(
               item.demanderAccountId === account &&
               item.eggGameId === eggGameId &&

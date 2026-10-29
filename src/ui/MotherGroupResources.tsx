@@ -2353,7 +2353,11 @@ export function MotherGroupResources({
                   </p>
                 ) : (
                   resourceDetailDemands.map((demand) => {
-                    const key = demandKey(demand);
+                    // 结单后可以再发同款：done 行与新行会同时存在，key 必须能区分
+                    const key =
+                      demand.status === 'done'
+                        ? `${demandKey(demand)}@done:${demand.updatedAt}`
+                        : demandKey(demand);
                     const claimed = demand.status === 'claimed';
                     const statusLabel =
                       demand.status === 'claimed'
