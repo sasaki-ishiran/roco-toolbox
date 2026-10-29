@@ -113,7 +113,7 @@ describe('MotherGroupResources 三视图', () => {
     expect(within(fireRow()!).queryByTestId('mother-resource-natures')).toBeNull();
   });
 
-  test('自己能产的蛋仍然展示，但不能勾选发需求', () => {
+  test('自己能产的蛋仍然展示，也可以勾选发需求（2026-10-29 取消限制）', () => {
     setGroupList('B', 'g1', { targetNature: '固执' });
     render(
       <MotherGroupResources
@@ -136,7 +136,11 @@ describe('MotherGroupResources 三视图', () => {
     // 2026-10-27：卡片不再写「自己能产」提示，只靠边框（data-self-breedable）区分
     expect(within(fireRow!).queryByTestId('mother-self-breedable')).toBeNull();
     expect(fireRow).toHaveAttribute('data-self-breedable', 'true');
-    expect(fireRow).toHaveAttribute('aria-disabled', 'true');
+    // 2026-10-29 用户口径：自己可孵也能发需求，不再 aria-disabled
+    expect(fireRow).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(screen.getByTestId('mother-select-action'));
+    fireEvent.click(fireRow!);
+    expect(screen.getByTestId('mother-select-action')).toHaveTextContent('发需求 1 项');
   });
 
   test('种公页：推荐卡显示组内产线，发需求用负数蛋组 id', async () => {
@@ -192,6 +196,43 @@ describe('MotherGroupResources 三视图', () => {
         { gender: '公', body: '大块头', voice: '+100' },
       ),
     );
+  });
+
+  test('种公页：自己能产也仍然可以发需求（2026-10-29 取消限制）', () => {
+    render(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="A"
+        species={catalog.map((entry) =>
+          entry.gameId === 101 ? { ...entry, maleCapable: true } : entry,
+        )}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        snapshots={[
+          snapshot(1001, 'A', [
+            mother(101, { nature: '开朗' }),
+            // 性格可以由公带（学院小窝 100% 遗传），产线才有「固执」
+            mother(101, { gender: '公', nature: '固执' }),
+          ]),
+        ]}
+        recommendations={[
+          {
+            id: 'r1',
+            natureName: '固执',
+            displayName: '火花',
+            groupIds: [2],
+            groupLabels: ['巨灵组'],
+            grade: '大婉',
+            gameId: 101,
+          },
+        ]}
+        studGroupCount={1}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('missing-kind-stud'));
+    expect(screen.getByTestId('stud-supply-status')).toHaveTextContent('自己能产');
+    // 能自己产也不再隐藏发布按钮
+    expect(screen.getByTestId('stud-publish-2')).toBeInTheDocument();
+    expect(screen.getByTestId('stud-publish-2')).not.toBeDisabled();
   });
 
   test('种公页：有未发布成员时先提示再发布', async () => {

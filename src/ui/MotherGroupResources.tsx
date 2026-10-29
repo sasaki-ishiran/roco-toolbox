@@ -439,7 +439,7 @@ export function MotherGroupResources({
 
   /**
    * 「自己能产」：背包里没有现货，但同账号有可孵的一对（母本 + 同档位公）。
-   * 这些蛋仍然展示，让人知道缺口在哪；但不能发需求，提示去覆盖度看可迭代。
+   * 只作为提示（蓝边 + 说明），**不再限制发需求**（2026-10-29 用户口径：自己可孵也能发）。
    */
   const selfBreedableEggIds = useMemo(() => {
     const result = new Set<number>();
@@ -1063,7 +1063,7 @@ export function MotherGroupResources({
 
   /** 当前视图实际可发需求的条目数：按钮可用性与计数必须跟渲染列表同源。 */
   const selectableMissingRows = filtered.filter(
-    (row) => !blockedEggIds.has(row.eggGameId) && !selfBreedableEggIds.has(row.eggGameId),
+    (row) => !blockedEggIds.has(row.eggGameId),
   );
   const visibleCount =
     effectiveView === 'mine'
@@ -1093,8 +1093,8 @@ export function MotherGroupResources({
 
   /** 单颗蛋的默认发布项：已发过的同性格跳过；没有可发性格时返回 null。 */
   const missingPublishItem = (eggGameId: number): DemandPublishItem | null => {
-    // 全新鲜且确认没有来源的蛋、自己能产的蛋都不发需求（防状态过期后被带上）
-    if (blockedEggIds.has(eggGameId) || selfBreedableEggIds.has(eggGameId)) return null;
+    // 全新鲜且确认没有来源的蛋不发需求（防状态过期后被带上）；自己能产不再拦。
+    if (blockedEggIds.has(eggGameId)) return null;
     const row = rowByEgg.get(eggGameId);
     const { base } = splitDisplayName(row?.name ?? `蛋 ${eggGameId}`);
     // 已发过的「同性格 + 同性别 / 体型 / 声音」不能再带进来：
@@ -1139,9 +1139,7 @@ export function MotherGroupResources({
       setDemandMessage(
         blockedEggIds.has(eggGameId)
           ? '组内暂时确认没人能补你缺的性格，发需求也大概率没人能接'
-          : selfBreedableEggIds.has(eggGameId)
-            ? '你自己就能孵这颗蛋，先到覆盖度看可迭代'
-            : '这颗蛋的性格都已经发过需求了；要改条件请先撤回原需求',
+          : '这颗蛋的性格都已经发过需求了；要改条件请先撤回原需求',
       );
       return;
     }
@@ -1890,7 +1888,7 @@ export function MotherGroupResources({
                           data-testid="stud-supply-status"
                         >
                           {row.self
-                            ? '自己能产 · 去覆盖度看可迭代'
+                            ? '自己能产 · 也可以发需求'
                             : row.groupCan
                               ? '组内有人能产'
                               : row.unknown > 0
@@ -1926,9 +1924,8 @@ export function MotherGroupResources({
                         ) : null}
                       </div>
                     </div>
-                    {!row.self ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {row.groups.map((group) => {
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {row.groups.map((group) => {
                           const groupName =
                             eggGroupNames[group.groupId] ?? `蛋组${group.groupId}`;
                           const target = row.targets.find(
@@ -1981,9 +1978,8 @@ export function MotherGroupResources({
                               {group.supplied ? `发到 ${groupName}` : `仍要发到 ${groupName}`}
                             </button>
                           );
-                        })}
-                      </div>
-                    ) : null}
+                      })}
+                    </div>
                   </li>
                 );
               })}
@@ -2037,8 +2033,8 @@ export function MotherGroupResources({
               </li>
             ) : null}
             <li
-              onClick={() => selecting && !blocked && !selfBreedable && toggleSelect(selectionKey)}
-              aria-disabled={blocked || selfBreedable ? true : undefined}
+              onClick={() => selecting && !blocked && toggleSelect(selectionKey)}
+              aria-disabled={blocked ? true : undefined}
               className={`flex h-full min-w-0 flex-col items-center gap-0.5 rounded-md px-1 py-1 ${
                 isSelected
                   ? 'bg-emerald-50 ring-1 ring-emerald-500'
@@ -2049,7 +2045,7 @@ export function MotherGroupResources({
                       : incomplete
                         ? 'bg-amber-50/60 ring-1 ring-inset ring-amber-300'
                         : 'bg-slate-50'
-              } ${selecting && !blocked && !selfBreedable ? 'cursor-pointer' : ''}`}
+              } ${selecting && !blocked ? 'cursor-pointer' : ''}`}
               data-testid="mother-resource-row"
               data-blocked={blocked ? 'true' : undefined}
               data-self-breedable={selfBreedable ? 'true' : undefined}
@@ -2287,18 +2283,15 @@ export function MotherGroupResources({
           );
           const publishItem = missingPublishItem(eggGameId);
           const blocked = blockedEggIds.has(eggGameId);
-          const selfBreedable = selfBreedableEggIds.has(eggGameId);
           const publishLabel = blocked
             ? '组内暂时没人能补'
-            : selfBreedable
-              ? '你自己能产，不用发需求'
-              : publishItem
-                ? publishItem.natures.length > 0
-                  ? `发需求 · ${publishItem.natures.join(' / ')}`
-                  : '发需求（不挑性格）'
-                : resourceDetailRow.missingNatures.length === 0
-                  ? '按你的收集口径已收齐'
-                  : '这些性格都已经发过需求';
+            : publishItem
+              ? publishItem.natures.length > 0
+                ? `发需求 · ${publishItem.natures.join(' / ')}`
+                : '发需求（不挑性格）'
+              : resourceDetailRow.missingNatures.length === 0
+                ? '按你的收集口径已收齐'
+                : '这些性格都已经发过需求';
           return (
             <div className="space-y-3 p-3" data-testid="mother-resource-detail-body">
               <div className="flex items-start gap-2.5">
@@ -2478,7 +2471,7 @@ export function MotherGroupResources({
               >
                 {publishLabel}
               </button>
-              {!publishItem && !blocked && !selfBreedable ? (
+              {!publishItem && !blocked ? (
                 <p className="text-[11px] leading-snug text-slate-400">
                   想改条件，先撤回对应的需求再重新发。
                 </p>
