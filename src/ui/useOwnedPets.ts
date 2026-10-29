@@ -9,7 +9,7 @@ import { filterByAccounts, useAccountFilter } from './accountFilterStore';
  * 账号身份是游戏 UID，两个同名但不同 UID 的真实账号是**两个账号**，
  * 直接显示同一个名字会让它们在界面上被当成一个（筛选也分不开）。
  */
-const labelerFor =
+export const labelerFor =
   (snapshots: AccountSnapshot[]) =>
   (snapshot: AccountSnapshot): string => {
     const sameName = snapshots.filter((item) => item.accountName === snapshot.accountName).length;

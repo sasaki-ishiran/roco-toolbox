@@ -10,6 +10,7 @@ import { PetAvatar } from './PetAvatar';
 import { PetCompactCard } from './PetCompactCard';
 import { BODY, CARD, HINT, INSET, PAGE, TITLE } from './primitives/styles';
 import { useSnapshots } from './useSnapshots';
+import { labelerFor } from './useOwnedPets';
 
 /**
  * 家园页（2026-10-27）。
@@ -24,13 +25,6 @@ import { useSnapshots } from './useSnapshots';
 export interface HomeLandProps {
   onGoImport?: () => void;
 }
-
-const labelerFor =
-  (snapshots: AccountSnapshot[]) =>
-  (snapshot: AccountSnapshot): string => {
-    const sameName = snapshots.filter((item) => item.accountName === snapshot.accountName).length;
-    return sameName > 1 ? `${snapshot.accountName}(${snapshot.gameId})` : snapshot.accountName;
-  };
 
 function formatCapturedAt(value: string): string {
   const time = Date.parse(value);
