@@ -1,8 +1,11 @@
 import {
   MOTHER_CATALOG_VERSION_MAX,
   MOTHER_RESOURCE_MAX_ACCOUNTS,
+  MOTHER_RESOURCE_MAX_BODY_BYTES,
   MOTHER_RESOURCE_MAX_EGGS_PER_ACCOUNT,
   MOTHER_RESOURCE_SCHEMA_VERSION,
+  PRODUCTION_LINE_MAX_NATURES,
+  PRODUCTION_LINE_MAX_PER_ACCOUNT,
   canonicalEggGameIds,
   canonicalProductionLines,
   isCanonicalMotherAccountKey,
@@ -37,7 +40,10 @@ export type MotherResourceErrorCode =
   | 'INVALID_EXPORTED_AT'
   | 'INVALID_CATALOG_VERSION'
   | 'TOO_MANY_ACCOUNTS'
-  | 'TOO_MANY_EGG_IDS';
+  | 'TOO_MANY_EGG_IDS'
+  | 'TOO_MANY_LINES'
+  | 'TOO_MANY_NATURES'
+  | 'PAYLOAD_TOO_LARGE';
 
 export class MotherResourceError extends Error {
   readonly code: MotherResourceErrorCode;
@@ -153,12 +159,50 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
 
   accounts.sort((a, b) => compareAccountKey(a.accountKey, b.accountKey));
 
-  return {
+  const resource: MotherResourceDraft = {
     schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
     criteriaId: criteriaId as MotherResourceDraft['criteriaId'],
     catalogVersion,
     accounts,
   };
+  assertMotherResourceWithinLimits(resource);
+  return resource;
+}
+
+/**
+ * 发布前的本地预检：与服务端 `motherGroupsValidation` 同口径。
+ *
+ * 服务端的产线上限（单账号 1024 条、单条 30 个性格）和 128KiB 请求体上限，
+ * 客户端不预检就只能等提交后收到 413 / INVALID_INPUT（2026-10-29 代码审查 B2-M02）。
+ * 请求体还会包一层 `{ baseRevision, resource }`，这里留 1KiB 余量。
+ */
+export function assertMotherResourceWithinLimits(resource: MotherResourceDraft): void {
+  for (const account of resource.accounts) {
+    const lines = account.lines ?? [];
+    if (lines.length > PRODUCTION_LINE_MAX_PER_ACCOUNT) {
+      throw new MotherResourceError(
+        'TOO_MANY_LINES',
+        `账号 ${account.accountKey} 的产线超过 ${PRODUCTION_LINE_MAX_PER_ACCOUNT} 条，请减少共享账号后重试`,
+      );
+    }
+    for (const line of lines) {
+      if (line.natures.length === 0 || line.natures.length > PRODUCTION_LINE_MAX_NATURES) {
+        throw new MotherResourceError(
+          'TOO_MANY_NATURES',
+          `账号 ${account.accountKey} 有产线的性格超过 ${PRODUCTION_LINE_MAX_NATURES} 个`,
+        );
+      }
+    }
+  }
+  const bytes = new TextEncoder().encode(JSON.stringify(resource)).length;
+  if (bytes > MOTHER_RESOURCE_MAX_BODY_BYTES - 1024) {
+    throw new MotherResourceError(
+      'PAYLOAD_TOO_LARGE',
+      `共享资源约 ${Math.ceil(bytes / 1024)}KiB，超过 ${Math.round(
+        MOTHER_RESOURCE_MAX_BODY_BYTES / 1024,
+      )}KiB 上限；请减少共享账号后重试`,
+    );
+  }
 }
 
 /** 账号键按游戏 UID 数值排序，避免 `uid:100` 排在 `uid:99` 前面。 */

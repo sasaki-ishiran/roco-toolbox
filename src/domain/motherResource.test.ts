@@ -13,6 +13,7 @@ import {
 } from '../test/fixtures/motherSharing';
 import {
   MotherResourceError,
+  assertMotherResourceWithinLimits,
   buildMotherResource,
   diffMotherResources,
   motherResourceSignature,
@@ -183,6 +184,41 @@ describe('buildMotherResource：共享全部母本（2026-10-28 去掉小组口�
     expect(perfect.criteriaId).toBe('all-mothers-v3-perfect');
     expect(medal.criteriaId).toBe('all-mothers-v3-medal');
     expect(diffMotherResources(perfect, medal).unchanged).toBe(false);
+  });
+
+  test('发布前预检：产线数 / 性格数 / 请求体超限都给出可读错误', () => {
+    const manyLines = draft([
+      sharedAccount(1, [101], {
+        lines: Array.from({ length: 1025 }, (_, index) => ({
+          eggGameId: 100000 + index,
+          grade: '大婉' as const,
+          natures: ['固执'],
+        })),
+      }),
+    ]);
+    expect(errorOf(() => assertMotherResourceWithinLimits(manyLines))?.code).toBe('TOO_MANY_LINES');
+
+    const manyNatures = draft([
+      sharedAccount(1, [101], {
+        lines: [
+          {
+            eggGameId: 101,
+            grade: '大婉',
+            natures: Array.from({ length: 31 }, (_, index) => `性格${index}`),
+          },
+        ],
+      }),
+    ]);
+    expect(errorOf(() => assertMotherResourceWithinLimits(manyNatures))?.code).toBe(
+      'TOO_MANY_NATURES',
+    );
+
+    const huge = draft(
+      Array.from({ length: 50 }, (_, index) =>
+        sharedAccount(index + 1, Array.from({ length: 1024 }, (_, slot) => 1000 + slot)),
+      ),
+    );
+    expect(errorOf(() => assertMotherResourceWithinLimits(huge))?.code).toBe('PAYLOAD_TOO_LARGE');
   });
 
   test('导出时间为空或非 ISO 时拒绝，不产出半份摘要', () => {
