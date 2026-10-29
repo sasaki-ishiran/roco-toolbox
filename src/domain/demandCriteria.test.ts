@@ -104,15 +104,14 @@ describe('findMatchingPet / hasStockForDemand', () => {
 });
 
 describe('findBreedableSupply', () => {
-  test('已有现货时报 stock', () => {
+  test('只有一只现货、配不出另一半时不算能接（只认配对孵蛋）', () => {
     const snapshots = [snapshot(1001, '甲', [mother(201)])];
     const supply = findBreedableSupply(
       snapshots,
       { eggGameId: 201, nature: '', gender: '', body: '', voice: '' },
       species,
     );
-    expect(supply.kind).toBe('stock');
-    expect(supply.accountKey).toBe('uid:1001');
+    expect(supply.kind).toBe('none');
   });
 
   test('同账号有目标母本 + 同蛋组公、且性格落在父母任一方时，算可孵', () => {
@@ -132,6 +131,24 @@ describe('findBreedableSupply', () => {
     expect(supply.maleGameId).toBe(701);
   });
 
+  test('公本可以是同蛋组的进化形态，不要求是蛋物种本体', () => {
+    // 102 火神是 101 火花的进化形态（eggGameId=101，同蛋组 2），当公本一样能配
+    const snapshots = [
+      snapshot(1001, '甲', [
+        mother(101, { nature: '开朗' }),
+        mother(102, { gender: '公', nature: '固执' }),
+      ]),
+    ];
+    const supply = findBreedableSupply(
+      snapshots,
+      { eggGameId: 101, nature: '固执', gender: '母', body: '大块头', voice: '+100' },
+      catalog,
+    );
+    expect(supply.kind).toBe('breedable');
+    expect(supply.motherGameId).toBe(101);
+    expect(supply.maleGameId).toBe(102);
+  });
+
   test('公也必须同档位：非大块头 / 非 +100 的公不算可孵', () => {
     const snapshots = [
       snapshot(1001, '甲', [
@@ -147,11 +164,11 @@ describe('findBreedableSupply', () => {
     expect(supply.kind).toBe('none');
   });
 
-  test('身高到顶可以当大块头：父母双方都认身高', () => {
+  test('身高到顶且体重 ≥95% 才能当大块头：父母双方都要同时满足', () => {
     const snapshots = [
       snapshot(1001, '甲', [
-        mother(201, { medalBody: '', heightPercent: 100 }),
-        mother(701, { gender: '公', nature: '固执', medalBody: '', heightPercent: 100 }),
+        mother(201, { medalBody: '', heightPercent: 100, weightPercent: 95 }),
+        mother(701, { gender: '公', nature: '固执', medalBody: '', heightPercent: 100, weightPercent: 95 }),
       ]),
     ];
     const supply = findBreedableSupply(
@@ -162,6 +179,21 @@ describe('findBreedableSupply', () => {
     expect(supply.kind).toBe('breedable');
     expect(supply.motherGameId).toBe(201);
     expect(supply.maleGameId).toBe(701);
+  });
+
+  test('身高 100% 但体重不足 95% 时不算大块头', () => {
+    const snapshots = [
+      snapshot(1001, '甲', [
+        mother(201, { medalBody: '', heightPercent: 100, weightPercent: 94.9 }),
+        mother(701, { gender: '公', nature: '固执' }),
+      ]),
+    ];
+    const supply = findBreedableSupply(
+      snapshots,
+      { eggGameId: 201, nature: '固执', gender: '母', body: '大块头', voice: '+100' },
+      species,
+    );
+    expect(supply.kind).toBe('none');
   });
 
   test('母本自带目标性格时，公可以不带目标性格', () => {
@@ -257,6 +289,23 @@ describe('种公需求（负数蛋组 id）', () => {
     expect(supply.eggGameId).toBe(201);
     expect(supply.mother?.pet.gameId).toBe(201);
     expect(supply.male?.pet.gameId).toBe(701);
+  });
+
+  test('同一个图鉴号有多只时，优先展示带目标性格的那只', () => {
+    const snapshots = [
+      snapshot(1001, '甲', [
+        mother(201, { nature: '开朗' }),
+        mother(201, { nature: '固执' }),
+        mother(701, { gender: '公', nature: '固执' }),
+      ]),
+    ];
+    const supply = findStudBreedableSupply(
+      snapshots,
+      { eggGameId: -3, nature: '固执', body: '大块头', voice: '+100' },
+      speciesWithMale201,
+    );
+    expect(supply.kind).toBe('breedable');
+    expect(supply.mother?.pet.nature).toBe('固执');
   });
 
   test('完成校验：背包里有任意同组物种的符合条件的公就算满足', () => {

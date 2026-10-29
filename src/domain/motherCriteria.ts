@@ -1,5 +1,5 @@
 import { matchesVoiceOption, type MotherGroup, type TargetMode } from './petFilters';
-import { heightBodyOf } from '../shared/bodySize.js';
+import { bodyGradeOf } from '../shared/bodySize.js';
 import type { OwnedPet } from './types';
 
 /**
@@ -58,30 +58,16 @@ export const matchesMotherVoice = (voiceDb: number, voices: readonly string[]): 
   voices.some((voice) => matchesVoiceOption(voiceDb, voice));
 
 /**
- * 体型达标容差（体重百分位，2026-10-25 用户拍板）。
+ * 该精灵是否命中选中的体型。
  *
- * 抓包解析器把「大块头」定在 98%、「小不点」定在 2%；实际会碰到 97.7% / 97.9%
- * 这种差几克没过线、但游戏里已经显示大块头的精灵。达标判定放宽 0.5 个百分位，
- * **显示仍按原阈值**：97.x% 的精灵照常显示为「普通」，只是不再漏算成母本。
+ * 口径与档位 / 种公完全一致（2026-10-28 用户确认）：奖牌优先；没有奖牌时
+ * **身高 100% / 0% 且体重 ≥95% / ≤5% 同时满足**才算大块头 / 小不点。
+ * 奖牌显示仍按体重 98% / 2%，这里只影响「够不够格当合格母本」。
  */
-export const MOTHER_BODY_PERCENT_TOLERANCE = 0.5;
-
-/** 该精灵是否命中选中的体型（先看解析出的奖章，再看身高百分位，最后按体重百分位放宽口径兜底）。 */
 export function matchesMotherBody(pet: OwnedPet, bodies: readonly MotherBody[]): boolean {
   if (bodies.length === 0) return true;
-  // 有奖牌就以奖牌为准：奖牌是体重 98% / 2% 判出来的，不再拿身高 / 体重百分位二次改判
-  if (pet.medalBody) return (bodies as readonly string[]).includes(pet.medalBody);
-  // 没有奖牌时才看身高百分位（2026-10-26 用户拍板：两个 100% 身高能生大块头蛋，
-  // 两个 0% 生小不点蛋）。奖牌本身不变，这里只是放宽「能不能作为合格亲本」的判定。
-  const heightBody = heightBodyOf(pet.heightPercent);
-  if (heightBody) return (bodies as readonly string[]).includes(heightBody);
-  const percent = pet.weightPercent;
-  if (typeof percent !== 'number' || !Number.isFinite(percent)) return false;
-  return bodies.some((body) =>
-    body === '大块头'
-      ? percent >= 98 - MOTHER_BODY_PERCENT_TOLERANCE
-      : percent <= 2 + MOTHER_BODY_PERCENT_TOLERANCE,
-  );
+  const body = bodyGradeOf(pet);
+  return body !== '' && (bodies as readonly string[]).includes(body);
 }
 
 /** 单只精灵是否是「达标母本」。`naturesOf` 只在要求推荐性格时才会被用到。 */

@@ -180,7 +180,7 @@ export function MotherResourceEditor({
                 >
                   <span className="font-medium">{snapshot.accountName}</span>
                   <span className="ml-1 text-[11px] text-slate-400">
-                    UID {snapshot.gameId > 0 ? snapshot.gameId : '未知'} · 达标 {coverageOf(snapshot)} 种
+                    UID {snapshot.gameId > 0 ? snapshot.gameId : '未知'} · 母本 {coverageOf(snapshot)} 种
                   </span>
                   <span className="mt-0.5 block text-[11px] text-slate-400">
                     导出 {snapshot.exportedAt ? new Date(snapshot.exportedAt).toLocaleString() : '未知'}

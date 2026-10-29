@@ -81,7 +81,7 @@ export function PetCard({ pet, species, eggGroupNames }: PetCardProps) {
       </div>
 
       <p className="truncate text-[10px] leading-tight text-slate-500">
-        {pet.weightPercent != null ? `${Math.round(pet.weightPercent)}%` : '—'} · {pet.voiceDb}dB
+        {pet.weightPercent != null ? `${pet.weightPercent.toFixed(2)}%` : '—'} · {pet.voiceDb}dB
       </p>
       <p className="mt-0.5 w-full truncate text-center text-[10px] leading-tight text-slate-500">
         {eggGroups || '—'}

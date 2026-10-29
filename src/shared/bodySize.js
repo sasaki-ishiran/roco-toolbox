@@ -37,10 +37,17 @@ export function heightPercentOf(size, heightCm) {
 }
 
 /**
- * 「两个 100% 身高能生大块头蛋、两个 0% 生小不点蛋」的容差（2026-10-26 用户拍板）。
- * 百分位保留 1 位小数，99.5 以上 / 0.5 以下都按到顶 / 到底算。
+ * 身高必须**正好到顶 / 到底**才算极端体型（2026-10-28 用户确认）：
+ * 100% 身高与 95% 体重是一起满足的条件，不能再有 99.5% 的容差。
  */
-export const HEIGHT_EXTREME_TOLERANCE = 0.5;
+export const HEIGHT_EXTREME_TOLERANCE = 0;
+
+/**
+ * 合格判定的体重容差（百分位，2026-10-28 用户确认）：
+ * 没有奖牌时，身高 100% 且体重 ≥95% 才算大块头；身高 0% 且体重 ≤5% 才算小不点。
+ * **奖牌显示仍按 98% / 2%**，这里只放宽「够不够格当亲本」。
+ */
+export const BODY_WEIGHT_TOLERANCE = 5;
 
 /**
  * 身高百分位换算成「能产出的体型蛋」：到顶 = 大块头、到底 = 小不点。
@@ -52,5 +59,23 @@ export function heightBodyOf(heightPercent) {
   if (typeof heightPercent !== 'number' || !Number.isFinite(heightPercent)) return '';
   if (heightPercent >= 100 - HEIGHT_EXTREME_TOLERANCE) return '大块头';
   if (heightPercent <= HEIGHT_EXTREME_TOLERANCE) return '小不点';
+  return '';
+}
+
+/**
+ * 合格体型（2026-10-28 用户确认的完整口径）：
+ * 1. 有奖牌：以奖牌为准（奖牌本身已隐含身高到顶 / 到底）；
+ * 2. 没有奖牌：身高必须正好 100% / 0%，**并且**体重 ≥95% / ≤5%，两者一起满足；
+ * 3. 缺身高或体重（老抓包）→ 判不了，不猜。
+ */
+export function bodyGradeOf(pet) {
+  if (!pet) return '';
+  if (pet.medalBody === '大块头' || pet.medalBody === '小不点') return pet.medalBody;
+  const heightBody = heightBodyOf(pet.heightPercent);
+  if (!heightBody) return '';
+  const percent = pet.weightPercent;
+  if (typeof percent !== 'number' || !Number.isFinite(percent)) return '';
+  if (heightBody === '大块头' && percent >= 100 - BODY_WEIGHT_TOLERANCE) return '大块头';
+  if (heightBody === '小不点' && percent <= BODY_WEIGHT_TOLERANCE) return '小不点';
   return '';
 }

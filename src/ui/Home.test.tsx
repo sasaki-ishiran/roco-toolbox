@@ -117,14 +117,26 @@ describe('家园页', () => {
     expect(screen.getByTestId('home-residents')).toHaveTextContent('母本甲');
     expect(screen.getByTestId('home-residents')).toHaveTextContent('公本乙');
     expect(screen.getAllByTestId('home-pet-card')).toHaveLength(2);
-    expect(screen.getAllByTestId('pet-avatar')).toHaveLength(2);
-    expect(screen.getByTestId('home-residents')).toHaveTextContent('50%');
-    expect(screen.getByTestId('home-residents')).toHaveTextContent('99%');
-    expect(screen.getByTestId('home-residents')).not.toHaveTextContent('奖牌');
-    expect(screen.getByTestId('home-pairs')).toHaveTextContent('公本乙');
-    expect(screen.getByTestId('home-pairs')).toHaveTextContent('母本甲');
+    // 两张精灵卡 + 配窝卡片里的一公一母各一个头像
+    expect(screen.getAllByTestId('pet-avatar')).toHaveLength(4);
+    expect(screen.getByTestId('home-residents')).toHaveTextContent('50.00%');
+    expect(screen.getByTestId('home-residents')).toHaveTextContent('99.00%');
+    expect(screen.getByTestId('home-pair-cards')).toHaveTextContent('公本乙');
+    expect(screen.getByTestId('home-pair-cards')).toHaveTextContent('母本甲');
+    expect(screen.getAllByTestId('home-pair-card')).toHaveLength(1);
     expect(screen.getByTestId('home-egg-count')).toHaveTextContent('有 1 枚蛋');
     expect(screen.getByTestId('home-eggs')).toHaveTextContent('普通小窝 · 一楼');
+  });
+
+  test('多形态只展示名字，不写形态（形态由头像区分）', () => {
+    const snapshot = snapshotWithHome();
+    snapshot.home!.residents[0].name = '雪绒鸟_夏天的样子';
+    h.snapshots = [snapshot];
+    render(<HomeLand />);
+
+    const card = screen.getAllByTestId('home-pet-card')[0];
+    expect(card).toHaveTextContent('雪绒鸟');
+    expect(card).not.toHaveTextContent('夏天的样子');
   });
 
   test('没有家园记录时给出采集提示', () => {

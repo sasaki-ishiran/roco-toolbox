@@ -57,7 +57,7 @@ const motherAccount = (uid, ids) => ({
 
 const motherDraft = (accounts) => ({
   schemaVersion: 1,
-  criteriaId: 'all-mothers-v1',
+  criteriaId: 'all-mothers-v2',
   catalogVersion: 'test-v1',
   accounts,
 });

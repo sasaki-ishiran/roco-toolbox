@@ -115,7 +115,7 @@ describe('导入后自动发布到小组', () => {
     const [, input] = vi.mocked(publishCollectionResources).mock.calls[0];
     expect(input.baseRevision).toBe(0);
     expect(input.resource).toMatchObject({
-      criteriaId: 'all-mothers-v1',
+      criteriaId: 'all-mothers-v2',
       accounts: [
         { accountKey: 'uid:1001', eggGameIds: [101] },
         { accountKey: 'uid:1002', eggGameIds: [101] },

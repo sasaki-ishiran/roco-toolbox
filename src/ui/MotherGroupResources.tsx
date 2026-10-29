@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NatureSelect } from './primitives/NatureSelect';
 import { eggGroupNames } from '../data/catalog';
 import { GRADE_BODY, buildEggSearchIndex, gradeLabel, type TargetMode } from '../domain/petFilters';
@@ -18,21 +18,25 @@ import {
   type ProductionLine,
 } from '../domain/productionLines';
 import { bodyMedalIconByLabel, voiceMedalIconByLabel, voiceMedalLabel } from '../domain/petIcons';
+import { boxLabel } from '../domain/coverageDetail';
+import { speciesDisplayName } from '../domain/speciesName';
 import type { StudRecommendation } from '../domain/suggestions';
 import type { AccountSnapshot } from '../domain/parseBackup';
-import type { SpeciesEntry } from '../domain/types';
+import type { OwnedPet, SpeciesEntry } from '../domain/types';
 import type {
   MotherCoverageRow,
   MotherGroupDetail,
   MotherGroupMember,
 } from '../shared/motherGroups';
-import type {
-  CollectionDemand,
-  CollectionTaskRecord,
-  DemandBody,
-  DemandVoice,
+import {
+  DEMAND_BODIES,
+  DEMAND_VOICES,
+  demandKeyOf,
+  type CollectionDemand,
+  type CollectionTaskRecord,
+  type DemandBody,
+  type DemandVoice,
 } from '../shared/collectionGroups';
-import { demandKeyOf } from '../shared/collectionGroups';
 import type { MotherTargetConfig } from '../shared/collectionGroups';
 import { eggNatures, defaultEggNatures, type NatureOverrides } from '../domain/recommendedNatures';
 import { completedDemandCounts } from '../domain/demandStats';
@@ -45,9 +49,12 @@ import { ensureGroupSession, setGroupList, useGroupList, type GroupListState } f
 import { InlineSelect } from './primitives/InlineSelect';
 import { PetAvatar } from './PetAvatar';
 import { InlineMultiSelect } from './primitives/InlineMultiSelect';
+import { ModalSurface } from './primitives/ModalSurface';
+import { PetCompactCard } from './PetCompactCard';
 import { SearchField } from './primitives/SearchField';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { StateNotice } from './primitives/StateNotice';
+import { GenderMark } from './GenderMark';
 
 type ViewId = 'missing' | 'mine' | 'seeking';
 
@@ -68,6 +75,16 @@ const DEMAND_PUBLISH_CONCURRENCY = 4;
 const RESOURCE_GRID_COLUMNS = 4;
 const MISSING_PAGE_ROWS = 6;
 const MISSING_PAGE_SIZE = RESOURCE_GRID_COLUMNS * MISSING_PAGE_ROWS;
+
+/** 「我缺的」/「共同寻找」用的行：额外带上按性格拆分的缺口与可补成员。 */
+interface TargetRow extends MotherCoverageRow {
+  /** 我在这颗蛋上还缺的收集性格；空数组 = 已收齐。 */
+  missingNatures: string[];
+  /** 每个还没收集的性格分别谁能补；没按性格收时键为空串。 */
+  suppliersByNature: Map<string, string[]>;
+  /** 是否有人能补「我还没收集的性格」（不是「有这颗蛋」）。 */
+  canSupplyMissing: boolean;
+}
 
 export interface MotherGroupResourcesProps {
   group: MotherGroupDetail;
@@ -153,7 +170,7 @@ export function MotherGroupResources({
   const list = useGroupList(viewerAccountId, group.group.id);
   const setList = (patch: Partial<GroupListState>) =>
     setGroupList(viewerAccountId, group.group.id, patch);
-  const { view, query, memberFilter, seekingMembers, onlyOwned, onlyDemanded } = list;
+  const { view, query, memberFilter, missingMembers, seekingMembers, onlyOwned, onlyDemanded } = list;
   const { targetNature, targetBody, targetVoice, targetKind, onlyGroupLine } = list;
   // 旧值兼容：`help`（旧的「我能补谁」）与 `all`（旧「小组资源」）都落到「需求中心」
   const effectiveView: ViewId = view === 'help' || view === 'all'
@@ -182,15 +199,20 @@ export function MotherGroupResources({
    * 用户可能刚拿到蛋、还没重新采集导入。值为 demandKey。
    */
   const [confirmComplete, setConfirmComplete] = useState<string | null>(null);
-  /** 「我缺的」分页：一页 6 行（4 列）；筛选 / 切视图后回到第 1 页。 */
-  const [missingPage, setMissingPage] = useState(1);
+  /** 需求详情（2026-10-28）：点击卡片上的「查看」看是谁发的、该怎么配对。 */
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  /** 「我缺的」二级页面：点头像进入，把发需求 / 完成 / 撤回放到大按钮里操作。 */
+  const [resourceDetailEggId, setResourceDetailEggId] = useState<number | null>(null);
+  /** 「我缺的」瀑布流：先出 24 项，滚到底自动追加；筛选 / 切视图后重置。 */
+  const [missingVisible, setMissingVisible] = useState(MISSING_PAGE_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     ensureGroupSession(viewerAccountId);
   }, [viewerAccountId]);
 
   useEffect(() => {
-    setMissingPage(1);
+    setMissingVisible(MISSING_PAGE_SIZE);
   }, [
     effectiveView,
     targetKind,
@@ -198,6 +220,7 @@ export function MotherGroupResources({
     targetBody,
     targetVoice,
     memberFilter,
+    missingMembers,
     query,
     onlyOwned,
     onlyDemanded,
@@ -208,10 +231,12 @@ export function MotherGroupResources({
       setList({ memberFilter: '' });
     }
     const alive = new Set(group.members.map((member) => member.accountId));
+    const keptMissing = missingMembers.filter((id) => alive.has(id));
+    if (keptMissing.length !== missingMembers.length) setList({ missingMembers: keptMissing });
     const kept = seekingMembers.filter((id) => alive.has(id));
     if (kept.length !== seekingMembers.length) setList({ seekingMembers: kept });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.members, memberFilter, seekingMembers]);
+  }, [group.members, memberFilter, missingMembers, seekingMembers]);
 
   const rows = useMemo(
     () => buildMotherCoverage({ species, catalogVersion, members: group.members, criteriaId }),
@@ -224,33 +249,193 @@ export function MotherGroupResources({
         .map((member) => member.accountId),
     [group.members, catalogVersion, criteriaId],
   );
+  /**
+   * 组内成员的产线：新摘要才有 `lines`；旧摘要没有时返回 null，只能退回任意母本口径。
+   */
+  const linesByMember = useMemo(() => {
+    const map = new Map<string, ProductionLine[] | null>();
+    for (const member of group.members) {
+      if (!isMotherResourceComparable(member.resource, catalogVersion, criteriaId)) {
+        map.set(member.accountId, null);
+        continue;
+      }
+      const accounts = member.resource?.accounts ?? [];
+      map.set(
+        member.accountId,
+        accounts.some((account) => account.lines === undefined)
+          ? null
+          : accounts.flatMap((account) => account.lines ?? []),
+      );
+    }
+    return map;
+  }, [group.members, catalogVersion, criteriaId]);
+
+  /**
+   * 每颗蛋「我自己设定的收集性格」（2026-10-28 用户口径）：
+   * 个人推荐性格优先，其次组目标；两边都没开 = 不按性格收（返回空数组）。
+   */
+  const configuredNaturesOf = (eggGameId: number): string[] => {
+    if (natureOverrides !== undefined) return eggNatures(species, eggGameId, natureOverrides);
+    if (target?.kind !== 'mother' || target.requireRecommendedNatures !== true) return [];
+    return eggNatures(species, eggGameId, target.natureOverrides);
+  };
+
+  /**
+   * 2026-10-28 用户口径：组内其他人的「有没有」按产线判断——
+   * 目标体型 / 声音 / 性格能产才算有；旧摘要没产线时退回任意母本。
+   *
+   * 性格不再用顶部「不限」一刀切：没手选性格时，按每颗蛋自己设定的收集性格逐个判断。
+   * 否则「我有一只 天真 优优」会被当成目标性格的母本也齐了，缺口显示 0。
+   */
+  const targetRows = useMemo<TargetRow[]>(() => {
+    const eggIdsOf = new Map<string, Set<number>>();
+    for (const member of group.members) {
+      eggIdsOf.set(
+        member.accountId,
+        new Set((member.resource?.accounts ?? []).flatMap((account) => account.eggGameIds)),
+      );
+    }
+    /** 这颗蛋要看的性格：手选的优先；否则用个人收集口径；都没有 = 不限（''）。 */
+    const naturesOfRow = (eggGameId: number): string[] => {
+      if (targetNature) return [targetNature];
+      const configured = configuredNaturesOf(eggGameId);
+      return configured.length > 0 ? configured : [''];
+    };
+    const supplyOf = (memberId: string, eggGameId: number): boolean => {
+      if (memberId === viewerAccountId && snapshots.length > 0) {
+        return hasStockForDemand(
+          snapshots,
+          { eggGameId, nature: targetNature, gender: '母', body: targetBody, voice: targetVoice },
+          species,
+        );
+      }
+      const lines = linesByMember.get(memberId);
+      if (lines != null) {
+        return linesSupplyTarget(
+          lines,
+          { kind: 'mother', eggGameId, nature: targetNature, body: targetBody, voice: targetVoice },
+          species,
+          targetMode,
+        );
+      }
+      // 旧摘要没有产线：退回「有没有这只蛋的任意母本」
+      return eggIdsOf.get(memberId)?.has(eggGameId) ?? false;
+    };
+    /** 这个成员能提供哪些目标性格（不限性格时 '' 表示「有任意一只」）。 */
+    const suppliedNaturesOf = (
+      memberId: string,
+      eggGameId: number,
+      natures: readonly string[],
+    ): Set<string> => {
+      if (natures.length === 1 && natures[0] === '') {
+        return supplyOf(memberId, eggGameId) ? new Set(['']) : new Set();
+      }
+      if (memberId === viewerAccountId && snapshots.length > 0) {
+        return new Set(
+          natures.filter((nature) =>
+            hasStockForDemand(
+              snapshots,
+              { eggGameId, nature, gender: '母', body: targetBody, voice: targetVoice },
+              species,
+            ),
+          ),
+        );
+      }
+      const lines = linesByMember.get(memberId);
+      if (lines != null) {
+        return new Set(
+          natures.filter((nature) =>
+            linesSupplyTarget(
+              lines,
+              { kind: 'mother', eggGameId, nature, body: targetBody, voice: targetVoice },
+              species,
+              targetMode,
+            ),
+          ),
+        );
+      }
+      // 旧摘要没有产线：分不清性格，按「有这只蛋」视为都能补
+      return eggIdsOf.get(memberId)?.has(eggGameId) ? new Set(natures) : new Set();
+    };
+
+    return rows.map((row) => {
+      const natures = naturesOfRow(row.eggGameId);
+      const viewerSupplied = suppliedNaturesOf(viewerAccountId, row.eggGameId, natures);
+      const missingNatures = natures.filter((nature) => !viewerSupplied.has(nature));
+      const holders: MotherCoverageRow['holders'] = [];
+      const missingMemberIds: string[] = [];
+      const unknownMemberIds: string[] = [];
+      /** 每个还没收集的性格分别谁能补；未按性格收时键为空串。 */
+      const suppliersByNature = new Map<string, string[]>();
+      for (const member of group.members) {
+        if (!isMotherResourceComparable(member.resource, catalogVersion, criteriaId)) {
+          unknownMemberIds.push(member.accountId);
+          continue;
+        }
+        const supplied = suppliedNaturesOf(member.accountId, row.eggGameId, natures);
+        if (supplied.size > 0) {
+          const previous = row.holders.find((holder) => holder.accountId === member.accountId);
+          holders.push({ accountId: member.accountId, accountKeys: previous?.accountKeys ?? [] });
+          if (member.accountId !== viewerAccountId) {
+            for (const nature of missingNatures) {
+              if (!supplied.has(nature)) continue;
+              const list = suppliersByNature.get(nature) ?? [];
+              list.push(member.accountId);
+              suppliersByNature.set(nature, list);
+            }
+          }
+        } else {
+          missingMemberIds.push(member.accountId);
+        }
+      }
+      return {
+        ...row,
+        holders,
+        missingMemberIds,
+        unknownMemberIds,
+        missingNatures,
+        suppliersByNature,
+        canSupplyMissing:
+          missingNatures.length > 0 &&
+          [...suppliersByNature.values()].some((ids) => ids.length > 0),
+      };
+    });
+  }, [
+    rows,
+    group.members,
+    linesByMember,
+    viewerAccountId,
+    snapshots,
+    species,
+    targetNature,
+    targetBody,
+    targetVoice,
+    targetMode,
+    catalogVersion,
+    criteriaId,
+    natureOverrides,
+    target,
+  ]);
+
   const views = useMemo(
-    () => selectMotherSharingViews(rows, viewerAccountId, comparableIds),
-    [rows, viewerAccountId, comparableIds],
+    () => selectMotherSharingViews(targetRows, viewerAccountId, comparableIds),
+    [targetRows, viewerAccountId, comparableIds],
   );
   const groupFresh = useMemo(() => groupFreshness(group.members), [group.members]);
   const myMember = group.members.find((member) => member.accountId === viewerAccountId) ?? null;
   const myFreshness = myMember ? memberFreshness(myMember) : null;
 
-  /** 当前目标口径；空字段 = 不挑 / 不限，后续匹配会自动跳过。 */
-  // 母本页固定要母；公母筛选已去掉（种公需求在「种公」页单独走）。
-  const criteriaOfRow = (row: MotherCoverageRow) => ({
-    eggGameId: row.eggGameId,
-    nature: targetNature,
-    gender: '母' as const,
-    body: targetBody,
-    voice: targetVoice,
-  });
-
   /**
-   * 「我缺的」以本机背包为准：有完全匹配的个体就不算缺。
-   * 没导入本机数据时退回旧的母本覆盖口径，并提示数据未更新。
+   * 「我缺的」：按每颗蛋自己设定的收集性格逐个判断（2026-10-28 用户口径）。
+   * 只有部分性格没收集时也算缺，卡片会标出还缺哪几个性格；
+   * 自己还没发布、也没导入数据时返回 null（不能计算）。
    */
-  const targetMissingRows = useMemo(() => {
-    if (snapshots.length === 0) return views.missingForMe;
-    return rows.filter((row) => !hasStockForDemand(snapshots, criteriaOfRow(row), species));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, snapshots, species, targetNature, targetBody, targetVoice, views.missingForMe]);
+  const targetMissingRows = useMemo<TargetRow[] | null>(() => {
+    if (snapshots.length === 0 && !comparableIds.includes(viewerAccountId)) {
+      return null;
+    }
+    return targetRows.filter((row) => row.missingNatures.length > 0);
+  }, [targetRows, snapshots.length, comparableIds, viewerAccountId]);
 
   /**
    * 「自己能产」：背包里没有现货，但同账号有可孵的一对（母本 + 同档位公）。
@@ -313,6 +498,10 @@ export function MotherGroupResources({
   }, [group.members, viewerAccountId, catalogVersion, criteriaId]);
 
   const searchIndex = useMemo(() => buildEggSearchIndex(species), [species]);
+  const speciesByGameId = useMemo(
+    () => new Map(species.map((entry) => [entry.gameId, entry])),
+    [species],
+  );
 
   const memberById = useMemo(
     () => new Map(group.members.map((member) => [member.accountId, member])),
@@ -339,7 +528,7 @@ export function MotherGroupResources({
     seekingMembers.length > 0
       ? seekingMembers
       : group.members.map((member) => member.accountId);
-  const seekingRows = rows.filter((row) =>
+  const seekingRows = targetRows.filter((row) =>
     seekingScope.every(
       (id) =>
         row.missingMemberIds.includes(id) || row.unknownMemberIds.includes(id),
@@ -374,14 +563,14 @@ export function MotherGroupResources({
   const missingEggIds = new Set((missingRows ?? []).map((row) => row.eggGameId));
   // 「我缺的」原本排除我已有的蛋；但发过需求的蛋一旦被自己获得，需求卡和撤回入口会一起消失。
   // 这里把「我有未结束需求」的蛋补回列表，动作仍走同一套需求卡。
-  const demandedExtras =
+  const demandedExtras: TargetRow[] =
     missingRows == null
       ? []
-      : rows.filter(
+      : targetRows.filter(
           (row) =>
             myUnfinishedDemandedEggs.has(row.eggGameId) && !missingEggIds.has(row.eggGameId),
         );
-  const currentRows =
+  const currentRows: TargetRow[] | null =
     effectiveView === 'missing'
       ? missingRows == null
         ? null
@@ -393,11 +582,12 @@ export function MotherGroupResources({
   const filtered = (currentRows ?? []).filter((row) => {
     if (onlyOwned && row.holders.length === 0) return false;
     if (onlyDemanded && !myDemandedEggs.has(row.eggGameId)) return false;
-    // 「共同寻找」的成员范围由 seekingMembers 决定；memberFilter 只服务「我缺的」，
-    // 否则在「我缺的」选了 B 再切过来，会用「B 是否拥有」把共同缺口筛空，而筛选控件又是隐藏的。
-    if (memberFilter && effectiveView !== 'seeking') {
-      // 我缺的：按「谁有」筛
-      if (!row.holders.some((holder) => holder.accountId === memberFilter)) return false;
+    // 「我缺的」：勾了几个人就取并集——其中任意一人能补就算命中（2026-10-28 用户口径）。
+    // 「共同寻找」的范围由 seekingMembers 决定，这里不掺和。
+    if (effectiveView === 'missing' && missingMembers.length > 0) {
+      // 只按「能补我还没收集的性格」筛；仅有这颗蛋但补不了缺口的人不算
+      const supplierIds = [...row.suppliersByNature.values()].flat();
+      if (!supplierIds.some((accountId) => missingMembers.includes(accountId))) return false;
     }
     const keyword = query.trim().toLowerCase();
     if (!keyword) return true;
@@ -413,13 +603,13 @@ export function MotherGroupResources({
    */
   const isDefaultTarget =
     !targetNature && targetBody === '大块头' && targetVoice === '+100';
-  const publishableRows = filtered.filter((row) => row.holders.length > 0);
+  const publishableRows = filtered.filter((row) => row.canSupplyMissing);
   const dataIncompleteRows = filtered.filter(
-    (row) => row.holders.length === 0 && (!isDefaultTarget || row.unknownMemberIds.length > 0),
+    (row) => !row.canSupplyMissing && (!isDefaultTarget || row.unknownMemberIds.length > 0),
   );
   const blockedRows = filtered.filter(
     (row) =>
-      row.holders.length === 0 &&
+      !row.canSupplyMissing &&
       isDefaultTarget &&
       row.unknownMemberIds.length === 0,
   );
@@ -431,14 +621,27 @@ export function MotherGroupResources({
       ? [...publishableRows, ...dataIncompleteRows, ...blockedRows]
       : filtered;
 
-  // 「我缺的」一页 6 行；页码越界时（筛选后条数变少）自动落到最后一页。
-  const missingTotalPages = Math.max(1, Math.ceil(listRows.length / MISSING_PAGE_SIZE));
-  const missingCurrentPage = Math.min(missingPage, missingTotalPages);
-  const missingPageOffset = (missingCurrentPage - 1) * MISSING_PAGE_SIZE;
+  // 「我缺的」瀑布流：不再翻页，滚到底自动追加，筛掉的分区也不会整页跳走。
+  const hasMoreRows = effectiveView === 'missing' && listRows.length > missingVisible;
   const pageRows =
-    effectiveView === 'missing'
-      ? listRows.slice(missingPageOffset, missingPageOffset + MISSING_PAGE_SIZE)
-      : listRows;
+    effectiveView === 'missing' ? listRows.slice(0, missingVisible) : listRows;
+
+  // 滚到底部的哨兵进入视口就追加一屏；IntersectionObserver 不可用时仍可点「加载更多」。
+  useEffect(() => {
+    if (!hasMoreRows) return;
+    const node = loadMoreRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setMissingVisible((value) => Math.min(value + MISSING_PAGE_SIZE, listRows.length));
+        }
+      },
+      { rootMargin: '240px 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMoreRows, missingVisible, listRows.length]);
 
   const taskKeyOf = (row: MotherCoverageRow): string => `mother:${row.eggGameId}`;
   const taskOf = (row: MotherCoverageRow): CollectionTaskRecord | undefined =>
@@ -446,6 +649,11 @@ export function MotherGroupResources({
   const nameOf = (accountId: string): string => {
     const member = memberById.get(accountId);
     return member ? cardName(labelOf(member)) : accountId.slice(0, 6);
+  };
+  /** 详情弹层不截断昵称，尽量写全，避免「不知道是谁」。 */
+  const fullNameOf = (accountId: string): string => {
+    const member = memberById.get(accountId);
+    return member ? labelOf(member) : '已退出的成员';
   };
   const runTask = async (row: MotherCoverageRow, action: 'claim' | 'release') => {
     const handler = action === 'claim' ? onClaimTask : onReleaseTask;
@@ -476,18 +684,6 @@ export function MotherGroupResources({
     }
   };
 
-  /**
-   * 每个蛋在本组要求什么性格（2026-10-25 用户口径：直接标在可立鸡这类条目上，
-   * 看到就知道该孵什么性格给对方）。只有本组开了「要求推荐性格」才显示。
-   */
-  const requiredNaturesOf = (eggGameId: number): string[] => {
-    // 个人推荐性格优先（2026-10-27 用户口径：母本按用户自己定的性格展示）；
-    // 直接渲染组件、没传个人覆盖时，退回组目标那份。
-    if (natureOverrides !== undefined) return eggNatures(species, eggGameId, natureOverrides);
-    if (target?.kind !== 'mother' || target.requireRecommendedNatures !== true) return [];
-    return eggNatures(species, eggGameId, target.natureOverrides);
-  };
-
   /* ---------- 需求承接（2026-10-26） ---------- */
 
   const rowByEgg = useMemo(() => new Map(rows.map((row) => [row.eggGameId, row])), [rows]);
@@ -496,15 +692,61 @@ export function MotherGroupResources({
     rowByEgg.get(eggGameId)?.holders.some((holder) => holder.accountId === viewerAccountId) ??
     false;
 
-  /** 本机是否有现货 / 同账号可孵；没导入数据时退回旧的「我有这颗蛋」口径。 */
+  /** 本机自己的已发布产线：手机上没导入本地数据时，也能判断「我能接什么」。 */
+  const myPublishedLines = useMemo(() => {
+    if (!isMotherResourceComparable(myMember?.resource ?? null, catalogVersion, criteriaId)) return null;
+    const accounts = myMember?.resource?.accounts ?? [];
+    if (accounts.length === 0) return null;
+    // 旧摘要没有产线字段，分不清性格 / 档位，只能退回旧口径
+    if (accounts.some((account) => account.lines === undefined)) return null;
+    return accounts.flatMap((account) => account.lines ?? []);
+  }, [myMember, catalogVersion, criteriaId]);
+
+  /**
+   * 本机是否能同账号孵出一对（母本 + 同档位公）。
+   * 没导入本机数据时改用**自己已发布的产线**判断（2026-10-28 用户反馈：
+   * 手机上没导入数据就接不了种公单）；旧摘要连产线都没有时，才退回「我有这颗蛋」。
+   */
   const viewerCanSupply = (demand: CollectionDemand): boolean => {
-    if (isStudDemandKey(demand.eggGameId)) {
-      return snapshots.length > 0 && findStudBreedableSupply(snapshots, demand, species).kind !== 'none';
-    }
     if (snapshots.length > 0) {
-      return findBreedableSupply(snapshots, demand, species).kind !== 'none';
+      return isStudDemandKey(demand.eggGameId)
+        ? findStudBreedableSupply(snapshots, demand, species).kind !== 'none'
+        : findBreedableSupply(snapshots, demand, species).kind !== 'none';
     }
-    return iHoldEgg(demand.eggGameId);
+    if (myPublishedLines != null) {
+      if (isStudDemandKey(demand.eggGameId)) {
+        return linesSupplyTarget(
+          myPublishedLines,
+          {
+            kind: 'stud',
+            groupId: -demand.eggGameId,
+            nature: demand.nature,
+            body: demand.body,
+            voice: demand.voice,
+          },
+          species,
+          targetMode,
+        );
+      }
+      // 需求要公时，该蛋物种必须能出公
+      if (demand.gender === '公') {
+        const egg = species.find((entry) => entry.gameId === demand.eggGameId);
+        if (egg?.maleCapable !== true) return false;
+      }
+      return linesSupplyTarget(
+        myPublishedLines,
+        {
+          kind: 'mother',
+          eggGameId: demand.eggGameId,
+          nature: demand.nature,
+          body: demand.body,
+          voice: demand.voice,
+        },
+        species,
+        targetMode,
+      );
+    }
+    return !isStudDemandKey(demand.eggGameId) && iHoldEgg(demand.eggGameId);
   };
   const myDataStale = myFreshness == null || myFreshness.stale;
 
@@ -613,9 +855,19 @@ export function MotherGroupResources({
     memberById,
     completedCounts,
     snapshots,
+    myPublishedLines,
     species,
+    targetMode,
     myDataStale,
   ]);
+
+  /** 「我缺的」二级页面展示的蛋：按当前目标口径重新取一遍谁能补。 */
+  const resourceDetailRow =
+    resourceDetailEggId == null
+      ? null
+      : targetRows.find((row) => row.eggGameId === resourceDetailEggId) ?? null;
+  const resourceDetailDemands =
+    resourceDetailEggId == null ? [] : myDemandsByEgg.get(resourceDetailEggId) ?? [];
 
   /** 种公推荐 → 组内产线状态（不含自己；自己单独用 viewerLines 判断）。 */
   const studRows = useMemo(() => {
@@ -675,6 +927,155 @@ export function MotherGroupResources({
   const demandKey = (demand: CollectionDemand): string =>
     `${demand.demanderAccountId}:${demandKeyOf(demand)}`;
 
+  /** 当前打开的需求；需求被刷新/删除后自动收起，不展示过期内容。 */
+  const detailDemand = detailKey
+    ? demands.find((demand) => demandKey(demand) === detailKey) ?? null
+    : null;
+
+  /**
+   * 需求详情里的配对建议（2026-10-28 用户要求「告诉我怎么配对」）：
+   * 用本机背包找同账号能配的一对（母本 + 种公），找不到时说明还缺什么。
+   */
+  const demandPairing = (demand: CollectionDemand): ReactNode => {
+    if (snapshots.length === 0) {
+      return (
+        <p className="px-1 text-[11px] leading-snug text-slate-500">
+          本机还没导入数据；导入后这里会直接给出用哪两只配窝。
+        </p>
+      );
+    }
+    /** 亲本条件（体型 / 声音要双方都满足；性格只要一方带）。 */
+    const gradeText = [
+      demand.body ? `体型 ${demand.body}` : '',
+      demand.voice ? `声音 ${demand.voice}` : '',
+    ]
+      .filter(Boolean)
+      .join('、');
+    const parentRule = [
+      gradeText ? `${gradeText} 双方都要满足` : '',
+      demand.nature ? `性格 ${demand.nature} 至少一方带` : '',
+    ]
+      .filter(Boolean)
+      .join('；');
+    const petOf = (accountKey: string | undefined, gameId: number | undefined, gender: '公' | '母') => {
+      if (gameId == null) return null;
+      const snapshot = snapshots.find(
+        (item) => (item.accountKey ?? `uid:${item.gameId}`) === accountKey,
+      );
+      const candidates = (snapshot?.pets ?? []).filter(
+        (pet) => pet.gameId === gameId && pet.gender === gender,
+      );
+      // 同一 gameId 可能有多只（性格不同）：优先带目标性格的那只，避免展示出孵不出的配对。
+      return (
+        candidates.find((pet) => !demand.nature || pet.nature === demand.nature) ??
+        candidates[0] ??
+        null
+      );
+    };
+    const nameOfPet = (pet: OwnedPet): string =>
+      speciesDisplayName(speciesByGameId.get(pet.gameId), pet.name);
+    /**
+     * 推荐配对（2026-10-29 用户口径）：需求中心改用**家园同款精灵卡**，
+     * 一公一母并排；角色用左下角标签区分，底部写账号 · 盒位。
+     */
+    const pairs = (
+      items: Array<{ label: string; pet: OwnedPet | null | undefined }>,
+      advice: string,
+    ): ReactNode => {
+      const visible = items.filter(
+        (item): item is { label: string; pet: OwnedPet } => item.pet != null,
+      );
+      if (visible.length < 2) return null;
+      const motherPet = visible.find((item) => item.label === '母本')?.pet ?? visible[0].pet;
+      const fatherPet = visible.find((item) => item.label === '种公')?.pet ?? visible[1].pet;
+      const card = (pet: OwnedPet, roleLabel: string) => (
+        <PetCompactCard
+          gameId={pet.gameId}
+          name={nameOfPet(pet)}
+          gender={pet.gender}
+          nature={pet.nature}
+          medalBody={pet.medalBody}
+          voiceDb={pet.voiceDb}
+          heightPercent={pet.heightPercent}
+          weightPercent={pet.weightPercent}
+          eggGroups={speciesByGameId.get(pet.gameId)?.eggGroups ?? []}
+          isShiny={pet.isShiny}
+          isColorful={pet.isColorful}
+          footer={`${pet.account} · ${boxLabel(pet)}`}
+          roleLabel={roleLabel}
+          variant="demand"
+          testId="mother-demand-pair-card"
+        />
+      );
+      return (
+        <div className="space-y-1" data-testid="mother-demand-pairing-text">
+          <p className="px-1 text-[10px] leading-snug text-emerald-800" data-testid="mother-demand-pair-advice">
+            {advice}
+          </p>
+          {/* 卡片固定 160 宽，不跟着弹层缩；窄屏改为横向滚动，避免元素错位。 */}
+          <div className="overflow-x-auto">
+            <div className="mx-auto flex w-max gap-2">
+              {card(motherPet, '母本')}
+              {card(fatherPet, '种公')}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    if (isStudDemandKey(demand.eggGameId)) {
+      const supply = findStudBreedableSupply(snapshots, demand, species);
+      const groupName = eggGroupNames[-demand.eggGameId] ?? `蛋组${-demand.eggGameId}`;
+      if (supply.kind === 'breedable') {
+        return (
+          pairs(
+            [
+              { label: '母本', pet: supply.mother?.pet },
+              { label: '种公', pet: supply.male?.pet },
+            ],
+            `用这两只同账号配对，可孵出「${groupName}」蛋。`,
+          ) ?? (
+            <p className="px-1 text-[11px] leading-snug text-slate-500">
+              本机暂时凑不出「{groupName}」的配对。
+            </p>
+          )
+        );
+      }
+      return (
+        <p className="px-1 text-[11px] leading-snug text-slate-500" data-testid="mother-demand-pairing-text">
+          本机暂时凑不出「{groupName}」的配对：需要同账号的母本 + 同蛋组公本
+          {parentRule ? `（${parentRule}）` : ''}。
+        </p>
+      );
+    }
+
+    const supply = findBreedableSupply(snapshots, demand, species);
+    const eggName = splitDisplayName(
+      rowByEgg.get(demand.eggGameId)?.name ?? `蛋 ${demand.eggGameId}`,
+    ).base;
+    if (supply.kind === 'breedable') {
+      return (
+        pairs(
+          [
+            { label: '母本', pet: petOf(supply.accountKey, supply.motherGameId, '母') },
+            { label: '种公', pet: petOf(supply.accountKey, supply.maleGameId, '公') },
+          ],
+          `用这两只同账号配对，可孵出「${eggName}」。`,
+        ) ?? (
+          <p className="px-1 text-[11px] leading-snug text-slate-500">
+            本机暂时凑不出能产「{eggName}」的一对。
+          </p>
+        )
+      );
+    }
+    return (
+      <p className="px-1 text-[11px] leading-snug text-slate-500" data-testid="mother-demand-pairing-text">
+        本机暂时凑不出能产「{eggName}」的一对：需要同账号的「{eggName}」母本 + 同蛋组公本
+        {parentRule ? `（${parentRule}）` : ''}。
+      </p>
+    );
+  };
+
   /** 当前视图实际可发需求的条目数：按钮可用性与计数必须跟渲染列表同源。 */
   const selectableMissingRows = filtered.filter(
     (row) => !blockedEggIds.has(row.eggGameId) && !selfBreedableEggIds.has(row.eggGameId),
@@ -705,6 +1106,65 @@ export function MotherGroupResources({
 
   const actionLabel = effectiveView === 'missing' ? '发需求' : '认领';
 
+  /** 单颗蛋的默认发布项：已发过的同性格跳过；没有可发性格时返回 null。 */
+  const missingPublishItem = (eggGameId: number): DemandPublishItem | null => {
+    // 全新鲜且确认没有来源的蛋、自己能产的蛋都不发需求（防状态过期后被带上）
+    if (blockedEggIds.has(eggGameId) || selfBreedableEggIds.has(eggGameId)) return null;
+    const row = rowByEgg.get(eggGameId);
+    const { base } = splitDisplayName(row?.name ?? `蛋 ${eggGameId}`);
+    // 已发过的「同性格 + 同性别 / 体型 / 声音」不能再带进来：
+    // 新接口不会覆盖，但重复发只会得到原行，提示「已发过」更清楚。
+    const existing = new Set(
+      (myDemandsByEgg.get(eggGameId) ?? [])
+        .filter((demand) => demand.status !== 'done')
+        .map((demand) => `${demand.nature}:${demand.gender}:${demand.body}:${demand.voice}`),
+    );
+    const targetRow = targetRows.find((row) => row.eggGameId === eggGameId);
+    const rowMissing = targetRow?.missingNatures;
+    // 目标性格已经收齐（或手选的那一个已经收到）→ 没有可发的了
+    if (rowMissing && rowMissing.length === 0) return null;
+    const missingNamed = (rowMissing ?? []).filter(Boolean);
+    const preferred = configuredNaturesOf(eggGameId);
+    // 只发「我还缺的性格」；没有按性格收时再退回默认推荐
+    const candidates = missingNamed.length > 0
+      ? missingNamed
+      : preferred.length > 0
+        ? preferred
+        : defaultEggNatures(species, eggGameId);
+    const natures = candidates.filter(
+      (nature) => !existing.has(`${nature}:母:${targetBody}:${targetVoice}`),
+    );
+    // 只在「本来有可发性格、但全部都发过了」时跳过；没有默认性格仍允许不挑性格发布
+    if (candidates.length > 0 && natures.length === 0) return null;
+    return { eggGameId, name: base, natures };
+  };
+
+  /** 发布前的数据不全提示；只在一部分蛋属于「数据不全」时出现。 */
+  const publishWarningFor = (eggGameIds: number[]): string => {
+    if (!eggGameIds.some((eggGameId) => dataIncompleteEggIds.has(eggGameId))) return '';
+    return groupFresh.stale > 0
+      ? `有 ${groupFresh.stale} 人超过 7 天未更新，可能有人能孵但没发布。仍要发布？`
+      : '有人还没发布资源，可能有人能孵但没发布。仍要发布？';
+  };
+
+  /** 二级页面里的「发需求」：直接为这颗蛋打开性格确认弹层。 */
+  const publishResourceDemand = (eggGameId: number) => {
+    const item = missingPublishItem(eggGameId);
+    if (!item) {
+      setDemandMessage(
+        blockedEggIds.has(eggGameId)
+          ? '组内暂时确认没人能补你缺的性格，发需求也大概率没人能接'
+          : selfBreedableEggIds.has(eggGameId)
+            ? '你自己就能孵这颗蛋，先到覆盖度看可迭代'
+            : '这颗蛋的性格都已经发过需求了；要改条件请先撤回原需求',
+      );
+      return;
+    }
+    setPublishWarning(publishWarningFor([eggGameId]));
+    setPublishError('');
+    setPublishItems([item]);
+  };
+
   const runBulk = async () => {
     if (selected.length === 0 || demandBusy) return;
     setDemandBusy(true);
@@ -714,54 +1174,13 @@ export function MotherGroupResources({
       if (effectiveView === 'missing') {
         // 先弹性格确认，发布放到 confirmPublish 里做（2026-10-26）
         const items = selected
-          .map((key) => {
-            const eggGameId = Number(key);
-            // 全新鲜且确认没有来源的蛋不参与发需求（防状态过期后被带上）
-            if (blockedEggIds.has(eggGameId)) return null;
-            // 自己能产的蛋也不发需求（防状态过期后被带上）
-            if (selfBreedableEggIds.has(eggGameId)) return null;
-            const row = rowByEgg.get(eggGameId);
-            const { base, form } = splitDisplayName(row?.name ?? `蛋 ${eggGameId}`);
-            // 已发过的「同性格 + 同性别 / 体型 / 声音」不能再带进来：
-            // 新接口不会覆盖，但重复发只会得到原行，提示「已发过」更清楚。
-            const existing = new Set(
-              (myDemandsByEgg.get(eggGameId) ?? [])
-                .filter((demand) => demand.status !== 'done')
-                .map(
-                  (demand) =>
-                    `${demand.nature}:${demand.gender}:${demand.body}:${demand.voice}`,
-                ),
-            );
-            const preferred = requiredNaturesOf(eggGameId);
-            const candidates = preferred.length > 0
-              ? preferred
-              : defaultEggNatures(species, eggGameId);
-            const currentKey = (nature: string) =>
-              `${nature}:母:${targetBody}:${targetVoice}`;
-            const natures = candidates.filter((nature) => !existing.has(currentKey(nature)));
-            // 只在「本来有可发性格、但全部都发过了」时跳过；没有默认性格仍允许不挑性格发布
-            if (candidates.length > 0 && natures.length === 0) return null;
-            return {
-              eggGameId,
-              name: form ? `${base} ${form}` : base,
-              natures,
-            };
-          })
-          .filter((item): item is { eggGameId: number; name: string; natures: string[] } => item !== null);
+          .map((key) => missingPublishItem(Number(key)))
+          .filter((item): item is DemandPublishItem => item !== null);
         if (items.length === 0) {
           setDemandMessage('这些蛋的性格都已经发过需求了；要改条件请先撤回原需求');
           return;
         }
-        const hasIncomplete = selected.some((key) =>
-          dataIncompleteEggIds.has(Number(key)),
-        );
-        setPublishWarning(
-          hasIncomplete
-            ? groupFresh.stale > 0
-              ? `有 ${groupFresh.stale} 人超过 7 天未更新，可能有人能孵但没发布。仍要发布？`
-              : '有人还没发布资源，可能有人能孵但没发布。仍要发布？'
-            : '',
-        );
+        setPublishWarning(publishWarningFor(selected.map(Number)));
         setPublishItems(items);
         setPublishError('');
         return;
@@ -966,14 +1385,15 @@ export function MotherGroupResources({
     setConfirmWithdraw(null);
     setConfirmStud(null);
     setConfirmComplete(null);
+    setResourceDetailEggId(null);
   }, [effectiveView, targetKind, group.group.id]);
 
   /** 需求卡：四段共用，只有动作不同；已完成的单不进列表。卡片只留 头像 + 名称 + 性格 + 动作。 */
   const renderDemandCard = (demand: CollectionDemand, actions: ReactNode): ReactNode => {
     const isStud = isStudDemandKey(demand.eggGameId);
-    const { base, form } = isStud
-      ? { base: eggGroupNames[-demand.eggGameId] ?? `蛋组${-demand.eggGameId}`, form: '' }
-      : splitDisplayName(rowByEgg.get(demand.eggGameId)?.name ?? `蛋 ${demand.eggGameId}`);
+    const base = isStud
+      ? (eggGroupNames[-demand.eggGameId] ?? `蛋组${-demand.eggGameId}`)
+      : splitDisplayName(rowByEgg.get(demand.eggGameId)?.name ?? `蛋 ${demand.eggGameId}`).base;
     return (
       <li
         key={demandKey(demand)}
@@ -1003,18 +1423,36 @@ export function MotherGroupResources({
               />
             ) : null}
           </div>
-          {isStud ? (
-            <span className="block h-10 w-10" aria-hidden />
-          ) : (
-            <PetAvatar gameId={demand.eggGameId} name={base} size={40} />
-          )}
+          <button
+            type="button"
+            aria-label={`查看${base}需求详情`}
+            title="点击头像查看需求详情与配对"
+            data-testid="mother-demand-open"
+            onClick={(event) => {
+              event.stopPropagation();
+              setDetailKey(demandKey(demand));
+            }}
+            className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+          >
+            {isStud ? (
+              <span className="block h-10 w-10" aria-hidden />
+            ) : (
+              <PetAvatar gameId={demand.eggGameId} name={base} size={40} />
+            )}
+          </button>
         </div>
         <span className="w-full break-words text-center text-[10px] font-medium leading-tight text-slate-700">
           {base}
-          {form ? <span className="block text-[9px] font-normal text-slate-400">{form}</span> : null}
         </span>
-        <NatureChips natures={[demand.nature || '不挑']} testId="mother-demand-natures" />
-        <div className="mt-auto flex flex-wrap items-center justify-center gap-1 text-[10px]">{actions}</div>
+        <div className="flex w-full items-center justify-center gap-0.5">
+          <NatureChips natures={[demand.nature || '不挑']} testId="mother-demand-natures" />
+          <GenderMark
+            gender={demand.gender === '公' || demand.gender === '母' ? demand.gender : '未知'}
+          />
+        </div>
+        <div className="mt-auto flex flex-wrap items-center justify-center gap-1 text-[10px]">
+          {actions}
+        </div>
       </li>
     );
   };
@@ -1055,60 +1493,60 @@ export function MotherGroupResources({
       </p>
 
       {effectiveView === 'missing' ? (
-        <>
-          <div className="flex items-center gap-1.5" data-testid="missing-kind-filter">
-            <SegmentedControl
-              label="我缺的类型"
-              value={targetKind}
-              options={[
-                { value: 'stud', label: '种公' },
-                { value: 'mother', label: '母本' },
-              ]}
-              onValueChange={(next) => setList({ targetKind: next as 'mother' | 'stud' })}
-              optionTestId={(value) => `missing-kind-${value}`}
-            />
-            {targetKind === 'stud' ? (
-              <span className="text-[10px] text-slate-400">按蛋组收，物种不限</span>
-            ) : null}
-          </div>
+        <div className="flex flex-nowrap items-center gap-1" data-testid="missing-kind-filter">
+          <SegmentedControl
+            label="我缺的类型"
+            value={targetKind}
+            options={[
+              { value: 'stud', label: '种公' },
+              { value: 'mother', label: '母本' },
+            ]}
+            onValueChange={(next) => setList({ targetKind: next as 'mother' | 'stud' })}
+            optionTestId={(value) => `missing-kind-${value}`}
+            className="w-[100px] shrink-0"
+          />
           {targetKind === 'mother' ? (
-        <div className="flex flex-wrap items-center gap-1.5" data-testid="mother-target-filter">
-          <NatureSelect
-            label="性格"
-            value={targetNature}
-            onValueChange={(value) => setList({ targetNature: value })}
-            testId="mother-target-nature"
-            menuTestId="mother-target-nature-options"
-            optionTestId={(value) => `mother-target-nature-option-${value || 'any'}`}
-            className="max-w-[88px]"
-          />
-          <InlineSelect
-            label="体型"
-            value={targetBody}
-            options={[
-              { value: '大块头', label: '大块头' },
-              { value: '', label: '不限' },
-            ]}
-            onValueChange={(value) => setList({ targetBody: value as DemandBody })}
-            testId="mother-target-body"
-            menuTestId="mother-target-body-options"
-            className="max-w-[88px]"
-          />
-          <InlineSelect
-            label="声音"
-            value={targetVoice}
-            options={[
-              { value: '+100', label: '+100' },
-              { value: '', label: '不限' },
-            ]}
-            onValueChange={(value) => setList({ targetVoice: value as DemandVoice })}
-            testId="mother-target-voice"
-            menuTestId="mother-target-voice-options"
-            className="max-w-[78px]"
-          />
+            <div className="flex min-w-0 flex-1 items-center gap-1" data-testid="mother-target-filter">
+              <NatureSelect
+                label="性格"
+                value={targetNature}
+                onValueChange={(value) => setList({ targetNature: value })}
+                testId="mother-target-nature"
+                menuTestId="mother-target-nature-options"
+                optionTestId={(value) => `mother-target-nature-option-${value || 'any'}`}
+                className="min-w-0 flex-1 [&>button]:w-full [&>button]:justify-between [&>button]:px-1.5 [&>button]:text-[11px]"
+              />
+              <InlineSelect
+                label="体型"
+                value={targetBody}
+                options={DEMAND_BODIES.map((value) => ({
+                  value,
+                  label: value || '不限',
+                }))}
+                onValueChange={(value) => setList({ targetBody: value as DemandBody })}
+                testId="mother-target-body"
+                menuTestId="mother-target-body-options"
+                optionTestId={(value) => `mother-target-body-option-${value || 'any'}`}
+                className="min-w-0 flex-1 [&>button]:w-full [&>button]:justify-between [&>button]:px-1.5 [&>button]:text-[11px]"
+              />
+              <InlineSelect
+                label="声音"
+                value={targetVoice}
+                options={DEMAND_VOICES.map((value) => ({
+                  value,
+                  label: value || '不限',
+                }))}
+                onValueChange={(value) => setList({ targetVoice: value as DemandVoice })}
+                testId="mother-target-voice"
+                menuTestId="mother-target-voice-options"
+                optionTestId={(value) => `mother-target-voice-option-${value || 'any'}`}
+                className="min-w-0 flex-1 [&>button]:w-full [&>button]:justify-between [&>button]:px-1.5 [&>button]:text-[11px]"
+              />
+            </div>
+          ) : (
+            <span className="truncate text-[10px] text-slate-400">按蛋组收，物种不限</span>
+          )}
         </div>
-          ) : null}
-        </>
       ) : null}
 
       {taskError ? (
@@ -1126,10 +1564,10 @@ export function MotherGroupResources({
         />
       ) : null}
 
-      {/* 搜索 / 筛选 / 动作按钮同一行；动作按钮在三个视图分别是 发需求 / 接单 / 认领（2026-10-26） */}
-      <div className="flex items-center gap-1.5">
+      {/* 搜索框独占一行（产品规范）；成员筛选与动作按钮放到下一行，不挤输入宽度。 */}
+      <div className="space-y-1.5">
         <SearchField
-          className="min-w-0 flex-1"
+          className="w-full"
           label={targetKind === 'stud' ? '搜索种公推荐' : '搜索小组资源'}
           value={query}
           onValueChange={(value) => setList({ query: value })}
@@ -1138,8 +1576,10 @@ export function MotherGroupResources({
           }
           testId="mother-search"
         />
+        <div className="flex items-center gap-1.5">
         {effectiveView === 'seeking' ? (
           <InlineMultiSelect
+            key="seeking-members"
             label="共同寻找范围"
             values={seekingMembers}
             options={group.members.map((member) => ({
@@ -1154,12 +1594,31 @@ export function MotherGroupResources({
             align="right"
             className="max-w-[104px] shrink-0"
           />
-        ) : effectiveView === 'missing' && targetKind === 'stud' ? null : (
+        ) : effectiveView === 'missing' && targetKind === 'stud' ? null : effectiveView === 'missing' ? (
+          <InlineMultiSelect
+            key="missing-members"
+            label="筛选能补我的成员"
+            values={missingMembers}
+            options={group.members.map((member) => ({
+              value: member.accountId,
+              label: labelOf(member),
+            }))}
+            onValuesChange={(values) => setList({ missingMembers: values })}
+            allLabel="全部成员"
+            unit="人"
+            testId="mother-member-filter"
+            menuTestId="mother-member-options"
+            optionTestId={(value) => `mother-member-${value || 'all'}`}
+            align="right"
+            className="max-w-[104px] shrink-0"
+          />
+        ) : (
           <InlineSelect
-            label={effectiveView === 'mine' ? '筛选需求方' : '筛选成员'}
+            key="demand-members"
+            label="筛选需求方"
             value={memberFilter}
             options={[
-              { value: '', label: effectiveView === 'mine' ? '全部需求方' : '全部成员' },
+              { value: '', label: '全部需求方' },
               ...group.members.map((member) => ({
                 value: member.accountId,
                 label: labelOf(member),
@@ -1192,7 +1651,7 @@ export function MotherGroupResources({
             }}
             disabled={demandBusy || (!selecting && visibleCount === 0)}
             data-testid="mother-select-action"
-            className={`min-h-[32px] shrink-0 rounded-lg px-2 text-xs font-medium disabled:opacity-40 ${
+            className={`min-h-[38px] shrink-0 rounded-lg px-2.5 text-xs font-medium disabled:opacity-40 ${
               selecting && selected.length > 0
                 ? 'bg-emerald-600 text-white'
                 : 'border border-emerald-500 text-emerald-700'
@@ -1207,6 +1666,7 @@ export function MotherGroupResources({
                   : `${actionLabel} ${selected.length} 项`}
           </button>
         ) : null}
+        </div>
       </div>
       <div className="flex items-center justify-between gap-2">
         {effectiveView === 'mine' ? null : effectiveView === 'missing' && targetKind === 'stud' ? (
@@ -1556,13 +2016,14 @@ export function MotherGroupResources({
           ) : (
         <ul className="grid grid-cols-4 items-stretch gap-1">
           {pageRows.map((row, index) => {
-            // 分页后 index 是页内序号；分区标题要按整个列表的绝对位置判断。
-            const absoluteIndex = (effectiveView === 'missing' ? missingPageOffset : 0) + index;
-            const natures = requiredNaturesOf(row.eggGameId);
-            const { base, form } = splitDisplayName(row.name);
+            // 瀑布流按整个列表的绝对位置判断分区标题。
+            const absoluteIndex = index;
+            const natures = configuredNaturesOf(row.eggGameId);
+            const { base } = splitDisplayName(row.name);
             const selectionKey = selectionKeyOf(row.eggGameId);
             const isSelected = selected.includes(selectionKey);
             const myDemands = myDemandsByEgg.get(row.eggGameId) ?? [];
+            const missingSet = new Set(row.missingNatures.filter(Boolean));
             const blocked = effectiveView === 'missing' && blockedEggIds.has(row.eggGameId);
             const selfBreedable =
               effectiveView === 'missing' && selfBreedableEggIds.has(row.eggGameId);
@@ -1579,7 +2040,7 @@ export function MotherGroupResources({
                 className="col-span-full border-t border-dashed border-amber-200 pt-1.5 text-[11px] font-medium text-amber-700"
                 data-testid="mother-incomplete-section"
               >
-                数据不全 · 可能有人能孵 · {dataIncompleteRows.length}
+                数据不全 · 可能有人能补 · {dataIncompleteRows.length}
               </li>
             ) : null}
             {showBlockedDivider ? (
@@ -1587,7 +2048,7 @@ export function MotherGroupResources({
                 className="col-span-full border-t border-dashed border-slate-200 pt-1.5 text-[11px] font-medium text-slate-400"
                 data-testid="mother-blocked-section"
               >
-                组内暂时孵不了 · {blockedRows.length}
+                组内暂时补不了 · {blockedRows.length}
               </li>
             ) : null}
             <li
@@ -1633,66 +2094,92 @@ export function MotherGroupResources({
                     />
                   ) : null}
                 </div>
-                <PetAvatar gameId={row.eggGameId} name={base} size={40} />
+                {effectiveView === 'missing' ? (
+                  <button
+                    type="button"
+                    aria-label={`查看${base}的详情与操作`}
+                    title="点击头像查看详情与操作"
+                    data-testid="mother-resource-open"
+                    onClick={(event) => {
+                      // 批量选择时点头像仍然只是勾选，不打断选择流程
+                      if (selecting) return;
+                      event.stopPropagation();
+                      setResourceDetailEggId(row.eggGameId);
+                    }}
+                    className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                  >
+                    <PetAvatar gameId={row.eggGameId} name={base} size={40} />
+                  </button>
+                ) : (
+                  <PetAvatar gameId={row.eggGameId} name={base} size={40} />
+                )}
               </div>
               <span
                 className="w-full break-words text-center text-[10px] font-medium leading-tight text-slate-700"
                 data-testid="mother-resource-name"
               >
                 {base}
-                {form ? (
-                  <span className="block text-[9px] font-normal text-slate-400" data-testid="mother-resource-form">
-                    {form}
-                  </span>
-                ) : null}
               </span>
-              <NatureChips natures={natures} testId="mother-resource-natures" />
-                  {myDemands.length > 0 ? (
-                    <div className="flex flex-wrap items-center justify-center gap-1" data-testid="mother-demanded">
-                      {myDemands.map((demand) => {
-                        const withdrawKey = demandKey(demand);
-                        const confirming = confirmWithdraw === withdrawKey;
-                        return (
-                          <Fragment key={demandKey(demand)}>
-                            {demand.status === 'claimed' ? (
-                              completeControl(demand)
-                            ) : null}
-                            {demand.status !== 'done' ? (
-                              confirming ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => void runDemandAction('withdraw', demand)}
-                                    data-testid="mother-demand-withdraw-confirm"
-                                    className="rounded px-1 text-[9px] leading-[1.3] text-rose-600 ring-1 ring-rose-300"
-                                  >
-                                    确认撤回
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmWithdraw(null)}
-                                    data-testid="mother-demand-withdraw-cancel"
-                                    className="rounded px-1 text-[9px] leading-[1.3] text-slate-500 ring-1 ring-slate-200"
-                                  >
-                                    取消
-                                  </button>
-                                </>
-                              ) : (
+              <NatureChips
+                natures={natures}
+                testId="mother-resource-natures"
+                missing={effectiveView === 'missing' ? missingSet : undefined}
+              />
+              {myDemands.length > 0 ? (
+                effectiveView === 'missing' ? (
+                  // 2026-10-28 用户口径：卡片上的按钮太小、多性格容易点错，
+                  // 卡片只保留一句概要，具体的完成 / 撤回 / 发需求都放到点头像的二级页面。
+                  <span
+                    className="w-full text-center text-[10px] leading-tight text-emerald-700"
+                    data-testid="mother-demanded"
+                  >
+                    已发 {myDemands.length} 条 · 点头像操作
+                  </span>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-center gap-1" data-testid="mother-demanded">
+                    {myDemands.map((demand) => {
+                      const withdrawKey = demandKey(demand);
+                      const confirming = confirmWithdraw === withdrawKey;
+                      return (
+                        <Fragment key={demandKey(demand)}>
+                          {demand.status === 'claimed' ? completeControl(demand) : null}
+                          {demand.status !== 'done' ? (
+                            confirming ? (
+                              <>
                                 <button
                                   type="button"
-                                  onClick={() => setConfirmWithdraw(withdrawKey)}
-                                  data-testid="mother-demand-withdraw"
-                                  className="px-1 text-[9px] leading-[1.3] text-slate-400 underline underline-offset-2"
+                                  onClick={() => void runDemandAction('withdraw', demand)}
+                                  data-testid="mother-demand-withdraw-confirm"
+                                  className="rounded px-1 text-[9px] leading-[1.3] text-rose-600 ring-1 ring-rose-300"
                                 >
-                                  撤回
+                                  确认撤回
                                 </button>
-                              )
-                            ) : null}
-                          </Fragment>
-                        );
-                      })}
-                    </div>
-                  ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmWithdraw(null)}
+                                  data-testid="mother-demand-withdraw-cancel"
+                                  className="rounded px-1 text-[9px] leading-[1.3] text-slate-500 ring-1 ring-slate-200"
+                                >
+                                  取消
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmWithdraw(withdrawKey)}
+                                data-testid="mother-demand-withdraw"
+                                className="px-1 text-[9px] leading-[1.3] text-slate-400 underline underline-offset-2"
+                              >
+                                撤回
+                              </button>
+                            )
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                )
+              ) : null}
               {effectiveView === 'seeking' ? (
                 <div className="mt-auto w-full border-t border-slate-200 pt-1 text-[10px]" data-testid="mother-task">
                   {tasksError ? (
@@ -1770,38 +2257,251 @@ export function MotherGroupResources({
           })}
         </ul>
           )}
-          {effectiveView === 'missing' && missingTotalPages > 1 ? (
-            <nav
-              className="mt-2 flex items-center justify-center gap-2 text-[11px] text-slate-500"
-              data-testid="mother-pagination"
+          {effectiveView === 'missing' && hasMoreRows ? (
+            <div
+              ref={loadMoreRef}
+              className="mt-2 py-2 text-center text-[10px] text-slate-400"
+              data-testid="mother-load-more"
             >
+              已显示 {pageRows.length} / {listRows.length} 项，继续下滑自动加载
               <button
                 type="button"
-                disabled={missingCurrentPage === 1}
-                onClick={() => setMissingPage(Math.max(1, missingCurrentPage - 1))}
-                data-testid="mother-page-prev"
-                className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 disabled:opacity-40"
-              >
-                上一页
-              </button>
-              <span data-testid="mother-page-indicator">
-                第 {missingCurrentPage} / {missingTotalPages} 页
-              </span>
-              <button
-                type="button"
-                disabled={missingCurrentPage === missingTotalPages}
                 onClick={() =>
-                  setMissingPage(Math.min(missingTotalPages, missingCurrentPage + 1))
+                  setMissingVisible((value) =>
+                    Math.min(value + MISSING_PAGE_SIZE, listRows.length),
+                  )
                 }
-                data-testid="mother-page-next"
-                className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 disabled:opacity-40"
+                className="ml-1 rounded-lg border border-slate-200 px-2 py-1"
+                data-testid="mother-load-more-button"
               >
-                下一页
+                加载更多
               </button>
-            </nav>
+            </div>
           ) : null}
         </>
       ) : null}
+      <ModalSurface
+        open={resourceDetailRow !== null}
+        title="母本详情"
+        onClose={() => setResourceDetailEggId(null)}
+        testId="mother-resource-detail"
+        closeTestId="mother-resource-detail-close"
+        backdropTestId="mother-resource-detail-backdrop"
+      >
+        {resourceDetailRow ? (() => {
+          const eggGameId = resourceDetailRow.eggGameId;
+          const { base } = splitDisplayName(resourceDetailRow.name);
+          const natures = configuredNaturesOf(eggGameId);
+          const missingNatures = resourceDetailRow.missingNatures.filter(Boolean);
+          const missingSet = new Set(missingNatures);
+          const supplierLines = [...resourceDetailRow.suppliersByNature.entries()].map(
+            ([nature, ids]) => {
+              const names = ids.map((accountId) => fullNameOf(accountId)).join('、');
+              return nature ? `${nature}：${names}` : `${names} 能补`;
+            },
+          );
+          const publishItem = missingPublishItem(eggGameId);
+          const blocked = blockedEggIds.has(eggGameId);
+          const selfBreedable = selfBreedableEggIds.has(eggGameId);
+          const publishLabel = blocked
+            ? '组内暂时没人能补'
+            : selfBreedable
+              ? '你自己能产，不用发需求'
+              : publishItem
+                ? publishItem.natures.length > 0
+                  ? `发需求 · ${publishItem.natures.join(' / ')}`
+                  : '发需求（不挑性格）'
+                : resourceDetailRow.missingNatures.length === 0
+                  ? '按你的收集口径已收齐'
+                  : '这些性格都已经发过需求';
+          return (
+            <div className="space-y-3 p-3" data-testid="mother-resource-detail-body">
+              <div className="flex items-start gap-2.5">
+                <PetAvatar gameId={eggGameId} name={base} size={56} />
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-base font-semibold text-slate-800">
+                    {base}
+                  </p>
+                  <NatureChips
+                    natures={natures}
+                    testId="mother-resource-detail-natures"
+                    missing={missingSet}
+                  />
+                  <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                    目标：性格 {targetNature || '不限'} · 体型 {targetBody || '不限'} · 声音{' '}
+                    {targetVoice || '不限'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 px-2.5 py-2" data-testid="mother-resource-detail-suppliers">
+                <h3 className="text-[11px] font-semibold text-slate-600">谁能补我</h3>
+                {missingNatures.length > 0 ? (
+                  <p
+                    className="mt-0.5 text-xs leading-snug text-rose-600"
+                    data-testid="mother-resource-detail-missing-natures"
+                  >
+                    还缺：{missingNatures.join('、')}
+                  </p>
+                ) : natures.length > 0 ? (
+                  <p className="mt-0.5 text-xs leading-snug text-emerald-700">
+                    按你的收集口径已经收齐。
+                  </p>
+                ) : null}
+                <div className="mt-0.5 space-y-0.5">
+                  {supplierLines.length > 0 ? (
+                    supplierLines.map((line) => (
+                      <p key={line} className="text-xs leading-snug text-slate-700">
+                        {line}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="text-xs leading-snug text-slate-500">
+                      {resourceDetailRow.unknownMemberIds.length > 0
+                        ? `已发布的成员都补不了；另有 ${resourceDetailRow.unknownMemberIds.length} 人未发布 / 未更新`
+                        : '组内暂时没人能补'}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1.5" data-testid="mother-resource-detail-demands">
+                <h3 className="text-[11px] font-semibold text-slate-600">
+                  我的需求 · {resourceDetailDemands.length}
+                </h3>
+                {resourceDetailDemands.length === 0 ? (
+                  <p className="rounded-xl bg-slate-50 px-2.5 py-2 text-xs text-slate-500">
+                    这颗蛋还没发过需求。
+                  </p>
+                ) : (
+                  resourceDetailDemands.map((demand) => {
+                    const key = demandKey(demand);
+                    const claimed = demand.status === 'claimed';
+                    const statusLabel =
+                      demand.status === 'claimed'
+                        ? demand.claimerAccountId === viewerAccountId
+                          ? '我接了'
+                          : demand.claimerAccountId
+                            ? `${fullNameOf(demand.claimerAccountId)} 接了`
+                            : '已被接单'
+                        : demand.status === 'done'
+                          ? '已完成'
+                          : '待承接';
+                    return (
+                      <div
+                        key={key}
+                        className="rounded-xl border border-slate-200 px-2.5 py-2"
+                        data-testid="mother-resource-detail-demand"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <NatureChips natures={[demand.nature || '不挑']} testId="mother-demand-natures" />
+                          <span
+                            className={`shrink-0 text-[11px] ${
+                              claimed ? 'text-emerald-700' : 'text-slate-500'
+                            }`}
+                          >
+                            {statusLabel}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {claimed ? (
+                            confirmComplete === key ? (
+                              <div className="flex w-full flex-col gap-1.5" data-testid="mother-demand-complete-confirm">
+                                <span className="text-[11px] leading-snug text-amber-700">
+                                  背包里未检测到，确认已完成？
+                                </span>
+                                <div className="flex gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={demandBusy}
+                                    onClick={() => void runDemandAction('complete', demand, true)}
+                                    data-testid="mother-demand-complete-confirm-yes"
+                                    className="min-h-[40px] flex-1 rounded-lg bg-emerald-600 text-sm font-medium text-white disabled:opacity-50"
+                                  >
+                                    已完成
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={demandBusy}
+                                    onClick={() => setConfirmComplete(null)}
+                                    data-testid="mother-demand-complete-cancel"
+                                    className="min-h-[40px] flex-1 rounded-lg border border-slate-200 text-sm text-slate-500"
+                                  >
+                                    取消
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={demandBusy}
+                                onClick={() => void runDemandAction('complete', demand)}
+                                data-testid="mother-demand-complete"
+                                className="min-h-[40px] flex-1 rounded-lg border border-emerald-500 text-sm font-medium text-emerald-700 disabled:opacity-50"
+                              >
+                                完成
+                              </button>
+                            )
+                          ) : null}
+                          {demand.status !== 'done' ? (
+                            confirmWithdraw === key ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={demandBusy}
+                                  onClick={() => void runDemandAction('withdraw', demand)}
+                                  data-testid="mother-demand-withdraw-confirm"
+                                  className="min-h-[40px] flex-1 rounded-lg border border-rose-300 text-sm font-medium text-rose-600 disabled:opacity-50"
+                                >
+                                  确认撤回
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={demandBusy}
+                                  onClick={() => setConfirmWithdraw(null)}
+                                  data-testid="mother-demand-withdraw-cancel"
+                                  className="min-h-[40px] flex-1 rounded-lg border border-slate-200 text-sm text-slate-500"
+                                >
+                                  取消
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={demandBusy}
+                                onClick={() => setConfirmWithdraw(key)}
+                                data-testid="mother-demand-withdraw"
+                                className="min-h-[40px] flex-1 rounded-lg border border-slate-200 text-sm text-slate-500 disabled:opacity-50"
+                              >
+                                撤回
+                              </button>
+                            )
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <button
+                type="button"
+                disabled={!publishItem || demandBusy}
+                onClick={() => publishResourceDemand(eggGameId)}
+                data-testid="mother-resource-publish"
+                className="min-h-[44px] w-full rounded-xl bg-emerald-600 text-sm font-medium text-white disabled:bg-slate-200 disabled:text-slate-500"
+              >
+                {publishLabel}
+              </button>
+              {!publishItem && !blocked && !selfBreedable ? (
+                <p className="text-[11px] leading-snug text-slate-400">
+                  想改条件，先撤回对应的需求再重新发。
+                </p>
+              ) : null}
+            </div>
+          );
+        })() : null}
+      </ModalSurface>
       <DemandPublishSheet
         open={publishItems !== null}
         items={publishItems ?? []}
@@ -1820,6 +2520,80 @@ export function MotherGroupResources({
         }}
         onConfirm={(items, criteria) => void confirmPublish(items, criteria)}
       />
+      <ModalSurface
+        open={detailDemand !== null}
+        title="需求详情"
+        onClose={() => setDetailKey(null)}
+        testId="mother-demand-detail"
+        closeTestId="mother-demand-detail-close"
+        backdropTestId="mother-demand-detail-backdrop"
+      >
+        {detailDemand ? (() => {
+          const isStud = isStudDemandKey(detailDemand.eggGameId);
+          const base = isStud
+            ? (eggGroupNames[-detailDemand.eggGameId] ?? `蛋组${-detailDemand.eggGameId}`)
+            : splitDisplayName(
+                rowByEgg.get(detailDemand.eggGameId)?.name ?? `蛋 ${detailDemand.eggGameId}`,
+              ).base;
+          const statusText =
+            detailDemand.status === 'claimed'
+              ? detailDemand.claimerAccountId === viewerAccountId
+                ? '我接了'
+                : detailDemand.claimerAccountId
+                  ? `${fullNameOf(detailDemand.claimerAccountId)} 接了`
+                  : '已被接单'
+              : detailDemand.status === 'done'
+                ? '已完成'
+                : '待承接';
+          return (
+            <div className="space-y-1.5 py-1" data-testid="mother-demand-detail-body">
+              <div className="flex items-start gap-2 px-1">
+                {isStud ? (
+                  <span className="block h-10 w-10 shrink-0 rounded-md bg-slate-100" aria-hidden />
+                ) : (
+                  <PetAvatar gameId={detailDemand.eggGameId} name={base} size={40} />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-sm font-medium leading-tight text-slate-800">
+                    {base}
+                  </p>
+                  <div className="mt-0.5 flex items-center gap-0.5">
+                    <NatureChips
+                      natures={[detailDemand.nature || '不挑']}
+                      testId="mother-demand-detail-natures"
+                    />
+                    <GenderMark
+                      gender={
+                        detailDemand.gender === '公' || detailDemand.gender === '母'
+                          ? detailDemand.gender
+                          : '未知'
+                      }
+                    />
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-slate-500" data-testid="mother-demand-detail-criteria">
+                    性别 {detailDemand.gender || '不挑'} · 体型 {detailDemand.body || '不限'} · 声音{' '}
+                    {detailDemand.voice || '不限'}
+                  </p>
+                </div>
+              </div>
+              <div className="mx-1 flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1">
+                <span className="min-w-0 truncate text-[11px] text-slate-700" data-testid="mother-demand-detail-demander">
+                  需求方：{fullNameOf(detailDemand.demanderAccountId)}
+                </span>
+                <span className="shrink-0 text-[11px] text-slate-500" data-testid="mother-demand-detail-status">
+                  状态：{statusText}
+                </span>
+              </div>
+              <div className="rounded-lg bg-emerald-50/70 px-0 py-1.5">
+                <h3 className="px-1 text-[11px] font-semibold text-emerald-800">推荐配对</h3>
+                <div className="mt-0.5" data-testid="mother-demand-detail-pairing">
+                  {demandPairing(detailDemand)}
+                </div>
+              </div>
+            </div>
+          );
+        })() : null}
+      </ModalSurface>
     </section>
   );
 }
@@ -1829,14 +2603,28 @@ export function MotherGroupResources({
  *
  * 放在头像与名称**下面**而不是右上角：性格数量变化不再改动头像位置，
  * 同排卡片头像始终对齐。
+ * `missing` 里的性格标红：表示这个性格的母本还没收集到（2026-10-28 用户口径）。
  */
-function NatureChips({ natures, testId }: { natures: string[]; testId?: string }) {
+function NatureChips({
+  natures,
+  testId,
+  missing,
+}: {
+  natures: string[];
+  testId?: string;
+  missing?: ReadonlySet<string>;
+}) {
   if (natures.length === 0) return null;
   const chip = 'rounded bg-emerald-50 px-1 text-[9px] leading-[1.15] text-emerald-700';
+  const missingChip = 'rounded bg-rose-50 px-1 text-[9px] leading-[1.15] text-rose-600';
   return (
     <span className="flex w-full flex-wrap justify-center gap-0.5" data-testid={testId}>
       {natures.map((nature) => (
-        <span key={nature} className={chip}>
+        <span
+          key={nature}
+          className={missing?.has(nature) ? missingChip : chip}
+          title={missing?.has(nature) ? '这个性格的母本还没收集到' : undefined}
+        >
           {nature}
         </span>
       ))}

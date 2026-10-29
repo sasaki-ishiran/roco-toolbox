@@ -59,7 +59,13 @@ export interface GroupListState {
    * 读到旧值时按「需求中心」处理（见 MotherGroupResources）。
    */
   view: 'missing' | 'mine' | 'seeking' | 'help' | 'all';
+  /** 「需求中心」的需求方筛选（单选）；空 = 全部需求方。 */
   memberFilter: string;
+  /**
+   * 「我缺的」能补我的成员（多选）：空 = 全部成员。
+   * 勾多个人时取并集——只要其中一人能补就算命中（2026-10-28 用户口径）。
+   */
+  missingMembers: string[];
   /**
    * 「共同寻找」的范围（多选）：空 = 全部成员。
    * 与 memberFilter 分开记：前者回答「我们几个共同缺什么」，后者回答「谁有 / 谁缺」。
@@ -83,6 +89,7 @@ const GROUP_DEFAULT: GroupListState = {
   query: '',
   view: 'missing',
   memberFilter: '',
+  missingMembers: [],
   seekingMembers: [],
   onlyOwned: false,
   onlyDemanded: false,

@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { CoverageSlot } from '../domain/studCoverage';
 import type { OwnedPet, SpeciesEntry } from '../domain/types';
-import { StudMatrix } from './StudMatrix';
+import { StudMatrix, studMatrixCellName } from './StudMatrix';
 import { resetStudMatrixPicksForTest } from './studMatrixStore';
 
 const species: SpeciesEntry[] = [
@@ -96,6 +96,156 @@ describe('StudMatrix', () => {
     // 手里的开朗是大婉，小婉 tab 下这一格没有候选 → 缺
     const giant = screen.getByText('巨灵组').closest('tr')!;
     expect(within(giant).getByTestId('stud-cell-empty-2-开朗')).toHaveTextContent('缺');
+  });
+
+  test('格子尺寸统一：固定高度 + 固定列宽，名字长短不撑大格子', () => {
+    renderMatrix();
+    const scroll = screen.getByTestId('stud-matrix-scroll');
+    // 触摸表格区域时仍要能上下滚整页：不能再锁成只允许横向手势
+    expect(scroll.className).not.toContain('touch-pan-x');
+    const table = within(scroll).getByRole('table');
+    expect(table.className).toContain('table-fixed');
+    const cells = within(scroll).getAllByRole('button');
+    expect(cells.length).toBeGreaterThan(0);
+    for (const cell of cells) {
+      expect(cell.className).toContain('h-[58px]');
+      expect(cell.className).toContain('overflow-hidden');
+    }
+    // 列宽固定后，长名字只会在格子里省略，不会把整列撑宽
+    expect(within(scroll).getByText('单组兽').className).toContain('truncate');
+  });
+
+  test('名字过长时只显示基础名，不展示形态', () => {
+    expect(studMatrixCellName('雪绒鸟_夏天的样子')).toBe('雪绒鸟');
+    expect(studMatrixCellName('火花')).toBe('火花');
+
+    const longSpecies: SpeciesEntry = {
+      key: 'long',
+      gameId: 104,
+      name: '雪绒鸟',
+      form: '夏天的样子',
+      officialName: '雪绒鸟_夏天的样子',
+      number: '004',
+      eggGroups: [2],
+    };
+    render(
+      <StudMatrix
+        slots={slots}
+        owned={[pet({ gameId: 104, nature: '固执' })]}
+        species={[...species, longSpecies]}
+        speciesByGameId={new Map([...speciesByGameId, [104, longSpecies]])}
+        eggGroupNames={eggGroupNames}
+        mode="perfect"
+      />,
+    );
+    const cell = screen.getByTestId('stud-cell-2-固执');
+    expect(within(cell).getByText('雪绒鸟')).toBeTruthy();
+    expect(within(cell).queryByText('雪绒鸟_夏天的样子')).toBeNull();
+  });
+
+  test('没收集到的格子填入推荐种公，用淡黄色卡片区分', () => {
+    render(
+      <StudMatrix
+        slots={slots}
+        owned={owned}
+        species={species}
+        speciesByGameId={speciesByGameId}
+        eggGroupNames={eggGroupNames}
+        mode="perfect"
+        recommendations={[
+          {
+            id: 'rec-6-固执',
+            natureName: '固执',
+            displayName: '雪绒鸟_夏天的样子',
+            groupIds: [6],
+            groupLabels: ['动物组'],
+            grade: '大婉',
+            gameId: 104,
+          },
+        ]}
+      />,
+    );
+    const cell = screen.getByTestId('stud-cell-recommend-6-固执');
+    // 长名字同样只显示基础名；卡片是淡黄色 + 「荐」标记
+    expect(cell).toHaveTextContent('雪绒鸟');
+    expect(cell).toHaveTextContent('荐');
+    expect(cell.className).toContain('bg-amber-50');
+    expect(screen.queryByTestId('stud-cell-empty-6-固执')).toBeNull();
+  });
+
+  test('没有精确推荐时，按蛋组兜底推荐一只可当种公的蛋物种', () => {
+    const fallbackSpecies: SpeciesEntry = {
+      key: 'group-6',
+      gameId: 106,
+      name: '六组兽',
+      number: '006',
+      eggGameId: 106,
+      eggGroups: [6],
+      maleCapable: true,
+    };
+    render(
+      <StudMatrix
+        slots={slots}
+        owned={owned}
+        species={[...species, fallbackSpecies]}
+        speciesByGameId={new Map([...speciesByGameId, [106, fallbackSpecies]])}
+        eggGroupNames={eggGroupNames}
+        mode="perfect"
+      />,
+    );
+    const cell = screen.getByTestId('stud-cell-recommend-6-固执');
+    expect(cell).toHaveTextContent('六组兽');
+    expect(cell.className).toContain('bg-amber-50');
+    expect(screen.queryByTestId('stud-cell-empty-6-固执')).toBeNull();
+  });
+
+  test('点淡黄推荐格可以直接发到小组需求中心（负数蛋组 id + 当前档位）', async () => {
+    const onLoadDemandGroups = vi.fn();
+    const onPublishStudDemand = vi.fn().mockResolvedValue(undefined);
+    render(
+      <StudMatrix
+        slots={slots}
+        owned={owned}
+        species={species}
+        speciesByGameId={speciesByGameId}
+        eggGroupNames={eggGroupNames}
+        mode="perfect"
+        recommendations={[
+          {
+            id: 'rec-6-固执',
+            natureName: '固执',
+            displayName: '雪绒鸟',
+            groupIds: [6],
+            groupLabels: ['动物组'],
+            grade: '大婉',
+            gameId: 104,
+          },
+        ]}
+        demandGroups={[{ id: 'g1', name: '测试组' }]}
+        onLoadDemandGroups={onLoadDemandGroups}
+        onPublishStudDemand={onPublishStudDemand}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('stud-cell-recommend-6-固执'));
+    expect(onLoadDemandGroups).toHaveBeenCalled();
+    expect(screen.getByTestId('stud-demand-publish')).toBeTruthy();
+    expect(screen.getByTestId('stud-demand-publish-summary')).toHaveTextContent('动物组');
+    expect(screen.getByTestId('stud-demand-publish-summary')).toHaveTextContent('固执');
+
+    fireEvent.click(screen.getByTestId('stud-demand-publish-g1'));
+    await waitFor(() =>
+      expect(onPublishStudDemand).toHaveBeenCalledWith({
+        groupId: 'g1',
+        groupName: '测试组',
+        eggGroupId: 6,
+        natureName: '固执',
+        body: '大块头',
+        voice: '+100',
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('stud-demand-publish-message')).toHaveTextContent('测试组'),
+    );
   });
 
   test('没有候选的目标格显示「缺」', () => {

@@ -121,7 +121,7 @@ export function parseMotherResource(value: unknown): MotherResourceDraft {
   const criteriaId = record.criteriaId;
   if (
     typeof criteriaId !== 'string' ||
-    !/^(all-mothers-v1|female-huge-voice100-v2|mother-v2-[0-9a-f]{8})$/.test(criteriaId)
+    !/^(all-mothers-v2|female-huge-voice100-v2|mother-v2-[0-9a-f]{8})$/.test(criteriaId)
   ) {
     invalid('criteriaId 不受支持');
   }

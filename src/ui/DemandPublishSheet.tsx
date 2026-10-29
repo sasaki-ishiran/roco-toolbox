@@ -13,6 +13,7 @@ import {
   type DemandVoice,
 } from '../shared/collectionGroups';
 import { ModalSurface } from './primitives/ModalSurface';
+import { PetAvatar } from './PetAvatar';
 
 /** 八大性格放前面，其余收进「更多性格」（2026-10-26 用户口径）。 */
 const PRIMARY_NATURES = targetNaturePool.map((nature) => nature.name);
@@ -70,7 +71,8 @@ export function DemandPublishSheet({
   onConfirm,
 }: DemandPublishSheetProps) {
   const [draft, setDraft] = useState<Record<number, string[]>>({});
-  const [showAll, setShowAll] = useState(false);
+  /** 展开「更多性格」的精灵（按蛋 id）：只展开点的那一只，不连带其他精灵。 */
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const [gender, setGender] = useState<DemandGender>(defaultCriteria?.gender ?? DEFAULT_DEMAND_GENDER);
   const [body, setBody] = useState<DemandBody>(defaultCriteria?.body ?? DEFAULT_DEMAND_BODY);
   const [voice, setVoice] = useState<DemandVoice>(defaultCriteria?.voice ?? DEFAULT_DEMAND_VOICE);
@@ -79,7 +81,7 @@ export function DemandPublishSheet({
   // 依赖按字段拆开：父组件每次渲染都会新建 defaultCriteria 对象，用对象当依赖会把草稿重置掉。
   useEffect(() => {
     if (!open) return;
-    setShowAll(false);
+    setExpanded(new Set());
     setDraft(Object.fromEntries(items.map((item) => [item.eggGameId, [...item.natures]])));
     setGender(defaultCriteria?.gender ?? DEFAULT_DEMAND_GENDER);
     setBody(defaultCriteria?.body ?? DEFAULT_DEMAND_BODY);
@@ -185,13 +187,33 @@ export function DemandPublishSheet({
             {warning}
           </p>
         ) : null}
+        {/* 2026-10-28：一行放 3 只精灵；每只带头像，常用性格按 3 列 × 3 行排。 */}
+        <div className="grid grid-cols-3 gap-1.5">
         {items.map((item) => {
           const picked = draft[item.eggGameId] ?? item.natures;
-          const visible = showAll ? [...PRIMARY_NATURES, ...EXTRA_NATURES] : PRIMARY_NATURES;
+          const itemExpanded = expanded.has(item.eggGameId);
+          const visible = itemExpanded
+            ? [...PRIMARY_NATURES, ...EXTRA_NATURES]
+            : PRIMARY_NATURES;
           return (
-            <div key={item.eggGameId} className="rounded-lg bg-slate-50 px-2 py-1.5" data-testid="demand-publish-item">
-              <p className="text-[11px] font-medium text-slate-700">{item.name}</p>
-              <div className="mt-1 flex flex-wrap gap-1">
+            <div
+              key={item.eggGameId}
+              className="flex min-w-0 flex-col rounded-lg bg-slate-50 px-1 py-1.5"
+              data-testid="demand-publish-item"
+            >
+              <div className="flex flex-col items-center">
+                <PetAvatar gameId={item.eggGameId} name={item.name} size={32} />
+                <p
+                  className="mt-0.5 line-clamp-2 h-[26px] w-full break-words text-center text-[10px] font-medium leading-tight text-slate-700"
+                  title={item.name}
+                >
+                  {item.name}
+                </p>
+              </div>
+              <div
+                className="mt-1 grid grid-cols-3 gap-1"
+                data-testid="demand-publish-natures"
+              >
                 {visible.map((nature) => {
                   const on = picked.includes(nature);
                   return (
@@ -201,7 +223,7 @@ export function DemandPublishSheet({
                       aria-pressed={on}
                       onClick={() => toggle(item.eggGameId, nature)}
                       data-testid={`demand-nature-${item.eggGameId}-${nature}`}
-                      className={`min-h-[26px] rounded-md border px-1.5 text-xs ${
+                      className={`min-h-[26px] rounded-md border px-0.5 text-[10px] leading-tight ${
                         on
                           ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
                           : 'border-slate-200 bg-white text-slate-500'
@@ -211,20 +233,28 @@ export function DemandPublishSheet({
                     </button>
                   );
                 })}
-                {EXTRA_NATURES.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAll((value) => !value)}
-                    data-testid="demand-nature-toggle"
-                    className="min-h-[26px] rounded-md border border-dashed border-slate-300 px-1.5 text-xs text-slate-500"
-                  >
-                    {showAll ? '收起 ▴' : `更多性格 +${EXTRA_NATURES.length} ▾`}
-                  </button>
-                ) : null}
               </div>
+              {EXTRA_NATURES.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpanded((current) => {
+                      const next = new Set(current);
+                      if (next.has(item.eggGameId)) next.delete(item.eggGameId);
+                      else next.add(item.eggGameId);
+                      return next;
+                    })
+                  }
+                  data-testid={`demand-nature-toggle-${item.eggGameId}`}
+                  className="mt-1 min-h-[26px] rounded-md border border-dashed border-slate-300 px-0.5 text-[10px] text-slate-500"
+                >
+                  {itemExpanded ? '收起 ▴' : `更多 +${EXTRA_NATURES.length} ▾`}
+                </button>
+              ) : null}
             </div>
           );
         })}
+        </div>
         {error ? (
           <p className="text-[11px] text-rose-600" data-testid="demand-publish-error">{error}</p>
         ) : null}

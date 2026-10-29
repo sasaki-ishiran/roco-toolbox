@@ -82,10 +82,10 @@ describe('buildProductionLines', () => {
     expect(account.lines).toHaveLength(0);
   });
 
-  test('身高到顶 / 到底也认体型', () => {
+  test('身高 100% 且体重 ≥95% 才认体型', () => {
     const account = build([
-      mother(201, { medalBody: '', heightPercent: 100 }),
-      mother(701, { gender: '公', medalBody: '', heightPercent: 100 }),
+      mother(201, { medalBody: '', heightPercent: 100, weightPercent: 95 }),
+      mother(701, { gender: '公', medalBody: '', heightPercent: 100, weightPercent: 95 }),
     ]);
     expect(account.lines).toHaveLength(1);
     expect(account.lines[0].grade).toBe('大婉');
@@ -123,6 +123,21 @@ describe('lineSuppliesTarget', () => {
     expect(lineSuppliesTarget(line, target({ kind: 'stud', groupId: 3, nature: '开朗' }), species, 'perfect')).toBe(true);
     expect(lineSuppliesTarget(line, target({ kind: 'stud', groupId: 2, nature: '开朗' }), species, 'perfect')).toBe(false);
     expect(lineSuppliesTarget(line, target({ kind: 'stud', groupId: 3, nature: '胆小' }), species, 'perfect')).toBe(false);
+  });
+
+  test('档位标签互通：+100 / 婉转声、-100 / 粗嗓门 在产线判定里等价', () => {
+    // 大婉产线：追双牌时用「婉转声」、追满分时用「+100」，两种写法都要认
+    expect(lineSuppliesTarget(line, target({ kind: 'mother', voice: '婉转声' }), species, 'perfect')).toBe(true);
+    expect(lineSuppliesTarget(line, target({ kind: 'mother', voice: '+100' }), species, 'medal')).toBe(true);
+
+    // 大粗产线同理
+    const coarse = build([
+      mother(201, { nature: '固执', voiceDb: -100 }),
+      mother(701, { gender: '公', nature: '开朗', voiceDb: -100 }),
+    ]).lines[0];
+    expect(coarse.grade).toBe('大粗');
+    expect(lineSuppliesTarget(coarse, target({ kind: 'mother', voice: '-100' }), species, 'medal')).toBe(true);
+    expect(lineSuppliesTarget(coarse, target({ kind: 'mother', voice: '粗嗓门' }), species, 'perfect')).toBe(true);
   });
 
   test('纯母物种有产线，但不能满足种公需求', () => {

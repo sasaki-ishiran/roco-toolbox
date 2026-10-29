@@ -58,7 +58,7 @@ test('导入页不再显示旧的外部文件导入指引', async ({ page }) => 
 test('主导航键盘顺序、弹层焦点循环与 Esc 返焦', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('app-refresh').focus();
-  for (const control of [page.getByTestId('guide-open'), ...['看板', '收集', '小组', '我的'].map((name) => page.getByRole('button', { name, exact: true }))]) {
+  for (const control of [page.getByTestId('guide-open'), ...['看板', '家园', '收集', '小组', '我的'].map((name) => page.getByRole('button', { name, exact: true }))]) {
     await page.keyboard.press('Tab');
     await expect(control).toBeFocused();
   }

@@ -43,31 +43,27 @@ describe('母本达标口径（看板卡与母本页共用）', () => {
     expect(isQualifiedMother(pet({ voiceDb: -100, medalBody: '小不点' }), DEFAULT)).toBe(true);
   });
 
-  test('体型达标放宽 0.5 个百分位，显示口径仍是 98% / 2%', () => {
+  test('没有奖牌时：身高 100% 与体重 ≥95% 同时满足才算大块头', () => {
     const bigOnly: MotherCriteria = { voices: ['+100'], bodies: ['大块头'] };
     const smallOnly: MotherCriteria = { voices: ['+100'], bodies: ['小不点'] };
-    // 差一点到 98% 的（97.5%~97.9%）按大块头算，但自身仍然显示「普通」
-    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 97.5 }), bigOnly)).toBe(true);
-    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 97.9 }), bigOnly)).toBe(true);
-    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 97.4 }), bigOnly)).toBe(false);
-    // 小不点同理：2.5% 以内算达标
-    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 2.5 }), smallOnly)).toBe(true);
-    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 2.6 }), smallOnly)).toBe(false);
-    // 真·小不点不会因此被算成大块头
+    // 身高到顶 + 体重 95% 以上 → 达标；体重差一点就不算
+    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 100, weightPercent: 95 }), bigOnly)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 100, weightPercent: 99 }), bigOnly)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 100, weightPercent: 94.9 }), bigOnly)).toBe(false);
+    // 身高必须正好 100%，99.9% 不再放宽
+    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 99.9, weightPercent: 99 }), bigOnly)).toBe(false);
+    // 小不点同理：身高 0% + 体重 ≤5%
+    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 0, weightPercent: 5 }), smallOnly)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 0, weightPercent: 5.1 }), smallOnly)).toBe(false);
+    // 真·小不点不会因为身高 100% 被算成大块头
     expect(isQualifiedMother(pet({ medalBody: '小不点', weightPercent: 0 }), bigOnly)).toBe(false);
     // 没有百分位（老数据 / 采集器缺图鉴且无体重）时保持原样，不靠猜
     expect(isQualifiedMother(pet({ medalBody: '' }), bigOnly)).toBe(false);
   });
 
-  test('身高到顶 / 到底视同大块头 / 小不点（奖牌本身仍按体重，不因身高改判）', () => {
+  test('有奖牌时以奖牌为准，不再看身高 / 体重', () => {
     const bigOnly: MotherCriteria = { voices: ['+100'], bodies: ['大块头'] };
-    const smallOnly: MotherCriteria = { voices: ['+100'], bodies: ['小不点'] };
-    // 没有奖牌、体重也够不上 98%，但身高 100% → 能生大块头蛋，算达标
-    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 90, heightPercent: 100 }), bigOnly)).toBe(true);
-    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 10, heightPercent: 0 }), smallOnly)).toBe(true);
-    // 身高在中间（不到顶 / 不到底）时仍是原来那套判定
-    expect(isQualifiedMother(pet({ medalBody: '', weightPercent: 90, heightPercent: 96.4 }), bigOnly)).toBe(false);
-    // 已经有奖牌就以奖牌为准：真·小不点不会因为身高 100% 被算成大块头
+    expect(isQualifiedMother(pet({ medalBody: '大块头', heightPercent: 50, weightPercent: 90 }), bigOnly)).toBe(true);
     expect(isQualifiedMother(pet({ medalBody: '小不点', heightPercent: 100 }), bigOnly)).toBe(false);
   });
 

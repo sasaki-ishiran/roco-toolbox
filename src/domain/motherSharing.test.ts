@@ -150,7 +150,7 @@ describe('selectMotherSharingViews：我缺的 / 我能补谁 / 小组资源', (
 describe('口径版本', () => {
   test('旧口径摘要与「全部母本」不可比较（成员需重新发布）', () => {
     const legacy = { ...resourceWith([101]), criteriaId: 'female-huge-voice100-v2' };
-    expect(ALL_MOTHERS_CRITERIA_ID).toBe('all-mothers-v1');
+    expect(ALL_MOTHERS_CRITERIA_ID).toBe('all-mothers-v2');
     expect(isMotherResourceComparable(legacy, FIXTURE_CATALOG_VERSION)).toBe(false);
     expect(isMotherResourceComparable(resourceWith([101]), FIXTURE_CATALOG_VERSION)).toBe(true);
   });

@@ -27,7 +27,7 @@ const detailBody = (lines?: unknown[]) => ({
       resourceRevision: 1,
       resource: {
         schemaVersion: 1,
-        criteriaId: 'all-mothers-v1',
+        criteriaId: 'all-mothers-v2',
         catalogVersion: 'test-v1',
         accounts: [
           {

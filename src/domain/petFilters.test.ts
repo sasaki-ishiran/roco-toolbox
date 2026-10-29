@@ -233,14 +233,40 @@ describe('classifyGrade（档位判定随模式）', () => {
     expect(classifyGrade(noBody, 'perfect')).toBeNull();
   });
 
-  test('身高到顶 / 到底也算档位；已有奖牌时以奖牌为准', () => {
-    // 奖牌为空、但身高 100% → 能生大块头蛋，算大婉
-    expect(classifyGrade(pet({ medalBody: '', heightPercent: 100, voiceDb: 100 }), 'perfect')).toBe('大婉');
-    expect(classifyGrade(pet({ medalBody: '', heightPercent: 0, voiceDb: -100 }), 'perfect')).toBe('小粗');
-    // 身高在中间不算
-    expect(classifyGrade(pet({ medalBody: '', heightPercent: 96.4, voiceDb: 100 }), 'perfect')).toBeNull();
+  test('身高 100% 且体重 ≥95% 才算大块头档位；已有奖牌时以奖牌为准', () => {
+    // 没有奖牌：身高 100% + 体重 95% 同时满足 → 能生大块头蛋，算大婉
+    expect(
+      classifyGrade(
+        pet({ medalBody: '', heightPercent: 100, weightPercent: 95, voiceDb: 100 }),
+        'perfect',
+      ),
+    ).toBe('大婉');
+    expect(
+      classifyGrade(
+        pet({ medalBody: '', heightPercent: 0, weightPercent: 5, voiceDb: -100 }),
+        'perfect',
+      ),
+    ).toBe('小粗');
+    // 身高在中间、或身高 100% 但体重不足 95%，都不算
+    expect(
+      classifyGrade(
+        pet({ medalBody: '', heightPercent: 96.4, weightPercent: 99, voiceDb: 100 }),
+        'perfect',
+      ),
+    ).toBeNull();
+    expect(
+      classifyGrade(
+        pet({ medalBody: '', heightPercent: 100, weightPercent: 94.9, voiceDb: 100 }),
+        'perfect',
+      ),
+    ).toBeNull();
     // 奖牌仍是体重口径：真·小不点不会因为身高 100% 变成大婉
-    expect(classifyGrade(pet({ medalBody: '小不点', heightPercent: 100, voiceDb: 100 }), 'perfect')).toBe('小婉');
+    expect(
+      classifyGrade(
+        pet({ medalBody: '小不点', heightPercent: 100, weightPercent: 100, voiceDb: 100 }),
+        'perfect',
+      ),
+    ).toBe('小婉');
   });
 });
 

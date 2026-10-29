@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { listCollectionGroups, publishCollectionDemand } from '../api/collectionGroups';
 import { describeCoverageCells } from '../domain/coverageDetail';
 import { TARGET_MODE_LABELS } from '../domain/petFilters';
 import { eggGroupNames, species, targetNaturePool } from '../data/catalog';
@@ -26,7 +27,7 @@ import {
 } from './CoverageMatrix';
 import { EmptyState } from './EmptyState';
 import { SourceNotice } from './SourceNotice';
-import { StudMatrix } from './StudMatrix';
+import { StudMatrix, type StudDemandPublishInput } from './StudMatrix';
 import { useCoverageSlots } from './useCoverageSlots';
 
 export interface CoverageProps {
@@ -38,7 +39,7 @@ export interface CoverageProps {
 
 export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: CoverageProps = {}) {
   // 与看板同一份摘要（2026-10-24）：覆盖矩阵不再自己算一遍
-  const { loaded, owned, mode, stud } = useCollectionSummary();
+  const { loaded, owned, mode, stud, recommendations } = useCollectionSummary();
   const { accounts } = useOwnedPets();
   const [editorOpen, setEditorOpen] = useState(false);
 
@@ -52,6 +53,39 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
     () => describeCoverageCells({ cells: stud.cells, species, owned, mode }),
     [stud, owned, mode],
   );
+  /** 种公阵列点淡黄推荐格 → 选小组发种公需求：小组列表按需读取，避免进页面就请求。 */
+  const [demandGroups, setDemandGroups] = useState<Array<{ id: string; name: string }> | null>(null);
+  const [demandGroupsLoading, setDemandGroupsLoading] = useState(false);
+  const [demandGroupsError, setDemandGroupsError] = useState('');
+
+  const loadDemandGroups = useCallback(() => {
+    setDemandGroupsLoading(true);
+    setDemandGroupsError('');
+    void listCollectionGroups()
+      .then((list) => {
+        setDemandGroups(
+          list
+            .filter((group) => group.groupType === 'mother')
+            .map((group) => ({ id: group.id, name: group.name })),
+        );
+      })
+      .catch((failure: unknown) => {
+        setDemandGroupsError(
+          failure instanceof Error ? failure.message : '读取小组失败，请稍后再试',
+        );
+      })
+      .finally(() => setDemandGroupsLoading(false));
+  }, []);
+
+  const publishStudDemand = useCallback(async (input: StudDemandPublishInput) => {
+    await publishCollectionDemand(input.groupId, {
+      eggGameId: -input.eggGroupId,
+      natures: [input.natureName],
+      gender: '公',
+      body: input.body,
+      voice: input.voice,
+    });
+  }, []);
 
   return (
     <main className="mx-auto max-w-md space-y-3 p-4">
@@ -178,6 +212,12 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
             speciesByGameId={speciesByGameId}
             eggGroupNames={eggGroupNames}
             mode={mode}
+            recommendations={recommendations}
+            demandGroups={demandGroups}
+            demandGroupsLoading={demandGroupsLoading}
+            demandGroupsError={demandGroupsError}
+            onLoadDemandGroups={loadDemandGroups}
+            onPublishStudDemand={publishStudDemand}
           />
 
           <h2 className="px-1 text-sm font-medium text-slate-500">缺口明细（按蛋组）</h2>

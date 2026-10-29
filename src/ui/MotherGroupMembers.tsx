@@ -100,7 +100,7 @@ export function MotherGroupMembers({
     if (!member.resource) return member.resourceRevision > 0 ? '已停止共享' : '尚未发布';
     if (!isMotherResourceComparable(member.resource, catalogVersion, targetCriteriaId)) return '需更新';
     const count = new Set(member.resource.accounts.flatMap((account) => account.eggGameIds)).size;
-    return count > 0 ? `已发布 ${count} 种` : '已发布 · 目前无达标母本';
+    return count > 0 ? `已发布 ${count} 种母本` : '已发布 · 目前无母本';
   };
 
   const run = async (tag: string, action: () => Promise<void>, success: string) => {
@@ -267,7 +267,7 @@ export function MotherGroupMembers({
                   ) : member.resource && member.resource.accounts.length > 0 ? (
                     member.resource.accounts.map((account) => (
                       <li key={account.accountKey} className="text-[11px] text-slate-500">
-                        {account.accountName} · UID {account.accountKey.slice(4)} · 达标{' '}
+                        {account.accountName} · UID {account.accountKey.slice(4)} · 母本{' '}
                         {account.eggGameIds.length} 种 · 导出 {timeText(Date.parse(account.sourceExportedAt))}
                       </li>
                     ))

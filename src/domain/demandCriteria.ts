@@ -1,4 +1,4 @@
-import { heightBodyOf } from '../shared/bodySize.js';
+import { bodyGradeOf } from '../shared/bodySize.js';
 import type { DemandBody, DemandCriteria, DemandVoice } from '../shared/collectionGroups';
 import { isBreedableGroup } from './eggs';
 import type { AccountSnapshot } from './parseBackup';
@@ -20,7 +20,8 @@ export interface PetMatch {
 }
 
 export interface DemandSupply {
-  kind: 'stock' | 'breedable' | 'none';
+  /** 只认**配对孵蛋**；已有现货但配不出另一半时不算能接单（2026-10-28 用户口径）。 */
+  kind: 'breedable' | 'none';
   accountKey?: string;
   /** 可孵时用来配对的母本 / 种公，便于界面展示「谁能孵」。 */
   motherGameId?: number;
@@ -30,8 +31,7 @@ export interface DemandSupply {
 const accountKeyOfSnapshot = (snapshot: AccountSnapshot): string =>
   snapshot.accountKey ?? `uid:${snapshot.gameId}`;
 
-const bodyOfPet = (pet: OwnedPet): string =>
-  pet.medalBody || heightBodyOf(pet.heightPercent) || '';
+const bodyOfPet = (pet: OwnedPet): string => bodyGradeOf(pet);
 
 const matchesDemandVoice = (pet: OwnedPet, voice: string): boolean => {
   if (!voice) return true;
@@ -118,8 +118,8 @@ const eggInfoOf = (species: readonly SpeciesEntry[]): Map<number, EggGroupInfo> 
 /**
  * 本机同账号能否孵出这条需求。
  *
- * - 已有完全匹配个体 = 现货；
- * - 否则找**同账号**的「该蛋母本 + 同蛋组公」，且父母双方都满足体型 / 声音；
+ * - **只认配对孵蛋**：必须找**同账号**的「该蛋母本 + 同蛋组公」，且父母双方都满足体型 / 声音；
+ *   自己已有一只、但配不出另一只时不算能接（2026-10-28 用户口径：不交割精灵）；
  * - 性格指定时，父母至少一方带目标性格（学院小窝 100% 遗传）；
  * - 需求为公时，该蛋物种必须能出公（`maleCapable`）。
  *
@@ -131,15 +131,13 @@ export function findBreedableSupply(
   species: readonly SpeciesEntry[],
 ): DemandSupply {
   const eggOfGameId = eggMapOf(species);
-  const stock = findMatchingPet(snapshots, criteria, species);
-  if (stock) {
-    return {
-      kind: 'stock',
-      accountKey: accountKeyOfSnapshot(stock.snapshot),
-    };
-  }
 
   const infoByGameId = eggInfoOf(species);
+  /** 所有形态的蛋组：公本只要是同蛋组即可，不要求是蛋物种本体（进化形态也能配）。 */
+  const groupsByGameId = new Map<number, number[]>();
+  for (const entry of species) {
+    groupsByGameId.set(entry.gameId, (entry.eggGroups ?? []).filter(isBreedableGroup));
+  }
   const info = infoByGameId.get(criteria.eggGameId);
   if (!info || info.groups.length === 0) return { kind: 'none' };
   if (criteria.gender === '公' && !info.maleCapable) return { kind: 'none' };
@@ -156,7 +154,7 @@ export function findBreedableSupply(
       (pet) =>
         pet.gender === '公' &&
         matchesParentGrade(pet, criteria) &&
-        (infoByGameId.get(pet.gameId)?.groups ?? []).some((group) =>
+        (groupsByGameId.get(pet.gameId) ?? []).some((group) =>
           info.groups.includes(group),
         ),
     );
@@ -225,29 +223,24 @@ export function findStudBreedableSupply(
       species,
     );
     if (supply.kind === 'none') continue;
-    if (supply.kind === 'stock') {
-      const stock = findMatchingPet(
-        snapshots,
-        {
-          eggGameId: egg.gameId,
-          nature: demand.nature,
-          gender: '公',
-          body: demand.body as DemandBody,
-          voice: demand.voice as DemandVoice,
-        },
-        species,
-      );
-      return { ...supply, eggGameId: egg.gameId, mother: stock ?? undefined };
-    }
     const snapshot = snapshots.find(
       (item) => accountKeyOfSnapshot(item) === supply.accountKey,
     );
-    const mother = snapshot?.pets.find(
-      (pet) => pet.gameId === supply.motherGameId && pet.gender === '母',
-    );
-    const male = snapshot?.pets.find(
-      (pet) => pet.gameId === supply.maleGameId && pet.gender === '公',
-    );
+    /** 同 gameId 可能有多只（性格不同）：优先挑带目标性格的那只，展示的配对才孵得出来。 */
+    const pickPet = (gameId: number, gender: '公' | '母'): OwnedPet | undefined => {
+      const candidates = (snapshot?.pets ?? []).filter(
+        (pet) => pet.gameId === gameId && pet.gender === gender,
+      );
+      return (
+        candidates.find((pet) => !demand.nature || pet.nature === demand.nature) ??
+        candidates[0]
+      );
+    };
+    if (supply.motherGameId == null || supply.maleGameId == null) {
+      return { ...supply, eggGameId: egg.gameId };
+    }
+    const mother = pickPet(supply.motherGameId, '母');
+    const male = pickPet(supply.maleGameId, '公');
     return {
       ...supply,
       eggGameId: egg.gameId,

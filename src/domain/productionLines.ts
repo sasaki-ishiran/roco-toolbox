@@ -163,7 +163,14 @@ const VOICE_GRADES: Record<TargetMode, Record<string, readonly PetGrade[]>> = {
 const gradeMatchesTarget = (grade: PetGrade, target: ProductionTarget, mode: TargetMode): boolean => {
   if (target.body && GRADE_BODY[grade] !== target.body) return false;
   if (!target.voice) return true;
-  return (VOICE_GRADES[mode][target.voice] ?? []).includes(grade);
+  // 产线只记档位，不记具体分贝；+100 与婉转声 / -100 与粗嗓门在档位上等价。
+  // 两种标签都认，否则把筛选切到「婉转声」时会一条产线都匹配不上。
+  const grades = new Set([
+    ...(VOICE_GRADES[mode][target.voice] ?? []),
+    ...(VOICE_GRADES.perfect[target.voice] ?? []),
+    ...(VOICE_GRADES.medal[target.voice] ?? []),
+  ]);
+  return grades.has(grade);
 };
 
 /**

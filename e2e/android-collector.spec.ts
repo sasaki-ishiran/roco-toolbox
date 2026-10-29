@@ -88,7 +88,10 @@ test('上传蛋神助手显示入库 UID，去重按成功展示', async ({ page
   await card.getByRole('button', { name: '上传蛋神助手', exact: true }).click();
   await expect(card.getByText(/已上传蛋神助手（云端已有相同数据）/)).toBeVisible();
   await expect(card.getByText(/游戏 UID 293143/)).toBeVisible();
-  await expect(card.getByRole('button', { name: '重新上传', exact: true })).toBeVisible();
+  // 上传成功的文件不能再重复上传，按钮保留但禁用
+  const uploaded = card.getByRole('button', { name: '已上传', exact: true });
+  await expect(uploaded).toBeVisible();
+  await expect(uploaded).toBeDisabled();
   for (const width of [375, 390, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);

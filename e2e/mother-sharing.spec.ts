@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿import { expect, test } from '@playwright/test';
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { expect, test } from '@playwright/test';
 import { enterGroup, loginAs, mockMotherGroups } from './helpers/motherGroupsMock';
 
 const openGroups = async (page: import('@playwright/test').Page) => {
@@ -33,7 +33,6 @@ test('已登录且本机无数据：能浏览小组资源，不能发布自己�
   await expect(page.getByTestId('group-card')).toContainText('周末互换');
   await expect(page.getByTestId('group-card')).toContainText('3 人');
   await expect(page.getByTestId('group-type-label')).toContainText('收集小组');
-  await expect(page.getByTestId('group-target-summary')).toContainText('母 · 大块头 · +100');
   await expect(page.getByTestId('mother-resource-editor')).toHaveCount(0);
   await page.getByTestId('group-edit-resources').click();
   await expect(page.getByTestId('mother-resource-editor')).toBeVisible();
@@ -42,6 +41,8 @@ test('已登录且本机无数据：能浏览小组资源，不能发布自己�
   await expect(page.getByTestId('mother-publish')).toBeDisabled();
 
   // 有人还没发布：组内没人有的行只能标「数据不全」，不能判死
+  // 先搜「喵喵」把它筛出来再断言（列表分页，一页 24 项）
+  await page.getByTestId('mother-search').fill('喵喵');
   const cat = page.getByTestId('mother-resource-row').filter({ hasText: '喵喵' });
   await expect(cat).toHaveAttribute('data-incomplete', 'true');
   await expect(page.getByTestId('mother-incomplete-section')).toContainText('数据不全');

@@ -67,7 +67,7 @@ const viewKeyOf = (pairing: NestPairing): string =>
  * 摆位图：按坐标把窝画出来（绿块=学院小窝），线=会配对的边。
  * 图层顺序 = 窝块 → 连线 → 名字：线画在窝块**之上**（否则会被方块盖住），名字再压在线上（保证读得清）。
  */
-function LayoutMap({ plan, styleByKey }: { plan: NestPlan; styleByKey: Map<string, PairingStyle> }) {
+export function NestLayoutMap({ plan, styleByKey }: { plan: NestPlan; styleByKey: Map<string, PairingStyle> }) {
   if (plan.slots.length === 0) return null;
   const xs = plan.slots.map((slot) => slot.position.x);
   const ys = plan.slots.map((slot) => slot.position.y);
@@ -342,7 +342,7 @@ export function NestPlanCard({ plans, emptyNote }: { plans: NestPlan[]; emptyNot
             <h3 className="mb-1 text-xs font-medium text-slate-400">
               {plan.account} · 用 {plan.nestsUsed}/{plan.nestsTotal} 个窝
             </h3>
-            <LayoutMap plan={plan} styleByKey={styleByKey} />
+            <NestLayoutMap plan={plan} styleByKey={styleByKey} />
             <ul className="mt-1.5 space-y-1.5">
               {views.map((view) => (
                 <PairingCard key={view.key} view={view} testId="breed-suggestion" />

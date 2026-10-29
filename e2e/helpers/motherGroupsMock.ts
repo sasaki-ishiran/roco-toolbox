@@ -22,7 +22,7 @@ const resource = (
   accounts: Array<{ accountKey: string; accountName: string; eggGameIds: number[] }>,
 ) => ({
   schemaVersion: 1,
-  criteriaId: 'all-mothers-v1',
+  criteriaId: 'all-mothers-v2',
   catalogVersion: CATALOG_VERSION,
   accounts: accounts.map((account) => ({
     ...account,
@@ -44,7 +44,7 @@ export const groupDetail = {
     resourceEpoch: 1,
     target: {
       kind: 'mother',
-      criteriaId: 'all-mothers-v1',
+      criteriaId: 'all-mothers-v2',
       mode: 'perfect',
       bodies: ['大块头'],
       voices: ['+100'],
