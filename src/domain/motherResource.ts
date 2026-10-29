@@ -163,7 +163,7 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
 /**
  * 发布前的本地预检：与服务端 `motherGroupsValidation` 同口径。
  *
- * 服务端的产线上限（单账号 1024 条、单条 30 个性格）和 128KiB 请求体上限，
+ * 服务端的产线上限（单账号 1024 条、单条 30 个性格）和 256KiB 请求体上限，
  * 客户端不预检就只能等提交后收到 413 / INVALID_INPUT（2026-10-29 代码审查 B2-M02）。
  * 请求体还会包一层 `{ baseRevision, resource }`，这里留 1KiB 余量。
  */

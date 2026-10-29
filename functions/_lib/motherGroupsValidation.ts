@@ -121,12 +121,11 @@ export function parseMotherResource(value: unknown): MotherResourceDraft {
   const criteriaId = record.criteriaId;
   if (
     typeof criteriaId !== 'string' ||
-    // v3 把产线口径（目标模式）编进 criteriaId；旧 id 仍接受，避免旧客户端发布 400。
-    !/^(all-mothers-v3-(perfect|medal)|all-mothers-v2|female-huge-voice100-v2|mother-v2-[0-9a-f]{8})$/.test(
-      criteriaId,
-    )
+    // 2026-10-29：小组可比性只认 v3（产线口径编进 criteriaId）。
+    // 旧 id 一律拒绝，避免「发布成功但永远待确认」的静默状态；旧客户端会收到明确的 400。
+    !/^all-mothers-v3-(perfect|medal)$/.test(criteriaId)
   ) {
-    invalid('criteriaId 不受支持');
+    invalid('criteriaId 不受支持：客户端版本过旧，请更新后重新发布');
   }
 
   const catalogVersion = record.catalogVersion;

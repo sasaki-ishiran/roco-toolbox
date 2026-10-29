@@ -17,7 +17,7 @@ if (!/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(BASE)) {
   );
 }
 
-const CRITERIA_ID = 'female-huge-voice100-v2';
+const CRITERIA_ID = 'all-mothers-v3-perfect';
 const TIME = '2026-10-23T00:00:00.000Z';
 const LATER = '2026-10-24T00:00:00.000Z';
 const READ_LIMIT_PER_HOUR = 1800;
@@ -471,9 +471,9 @@ test('产线随摘要发布并可读回', async () => {
   assert.deepEqual(saved.accounts[0].lines, lines);
 });
 
-test('超过 128KiB 的请求体返回 413', async () => {
+test('超过 256KiB 的请求体返回 413', async () => {
   const group = await groupWithMembers([B]);
-  const huge = draftOf([accountOf(1001, [101])], { padding: 'x'.repeat(132 * 1024) });
+  const huge = draftOf([accountOf(1001, [101])], { padding: 'x'.repeat(260 * 1024) });
   const result = await publish(A.token, group.id, 0, huge);
   assert.equal(result.status, 413);
   assert.equal(result.body.code, 'PAYLOAD_TOO_LARGE');
