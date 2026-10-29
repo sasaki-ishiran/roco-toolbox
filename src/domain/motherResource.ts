@@ -15,10 +15,8 @@ import {
   type SharedMotherAccount,
 } from '../shared/motherGroups';
 import { isBreedableGroup } from './eggs';
-import type { MotherCriteria } from './motherCriteria';
 import type { TargetMode } from './petFilters';
 import { buildProductionLines } from './productionLines';
-import type { NatureOverrides } from './recommendedNatures';
 import { accountKeyOf, type AccountSnapshot } from './parseBackup';
 import type { SpeciesEntry } from './types';
 
@@ -31,7 +29,6 @@ import type { SpeciesEntry } from './types';
  * 单位是「蛋」（`SpeciesEntry.eggGameId`），不是进化形态；同一颗蛋的重复个体只算一次。
  * 这里刻意不使用 `useOwnedPets()` 的输出（它受顶部账号筛选影响，`account` 只是显示名）。
  */
-export const SHARED_MOTHER_CRITERIA: MotherCriteria = { bodies: ['大块头'], voices: ['+100'] };
 
 export type MotherResourceErrorCode =
   | 'NO_SELECTED_ACCOUNTS'
@@ -62,12 +59,6 @@ export interface BuildMotherResourceInput {
   selectedAccountKeys: readonly string[];
   species: readonly SpeciesEntry[];
   catalogVersion: string;
-  /** 本组口径；不传时沿用一期的固定口径（母 · 大块头 · +100dB）。 */
-  criteria?: MotherCriteria;
-  /** 组内是否要求母本性格为推荐性格（2026-10-25）。 */
-  requireRecommendedNatures?: boolean;
-  /** 这份口径用的推荐性格覆盖（组长那一份）；不传 = 图鉴推荐 + 种族值兜底。 */
-  natureOverrides?: NatureOverrides;
   /**
    * 组目标模式（必传）：产线按双方同档位计算，并按它生成 `criteriaId`。
    * 漏传会让摘要用错模式、组内口径混用（2026-10-29 代码审查 B2-M01）。

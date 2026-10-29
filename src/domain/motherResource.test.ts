@@ -147,7 +147,7 @@ describe('buildMotherResource：共享全部母本（2026-10-28 去掉小组口�
     );
   });
 
-  test('旧的自选口径参数不再参与过滤，criteriaId 由目标模式派生', () => {
+  test('共享全部母本，criteriaId 由目标模式派生', () => {
     const resource = buildMotherResource({
       snapshots: [
         snapshot(1001, '甲', [
@@ -158,7 +158,6 @@ describe('buildMotherResource：共享全部母本（2026-10-28 去掉小组口�
       selectedAccountKeys: ['uid:1001'],
       species: catalog,
       catalogVersion: FIXTURE_CATALOG_VERSION,
-      criteria: { bodies: ['小不点'], voices: ['婉转声'] },
       mode: 'medal',
     });
     expect(resource.criteriaId).toBe(motherResourceCriteriaIdOf('medal'));
