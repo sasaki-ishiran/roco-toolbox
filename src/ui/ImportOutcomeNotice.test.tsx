@@ -129,4 +129,49 @@ describe('ImportOutcomeNotice 待结单提醒', () => {
     render(<ImportOutcomeNotice onOpenGroups={vi.fn()} />);
     expect(screen.queryByTestId('import-outcome-claims')).toBeNull();
   });
+
+  test('开始新一轮导入时清掉上一轮的结单结果提示', async () => {
+    withClaims([claim]);
+    render(<ImportOutcomeNotice onOpenGroups={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId('import-outcome-complete-all'));
+    await waitFor(() =>
+      expect(screen.getByTestId('import-outcome-claims-done')).toHaveTextContent('已结单 2 单'),
+    );
+
+    act(() => {
+      const operationId = beginImport();
+      updateImportOutcome(operationId, { local: 'saved', claims: [claim] });
+    });
+    await waitFor(() => expect(screen.queryByTestId('import-outcome-claims-done')).toBeNull());
+    expect(screen.queryByTestId('import-outcome-claims-error')).toBeNull();
+    expect(screen.getByTestId('import-outcome-claims')).toBeTruthy();
+  });
+
+  test('多组待结单：文案列出全部组名，按钮指向第一组', () => {
+    const second: PendingDemandClaim = {
+      ...claim,
+      groupId: 'g2',
+      groupName: '夜间交换',
+      accountId: 'acc2',
+      claimers: ['阿甲'],
+      items: claim.items.map((item) => ({ ...item, claimerAccountId: 'C', claimerName: '阿甲' })),
+    };
+    const onOpenGroups = vi.fn();
+    withClaims([claim, second]);
+    render(<ImportOutcomeNotice onOpenGroups={onOpenGroups} />);
+
+    const notice = screen.getByTestId('import-outcome-claims');
+    expect(notice).toHaveTextContent('分别在「周末互换」「夜间交换」里');
+    expect(screen.getByTestId('import-outcome-open-claims')).toHaveTextContent(
+      '去需求中心（周末互换）',
+    );
+    // 两组里形状相同的两单都要列出来，不能被当成同一条
+    expect(notice).toHaveTextContent('阿乙 接的');
+    expect(notice).toHaveTextContent('阿甲 接的');
+    expect(notice.querySelectorAll('li')).toHaveLength(4);
+
+    fireEvent.click(screen.getByTestId('import-outcome-open-claims'));
+    expect(readLastGroupId('acc', 'mother')).toBe('g1');
+  });
 });

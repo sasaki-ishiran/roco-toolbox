@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { completeCollectionDemand } from '../api/collectionGroups';
 import { useImportOutcome, updateImportOutcome } from './importOutcomeStore';
 import { saveLastGroupId } from './collectionGroupStore';
@@ -32,6 +32,12 @@ export function ImportOutcomeNotice({ onOpenGroups }: ImportOutcomeNoticeProps =
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  // 新的一次导入开始后，上一次的结单结果提示不能继续挂着
+  useEffect(() => {
+    setMessage('');
+    setError('');
+    setBusy(false);
+  }, [outcome.operationId]);
   if (outcome.local === 'idle') return null;
 
   const local =
@@ -59,8 +65,9 @@ export function ImportOutcomeNotice({ onOpenGroups }: ImportOutcomeNoticeProps =
     onOpenGroups?.();
   };
   const allItems = outcome.claims.flatMap((claim) =>
-    claim.items.map((item) => ({ ...item, groupId: claim.groupId })),
+    claim.items.map((item) => ({ ...item, groupId: claim.groupId, accountId: claim.accountId })),
   );
+  const groupNames = [...new Set(outcome.claims.map((claim) => claim.groupName || '小组'))];
   const visibleItems = allItems.slice(0, 5);
   const completeAll = async () => {
     if (busy || allItems.length === 0) return;
@@ -142,13 +149,13 @@ export function ImportOutcomeNotice({ onOpenGroups }: ImportOutcomeNoticeProps =
           <p className="mt-0.5 text-xs opacity-90">
             {outcome.claims.length === 1
               ? `在「${primaryClaim?.groupName ?? '小组'}」里，`
-              : `共 ${outcome.claims.length} 个组，`}
+              : `分别在「${groupNames.join('」「')}」里，`}
             确认完成后对方会多一笔「已结单」，大家都更愿意接着换蛋。
           </p>
           <ul className="mt-1.5 space-y-0.5 text-xs">
             {visibleItems.map((item) => (
               <li
-                key={`${item.groupId}:${item.eggGameId}:${item.nature}:${item.gender}:${item.body}:${item.voice}`}
+                key={`${item.accountId}:${item.groupId}:${item.claimerAccountId}:${item.eggGameId}:${item.nature}:${item.gender}:${item.body}:${item.voice}`}
                 className="flex items-center justify-between gap-2"
               >
                 <span className="min-w-0 flex-1 truncate">
@@ -181,7 +188,9 @@ export function ImportOutcomeNotice({ onOpenGroups }: ImportOutcomeNoticeProps =
                 onClick={openClaimCenter}
                 data-testid="import-outcome-open-claims"
               >
-                去需求中心
+                {outcome.claims.length > 1
+                  ? `去需求中心（${primaryClaim?.groupName ?? '第 1 个组'}）`
+                  : '去需求中心'}
               </Button>
             ) : null}
           </div>
