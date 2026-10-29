@@ -28,4 +28,15 @@ describe('PetAvatar', () => {
     expect(screen.queryByTestId('pet-avatar')).toBeNull();
     expect(screen.getByTestId('pet-avatar-fallback').textContent).toBe('喵');
   });
+
+  test('换成另一只精灵时重置兜底阶段，不沿用上一张的失败结果', () => {
+    const view = render(<PetAvatar gameId={3001} name="喵喵" shiny />);
+    fireEvent.error(screen.getByTestId('pet-avatar'));
+    expect((screen.getByTestId('pet-avatar') as HTMLImageElement).src).toBe(`${CDN}/icon.png`);
+
+    view.rerender(<PetAvatar gameId={3002} name="火花" shiny />);
+    expect((screen.getByTestId('pet-avatar') as HTMLImageElement).src).toBe(
+      'https://game.gtimg.cn/images/rocom/rocodata/jingling/3002/icon_yise.png',
+    );
+  });
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { petAvatarUrl } from '../domain/petAvatar';
 
 /** 尺寸只允许这几档，用静态类名（Tailwind 不能拼字符串） */
@@ -31,6 +31,8 @@ export interface PetAvatarProps {
  */
 export function PetAvatar({ gameId, name, shiny = false, size = 32, className = '' }: PetAvatarProps) {
   const [stage, setStage] = useState<'primary' | 'normal' | 'fallback'>('primary');
+  // 换精灵 / 换异色状态时重置兜底阶段：否则上一张的失败结果会带到新头像
+  useEffect(() => { setStage('primary'); }, [gameId, shiny]);
   const sizeClass = SIZE_CLASS[size];
   const url =
     stage === 'fallback'
