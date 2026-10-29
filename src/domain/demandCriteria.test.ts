@@ -270,6 +270,44 @@ describe('findBreedableSupply', () => {
     );
     expect(supply.kind).toBe('none');
   });
+
+  test('同图鉴号多只母本时，返回达标的那只，不是背包里第一只', () => {
+    const snapshots = [
+      snapshot(1001, '甲', [
+        // 同图鉴号第一只：不达标（-4dB、普通体型）；只有第二只是大块头 + 100dB
+        mother(201, { nature: '专注', medalBody: '', heightPercent: 33.3, weightPercent: 30.7, voiceDb: -4 }),
+        mother(201, { nature: '开朗' }),
+        mother(701, { gender: '公', nature: '胆小' }),
+      ]),
+    ];
+    const supply = findBreedableSupply(
+      snapshots,
+      { eggGameId: 201, nature: '胆小', gender: '', body: '大块头', voice: '+100' },
+      species,
+    );
+    expect(supply.kind).toBe('breedable');
+    expect(supply.motherPet?.pet.voiceDb).toBe(100);
+    expect(supply.motherPet?.pet.medalBody).toBe('大块头');
+  });
+
+  test('同图鉴号多只公本时，返回达标的那只，不按性格挑到 96dB', () => {
+    const snapshots = [
+      snapshot(1001, '甲', [
+        mother(201, { nature: '急躁' }),
+        // 同图鉴号第一只公：带目标性格但只有 96dB，孵不出 +100
+        mother(701, { gender: '公', nature: '急躁', voiceDb: 96 }),
+        mother(701, { gender: '公', nature: '开朗', voiceDb: 100 }),
+      ]),
+    ];
+    const supply = findBreedableSupply(
+      snapshots,
+      { eggGameId: 201, nature: '急躁', gender: '母', body: '大块头', voice: '+100' },
+      species,
+    );
+    expect(supply.kind).toBe('breedable');
+    expect(supply.malePet?.pet.voiceDb).toBe(100);
+    expect(supply.malePet?.pet.nature).toBe('开朗');
+  });
 });
 
 describe('种公需求（负数蛋组 id）', () => {
@@ -287,8 +325,8 @@ describe('种公需求（负数蛋组 id）', () => {
     );
     expect(supply.kind).toBe('breedable');
     expect(supply.eggGameId).toBe(201);
-    expect(supply.mother?.pet.gameId).toBe(201);
-    expect(supply.male?.pet.gameId).toBe(701);
+    expect(supply.motherPet?.pet.gameId).toBe(201);
+    expect(supply.malePet?.pet.gameId).toBe(701);
   });
 
   test('同一个图鉴号有多只时，优先展示带目标性格的那只', () => {
@@ -305,7 +343,26 @@ describe('种公需求（负数蛋组 id）', () => {
       speciesWithMale201,
     );
     expect(supply.kind).toBe('breedable');
-    expect(supply.mother?.pet.nature).toBe('固执');
+    expect(supply.motherPet?.pet.nature).toBe('固执');
+  });
+
+  test('同图鉴号多只时返回达标的那只，不按性格挑到不达标个体', () => {
+    const snapshots = [
+      snapshot(1001, '甲', [
+        // 同图鉴号第一只：带目标性格但不达标（声音 0dB、非大块头）
+        mother(201, { nature: '固执', medalBody: '', heightPercent: 40, weightPercent: 40, voiceDb: 0 }),
+        mother(201, { nature: '固执' }),
+        mother(701, { gender: '公', nature: '固执' }),
+      ]),
+    ];
+    const supply = findStudBreedableSupply(
+      snapshots,
+      { eggGameId: -3, nature: '固执', body: '大块头', voice: '+100' },
+      speciesWithMale201,
+    );
+    expect(supply.kind).toBe('breedable');
+    expect(supply.motherPet?.pet.voiceDb).toBe(100);
+    expect(supply.motherPet?.pet.medalBody).toBe('大块头');
   });
 
   test('完成校验：背包里有任意同组物种的符合条件的公就算满足', () => {

@@ -957,21 +957,6 @@ export function MotherGroupResources({
     ]
       .filter(Boolean)
       .join('；');
-    const petOf = (accountKey: string | undefined, gameId: number | undefined, gender: '公' | '母') => {
-      if (gameId == null) return null;
-      const snapshot = snapshots.find(
-        (item) => (item.accountKey ?? `uid:${item.gameId}`) === accountKey,
-      );
-      const candidates = (snapshot?.pets ?? []).filter(
-        (pet) => pet.gameId === gameId && pet.gender === gender,
-      );
-      // 同一 gameId 可能有多只（性格不同）：优先带目标性格的那只，避免展示出孵不出的配对。
-      return (
-        candidates.find((pet) => !demand.nature || pet.nature === demand.nature) ??
-        candidates[0] ??
-        null
-      );
-    };
     const nameOfPet = (pet: OwnedPet): string =>
       speciesDisplayName(speciesByGameId.get(pet.gameId), pet.name);
     /**
@@ -1030,8 +1015,8 @@ export function MotherGroupResources({
         return (
           pairs(
             [
-              { label: '母本', pet: supply.mother?.pet },
-              { label: '种公', pet: supply.male?.pet },
+              { label: '母本', pet: supply.motherPet?.pet },
+              { label: '种公', pet: supply.malePet?.pet },
             ],
             `用这两只同账号配对，可孵出「${groupName}」蛋。`,
           ) ?? (
@@ -1057,8 +1042,8 @@ export function MotherGroupResources({
       return (
         pairs(
           [
-            { label: '母本', pet: petOf(supply.accountKey, supply.motherGameId, '母') },
-            { label: '种公', pet: petOf(supply.accountKey, supply.maleGameId, '公') },
+            { label: '母本', pet: supply.motherPet?.pet },
+            { label: '种公', pet: supply.malePet?.pet },
           ],
           `用这两只同账号配对，可孵出「${eggName}」。`,
         ) ?? (

@@ -26,6 +26,14 @@ export interface DemandSupply {
   /** 可孵时用来配对的母本 / 种公，便于界面展示「谁能孵」。 */
   motherGameId?: number;
   maleGameId?: number;
+  /**
+   * 被选中的**具体个体**（2026-10-29 代码审查 B1-H01）。
+   *
+   * 同图鉴号可能有多只，体型 / 声音达标的往往只有其中一只；调用方必须直接展示这两只，
+   * 不要再按图鉴号 + 性别重新挑，否则会把不达标的那只展示成「推荐配对」。
+   */
+  motherPet?: PetMatch;
+  malePet?: PetMatch;
 }
 
 const accountKeyOfSnapshot = (snapshot: AccountSnapshot): string =>
@@ -175,6 +183,8 @@ export function findBreedableSupply(
       accountKey: accountKeyOfSnapshot(snapshot),
       motherGameId: female.gameId,
       maleGameId: male.gameId,
+      motherPet: { snapshot, pet: female },
+      malePet: { snapshot, pet: male },
     };
   }
   return { kind: 'none' };
@@ -191,9 +201,6 @@ export const eggGroupIdOfDemand = (eggGameId: number): number => -eggGameId;
 export interface StudDemandSupply extends DemandSupply {
   /** 满足条件的蛋（蛋组里任意一只）。 */
   eggGameId?: number;
-  /** 接单方具体用哪只母本 / 哪只公配对（便于直接显示怎么配窝）。 */
-  mother?: PetMatch;
-  male?: PetMatch;
 }
 
 /** 组内任意一只蛋里，是否能凑出同账号、双方同档位的一对。 */
@@ -223,30 +230,8 @@ export function findStudBreedableSupply(
       species,
     );
     if (supply.kind === 'none') continue;
-    const snapshot = snapshots.find(
-      (item) => accountKeyOfSnapshot(item) === supply.accountKey,
-    );
-    /** 同 gameId 可能有多只（性格不同）：优先挑带目标性格的那只，展示的配对才孵得出来。 */
-    const pickPet = (gameId: number, gender: '公' | '母'): OwnedPet | undefined => {
-      const candidates = (snapshot?.pets ?? []).filter(
-        (pet) => pet.gameId === gameId && pet.gender === gender,
-      );
-      return (
-        candidates.find((pet) => !demand.nature || pet.nature === demand.nature) ??
-        candidates[0]
-      );
-    };
-    if (supply.motherGameId == null || supply.maleGameId == null) {
-      return { ...supply, eggGameId: egg.gameId };
-    }
-    const mother = pickPet(supply.motherGameId, '母');
-    const male = pickPet(supply.maleGameId, '公');
-    return {
-      ...supply,
-      eggGameId: egg.gameId,
-      mother: snapshot && mother ? { snapshot, pet: mother } : undefined,
-      male: snapshot && male ? { snapshot, pet: male } : undefined,
-    };
+    // 母本 / 种公直接用 findBreedableSupply 挑中的个体，不再按图鉴号二次挑选（B1-H01）。
+    return { ...supply, eggGameId: egg.gameId };
   }
   return { kind: 'none' };
 }
