@@ -1050,6 +1050,43 @@ describe('MotherGroupResources 三视图', () => {
     );
   });
 
+  test('我缺的：撤回已被接单的需求时提示会取消对方承接', () => {
+    render(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        demands={[
+          demandOf({ eggGameId: 201, nature: '胆小' }),
+          demandOf({
+            eggGameId: 201,
+            nature: '固执',
+            status: 'claimed',
+            claimerAccountId: 'B',
+          }),
+        ]}
+        onWithdrawDemand={vi.fn()}
+      />,
+    );
+    const row = screen
+      .getAllByTestId('mother-resource-row')
+      .find((item) => item.textContent?.includes('水蓝蓝'))!;
+    fireEvent.click(within(row).getByTestId('mother-resource-open'));
+    const detail = screen.getByTestId('mother-resource-detail');
+
+    // 待承接的单：只是二次确认，不写「取消对方承接」
+    fireEvent.click(within(detail).getAllByTestId('mother-demand-withdraw')[0]);
+    expect(within(detail).queryByTestId('mother-demand-withdraw-hint')).toBeNull();
+
+    // 已被接单的单：必须提示撤回会取消对方承接（changelog 2026-10-26a）
+    // 上一条进入确认后，它的「撤回」按钮已被替换，此时列表里只剩被接单这条
+    fireEvent.click(within(detail).getAllByTestId('mother-demand-withdraw')[0]);
+    expect(within(detail).getByTestId('mother-demand-withdraw-hint')).toHaveTextContent(
+      '撤回会取消对方承接',
+    );
+  });
+
   test('我缺的：自己已获得的蛋仍保留未结束的需求，可撤回', () => {
     const withdraw = vi.fn().mockResolvedValue(undefined);
     render(

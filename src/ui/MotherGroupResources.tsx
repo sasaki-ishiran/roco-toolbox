@@ -2127,6 +2127,15 @@ export function MotherGroupResources({
                           {demand.status !== 'done' ? (
                             confirming ? (
                               <>
+                                {/* 已被接单的单撤回会取消对方承接（2026-10-26a / B5-H02） */}
+                                {demand.status === 'claimed' ? (
+                                  <span
+                                    className="w-full text-center text-[9px] leading-[1.3] text-rose-600"
+                                    data-testid="mother-demand-withdraw-hint"
+                                  >
+                                    撤回会取消对方承接
+                                  </span>
+                                ) : null}
                                 <button
                                   type="button"
                                   onClick={() => void runDemandAction('withdraw', demand)}
@@ -2428,6 +2437,15 @@ export function MotherGroupResources({
                           {demand.status !== 'done' ? (
                             confirmWithdraw === key ? (
                               <>
+                                {/* 已被接单的单撤回会取消对方承接，必须写出来（2026-10-26a / B5-H02） */}
+                                {demand.status === 'claimed' ? (
+                                  <span
+                                    className="w-full text-[11px] leading-snug text-rose-600"
+                                    data-testid="mother-demand-withdraw-hint"
+                                  >
+                                    已有人接单，撤回会取消对方承接
+                                  </span>
+                                ) : null}
                                 <button
                                   type="button"
                                   disabled={demandBusy}
