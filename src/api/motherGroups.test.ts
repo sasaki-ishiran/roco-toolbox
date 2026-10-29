@@ -17,7 +17,7 @@ const detailBody = {
       resourceRevision: 2,
       resource: {
         schemaVersion: 1,
-        criteriaId: 'female-huge-voice100-v2',
+        criteriaId: 'all-mothers-v3-perfect',
         catalogVersion: 'test-v1',
         accounts: [
           {
@@ -81,7 +81,7 @@ describe('多人母本共享 API 客户端', () => {
         baseRevision: 1,
         resource: {
           schemaVersion: 1,
-          criteriaId: 'female-huge-voice100-v2',
+          criteriaId: 'all-mothers-v3-perfect',
           catalogVersion: 'test-v1',
           accounts: [],
         },
