@@ -24,7 +24,6 @@ import {
   resetCollectionGroupInvite,
   transferCollectionTask as transferTaskApi,
   updateCollectionGroupProfile,
-  updateCollectionTarget as updateCollectionTargetApi,
   withdrawCollectionDemand as withdrawDemandApi,
   type CollectionTasksResponse,
   type InvitePreview,
@@ -167,7 +166,6 @@ export interface CollectionGroupsHook {
   preflightInvite: (inviteCode: string) => Promise<InvitePreview>;
   publish: () => Promise<void>;
   stopSharing: () => Promise<void>;
-  updateTarget: (target: GroupTargetConfig) => Promise<number>;
   updateProfile: (displayName: string) => Promise<void>;
   resetInvite: () => Promise<string>;
   /** 组长移除组员（2026-10-26）：会取消对方未完成的需求，已完成保留。 */
@@ -1070,23 +1068,6 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     return previewCollectionInvite(inviteCode);
   }, []);
 
-  const updateTarget = useCallback(
-    async (nextTarget: GroupTargetConfig) => {
-      const groupId = groupRef.current;
-      const detail = detailRef.current;
-      if (!groupId || !detail) throw new Error('还没有打开小组');
-      const active = scope(true);
-      const result = await updateCollectionTargetApi(groupId, {
-        baseTargetRevision: detail.group.targetRevision,
-        target: nextTarget,
-      });
-      if (!active()) throw new Error('身份或小组已切换，请在原身份中查看操作结果');
-      await reloadCurrent();
-      return result.targetRevision;
-    },
-    [reloadCurrent, scope],
-  );
-
   const updateProfile = useCallback(
     async (displayName: string) => {
       const groupId = groupRef.current;
@@ -1199,7 +1180,6 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     preflightInvite,
     publish,
     stopSharing,
-    updateTarget,
     updateProfile,
     resetInvite,
     removeMember,
