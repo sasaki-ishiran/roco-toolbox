@@ -45,8 +45,13 @@ export const MOTHER_GROUP_MAX_MEMBERS = 20;
 export const MOTHER_RESOURCE_MAX_ACCOUNTS = 50;
 /** 每个账号最多 1024 个蛋血脉 ID。 */
 export const MOTHER_RESOURCE_MAX_EGGS_PER_ACCOUNT = 1024;
-/** 请求体上限 128KiB（按 UTF-8 字节算，不信任 Content-Length）。 */
-export const MOTHER_RESOURCE_MAX_BODY_BYTES = 128 * 1024;
+/**
+ * 请求体上限 256KiB（按 UTF-8 字节算，不信任 Content-Length）。
+ *
+ * 2026-10-29：共享摘要新增 `lines`（每账号最多 1024 条产线）后，128KiB 装不下
+ * 「共享全部母本与产线」的正常账号组合（3 个重度账号即可超），恢复为改动前的 256KiB。
+ */
+export const MOTHER_RESOURCE_MAX_BODY_BYTES = 256 * 1024;
 /** 账号名 1–80 个 Unicode 码点。 */
 export const MOTHER_ACCOUNT_NAME_MAX = 80;
 /** 图鉴版本 1–80 字符。 */
