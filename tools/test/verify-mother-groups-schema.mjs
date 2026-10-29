@@ -54,6 +54,15 @@ const MIGRATIONS = [
     file: path.join(root, 'functions/migrations/2026-10-27-mother-production-lines.sql'),
     repeat: 1,
   },
+  {
+    // 已完成需求归档：需求表只留 open / claimed，完成时整行搬进归档表。
+    // 迁移可重复执行（建表 IF NOT EXISTS，搬移只处理仍留在需求表里的 done 行）。
+    label: 'collection-demand-completions',
+    file: path.join(root, 'functions/migrations/2026-10-29-collection-demand-completions.sql'),
+    start: '-- >>> collection-demand-completions (2026-10-29)',
+    end: '-- <<< collection-demand-completions (2026-10-29)',
+    tables: ['collection_group_demand_completions'],
+  },
 ];
 const NEW_TABLES = MIGRATIONS.flatMap((item) => item.tables ?? []);
 

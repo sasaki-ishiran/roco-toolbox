@@ -57,7 +57,7 @@ const motherAccount = (uid, ids) => ({
 
 const motherDraft = (accounts) => ({
   schemaVersion: 1,
-  criteriaId: 'all-mothers-v2',
+  criteriaId: 'all-mothers-v3-perfect',
   catalogVersion: 'test-v1',
   accounts,
 });
@@ -197,7 +197,7 @@ test('母本发布不再校验口径；过期 baseTargetRevision 仍拒绝', asy
 
   const customDraft = {
     ...motherDraft([motherAccount(1001, [101])]),
-    criteriaId: customId,
+    criteriaId: 'all-mothers-v3-medal',
   };
   const published = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
     baseRevision: 0,
@@ -498,6 +498,28 @@ test('已完成需求不能撤回；组长移除组员会释放承接、取消�
   });
   assert.equal(cClaim.status, 200, JSON.stringify(cClaim.body));
 
+  // C 自己发的另一条由 B 接住并确认完成：移除 C 之后这笔「已结单」凭据必须保留
+  const cDonePublish = await call(C.token, 'POST', `${base}/demands`, {
+    eggGameId: 3469,
+    natures: [],
+  });
+  assert.equal(cDonePublish.status, 200, JSON.stringify(cDonePublish.body));
+  const cDoneClaim = await call(B.token, 'POST', `${base}/demands/3469/claim`, {
+    demanderAccountId: C.accountId,
+    eggGameId: 3469,
+    nature: '',
+    version: cDonePublish.body.demands[0].version,
+  });
+  assert.equal(cDoneClaim.status, 200, JSON.stringify(cDoneClaim.body));
+  const cDone = await call(C.token, 'POST', `${base}/demands/3469/complete`, {
+    demanderAccountId: C.accountId,
+    eggGameId: 3469,
+    nature: '',
+    version: cDoneClaim.body.demand.version,
+  });
+  assert.equal(cDone.status, 200, JSON.stringify(cDone.body));
+  assert.equal(cDone.body.demand.status, 'done');
+
   const notOwner = await call(B.token, 'DELETE', `${base}/members/${C.accountId}`);
   assert.equal(notOwner.status, 403);
   assert.equal(notOwner.body.code, 'NOT_OWNER');
@@ -520,6 +542,9 @@ test('已完成需求不能撤回；组长移除组员会释放承接、取消�
   assert.equal(byEgg.get(3467).claimerAccountId, null);
   // C 自己发的未完成需求被取消
   assert.equal(byEgg.has(3468), false);
+  // 被移除者「已完成」的需求也必须保留，承接人 B 的已结单数不会倒退
+  assert.equal(byEgg.get(3469).status, 'done');
+  assert.equal(byEgg.get(3469).claimerAccountId, B.accountId);
 
   const detail = await call(A.token, 'GET', base);
   assert.equal(detail.status, 200, JSON.stringify(detail.body));
@@ -527,6 +552,18 @@ test('已完成需求不能撤回；组长移除组员会释放承接、取消�
     detail.body.members.some((member) => member.accountId === C.accountId),
     false,
   );
+
+  // 已结单的同一颗蛋 + 同一组条件可以再次发布（归档后不占主键）
+  const republished = await call(A.token, 'POST', `${base}/demands`, {
+    eggGameId: 3466,
+    natures: [],
+  });
+  assert.equal(republished.status, 200, JSON.stringify(republished.body));
+  assert.equal(republished.body.demands[0].status, 'open');
+  const listedAgain = await call(A.token, 'GET', `${base}/demands`);
+  const rows3466 = listedAgain.body.demands.filter((item) => item.eggGameId === 3466);
+  assert.equal(rows3466.filter((item) => item.status === 'done').length, 1);
+  assert.equal(rows3466.filter((item) => item.status === 'open').length, 1);
 });
 
 test('收集组接口：产线随母本摘要发布并可读回（发布预览不再反复提示变化）', async () => {

@@ -959,12 +959,10 @@ async function removeMemberCleanup(
           WHERE group_id = ?`,
       )
       .bind(now, groupId),
-    db
-      .prepare('DELETE FROM mother_group_members WHERE group_id = ? AND account_id = ?')
-      .bind(groupId, accountId),
   ];
   if (cancelUnfinishedDemands) {
-    // 被移除的人未完成的需求一并取消，避免还在需求中心挂着；已完成保留用于已结单计数
+    // 被移除的人未完成的需求一并取消；已完成的行在归档表里，与成员行无关。
+    // 必须排在删成员行之前——删除成员会触发外键级联，之后的 DELETE 一行也删不到。
     statements.push(
       db
         .prepare(
@@ -974,8 +972,14 @@ async function removeMemberCleanup(
         .bind(groupId, accountId),
     );
   }
+  const memberIndex = statements.length;
+  statements.push(
+    db
+      .prepare('DELETE FROM mother_group_members WHERE group_id = ? AND account_id = ?')
+      .bind(groupId, accountId),
+  );
   const result = await db.batch(statements);
-  if ((result[3]?.meta.changes ?? 0) === 0) {
+  if ((result[memberIndex]?.meta.changes ?? 0) === 0) {
     throw new MotherStoreError('NOT_MEMBER', '不是该组成员');
   }
 }
@@ -1531,19 +1535,63 @@ const toDemand = (row: DemandRow): CollectionDemand => ({
 const DEMAND_COLUMNS = `group_id, demander_account_id, egg_game_id, nature,
   gender, body, voice, status, claimer_account_id, version, created_at, updated_at`;
 
-/** 组内全部需求（不分状态），按更新时间倒序。 */
+interface CompletionRow {
+  group_id: string;
+  demander_account_id: string;
+  claimer_account_id: string;
+  egg_game_id: number;
+  nature: string;
+  gender: string;
+  body: string;
+  voice: string;
+  created_at: number;
+  completed_at: number;
+}
+
+const COMPLETION_COLUMNS = `group_id, demander_account_id, claimer_account_id, egg_game_id, nature,
+  gender, body, voice, created_at, completed_at`;
+
+/** 归档行映射回需求形状：前端仍按 `status = 'done'` 统计已结单，接口契约不变。 */
+const toCompletedDemand = (row: CompletionRow): CollectionDemand => ({
+  groupId: row.group_id,
+  demanderAccountId: row.demander_account_id,
+  eggGameId: row.egg_game_id,
+  nature: row.nature ?? '',
+  gender: normalizeDemandGender(row.gender),
+  body: normalizeDemandBody(row.body),
+  voice: normalizeDemandVoice(row.voice),
+  status: 'done',
+  claimerAccountId: row.claimer_account_id,
+  // 已完成的单不再参与状态机，version 只为满足契约类型。
+  version: 0,
+  createdAt: row.created_at,
+  updatedAt: row.completed_at,
+});
+
+/**
+ * 组内全部需求：未完成的行 + 已完成的归档行，按更新时间倒序。
+ *
+ * 已完成的单搬进归档表后与成员行解耦，成员退出 / 被移除 / 注销都不再删除「已结单」凭据。
+ */
 export async function listCollectionDemands(
   db: D1Database,
   groupId: string,
 ): Promise<CollectionDemand[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT ${DEMAND_COLUMNS} FROM collection_group_demands
-        WHERE group_id = ? ORDER BY updated_at DESC`,
-    )
-    .bind(groupId)
-    .all<DemandRow>();
-  return results.map(toDemand);
+  const [active, completed] = await db.batch([
+    db
+      .prepare(`SELECT ${DEMAND_COLUMNS} FROM collection_group_demands WHERE group_id = ?`)
+      .bind(groupId),
+    db
+      .prepare(
+        `SELECT ${COMPLETION_COLUMNS} FROM collection_group_demand_completions WHERE group_id = ?`,
+      )
+      .bind(groupId),
+  ]);
+  const activeRows = (active.results ?? []) as unknown as DemandRow[];
+  const completedRows = (completed.results ?? []) as unknown as CompletionRow[];
+  return [...activeRows.map(toDemand), ...completedRows.map(toCompletedDemand)].sort(
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
 }
 
 export interface DemandCriteriaInput {
@@ -1576,6 +1624,31 @@ async function findDemand(
       criteria.voice,
     )
     .first<DemandRow>();
+}
+
+/** 同一条需求的最近一次完成记录（归档表里可能有多次：同一颗蛋允许再次发布）。 */
+async function findCompletion(
+  db: D1Database,
+  groupId: string,
+  criteria: DemandCriteriaInput,
+): Promise<CompletionRow | null> {
+  return db
+    .prepare(
+      `SELECT ${COMPLETION_COLUMNS} FROM collection_group_demand_completions
+        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ?
+          AND nature = ? AND gender = ? AND body = ? AND voice = ?
+        ORDER BY completed_at DESC LIMIT 1`,
+    )
+    .bind(
+      groupId,
+      criteria.demanderAccountId,
+      criteria.eggGameId,
+      criteria.nature,
+      criteria.gender,
+      criteria.body,
+      criteria.voice,
+    )
+    .first<CompletionRow>();
 }
 
 /** 本人在本组发布过的游戏账号数（决定需求额度）。 */
@@ -1701,15 +1774,21 @@ export async function withdrawCollectionDemand(
   body: DemandBody,
   voice: DemandVoice,
 ): Promise<void> {
-  const existing = await findDemand(db, groupId, {
+  const criteria: DemandCriteriaInput = {
     demanderAccountId: accountId,
     eggGameId,
     nature,
     gender,
     body,
     voice,
-  });
+  };
+  const existing = await findDemand(db, groupId, criteria);
   if (!existing) {
+    // 已完成的单已归档：仍然要明确告诉需求方「不能撤回」，不能报成不存在
+    const completed = await findCompletion(db, groupId, criteria);
+    if (completed) {
+      throw new MotherStoreError('DEMAND_ALREADY_DONE', '已完成的需求不能撤回');
+    }
     throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   }
   // 已完成的单是「已结单」计数的凭据，不能撤回（否则承接人的贡献会倒退）
@@ -1727,15 +1806,14 @@ export async function withdrawCollectionDemand(
     .run();
   if ((result.meta.changes ?? 0) === 0) {
     // 读到的快照与删除之间可能刚被确认完成：0 行删除不能当作撤回成功
-    const latest = await findDemand(db, groupId, {
-      demanderAccountId: accountId,
-      eggGameId,
-      nature,
-      gender,
-      body,
-      voice,
-    });
-    if (!latest) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+    const latest = await findDemand(db, groupId, criteria);
+    if (!latest) {
+      const completed = await findCompletion(db, groupId, criteria);
+      if (completed) {
+        throw new MotherStoreError('DEMAND_ALREADY_DONE', '已完成的需求不能撤回');
+      }
+      throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+    }
     if (latest.status === 'done') {
       throw new MotherStoreError('DEMAND_ALREADY_DONE', '已完成的需求不能撤回');
     }
@@ -1877,34 +1955,70 @@ export async function completeCollectionDemand(
   }
   const criteria = actionCriteria(input);
   const existing = await findDemand(db, groupId, criteria);
-  if (!existing) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  if (!existing) {
+    // 已经归档 = 别的设备刚完成过；按最近一次完成返回，重复提交保持幂等
+    const completed = await findCompletion(db, groupId, criteria);
+    if (completed) return toCompletedDemand(completed);
+    throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  }
   if (existing.status === 'done') return toDemand(existing);
   if (existing.status !== 'claimed') {
     throw new MotherStoreError('DEMAND_NOT_CLAIMED', '还没有人接单，不能确认完成');
   }
+  if (existing.claimer_account_id == null) {
+    throw new MotherStoreError(
+      'DEMAND_NOT_CLAIMED',
+      '承接人已注销账号，无法确认完成；请撤回后重新发布',
+    );
+  }
   const now = Date.now();
-  const result = await db
-    .prepare(
-      `UPDATE collection_group_demands
-          SET status = 'done', version = version + 1, updated_at = ?
-        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
-          AND gender = ? AND body = ? AND voice = ?
-          AND status = 'claimed' AND version = ?`,
-    )
-    .bind(
-      now,
-      groupId,
-      demanderAccountId,
-      input.eggGameId,
-      input.nature,
-      input.gender,
-      input.body,
-      input.voice,
-      input.expectedVersion ?? existing.version,
-    )
-    .run();
-  if ((result.meta.changes ?? 0) === 0) {
-    // 0 行更新不能当作成功：承接人可能刚放弃（改回 open），或别的设备已经完成
+  const version = input.expectedVersion ?? existing.version;
+  const [inserted, removed] = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO collection_group_demand_completions
+          (group_id, demander_account_id, claimer_account_id, egg_game_id, nature,
+           gender, body, voice, created_at, completed_at)
+         SELECT group_id, demander_account_id, claimer_account_id, egg_game_id, nature,
+                gender, body, voice, created_at, ?
+           FROM collection_group_demands
+          WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+            AND gender = ? AND body = ? AND voice = ?
+            AND status = 'claimed' AND claimer_account_id IS NOT NULL AND version = ?`,
+      )
+      .bind(
+        now,
+        groupId,
+        demanderAccountId,
+        input.eggGameId,
+        input.nature,
+        input.gender,
+        input.body,
+        input.voice,
+        version,
+      ),
+    db
+      .prepare(
+        `DELETE FROM collection_group_demands
+          WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+            AND gender = ? AND body = ? AND voice = ?
+            AND status = 'claimed' AND claimer_account_id IS NOT NULL AND version = ?`,
+      )
+      .bind(
+        groupId,
+        demanderAccountId,
+        input.eggGameId,
+        input.nature,
+        input.gender,
+        input.body,
+        input.voice,
+        version,
+      ),
+  ]);
+  if ((removed?.meta.changes ?? 0) === 0 || (inserted?.meta.changes ?? 0) === 0) {
+    // 0 行变化不能当作成功：承接人可能刚放弃（改回 open），或别的设备已经完成
+    const completed = await findCompletion(db, groupId, criteria);
+    if (completed) return toCompletedDemand(completed);
     const latest = await findDemand(db, groupId, criteria);
     if (!latest) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
     if (latest.status === 'done') return toDemand(latest);
@@ -1913,7 +2027,18 @@ export async function completeCollectionDemand(
     }
     throw new MotherStoreError('DEMAND_TAKEN', '需求状态已更新，刷新后再看');
   }
-  const saved = await findDemand(db, groupId, criteria);
-  if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
-  return toDemand(saved);
+  return {
+    groupId: existing.group_id,
+    demanderAccountId: existing.demander_account_id,
+    eggGameId: existing.egg_game_id,
+    nature: existing.nature ?? '',
+    gender: normalizeDemandGender(existing.gender),
+    body: normalizeDemandBody(existing.body),
+    voice: normalizeDemandVoice(existing.voice),
+    status: 'done',
+    claimerAccountId: existing.claimer_account_id,
+    version: 0,
+    createdAt: existing.created_at,
+    updatedAt: now,
+  };
 }

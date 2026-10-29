@@ -196,3 +196,27 @@ CREATE TABLE IF NOT EXISTS collection_group_demands (
 CREATE INDEX IF NOT EXISTS idx_collection_group_demands_claimer
   ON collection_group_demands (group_id, claimer_account_id);
 -- <<< collection-demands (2026-10-26)
+
+-- >>> collection-demand-completions (2026-10-29)
+-- 已完成需求的归档：与成员行解耦，成员退出 / 被移除 / 注销账号都不再删除「已结单」凭据。
+-- 需求表只保留 open / claimed；完成时把整行搬到这里，所以同一颗蛋结单后可以再次发布。
+-- 增量文件 functions/migrations/2026-10-29-collection-demand-completions.sql 必须与本区块一致。
+CREATE TABLE IF NOT EXISTS collection_group_demand_completions (
+  group_id            TEXT NOT NULL,
+  demander_account_id TEXT NOT NULL,
+  claimer_account_id  TEXT NOT NULL,
+  egg_game_id         INTEGER NOT NULL,
+  nature              TEXT NOT NULL DEFAULT '',
+  gender              TEXT NOT NULL DEFAULT '母',
+  body                TEXT NOT NULL DEFAULT '大块头',
+  voice               TEXT NOT NULL DEFAULT '+100',
+  created_at          INTEGER NOT NULL,
+  completed_at        INTEGER NOT NULL,
+  FOREIGN KEY (group_id) REFERENCES mother_groups (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_collection_group_demand_completions_claimer
+  ON collection_group_demand_completions (group_id, claimer_account_id);
+CREATE INDEX IF NOT EXISTS idx_collection_group_demand_completions_demand
+  ON collection_group_demand_completions
+    (group_id, demander_account_id, egg_game_id, nature, gender, body, voice);
+-- <<< collection-demand-completions (2026-10-29)
