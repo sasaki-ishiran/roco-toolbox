@@ -37,3 +37,33 @@ export function newDemandCompletionNotice(
   }
   return { count: fresh.length, demanderNames, watermark };
 }
+
+export interface DemandCompletionDecision {
+  /** 要弹出的提示；null = 不提示。 */
+  notice: DemandCompletionNotice | null;
+  /** 要写入的已读水位；null = 不需要写。 */
+  markSeenAt: number | null;
+}
+
+/**
+ * 决定「这次要不要提示、要不要推进已读水位」。
+ *
+ * 第一次见到某个组（`seenAt == null`）只记水位、不把历史当成新消息，但**必须留下初始化标记**：
+ * 否则「这个组还没有任何已完成单」时什么都不写，之后第一条完成单会继续被当成历史吞掉
+ * （2026-10-29 审查 B6-M01）。
+ */
+export function resolveDemandCompletionNotice(
+  demands: readonly CollectionDemand[],
+  claimerAccountId: string,
+  seenAt: number | null,
+  nameOf: (accountId: string) => string | null,
+  now: number = Date.now(),
+): DemandCompletionDecision {
+  const computed = newDemandCompletionNotice(demands, claimerAccountId, seenAt, nameOf);
+  if (seenAt == null) {
+    // 水位取「现在」，保证本次之前完成的单都算已读，之后完成的单才提示。
+    return { notice: null, markSeenAt: Math.max(computed?.watermark ?? 0, now) };
+  }
+  if (!computed || computed.count === 0) return { notice: null, markSeenAt: null };
+  return { notice: computed, markSeenAt: null };
+}

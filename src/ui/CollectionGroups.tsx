@@ -27,7 +27,7 @@ import {
   savePendingInviteCode,
 } from './collectionGroupStore';
 import {
-  newDemandCompletionNotice,
+  resolveDemandCompletionNotice,
   type DemandCompletionNotice,
 } from './demandCompletionNotice';
 
@@ -67,22 +67,17 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
       return;
     }
     const seenAt = readDemandCompletionSeenAt(accountId, group.group.id);
-    const notice = newDemandCompletionNotice(
+    const decision = resolveDemandCompletionNotice(
       hook.demands,
       accountId,
       seenAt,
       (id) => group.members.find((member) => member.accountId === id)?.displayName ?? null,
     );
-    if (!notice) {
-      setCompletionNotice(null);
-      return;
+    // 第一次见到这个组也要留下水位，否则该组的第一条完成单会被当成历史吞掉。
+    if (decision.markSeenAt != null) {
+      saveDemandCompletionSeenAt(accountId, group.group.id, decision.markSeenAt);
     }
-    if (notice.count === 0) {
-      if (seenAt == null) saveDemandCompletionSeenAt(accountId, group.group.id, notice.watermark);
-      setCompletionNotice(null);
-      return;
-    }
-    setCompletionNotice(notice);
+    setCompletionNotice(decision.notice);
   }, [hook.accountId, hook.currentGroup, hook.demands]);
 
   const dismissCompletionNotice = () => {

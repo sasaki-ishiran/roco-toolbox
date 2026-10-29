@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import type { CollectionDemand } from '../shared/collectionGroups';
-import { newDemandCompletionNotice } from './demandCompletionNotice';
+import {
+  newDemandCompletionNotice,
+  resolveDemandCompletionNotice,
+} from './demandCompletionNotice';
 
 const demand = (over: Partial<CollectionDemand>): CollectionDemand => ({
   groupId: 'g1',
@@ -80,5 +83,35 @@ describe('newDemandCompletionNotice', () => {
       nameOf,
     );
     expect(notice).toEqual({ count: 1, demanderNames: [], watermark: 300 });
+  });
+});
+
+describe('resolveDemandCompletionNotice', () => {
+  test('第一次见到组、还没有任何已完成单：也要写下初始化水位', () => {
+    expect(resolveDemandCompletionNotice([], 'B', null, nameOf, 1000)).toEqual({
+      notice: null,
+      markSeenAt: 1000,
+    });
+  });
+
+  test('第一次见到组、已有历史完成单：不提示，水位取「现在」而不是最晚完成时间', () => {
+    expect(
+      resolveDemandCompletionNotice([demand({ updatedAt: 300 })], 'B', null, nameOf, 1000),
+    ).toEqual({ notice: null, markSeenAt: 1000 });
+  });
+
+  test('初始化之后完成的单会提示，并且不再改写水位', () => {
+    expect(
+      resolveDemandCompletionNotice([demand({ updatedAt: 1200 })], 'B', 1000, nameOf, 2000),
+    ).toEqual({
+      notice: { count: 1, demanderNames: ['小明'], watermark: 1200 },
+      markSeenAt: null,
+    });
+  });
+
+  test('已读水位之后没有新的完成单：不提示也不写', () => {
+    expect(
+      resolveDemandCompletionNotice([demand({ updatedAt: 900 })], 'B', 1000, nameOf, 2000),
+    ).toEqual({ notice: null, markSeenAt: null });
   });
 });
