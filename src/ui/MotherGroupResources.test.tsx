@@ -1295,6 +1295,63 @@ describe('MotherGroupResources 三视图', () => {
     expect(screen.getByTestId('mother-blocked-section')).toHaveTextContent('组内暂时补不了 · 1');
   });
 
+  test('我缺的：换成非默认目标后，红边沉底与禁选仍然生效', () => {
+    render(
+      <MotherGroupResources
+        group={groupAllPublished}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+      />,
+    );
+    // 默认目标（大块头 + 100）：纯母种没人有 → 红边沉底
+    expect(screen.getByTestId('mother-blocked-section')).toHaveTextContent('组内暂时补不了 · 1');
+
+    // 换成「小不点」后规则不变（2026-10-29 审查 B5-H01：之前会整段变成「数据不全」并可勾选）
+    fireEvent.click(screen.getByTestId('mother-target-body'));
+    fireEvent.click(screen.getByTestId('mother-target-body-option-小不点'));
+    expect(screen.getByTestId('mother-blocked-section')).toHaveTextContent('组内暂时补不了 · 1');
+    expect(screen.queryByTestId('mother-incomplete-section')).toBeNull();
+    const blockedRow = screen
+      .getAllByTestId('mother-resource-row')
+      .find((row) => row.textContent?.includes('纯母种'))!;
+    expect(blockedRow).toHaveAttribute('data-blocked', 'true');
+    expect(blockedRow).not.toHaveAttribute('data-incomplete');
+    expect(screen.getByTestId('mother-resource-count')).toHaveTextContent('可发需求 1 项');
+  });
+
+  test('我缺的：有成员超过 7 天未更新时，不把「没人有」判死', () => {
+    const stale = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    render(
+      <MotherGroupResources
+        group={{
+          ...groupAllPublished,
+          members: [
+            member('A', resourceWith([101], { accounts: [sharedAccount(1001, [101])] })),
+            member(
+              'B',
+              resourceWith([201], {
+                accounts: [sharedAccount(1002, [201], { sourceExportedAt: stale })],
+              }),
+            ),
+            member('C', resourceWith([], { accounts: [sharedAccount(1003, [])] })),
+          ],
+        }}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+      />,
+    );
+    // 没人有纯母种，但 B 的数据旧 → 只能标「数据不全」，不能判死
+    expect(screen.queryByTestId('mother-blocked-section')).toBeNull();
+    expect(screen.getByTestId('mother-incomplete-section')).toHaveTextContent('数据不全');
+    const pureRow = screen
+      .getAllByTestId('mother-resource-row')
+      .find((row) => row.textContent?.includes('纯母种'))!;
+    expect(pureRow).toHaveAttribute('data-incomplete', 'true');
+    expect(pureRow).not.toHaveAttribute('data-blocked');
+  });
+
   test('需求中心：四段顺序固定，其他人接的按成员分组并显示已结单数', () => {
     const demands: CollectionDemand[] = [
       demandOf({

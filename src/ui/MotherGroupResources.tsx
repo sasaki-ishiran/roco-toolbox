@@ -601,19 +601,23 @@ export function MotherGroupResources({
 
   /**
    * 「我缺的」分三档（2026-10-27 数据新鲜度软校验）：
-   * 组内有人发布过 → 可发；数据不全 → 黄边提示后仍可发；全新鲜且确实没有 → 红边沉底。
+   * 组内有人发布过 → 可发；数据不全 → 黄边提示后仍可发；全员可比、数据新鲜且确实没人能补 → 红边沉底。
+   *
+   * 红边只看「有没有未发布 / 未更新 / 不可比的成员」，与当前目标筛选无关
+   * （2026-10-29 代码审查 B5-H01：之前额外要求默认目标，选了性格 / 小不点后红边区会整段消失；
+   *  之前也没把「超 7 天未更新」算进数据不全，旧数据成员可能被当成「确认没有」）。
    */
-  const isDefaultTarget =
-    !targetNature && targetBody === '大块头' && targetVoice === '+100';
   const publishableRows = filtered.filter((row) => row.canSupplyMissing);
   const dataIncompleteRows = filtered.filter(
-    (row) => !row.canSupplyMissing && (!isDefaultTarget || row.unknownMemberIds.length > 0),
+    (row) =>
+      !row.canSupplyMissing &&
+      (row.unknownMemberIds.length > 0 || groupFresh.stale > 0),
   );
   const blockedRows = filtered.filter(
     (row) =>
       !row.canSupplyMissing &&
-      isDefaultTarget &&
-      row.unknownMemberIds.length === 0,
+      row.unknownMemberIds.length === 0 &&
+      groupFresh.stale === 0,
   );
   const blockedEggIds = new Set(blockedRows.map((row) => row.eggGameId));
   const dataIncompleteEggIds = new Set(dataIncompleteRows.map((row) => row.eggGameId));
