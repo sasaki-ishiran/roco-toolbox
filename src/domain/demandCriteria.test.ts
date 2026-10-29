@@ -79,6 +79,16 @@ describe('petMatchesDemand', () => {
     expect(petMatchesDemand(calm, { ...anyCriteria, nature: '开朗' }, eggOf)).toBe(true);
   });
 
+  test('声音匹配与 petFilters 同口径：婉转声 ≥96、粗嗓门 ≤-96，满分只认 ±100', () => {
+    const eggOf = eggMapOf(species);
+    const at = (voiceDb: number) => mother(101, { medalBody: '大块头', voiceDb });
+    expect(petMatchesDemand(at(96), { ...anyCriteria, voice: '婉转声' }, eggOf)).toBe(true);
+    expect(petMatchesDemand(at(95), { ...anyCriteria, voice: '婉转声' }, eggOf)).toBe(false);
+    expect(petMatchesDemand(at(-96), { ...anyCriteria, voice: '粗嗓门' }, eggOf)).toBe(true);
+    expect(petMatchesDemand(at(-95), { ...anyCriteria, voice: '粗嗓门' }, eggOf)).toBe(false);
+    expect(petMatchesDemand(at(99), { ...anyCriteria, voice: '+100' }, eggOf)).toBe(false);
+  });
+
   test('进化形态也算同一颗蛋', () => {
     const evolved = mother(102, { nature: '开朗' });
     const criteria = { ...anyCriteria, nature: '开朗' };

@@ -1,6 +1,7 @@
 import { bodyGradeOf } from '../shared/bodySize.js';
 import type { DemandBody, DemandCriteria, DemandVoice } from '../shared/collectionGroups';
 import { isBreedableGroup } from './eggs';
+import { matchesVoiceOption } from './petFilters';
 import type { AccountSnapshot } from './parseBackup';
 import type { OwnedPet, SpeciesEntry } from './types';
 
@@ -41,14 +42,13 @@ const accountKeyOfSnapshot = (snapshot: AccountSnapshot): string =>
 
 const bodyOfPet = (pet: OwnedPet): string => bodyGradeOf(pet);
 
-const matchesDemandVoice = (pet: OwnedPet, voice: string): boolean => {
-  if (!voice) return true;
-  if (voice === '+100') return pet.voiceDb === 100;
-  if (voice === '-100') return pet.voiceDb === -100;
-  if (voice === '婉转声') return pet.voiceDb >= 96;
-  if (voice === '粗嗓门') return pet.voiceDb <= -96;
-  return true;
-};
+/**
+ * 声音是否命中需求里的选项；空字符串 = 不挑。
+ * 统一走 `petFilters.matchesVoiceOption`（2026-10-29 代码审查 B1-M01：此处曾复制一份，
+ * 婉转声漏了 ≤100 上界，后续改口径必然漏改）。
+ */
+const matchesDemandVoice = (pet: OwnedPet, voice: string): boolean =>
+  !voice || matchesVoiceOption(pet.voiceDb, voice);
 
 /**
  * 亲本是否满足需求里选的体型 / 声音。
