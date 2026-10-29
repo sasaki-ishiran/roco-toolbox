@@ -117,8 +117,9 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
     }
     const key = `${type}:${focus?.eggGameId ?? ''}`;
     if (appliedFocusRef.current === key) return;
-    // 组列表（缓存或接口）还没读到：等它回来再决定，别把 focus 消费成「没有兼容组」
-    if (!hook.groupsLoaded) return;
+    // 组列表（缓存或接口）还没读到：等它回来再决定，别把 focus 消费成「没有兼容组」。
+    // 未登录时不会有任何小组，列表永远不会就绪，直接落到个人求蛋。
+    if (hook.accountId != null && !hook.groupsLoaded) return;
     if (hook.currentGroup?.group.groupType === type) {
       appliedFocusRef.current = key;
       return;
