@@ -288,6 +288,37 @@ describe('导入后检查待结单需求', () => {
     expect(claims[0].items.map((item) => item.eggGameId)).toEqual([101]);
   });
 
+  test('种公需求（负数蛋组 id）也走同一条提醒，用同组公匹配', async () => {
+    const detail = motherDetail();
+    detail.members.push({
+      accountId: 'B',
+      displayName: '阿乙',
+      joinedAt: 2,
+      resourceRevision: 0,
+      resource: null,
+      studResource: null,
+    });
+    vi.mocked(getCollectionGroup).mockResolvedValue(detail);
+    vi.mocked(getCollectionDemands).mockResolvedValue([
+      demand({ eggGameId: -3, gender: '公', status: 'claimed', claimerAccountId: 'B' }),
+    ] as never);
+
+    const claims = await collectPendingDemandClaims({
+      snapshots: [snapshot(1001, '账号1001', [mother(201, { gender: '公', nature: '固执' })])],
+      species: catalog,
+    });
+    expect(claims).toHaveLength(1);
+    expect(claims[0].items).toHaveLength(1);
+    expect(claims[0].items[0]).toMatchObject({
+      eggGameId: -3,
+      nature: '固执',
+      gender: '公',
+      body: '大块头',
+      voice: '+100',
+    });
+    expect(claims[0].items[0].eggName.endsWith('蛋组')).toBe(true);
+  });
+
   test('有这颗蛋但性格 / 体型 / 声音不符，不算可以结单', async () => {
     const detail = motherDetail();
     detail.members.push({

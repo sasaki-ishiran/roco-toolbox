@@ -7,7 +7,7 @@ import {
 import { isMotherGroupsApiError } from '../api/motherGroups';
 import { readAccountId } from '../api/session';
 import { diffMotherResources, buildMotherResource } from '../domain/motherResource';
-import { hasStockForDemand } from '../domain/demandCriteria';
+import { hasStockForDemand, hasStockForStudDemand, isStudDemandKey } from '../domain/demandCriteria';
 import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
 import { speciesDisplayName } from '../domain/speciesName';
 import { buildStudResource, diffStudResources } from '../domain/studResource';
@@ -21,6 +21,7 @@ import {
 } from '../shared/collectionGroups';
 import type { MotherResourceDraft } from '../shared/motherGroups';
 import type { StudResourceDraft } from '../shared/collectionGroups';
+import { eggGroupNames } from '../data/catalog';
 import { isGroupSharingOff } from './collectionGroupStore';
 
 export interface AutoPublishInput {
@@ -118,17 +119,21 @@ export async function collectPendingDemandClaims(
       for (const demand of demands) {
         if (demand.demanderAccountId !== accountId || demand.status !== 'claimed') continue;
         if (!demand.claimerAccountId) continue;
-        if (
-          requireOwned &&
-          input.snapshots &&
-          input.species &&
-          !hasStockForDemand(input.snapshots, demand, input.species)
-        ) {
-          continue;
+        // 种公需求用负数蛋组 id（见 demandCriteria.isStudDemandKey），必须走另一套匹配，
+        // 否则母本口径的 hasStockForDemand 永远返回 false、种公单永远不提醒（B1-M03）。
+        const studDemand = isStudDemandKey(demand.eggGameId);
+        if (requireOwned && input.snapshots && input.species) {
+          const owned = studDemand
+            ? hasStockForStudDemand(input.snapshots, demand, input.species)
+            : hasStockForDemand(input.snapshots, demand, input.species);
+          if (!owned) continue;
         }
+        const groupName = eggGroupNames[-demand.eggGameId] ?? `蛋组${-demand.eggGameId}`;
         items.push({
           eggGameId: demand.eggGameId,
-          eggName: eggNameOf.get(demand.eggGameId) ?? `蛋 ${demand.eggGameId}`,
+          eggName: studDemand
+            ? `${groupName}蛋组`
+            : eggNameOf.get(demand.eggGameId) ?? `蛋 ${demand.eggGameId}`,
           nature: demand.nature,
           gender: demand.gender,
           body: demand.body,
