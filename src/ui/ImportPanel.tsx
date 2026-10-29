@@ -176,6 +176,34 @@ export function ImportPanel() {
   };
 
   /**
+   * 导入后的尽力而为收尾：把资源同步到已加入的小组 + 看看有没有人接了我的需求。
+   * 主入口与「合并导入」共用，避免两条导入路径行为不一致。
+   * 失败不影响本机与云同步，也不打断用户操作。
+   */
+  const afterImport = (
+    operationId: number,
+    working: AccountSnapshot[],
+    touched: Set<string>,
+  ) => {
+    void Promise.all([
+      autoPublishGroups({
+        snapshots: working,
+        species,
+        catalogVersion: CATALOG_VERSION,
+        touchedAccountKeys: [...touched],
+      }).catch(() => 0),
+      // 顺带看看有没有人接了我的需求，且这次导入的数据里确实已经有这颗蛋
+      collectPendingDemandClaims({ snapshots: working, species }).catch(() => []),
+    ]).then(([count, claims]) => {
+      if (count === 0 && claims.length === 0) return;
+      updateImportOutcome(operationId, {
+        ...(count > 0 ? { group: 'updated' as const, groupCount: count } : {}),
+        ...(claims.length > 0 ? { claims } : {}),
+      });
+    });
+  };
+
+  /**
    * 导入入口。一个入口认两种文件：
    * - 采集器抓包（.pcap / 抓包 JSON）→ 按账号替换该账号的快照（「重新抓了一次」的正确语义）
    * - 工具箱备份（自己导出的）→ **合并**，多设备同步靠它
@@ -240,23 +268,7 @@ export function ImportPanel() {
         cloud: readAccountId() ? 'syncing' : 'not-enabled',
       });
       // 导入后直接把资源同步到已加入的小组（发布不再是用户必须记得的一步）。
-      // 尽力而为：失败不影响本机与云同步，也不打断用户操作。
-      void Promise.all([
-        autoPublishGroups({
-          snapshots: working,
-          species,
-          catalogVersion: CATALOG_VERSION,
-          touchedAccountKeys: [...touched],
-        }).catch(() => 0),
-        // 顺带看看有没有人接了我的需求，且这次导入的数据里确实已经有这颗蛋
-        collectPendingDemandClaims({ snapshots: working, species }).catch(() => []),
-      ]).then(([count, claims]) => {
-        if (count === 0 && claims.length === 0) return;
-        updateImportOutcome(operationId, {
-          ...(count > 0 ? { group: 'updated' as const, groupCount: count } : {}),
-          ...(claims.length > 0 ? { claims } : {}),
-        });
-      });
+      afterImport(operationId, working, touched);
       return imported;
     } catch (error) {
       updateImportOutcome(operationId, {
@@ -433,6 +445,12 @@ export function ImportPanel() {
         message: text,
         cloud: readAccountId() ? 'syncing' : 'not-enabled',
       });
+      // 合并导入也可能带进新蛋：与主入口一样跑自动发布与待结单提醒
+      afterImport(
+        operationId,
+        merged.snapshots,
+        new Set(backup.accounts.map((account) => account.accountKey ?? accountKeyOf(account))),
+      );
     } catch (error) {
       // JSON.parse 的 SyntaxError 是英文原文（"Unexpected token..."），换成用户能看懂的提示
       setActionError(
