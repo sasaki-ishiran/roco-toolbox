@@ -512,7 +512,7 @@ function PickerSheet({
   picks: Record<string, string>;
   onClose: () => void;
 }) {
-  const key = studMatrixPickKey(grade, cell.groupId, cell.natureName);
+  const key = studMatrixPickKey(grade, cell.groupId, cell);
   const auto = cell.candidates[0] ?? null;
   const picked = picks[key] ? cell.candidates.find((pet) => pet.key === picks[key]) : undefined;
 

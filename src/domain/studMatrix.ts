@@ -23,6 +23,8 @@ export interface StudMatrixPet {
 
 export interface StudMatrixCell {
   groupId: number;
+  /** 目标槽位里的性格 id；旧数据可能没有，此时代表记忆退回用名字。 */
+  natureId?: number;
   natureName: string;
   /** 该蛋组是否把这一列性格列为目标（false = 淡灰「—」，不参与统计） */
   targeted: boolean;
@@ -53,9 +55,19 @@ export interface BuildStudMatrixInput {
   grade: PetGrade;
 }
 
-/** 代表选择的键：档位、蛋组、性格三者定位一格 */
-export function studMatrixPickKey(grade: PetGrade, groupId: number, natureName: string): string {
-  return `${grade}::${groupId}::${natureName}`;
+/**
+ * 代表选择的键：档位、蛋组、性格三者定位一格。
+ * 有 `natureId` 时优先用它（与 `slotKeyOf` 一致），图鉴/目标改名后本机记忆仍然有效；
+ * 旧数据没有 id 时才退回名字（2026-10-29 代码审查 B2-L04）。
+ */
+export function studMatrixPickKey(
+  grade: PetGrade,
+  groupId: number,
+  nature: Pick<StudMatrixCell, 'natureId' | 'natureName'>,
+): string {
+  const id = nature.natureId;
+  const key = typeof id === 'number' && id > 0 ? String(id) : nature.natureName;
+  return `${grade}::${groupId}::${key}`;
 }
 
 /** 一只种公的稳定键：优先抓包 id，避免重新导入后序号变化 */
@@ -101,9 +113,13 @@ export function buildStudMatrix(input: BuildStudMatrixInput): StudMatrix {
 
   const rowOrder: number[] = [];
   const targeted = new Set<string>();
+  const natureIds = new Map<string, number>();
   for (const slot of gradeSlots) {
     if (!rowOrder.includes(slot.groupId)) rowOrder.push(slot.groupId);
     targeted.add(`${slot.groupId}::${slot.natureName}`);
+    if (slot.natureId > 0 && !natureIds.has(slot.natureName)) {
+      natureIds.set(slot.natureName, slot.natureId);
+    }
   }
 
   const hits = describeStudTargets({ owned, species, slots: gradeSlots, eggGroupNames, mode });
@@ -142,6 +158,7 @@ export function buildStudMatrix(input: BuildStudMatrixInput): StudMatrix {
       const key = `${groupId}::${natureName}`;
       return {
         groupId,
+        natureId: natureIds.get(natureName),
         natureName,
         targeted: targeted.has(key),
         candidates: byCell.get(key) ?? [],
@@ -161,7 +178,7 @@ export function representativeOf(
   picks: Record<string, string> | undefined,
   grade: PetGrade,
 ): StudMatrixPet | null {
-  const pickedKey = picks?.[studMatrixPickKey(grade, cell.groupId, cell.natureName)];
+  const pickedKey = picks?.[studMatrixPickKey(grade, cell.groupId, cell)];
   const picked = pickedKey ? cell.candidates.find((pet) => pet.key === pickedKey) : undefined;
   return picked ?? cell.candidates[0] ?? null;
 }

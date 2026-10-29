@@ -70,6 +70,15 @@ describe('buildStudMatrix', () => {
     expect(animal.cells.find((item) => item.natureName === '固执')!.candidates).toHaveLength(1);
   });
 
+  test('代表记忆优先用性格 id（与 slotKeyOf 一致），改名也不丢', () => {
+    const matrix = build({
+      slots: [{ groupId: 2, natureId: 11, natureName: '固执', grade: '大婉' }],
+    });
+    const cell = matrix.rows[0].cells[0];
+    expect(cell.natureId).toBe(11);
+    expect(studMatrixPickKey('大婉', 2, cell)).toBe('大婉::2::11');
+  });
+
   test('只统计当前 tab 的档位', () => {
     const matrix = build({
       slots: [slot(2, '固执'), slot(2, '开朗', '小婉')],
@@ -91,7 +100,7 @@ describe('buildStudMatrix', () => {
 
     const picked = representativeOf(
       cell,
-      { [studMatrixPickKey('大婉', 2, '固执')]: cell.candidates[1].key },
+      { [studMatrixPickKey('大婉', 2, { natureName: '固执' })]: cell.candidates[1].key },
       '大婉',
     );
     expect(picked?.account).toBe('乙');
@@ -99,7 +108,7 @@ describe('buildStudMatrix', () => {
     // 记录的那只已经不在了 → 退回自动
     const missing = representativeOf(
       cell,
-      { [studMatrixPickKey('大婉', 2, '固执')]: '不存在' },
+      { [studMatrixPickKey('大婉', 2, { natureName: '固执' })]: '不存在' },
       '大婉',
     );
     expect(missing?.account).toBe('甲');
