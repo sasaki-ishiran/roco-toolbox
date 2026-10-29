@@ -16,7 +16,8 @@ function weightPercentOf(size: { small: number; big: number } | undefined, weigh
   const span = (size.big - size.small) / 0.96;
   if (!(span > 0)) return undefined;
   const percent = ((weightKg - (size.small - span * 0.02)) / span) * 100;
-  return Math.round(Math.min(100, Math.max(0, percent)) * 10) / 10;
+  // 两位小数：95% 是「够不够格当亲本」的硬边界，一位小数会把 94.96% 舍成 95%。
+  return Math.round(Math.min(100, Math.max(0, percent)) * 100) / 100;
 }
 
 export interface BackupEgg {

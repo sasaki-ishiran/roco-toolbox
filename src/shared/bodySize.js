@@ -33,7 +33,9 @@ export function bodyMedalOf(size, weightKg) {
 export function heightPercentOf(size, heightCm) {
   if (!size || !positive(heightCm) || !(size.max > size.min)) return null;
   const percent = ((heightCm / 100 - size.min) / (size.max - size.min)) * 100;
-  return Number(Math.min(100, Math.max(0, percent)).toFixed(1));
+  // 保留两位小数与展示口径一致；一位小数会把 99.96% 舍入成 100%，
+  // 绕过「身高必须正好到顶」的判定（2026-10-29 代码审查 B1-L02）。
+  return Number(Math.min(100, Math.max(0, percent)).toFixed(2));
 }
 
 /**
