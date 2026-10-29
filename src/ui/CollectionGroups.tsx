@@ -253,6 +253,24 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             ) : null}
           </div>
 
+          {/* 需求接口失败时不能静默当成「没有需求」：给出错误与重试（2026-10-29 审查 B6-M02）。 */}
+          {hook.demandsError ? (
+            <p
+              className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600"
+              data-testid="group-demands-error"
+            >
+              需求列表暂时读不到：{hook.demandsError}
+              <button
+                type="button"
+                onClick={() => void hook.refreshDemands()}
+                data-testid="group-demands-retry"
+                className="ml-2 underline"
+              >
+                重试
+              </button>
+            </p>
+          ) : null}
+
           {completionNotice ? (
             <div
               className="rounded-xl bg-emerald-50 px-3 py-2 text-emerald-800"
