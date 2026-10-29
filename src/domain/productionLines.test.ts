@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  buildProductionIndex,
   buildProductionLines,
   lineSuppliesTarget,
   linesSupplyTarget,
@@ -37,6 +38,8 @@ const species: SpeciesEntry[] = [
   male3,
   male4,
 ];
+
+const index = buildProductionIndex(species);
 
 const target = (patch: Partial<ProductionTarget> & Pick<ProductionTarget, 'kind'>): ProductionTarget =>
   ({
@@ -112,23 +115,23 @@ describe('lineSuppliesTarget', () => {
   const line = account.lines[0];
 
   test('母本目标：指定蛋 + 性格 + 体型 + 声音都要匹配', () => {
-    expect(lineSuppliesTarget(line, target({ kind: 'mother', nature: '固执' }), species, 'perfect')).toBe(true);
-    expect(lineSuppliesTarget(line, target({ kind: 'mother', nature: '胆小' }), species, 'perfect')).toBe(false);
-    expect(lineSuppliesTarget(line, target({ kind: 'mother', body: '小不点' }), species, 'perfect')).toBe(false);
-    expect(lineSuppliesTarget(line, target({ kind: 'mother', voice: '-100' }), species, 'perfect')).toBe(false);
-    expect(lineSuppliesTarget(line, target({ kind: 'mother', body: '', voice: '' }), species, 'perfect')).toBe(true);
+    expect(lineSuppliesTarget(line, target({ kind: 'mother', nature: '固执' }), index)).toBe(true);
+    expect(lineSuppliesTarget(line, target({ kind: 'mother', nature: '胆小' }), index)).toBe(false);
+    expect(lineSuppliesTarget(line, target({ kind: 'mother', body: '小不点' }), index)).toBe(false);
+    expect(lineSuppliesTarget(line, target({ kind: 'mother', voice: '-100' }), index)).toBe(false);
+    expect(lineSuppliesTarget(line, target({ kind: 'mother', body: '', voice: '' }), index)).toBe(true);
   });
 
   test('种公目标：只认蛋组，不认具体物种', () => {
-    expect(lineSuppliesTarget(line, target({ kind: 'stud', groupId: 3, nature: '开朗' }), species, 'perfect')).toBe(true);
-    expect(lineSuppliesTarget(line, target({ kind: 'stud', groupId: 2, nature: '开朗' }), species, 'perfect')).toBe(false);
-    expect(lineSuppliesTarget(line, target({ kind: 'stud', groupId: 3, nature: '胆小' }), species, 'perfect')).toBe(false);
+    expect(lineSuppliesTarget(line, target({ kind: 'stud', groupId: 3, nature: '开朗' }), index)).toBe(true);
+    expect(lineSuppliesTarget(line, target({ kind: 'stud', groupId: 2, nature: '开朗' }), index)).toBe(false);
+    expect(lineSuppliesTarget(line, target({ kind: 'stud', groupId: 3, nature: '胆小' }), index)).toBe(false);
   });
 
   test('档位标签互通：+100 / 婉转声、-100 / 粗嗓门 在产线判定里等价', () => {
     // 大婉产线：追双牌时用「婉转声」、追满分时用「+100」，两种写法都要认
-    expect(lineSuppliesTarget(line, target({ kind: 'mother', voice: '婉转声' }), species, 'perfect')).toBe(true);
-    expect(lineSuppliesTarget(line, target({ kind: 'mother', voice: '+100' }), species, 'medal')).toBe(true);
+    expect(lineSuppliesTarget(line, target({ kind: 'mother', voice: '婉转声' }), index)).toBe(true);
+    expect(lineSuppliesTarget(line, target({ kind: 'mother', voice: '+100' }), index)).toBe(true);
 
     // 大粗产线同理
     const coarse = build([
@@ -136,8 +139,8 @@ describe('lineSuppliesTarget', () => {
       mother(701, { gender: '公', nature: '开朗', voiceDb: -100 }),
     ]).lines[0];
     expect(coarse.grade).toBe('大粗');
-    expect(lineSuppliesTarget(coarse, target({ kind: 'mother', voice: '-100' }), species, 'medal')).toBe(true);
-    expect(lineSuppliesTarget(coarse, target({ kind: 'mother', voice: '粗嗓门' }), species, 'perfect')).toBe(true);
+    expect(lineSuppliesTarget(coarse, target({ kind: 'mother', voice: '-100' }), index)).toBe(true);
+    expect(lineSuppliesTarget(coarse, target({ kind: 'mother', voice: '粗嗓门' }), index)).toBe(true);
   });
 
   test('纯母物种有产线，但不能满足种公需求', () => {
@@ -148,16 +151,16 @@ describe('lineSuppliesTarget', () => {
     const pureLine = pureMother.lines[0];
     expect(pureLine.eggGameId).toBe(301);
     expect(
-      lineSuppliesTarget(pureLine, target({ kind: 'mother', eggGameId: 301, nature: '固执' }), species, 'perfect'),
+      lineSuppliesTarget(pureLine, target({ kind: 'mother', eggGameId: 301, nature: '固执' }), index),
     ).toBe(true);
     expect(
-      lineSuppliesTarget(pureLine, target({ kind: 'stud', groupId: 4, nature: '开朗' }), species, 'perfect'),
+      lineSuppliesTarget(pureLine, target({ kind: 'stud', groupId: 4, nature: '开朗' }), index),
     ).toBe(false);
   });
 
   test('一组账号里任意一条产线满足即可', () => {
     const other = build([mother(201, { nature: '胆小' })]);
-    expect(linesSupplyTarget([...other.lines, ...account.lines], target({ kind: 'mother', nature: '固执' }), species, 'perfect')).toBe(true);
-    expect(linesSupplyTarget(other.lines, target({ kind: 'mother', nature: '固执' }), species, 'perfect')).toBe(false);
+    expect(linesSupplyTarget([...other.lines, ...account.lines], target({ kind: 'mother', nature: '固执' }), index)).toBe(true);
+    expect(linesSupplyTarget(other.lines, target({ kind: 'mother', nature: '固执' }), index)).toBe(false);
   });
 });

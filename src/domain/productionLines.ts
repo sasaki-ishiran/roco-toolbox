@@ -67,16 +67,6 @@ const eggGroupsOf = (species: readonly SpeciesEntry[]): Map<number, number[]> =>
   return map;
 };
 
-const maleCapableOf = (species: readonly SpeciesEntry[]): Map<number, boolean> => {
-  const map = new Map<number, boolean>();
-  for (const entry of species) {
-    if (entry.eggGameId != null && entry.eggGameId === entry.gameId) {
-      map.set(entry.gameId, entry.maleCapable === true);
-    }
-  }
-  return map;
-};
-
 /**
  * 从账号快照生成产线。每个账号单独算，绝不跨账号拼父母。
  */
@@ -149,29 +139,50 @@ export function buildProductionLines(
   });
 }
 
-const VOICE_GRADES: Record<TargetMode, Record<string, readonly PetGrade[]>> = {
-  perfect: {
-    '+100': ['大婉', '小婉'],
-    '-100': ['大粗', '小粗'],
-  },
-  medal: {
-    婉转声: ['大婉', '小婉'],
-    粗嗓门: ['大粗', '小粗'],
-  },
+/**
+ * 产线档位 → 能匹配的声音标签。
+ *
+ * 产线只记档位、不记具体分贝，所以 +100 与婉转声 / -100 与粗嗓门在档位上等价，
+ * 四标签互通（2026-10-28b）。这里与目标模式无关，判定统一用这一张表
+ * （2026-10-29 代码审查 B1-L01：原来按 mode 分层再合并，mode 实际不生效）。
+ */
+const VOICE_GRADES: Record<string, readonly PetGrade[]> = {
+  '+100': ['大婉', '小婉'],
+  婉转声: ['大婉', '小婉'],
+  '-100': ['大粗', '小粗'],
+  粗嗓门: ['大粗', '小粗'],
 };
 
-const gradeMatchesTarget = (grade: PetGrade, target: ProductionTarget, mode: TargetMode): boolean => {
+const gradeMatchesTarget = (grade: PetGrade, target: ProductionTarget): boolean => {
   if (target.body && GRADE_BODY[grade] !== target.body) return false;
   if (!target.voice) return true;
-  // 产线只记档位，不记具体分贝；+100 与婉转声 / -100 与粗嗓门在档位上等价。
-  // 两种标签都认，否则把筛选切到「婉转声」时会一条产线都匹配不上。
-  const grades = new Set([
-    ...(VOICE_GRADES[mode][target.voice] ?? []),
-    ...(VOICE_GRADES.perfect[target.voice] ?? []),
-    ...(VOICE_GRADES.medal[target.voice] ?? []),
-  ]);
-  return grades.has(grade);
+  return (VOICE_GRADES[target.voice] ?? []).includes(grade);
 };
+
+/**
+ * 产线判定用的图鉴索引：一次构建，供 `lineSuppliesTarget` 反复使用。
+ *
+ * 这些 Map 原来在每个 `lineSuppliesTarget` 调用里重建（`species.find` + 全表 Map），
+ * 调用方又在「行 × 成员 × 性格」的循环里，属于重复计算（2026-10-29 代码审查 B1-M02）。
+ */
+export interface ProductionIndex {
+  /** 形态 gameId → 可孵蛋组（公本可以是进化形态，所以按形态自己的蛋组）。 */
+  eggGroupsByGameId: Map<number, number[]>;
+  /** 蛋物种 gameId → 能否出公（只对蛋物种本身有意义）。 */
+  maleCapableByGameId: Map<number, boolean>;
+}
+
+export function buildProductionIndex(species: readonly SpeciesEntry[]): ProductionIndex {
+  const eggGroupsByGameId = new Map<number, number[]>();
+  const maleCapableByGameId = new Map<number, boolean>();
+  for (const entry of species) {
+    eggGroupsByGameId.set(entry.gameId, (entry.eggGroups ?? []).filter(isBreedableGroup));
+    if (entry.eggGameId != null && entry.eggGameId === entry.gameId) {
+      maleCapableByGameId.set(entry.gameId, entry.maleCapable === true);
+    }
+  }
+  return { eggGroupsByGameId, maleCapableByGameId };
+}
 
 /**
  * 一条产线能否满足目标。
@@ -184,27 +195,24 @@ const gradeMatchesTarget = (grade: PetGrade, target: ProductionTarget, mode: Tar
 export function lineSuppliesTarget(
   line: ProductionLine,
   target: ProductionTarget,
-  species: readonly SpeciesEntry[],
-  mode: TargetMode,
+  index: ProductionIndex,
 ): boolean {
   if (target.kind === 'mother') {
     if (line.eggGameId !== target.eggGameId) return false;
   } else {
-    const groups = (species.find((entry) => entry.gameId === line.eggGameId)?.eggGroups ?? [])
-      .filter(isBreedableGroup);
+    const groups = index.eggGroupsByGameId.get(line.eggGameId) ?? [];
     if (!groups.includes(target.groupId)) return false;
-    if (maleCapableOf(species).get(line.eggGameId) !== true) return false;
+    if (index.maleCapableByGameId.get(line.eggGameId) !== true) return false;
   }
   if (target.nature && !line.natures.includes(target.nature)) return false;
-  return gradeMatchesTarget(line.grade, target, mode);
+  return gradeMatchesTarget(line.grade, target);
 }
 
 /** 一组产线（一个账号 / 一个小组）里是否有人能满足目标。 */
 export function linesSupplyTarget(
   lines: readonly ProductionLine[],
   target: ProductionTarget,
-  species: readonly SpeciesEntry[],
-  mode: TargetMode,
+  index: ProductionIndex,
 ): boolean {
-  return lines.some((line) => lineSuppliesTarget(line, target, species, mode));
+  return lines.some((line) => lineSuppliesTarget(line, target, index));
 }

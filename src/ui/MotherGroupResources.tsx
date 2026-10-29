@@ -13,6 +13,7 @@ import {
   memberFreshness,
 } from '../domain/demandCriteria';
 import {
+  buildProductionIndex,
   buildProductionLines,
   linesSupplyTarget,
   type ProductionLine,
@@ -280,6 +281,9 @@ export function MotherGroupResources({
     return eggNatures(species, eggGameId, target.natureOverrides);
   };
 
+  /** 产线判定的图鉴索引：只随 species 重建一次（2026-10-29 代码审查 B1-M02）。 */
+  const productionIndex = useMemo(() => buildProductionIndex(species), [species]);
+
   /**
    * 2026-10-28 用户口径：组内其他人的「有没有」按产线判断——
    * 目标体型 / 声音 / 性格能产才算有；旧摘要没产线时退回任意母本。
@@ -314,8 +318,7 @@ export function MotherGroupResources({
         return linesSupplyTarget(
           lines,
           { kind: 'mother', eggGameId, nature: targetNature, body: targetBody, voice: targetVoice },
-          species,
-          targetMode,
+          productionIndex,
         );
       }
       // 旧摘要没有产线：退回「有没有这只蛋的任意母本」
@@ -348,8 +351,7 @@ export function MotherGroupResources({
             linesSupplyTarget(
               lines,
               { kind: 'mother', eggGameId, nature, body: targetBody, voice: targetVoice },
-              species,
-              targetMode,
+              productionIndex,
             ),
           ),
         );
@@ -410,7 +412,7 @@ export function MotherGroupResources({
     targetNature,
     targetBody,
     targetVoice,
-    targetMode,
+    productionIndex,
     catalogVersion,
     criteriaId,
     natureOverrides,
@@ -724,14 +726,12 @@ export function MotherGroupResources({
             body: demand.body,
             voice: demand.voice,
           },
-          species,
-          targetMode,
+          productionIndex,
         );
       }
       // 需求要公时，该蛋物种必须能出公
       if (demand.gender === '公') {
-        const egg = species.find((entry) => entry.gameId === demand.eggGameId);
-        if (egg?.maleCapable !== true) return false;
+        if (productionIndex.maleCapableByGameId.get(demand.eggGameId) !== true) return false;
       }
       return linesSupplyTarget(
         myPublishedLines,
@@ -742,8 +742,7 @@ export function MotherGroupResources({
           body: demand.body,
           voice: demand.voice,
         },
-        species,
-        targetMode,
+        productionIndex,
       );
     }
     return !isStudDemandKey(demand.eggGameId) && iHoldEgg(demand.eggGameId);
@@ -889,11 +888,11 @@ export function MotherGroupResources({
                 : '-100',
         }));
         const self = targets.some((target) =>
-          linesSupplyTarget(viewerLines, target, species, targetMode),
+          linesSupplyTarget(viewerLines, target, productionIndex),
         );
         const groups = targets.map((target) => ({
           groupId: target.groupId,
-          supplied: linesSupplyTarget(groupLineInfo.lines, target, species, targetMode),
+          supplied: linesSupplyTarget(groupLineInfo.lines, target, productionIndex),
         }));
         return {
           rec,
@@ -917,6 +916,7 @@ export function MotherGroupResources({
     recommendations,
     query,
     onlyGroupLine,
+    productionIndex,
     viewerLines,
     groupLineInfo,
     species,
