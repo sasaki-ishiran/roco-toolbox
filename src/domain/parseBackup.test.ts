@@ -122,6 +122,32 @@ describe('parseBackup', () => {
     expect(snapshot.home?.sceneEggs).toEqual([{ actorId: '99', furnitureGuid: '88', npcConfigId: 301 }]);
   });
 
+  test('增量快照只有配对 / 地上的蛋时也保留 home', () => {
+    const snapshot = parseBackup(
+      {
+        meta: {
+          type: 'hatch-backup',
+          gameId: 1001,
+          captureHome: {
+            gameId: '1001',
+            capturedAt: '2026-10-27T00:00:00.000Z',
+            snapshotKind: 'delta',
+            residents: [],
+            nests: [],
+            layEggCouples: [{ femaleActorId: '77', maleActorIds: ['78'] }],
+            sceneEggs: [{ actorId: '99', furnitureGuid: '88' }],
+            couplesStale: false,
+          },
+        },
+        collections: { petBackpack: { items: [] } },
+      },
+      'now',
+    );
+    expect(snapshot.home?.snapshotKind).toBe('delta');
+    expect(snapshot.home?.layEggCouples).toHaveLength(1);
+    expect(snapshot.home?.sceneEggs).toHaveLength(1);
+  });
+
   test('没有家园字段时不生成 home', () => {
     expect(parseBackup(fixture, 'now').home).toBeUndefined();
   });

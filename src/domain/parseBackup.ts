@@ -94,7 +94,18 @@ export function parseHomeSnapshot(value: unknown): HomeSnapshot | undefined {
   if (!raw) return undefined;
   const residentsRaw = Array.isArray(raw.residents) ? raw.residents : [];
   const nestsRaw = Array.isArray(raw.nests) ? raw.nests : [];
-  if (residentsRaw.length === 0 && nestsRaw.length === 0) return undefined;
+  const couplesRaw = Array.isArray(raw.layEggCouples) ? raw.layEggCouples : [];
+  const sceneEggsRaw = Array.isArray(raw.sceneEggs) ? raw.sceneEggs : [];
+  // 增量快照可能只刷新了配对 / 地上的蛋；只要四类里有内容就保留，
+  // 不能因为没住户和小窝就整块丢掉（2026-10-29 代码审查 B2-L03）。
+  if (
+    residentsRaw.length === 0 &&
+    nestsRaw.length === 0 &&
+    couplesRaw.length === 0 &&
+    sceneEggsRaw.length === 0
+  ) {
+    return undefined;
+  }
 
   const nests: HomeNest[] = nestsRaw
     .map((item) => asRecord(item))
@@ -145,7 +156,7 @@ export function parseHomeSnapshot(value: unknown): HomeSnapshot | undefined {
     })
     .filter((item) => item.instanceId);
 
-  const layEggCouples: HomePair[] = (Array.isArray(raw.layEggCouples) ? raw.layEggCouples : [])
+  const layEggCouples: HomePair[] = couplesRaw
     .map((item) => asRecord(item))
     .filter((item): item is UnknownRecord => item != null)
     .map((item) => ({
@@ -156,7 +167,7 @@ export function parseHomeSnapshot(value: unknown): HomeSnapshot | undefined {
     }))
     .filter((item) => item.femaleActorId && item.maleActorIds.length > 0);
 
-  const sceneEggs: HomeEgg[] = (Array.isArray(raw.sceneEggs) ? raw.sceneEggs : [])
+  const sceneEggs: HomeEgg[] = sceneEggsRaw
     .map((item) => asRecord(item))
     .filter((item): item is UnknownRecord => item != null)
     .map((item) => ({
