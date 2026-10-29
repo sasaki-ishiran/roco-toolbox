@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { AccountSnapshot } from '../domain/parseBackup';
+import { clearAccountFilter, toggleAccount } from './accountFilterStore';
 import { HomeLand } from './Home';
 
 const h = vi.hoisted(() => ({
@@ -105,6 +106,7 @@ const snapshotWithHome = (): AccountSnapshot => ({
 
 afterEach(() => {
   cleanup();
+  clearAccountFilter();
   h.snapshots = [];
   h.loaded = true;
 });
@@ -156,5 +158,53 @@ describe('家园页', () => {
 
     expect(screen.getByTestId('home-egg-count')).toHaveTextContent('没有蛋');
     expect(screen.getByTestId('home-no-eggs')).toBeTruthy();
+  });
+
+  test('学院小窝的精灵卡标记 academy 并整卡变绿', () => {
+    h.snapshots = [snapshotWithHome()];
+    render(<HomeLand />);
+
+    const cards = screen.getAllByTestId('home-pet-card');
+    expect(cards[0]).not.toHaveAttribute('data-academy');
+    expect(cards[1]).toHaveAttribute('data-academy', 'true');
+    expect(cards[1].className).toContain('bg-emerald-50');
+    expect(screen.getByText('小窝（学院 1）')).toBeTruthy();
+  });
+
+  test('采集期间有精灵进出时提示配对可能过期', () => {
+    const snapshot = snapshotWithHome();
+    if (snapshot.home) snapshot.home.couplesStale = true;
+    h.snapshots = [snapshot];
+    render(<HomeLand />);
+
+    expect(screen.getByTestId('home-stale')).toHaveTextContent('重新采集一次家园会更准');
+  });
+
+  test('增量快照提示可能不含全部住户', () => {
+    const snapshot = snapshotWithHome();
+    if (snapshot.home) snapshot.home.snapshotKind = 'delta';
+    h.snapshots = [snapshot];
+    render(<HomeLand />);
+
+    expect(screen.getByText(/这份是增量快照/)).toBeTruthy();
+  });
+
+  test('账号全不选时说明怎么恢复，而不是当成没有家园记录', () => {
+    h.snapshots = [snapshotWithHome()];
+    toggleAccount('测试甲');
+    render(<HomeLand />);
+
+    expect(screen.getByText('未选择游戏账号：上面点「全选」可恢复。')).toBeTruthy();
+    expect(screen.queryByTestId('home-no-capture')).toBeNull();
+  });
+
+  test('配对里缺少公本时降级成「公本未知」，不崩也不空白', () => {
+    const snapshot = snapshotWithHome();
+    if (snapshot.home) snapshot.home.layEggCouples = [{ femaleActorId: '7002', maleActorIds: ['7999'] }];
+    h.snapshots = [snapshot];
+    render(<HomeLand />);
+
+    expect(screen.getByTestId('home-pair-card')).toHaveTextContent('公本未知');
+    expect(screen.getAllByTestId('home-pair-card')).toHaveLength(1);
   });
 });

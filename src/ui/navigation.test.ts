@@ -16,6 +16,7 @@ const openCollection = (current: AppNavigation, location: CollectionLocation): A
 describe('initialNavigation：旧页签 / 子视图映射', () => {
   test.each([
     ['dashboard', null, 'dashboard'],
+    ['home', null, 'home'],
     ['myPets', null, 'collection'],
     ['coverage', null, 'collection'],
     ['swap', 'eggs', 'groups'],
@@ -199,6 +200,13 @@ describe('legacyLocation：新页面写回旧键', () => {
     ).toBe('myPets');
     expect(legacyLocation({ ...base, page: 'profile' }).lastTab).toBe('import');
     expect(legacyLocation({ ...base, page: 'dashboard' }).lastTab).toBe('dashboard');
+  });
+
+  test('家园 → home', () => {
+    expect(legacyLocation({ ...base, page: 'home' })).toEqual({
+      lastTab: 'home',
+      swapView: 'eggs',
+    });
   });
 
   test('不把新 page 字符串写进旧 lastTab', () => {
