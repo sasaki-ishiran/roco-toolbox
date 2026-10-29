@@ -19,7 +19,7 @@ import {
   type MotherTargetConfig,
   type StudTargetConfig,
 } from '../shared/collectionGroups';
-import { ALL_MOTHERS_CRITERIA_ID, type MotherResourceDraft } from '../shared/motherGroups';
+import type { MotherResourceDraft } from '../shared/motherGroups';
 import type { StudResourceDraft } from '../shared/collectionGroups';
 import { isGroupSharingOff } from './collectionGroupStore';
 
@@ -246,7 +246,7 @@ function buildResource(
     selectedAccountKeys: keys,
     species: input.species,
     catalogVersion: input.catalogVersion,
-    criteriaId: ALL_MOTHERS_CRITERIA_ID,
+    // criteriaId 由 mode 派生（v3），不再单独传。
     mode: target.mode,
   });
 }

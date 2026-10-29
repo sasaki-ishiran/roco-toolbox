@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { buildEggSearchIndex } from '../domain/petFilters';
+import { buildEggSearchIndex, type TargetMode } from '../domain/petFilters';
 import { groupPublicationStatus } from '../domain/collectionPublication';
 import { CATALOG_VERSION, eggGroupNames, species } from '../data/catalog';
 import {
   GROUP_TYPE_LABELS,
   type CollectionGroupType,
 } from '../shared/collectionGroups';
-import { ALL_MOTHERS_CRITERIA_ID } from '../shared/motherGroups';
+import { motherResourceCriteriaIdOf } from '../shared/motherGroups';
 import { useNatureOverrides } from './natureOverrideStore';
 import { CollectionGroupSetup } from './CollectionGroupSetup';
 import { useCollectionGroups } from './useCollectionGroups';
@@ -48,6 +48,13 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
 
   const searchIndex = useMemo(() => buildEggSearchIndex(species), []);
+  /**
+   * 小组页一律用**组目标**的模式：已发布的产线就是这个模式算的，
+   * 用个人模式会让同组内的产线口径混用（2026-10-29 代码审查 B2-H01/M01）。
+   */
+  const groupMotherMode: TargetMode =
+    hook.target?.kind === 'mother' ? hook.target.mode : 'perfect';
+  const motherResourceCriteriaId = motherResourceCriteriaIdOf(groupMotherMode);
   const editing = hook.currentGroupId != null && editingGroupId === hook.currentGroupId;
   const inGroup = hook.pageMode === 'group' && hook.currentGroup != null;
   /** 组模式但详情还没回来：显示加载态，不能先渲染个人求蛋（切组时会闪一屏无关内容）。 */
@@ -208,7 +215,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             accountId={hook.accountId ?? ''}
             catalogVersion={CATALOG_VERSION}
             groupType={hook.currentGroup.group.groupType}
-            targetCriteriaId={ALL_MOTHERS_CRITERIA_ID}
+            targetCriteriaId={motherResourceCriteriaId}
             inviteCode={
               hook.accountId ? readCollectionInviteCode(hook.accountId, hook.currentGroup.group.id) : null
             }
@@ -233,10 +240,10 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             species={species}
             catalogVersion={CATALOG_VERSION}
             snapshots={snapshots}
-            criteriaId={ALL_MOTHERS_CRITERIA_ID}
+            criteriaId={motherResourceCriteriaId}
             target={null}
             recommendations={summary.recommendations}
-            targetMode={summary.mode}
+            targetMode={groupMotherMode}
             natureOverrides={personalNatures}
             studGroupCount={summary.stud.groupCount}
             tasks={hook.tasks}

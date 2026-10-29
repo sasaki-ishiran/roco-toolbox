@@ -1,5 +1,5 @@
 import type { GroupTargetConfig, PublishedStudResource } from '../shared/collectionGroups';
-import type { PublishedMotherResource } from '../shared/motherGroups';
+import { motherResourceCriteriaIdOf, type PublishedMotherResource } from '../shared/motherGroups';
 import { isMotherResourceComparable } from './motherSharing';
 import { isStudResourceComparable } from './studSharing';
 
@@ -29,8 +29,13 @@ export function groupPublicationStatus(input: {
     input.type === 'stud'
       ? input.target?.kind === 'stud' &&
         isStudResourceComparable(input.stud, input.target, input.targetRevision, input.catalogVersion)
-      : // 2026-10-28：母本组不再有口径，忽略旧组目标里的 criteriaId；
-        // 旧口径摘要由 isMotherResourceComparable 的默认「全部母本」判成需更新。
-        isMotherResourceComparable(input.mother, input.catalogVersion);
+      : // 2026-10-29：产线口径（目标模式）编进 criteriaId；组长切模式后旧摘要自动需更新。
+        isMotherResourceComparable(
+          input.mother,
+          input.catalogVersion,
+          motherResourceCriteriaIdOf(
+            input.target?.kind === 'mother' ? input.target.mode : 'perfect',
+          ),
+        );
   return comparable && input.unchanged ? '已发布' : '需更新';
 }

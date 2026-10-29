@@ -53,7 +53,7 @@ describe('成体体型解析到母本共享', () => {
       const payload = await decodePet(id, grams, shiny);
       expect(payload.collections.petBackpack.items[0].medalBody).toBe('大块头');
       const snapshot = parseBackup(payload, '2026-10-24T00:00:00.000Z');
-      const resource = buildMotherResource({ snapshots: [snapshot], selectedAccountKeys: ['uid:1001'], species, catalogVersion: CATALOG_VERSION });
+      const resource = buildMotherResource({ snapshots: [snapshot], selectedAccountKeys: ['uid:1001'], species, catalogVersion: CATALOG_VERSION, mode: 'perfect' });
       expect(resource.accounts[0].eggGameIds).toContain(3775);
     }
   });
@@ -86,6 +86,7 @@ describe('成体体型解析到母本共享', () => {
       selectedAccountKeys: ['uid:1001'],
       species,
       catalogVersion: CATALOG_VERSION,
+      mode: 'perfect',
     });
     expect(resource.accounts[0].eggGameIds).toContain(3090);
   });

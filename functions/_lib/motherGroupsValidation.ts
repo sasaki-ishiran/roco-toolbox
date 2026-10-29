@@ -121,7 +121,10 @@ export function parseMotherResource(value: unknown): MotherResourceDraft {
   const criteriaId = record.criteriaId;
   if (
     typeof criteriaId !== 'string' ||
-    !/^(all-mothers-v2|female-huge-voice100-v2|mother-v2-[0-9a-f]{8})$/.test(criteriaId)
+    // v3 把产线口径（目标模式）编进 criteriaId；旧 id 仍接受，避免旧客户端发布 400。
+    !/^(all-mothers-v3-(perfect|medal)|all-mothers-v2|female-huge-voice100-v2|mother-v2-[0-9a-f]{8})$/.test(
+      criteriaId,
+    )
   ) {
     invalid('criteriaId 不受支持');
   }

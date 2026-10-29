@@ -8,10 +8,10 @@
  * - 旧 `/api/mother-groups` 只能看到、写入母本组，类型门禁在 HTTP 层。
  */
 import {
-  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_GROUP_MAX_MEMBERS,
   MOTHER_RESOURCE_SCHEMA_VERSION,
   canonicalEggGameIds,
+  motherResourceCriteriaIdOf,
   canonicalProductionLines,
   type MotherCriteriaId,
   type MotherResourceDraft,
@@ -1056,12 +1056,15 @@ export interface CollectionTasksView {
 
 const expectedCriteriaOf = (config: CollectionGroupConfig): string => {
   // 2026-10-28：母本组不再有口径，所有成员统一按「全部母本」摘要比较；
-  // 旧口径摘要一律视为待更新，成员重新发布后才算可比。
+  // 2026-10-29：产线口径（目标模式）编进 criteriaId，必须按组目标模式算期望值，
+  // 否则 v3 摘要会被一律判成不可比（共同寻找永远无法确认）。
   if (config.groupType === 'mother' || config.target?.kind === 'mother') {
-    return ALL_MOTHERS_CRITERIA_ID;
+    return motherResourceCriteriaIdOf(
+      config.target?.kind === 'mother' ? config.target.mode : 'perfect',
+    );
   }
   if (config.target?.kind === 'stud') return studSlotSetIdOf(config.target);
-  return ALL_MOTHERS_CRITERIA_ID;
+  return motherResourceCriteriaIdOf('perfect');
 };
 
 const targetCatalogOf = (config: CollectionGroupConfig): string =>

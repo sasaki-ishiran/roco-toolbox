@@ -2,8 +2,8 @@ import type { AccountSnapshot } from '../../domain/parseBackup';
 import { accountKeyOf } from '../../domain/parseBackup';
 import type { OwnedPet, SpeciesEntry } from '../../domain/types';
 import {
-  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_RESOURCE_SCHEMA_VERSION,
+  motherResourceCriteriaIdOf,
   type MotherGroupMember,
   type PublishedMotherResource,
   type SharedMotherAccount,
@@ -105,7 +105,7 @@ export function resourceWith(
 ): PublishedMotherResource {
   return {
     schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
-    criteriaId: ALL_MOTHERS_CRITERIA_ID,
+    criteriaId: motherResourceCriteriaIdOf('perfect'),
     catalogVersion: FIXTURE_CATALOG_VERSION,
     accounts: [sharedAccount(9001, ids)],
     revision: 1,

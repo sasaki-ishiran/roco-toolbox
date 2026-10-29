@@ -132,6 +132,10 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
     if (ok && mountedRef.current) setPendingTarget(null);
   };
 
+  /** 服务器上已生效的组目标模式；切换后产线口径会变，需要给组长明确提示。 */
+  const savedMotherMode = target?.kind === 'mother' ? target.mode : null;
+  const motherModeChanged = savedMotherMode != null && savedMotherMode !== motherMode;
+
   const saveMother = () => {
     if (bodies.length === 0) {
       setError('至少选择一种体型');
@@ -161,9 +165,11 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
     };
     void run(
       () => hook.updateTarget(next),
-      requireNatures
-        ? '本组口径已更新（含推荐性格），成员需要重新发布'
-        : '本组口径已更新，成员需要重新发布',
+      motherModeChanged
+        ? '已切换目标模式：产线按新模式重算，全组成员会显示「需更新」，需要重新发布一次资源'
+        : requireNatures
+          ? '本组口径已更新（含推荐性格），成员需要重新发布'
+          : '本组口径已更新，成员需要重新发布',
     );
   };
 
@@ -288,6 +294,15 @@ export function GroupTargetEditor({ hook }: GroupTargetEditorProps) {
               </button>
             ))}
           </div>
+          {motherModeChanged ? (
+            <p
+              className="rounded bg-amber-50 px-1.5 py-1 text-[11px] leading-snug text-amber-800"
+              data-testid="mother-target-mode-hint"
+            >
+              切换目标模式会改变产线档位（追满分要 ±100、追双牌 ≥96）。保存后全组成员都会显示
+              「需更新」，需要重新发布一次资源才会按新模式参与匹配。
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-1" data-testid="mother-target-options">
             {MOTHER_TARGET_BODIES.map((body) => (
               <button

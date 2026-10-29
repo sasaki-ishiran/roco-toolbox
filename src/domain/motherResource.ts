@@ -1,5 +1,4 @@
 import {
-  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_CATALOG_VERSION_MAX,
   MOTHER_RESOURCE_MAX_ACCOUNTS,
   MOTHER_RESOURCE_MAX_EGGS_PER_ACCOUNT,
@@ -8,6 +7,7 @@ import {
   canonicalProductionLines,
   isCanonicalMotherAccountKey,
   isValidIsoTimestamp,
+  motherResourceCriteriaIdOf,
   type MotherResourceDraft,
   type SharedMotherAccount,
 } from '../shared/motherGroups';
@@ -20,10 +20,10 @@ import { accountKeyOf, type AccountSnapshot } from './parseBackup';
 import type { SpeciesEntry } from './types';
 
 /**
- * 多人母本共享：从**原始账号快照**提取固定口径的母本摘要。
+ * 多人母本共享：从**原始账号快照**提取「全部母本 + 产线」摘要（2026-10-28 起不再有母本口径）。
  *
- * 口径固定为「母 + 大块头 + +100dB」（`MOTHER_CRITERIA_ID`），不跟随页面的目标模式、
- * 账号筛选或母本筛选——组里每个人读到的必须是同一条件。
+ * 产线的档位门槛依赖**组目标模式**（追满分 ±100 / 追双牌 ≥96），所以模式必须随摘要一起走：
+ * 它被编进 `criteriaId`（v3），组里每个人读到的产线口径才一致。
  *
  * 单位是「蛋」（`SpeciesEntry.eggGameId`），不是进化形态；同一颗蛋的重复个体只算一次。
  * 这里刻意不使用 `useOwnedPets()` 的输出（它受顶部账号筛选影响，`account` 只是显示名）。
@@ -58,14 +58,15 @@ export interface BuildMotherResourceInput {
   catalogVersion: string;
   /** 本组口径；不传时沿用一期的固定口径（母 · 大块头 · +100dB）。 */
   criteria?: MotherCriteria;
-  /** 与 criteria 对应的稳定标识；不传时用一期的固定 id。 */
-  criteriaId?: string;
   /** 组内是否要求母本性格为推荐性格（2026-10-25）。 */
   requireRecommendedNatures?: boolean;
   /** 这份口径用的推荐性格覆盖（组长那一份）；不传 = 图鉴推荐 + 种族值兜底。 */
   natureOverrides?: NatureOverrides;
-  /** 组目标模式；产线按双方同档位计算。不传按追满分。 */
-  mode?: TargetMode;
+  /**
+   * 组目标模式（必传）：产线按双方同档位计算，并按它生成 `criteriaId`。
+   * 漏传会让摘要用错模式、组内口径混用（2026-10-29 代码审查 B2-M01）。
+   */
+  mode: TargetMode;
 }
 
 /**
@@ -77,8 +78,9 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
   /**
    * 2026-10-28：小组不再设母本口径，共享全部母本 + 产线。
    * 具体缺什么由每个成员在自己的本地筛选里决定。
+   * 2026-10-29：产线口径（目标模式）编进 criteriaId，切模式后旧摘要自动「需更新」。
    */
-  const criteriaId = ALL_MOTHERS_CRITERIA_ID;
+  const criteriaId = motherResourceCriteriaIdOf(input.mode);
 
   if (catalogVersion.trim().length === 0 || catalogVersion.length > MOTHER_CATALOG_VERSION_MAX) {
     throw new MotherResourceError('INVALID_CATALOG_VERSION', '图鉴版本无效');
@@ -106,7 +108,7 @@ export function buildMotherResource(input: BuildMotherResourceInput): MotherReso
     buildProductionLines({
       snapshots,
       species,
-      mode: input.mode ?? 'perfect',
+      mode: input.mode,
     }).map((account) => [account.accountKey, canonicalProductionLines(account.lines)]),
   );
 
@@ -254,6 +256,8 @@ export function diffMotherResources(
     addedLines,
     removedLines,
     unchanged:
+      // criteriaId 里带着产线口径（目标模式）：口径变了就不是同一份摘要。
+      previous.criteriaId === next.criteriaId &&
       addedEggGameIds.length === 0 &&
       removedEggGameIds.length === 0 &&
       addedAccounts.length === 0 &&

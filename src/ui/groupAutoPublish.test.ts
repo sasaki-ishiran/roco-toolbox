@@ -115,7 +115,8 @@ describe('导入后自动发布到小组', () => {
     const [, input] = vi.mocked(publishCollectionResources).mock.calls[0];
     expect(input.baseRevision).toBe(0);
     expect(input.resource).toMatchObject({
-      criteriaId: 'all-mothers-v2',
+      // 2026-10-29：口径 v3，模式编进 criteriaId（默认组目标为追满分）
+      criteriaId: 'all-mothers-v3-perfect',
       accounts: [
         { accountKey: 'uid:1001', eggGameIds: [101] },
         { accountKey: 'uid:1002', eggGameIds: [101] },

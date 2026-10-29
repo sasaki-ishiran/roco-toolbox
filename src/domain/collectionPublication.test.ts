@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ALL_MOTHERS_CRITERIA_ID, type PublishedMotherResource } from '../shared/motherGroups';
+import { motherResourceCriteriaIdOf, type PublishedMotherResource } from '../shared/motherGroups';
 import { studSlotSetIdOf, type PublishedStudResource, type StudTargetConfig } from '../shared/collectionGroups';
 import { groupPublicationStatus } from './collectionPublication';
 
@@ -7,7 +7,7 @@ const CATALOG = 'cat-1';
 
 const motherResource = (patch: Partial<PublishedMotherResource> = {}): PublishedMotherResource => ({
   schemaVersion: 1,
-  criteriaId: ALL_MOTHERS_CRITERIA_ID,
+  criteriaId: motherResourceCriteriaIdOf('perfect'),
   catalogVersion: CATALOG,
   accounts: [],
   revision: 1,

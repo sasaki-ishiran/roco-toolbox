@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  ALL_MOTHERS_CRITERIA_ID,
+  motherResourceCriteriaIdOf,
   type MotherResourceDraft,
   type SharedMotherAccount,
 } from '../shared/motherGroups';
@@ -27,11 +27,12 @@ const build = (
     selectedAccountKeys,
     species: catalog,
     catalogVersion: FIXTURE_CATALOG_VERSION,
+    mode: 'perfect',
   });
 
 const draft = (accounts: SharedMotherAccount[]): MotherResourceDraft => ({
   schemaVersion: 1,
-  criteriaId: ALL_MOTHERS_CRITERIA_ID,
+  criteriaId: motherResourceCriteriaIdOf('perfect'),
   catalogVersion: FIXTURE_CATALOG_VERSION,
   accounts,
 });
@@ -87,7 +88,7 @@ describe('buildMotherResource：共享全部母本（2026-10-28 去掉小组口�
     // 重名不合并：两个来源账号各自保留，名字相同也不影响身份
     expect(resource.accounts.map((account) => account.accountName)).toEqual(['同名', '同名']);
     expect(resource.schemaVersion).toBe(1);
-    expect(resource.criteriaId).toBe(ALL_MOTHERS_CRITERIA_ID);
+    expect(resource.criteriaId).toBe(motherResourceCriteriaIdOf('perfect'));
     expect(resource.catalogVersion).toBe(FIXTURE_CATALOG_VERSION);
   });
 
@@ -145,7 +146,7 @@ describe('buildMotherResource：共享全部母本（2026-10-28 去掉小组口�
     );
   });
 
-  test('旧的自选口径参数不再参与过滤，criteriaId 固定为全部母本', () => {
+  test('旧的自选口径参数不再参与过滤，criteriaId 由目标模式派生', () => {
     const resource = buildMotherResource({
       snapshots: [
         snapshot(1001, '甲', [
@@ -157,10 +158,31 @@ describe('buildMotherResource：共享全部母本（2026-10-28 去掉小组口�
       species: catalog,
       catalogVersion: FIXTURE_CATALOG_VERSION,
       criteria: { bodies: ['小不点'], voices: ['婉转声'] },
-      criteriaId: 'mother-v2-deadbeef',
+      mode: 'medal',
     });
-    expect(resource.criteriaId).toBe(ALL_MOTHERS_CRITERIA_ID);
+    expect(resource.criteriaId).toBe(motherResourceCriteriaIdOf('medal'));
     expect(resource.accounts[0].eggGameIds).toEqual([101]);
+  });
+
+  test('模式不同 → criteriaId 不同，摘要不可混用（2026-10-29 B2-H01）', () => {
+    const snapshots = [snapshot(1001, '甲', [mother(101)])];
+    const perfect = buildMotherResource({
+      snapshots,
+      selectedAccountKeys: ['uid:1001'],
+      species: catalog,
+      catalogVersion: FIXTURE_CATALOG_VERSION,
+      mode: 'perfect',
+    });
+    const medal = buildMotherResource({
+      snapshots,
+      selectedAccountKeys: ['uid:1001'],
+      species: catalog,
+      catalogVersion: FIXTURE_CATALOG_VERSION,
+      mode: 'medal',
+    });
+    expect(perfect.criteriaId).toBe('all-mothers-v3-perfect');
+    expect(medal.criteriaId).toBe('all-mothers-v3-medal');
+    expect(diffMotherResources(perfect, medal).unchanged).toBe(false);
   });
 
   test('导出时间为空或非 ISO 时拒绝，不产出半份摘要', () => {

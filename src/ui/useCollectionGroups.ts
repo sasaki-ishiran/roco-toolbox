@@ -35,8 +35,8 @@ import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
 import { buildStudResource, diffStudResources } from '../domain/studResource';
 import type { SpeciesEntry } from '../domain/types';
 import {
-  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_RESOURCE_SCHEMA_VERSION,
+  motherResourceCriteriaIdOf,
   type MotherResourceDraft,
 } from '../shared/motherGroups';
 import {
@@ -200,7 +200,7 @@ const selectionOf = (detail: CollectionGroupDetail | null, accountId: string | n
 
 const emptyMotherDraft = (
   catalogVersion: string,
-  criteriaId: string = ALL_MOTHERS_CRITERIA_ID,
+  criteriaId: string = motherResourceCriteriaIdOf('perfect'),
 ): MotherResourceDraft => ({
   schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
   criteriaId,
@@ -826,11 +826,10 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
           selectedAccountKeys: draftSelection,
           species,
           catalogVersion,
-          criteriaId: ALL_MOTHERS_CRITERIA_ID,
-          // 母本口径已去掉；模式只用于产线档位。
+          // 母本口径已去掉；模式决定产线档位，并编进 criteriaId。
           mode: motherTarget?.mode ?? 'perfect',
         });
-        const base = myMember?.resource ?? emptyMotherDraft(catalogVersion);
+        const base = myMember?.resource ?? emptyMotherDraft(catalogVersion, resource.criteriaId);
         return {
           kind: 'mother',
           resource,

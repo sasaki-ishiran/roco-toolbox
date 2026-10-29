@@ -17,8 +17,8 @@ import { motherResourceSignature, buildMotherResource, diffMotherResources } fro
 import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
 import type { SpeciesEntry } from '../domain/types';
 import {
-  ALL_MOTHERS_CRITERIA_ID,
   MOTHER_RESOURCE_SCHEMA_VERSION,
+  motherResourceCriteriaIdOf,
   type MotherGroupDetail,
   type MotherGroupMember,
   type MotherGroupSummary,
@@ -100,9 +100,12 @@ const selectionOf = (detail: MotherGroupDetail | null, accountId: string | null)
   return mine?.resource?.accounts.map((account) => account.accountKey) ?? [];
 };
 
-const emptyDraft = (catalogVersion: string): MotherResourceDraft => ({
+const emptyDraft = (
+  catalogVersion: string,
+  criteriaId: string = motherResourceCriteriaIdOf('perfect'),
+): MotherResourceDraft => ({
   schemaVersion: MOTHER_RESOURCE_SCHEMA_VERSION,
-  criteriaId: ALL_MOTHERS_CRITERIA_ID,
+  criteriaId,
   catalogVersion,
   accounts: [],
 });
@@ -454,6 +457,8 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
       selectedAccountKeys: keys,
       species,
       catalogVersion,
+      // 一期母本组页没有组目标，按默认的追满分算产线（2026-10-29 criteriaId v3 起模式必传）。
+      mode: 'perfect',
     });
   }, []);
 
@@ -602,8 +607,9 @@ export function useMotherGroups(input: UseMotherGroupsInput): MotherGroupsHook {
         selectedAccountKeys: draftSelection,
         species,
         catalogVersion,
+        mode: 'perfect',
       });
-      const base = myMember?.resource ?? emptyDraft(catalogVersion);
+      const base = myMember?.resource ?? emptyDraft(catalogVersion, resource.criteriaId);
       return {
         resource,
         diff: diffMotherResources(base, resource),

@@ -1,5 +1,5 @@
 import {
-  ALL_MOTHERS_CRITERIA_ID,
+  motherResourceCriteriaIdOf,
   type MotherCoverageHolder,
   type MotherCoverageRow,
   type MotherGroupMember,
@@ -36,7 +36,7 @@ export interface BuildMotherCoverageInput {
 export function isMotherResourceComparable(
   resource: PublishedMotherResource | null,
   catalogVersion: string,
-  criteriaId: string = ALL_MOTHERS_CRITERIA_ID,
+  criteriaId: string = motherResourceCriteriaIdOf('perfect'),
 ): boolean {
   return (
     resource != null &&
@@ -49,7 +49,7 @@ const compareAccountKey = (a: string, b: string): number =>
   Number(a.slice(4)) - Number(b.slice(4)) || a.localeCompare(b);
 
 export function buildMotherCoverage(input: BuildMotherCoverageInput): MotherCoverageRow[] {
-  const { species, catalogVersion, members, criteriaId = ALL_MOTHERS_CRITERIA_ID } = input;
+  const { species, catalogVersion, members, criteriaId = motherResourceCriteriaIdOf('perfect') } = input;
 
   // 目标全集：`eggGameId === gameId` 且至少有一个可孵蛋组。图鉴未知的 eggGameId 不生成行。
   const eggById = new Map<number, SpeciesEntry>();

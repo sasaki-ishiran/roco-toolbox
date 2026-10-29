@@ -18,13 +18,24 @@
 export const MOTHER_CRITERIA_ID = 'female-huge-voice100-v2' as const;
 
 /**
- * 2026-10-28：小组不再有母本口径，共享全部母本/产线。
- * v2（2026-10-28 晚）：合格体型改为「身高 100% + 体重 ≥95%」同时满足，
- * 产线会因此变化；旧摘要必须显示「需更新」，由成员重新导入发布。
+ * 口径标识是稳定字符串：一期固定值 + 二期自选的 `mother-v2-<8hex>`。
  */
-export const ALL_MOTHERS_CRITERIA_ID = 'all-mothers-v2' as const;
-/** 口径标识是稳定字符串：一期固定值 + 二期自选的 `mother-v2-<8hex>`。 */
 export type MotherCriteriaId = string;
+
+/**
+ * 母本资源的口径版本（2026-10-29 代码审查 B2-H01）。
+ *
+ * - v2（2026-10-28 晚）：合格体型改为「身高 100% + 体重 ≥95%」同时满足，产线会因此变化；
+ * - v3（2026-10-29）：产线档位依赖目标模式（追满分要 ±100、追双牌 ≥96），模式必须跟着摘要走，
+ *   否则组长切换模式后组内会混用两种产线口径。
+ *
+ * D1 没有 mode 列、本轮也不改迁移，所以把模式编进 criteriaId：服务端原样存储，客户端
+ * `isMotherResourceComparable` 用「期望 criteriaId」比较，切模式后全员自动变成「需更新」。
+ */
+export type MotherResourceMode = 'perfect' | 'medal';
+
+export const motherResourceCriteriaIdOf = (mode: MotherResourceMode): MotherCriteriaId =>
+  mode === 'medal' ? 'all-mothers-v3-medal' : 'all-mothers-v3-perfect';
 
 export const MOTHER_RESOURCE_SCHEMA_VERSION = 1 as const;
 
