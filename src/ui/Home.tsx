@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { species } from '../data/catalog';
 import type { AccountSnapshot } from '../domain/parseBackup';
-import type { HomeResident, HomeSnapshot } from '../domain/types';
+import type { HomeResident, HomeSnapshot, OwnedPet } from '../domain/types';
 import { useAccountFilter } from './accountFilterStore';
 import { AccountFilterBar } from './AccountFilterBar';
 import { EmptyState } from './EmptyState';
@@ -37,9 +37,16 @@ const GENDER_OF = (value: string | undefined): '公' | '母' | '未知' =>
 
 const speciesByGameId = new Map(species.map((entry) => [entry.gameId, entry]));
 
-function petOf(snapshot: AccountSnapshot, resident: HomeResident) {
-  const suffix = `_${resident.instanceId}`;
-  return snapshot.pets.find((pet) => pet.captureId && pet.captureId.endsWith(suffix));
+/** 背包精灵按家园实例 id 建索引：避免每个住户都把配对的 pets 扫一遍 */
+function petsByInstance(snapshot: AccountSnapshot): Map<string, OwnedPet> {
+  const map = new Map<string, OwnedPet>();
+  for (const pet of snapshot.pets) {
+    if (!pet.captureId) continue;
+    const index = pet.captureId.lastIndexOf('_');
+    if (index < 0) continue;
+    map.set(pet.captureId.slice(index + 1), pet);
+  }
+  return map;
 }
 
 function nestLabel(home: HomeSnapshot, furnitureGuid: string): string {
@@ -53,8 +60,7 @@ function nestLabel(home: HomeSnapshot, furnitureGuid: string): string {
  * 家园精灵卡（2026-10-29 用户口径）：直接复用紧凑精灵卡，
  * 头像 + 名称 + 性别 + 奖牌 + 蛋组 + 性格，底部一行声音 / 身高 / 体重。
  */
-function HomePetCard({ snapshot, resident }: { snapshot: AccountSnapshot; resident: HomeResident }) {
-  const pet = petOf(snapshot, resident);
+function HomePetCard({ pet, resident }: { pet?: OwnedPet; resident: HomeResident }) {
   const name = resident.name || pet?.name || `精灵 ${resident.instanceId}`;
   const gender = GENDER_OF(resident.gender || pet?.gender);
   const nature = resident.nature || pet?.nature || '';
@@ -82,8 +88,7 @@ function HomePetCard({ snapshot, resident }: { snapshot: AccountSnapshot; reside
 }
 
 /** 配窝卡片里的一只精灵：小头像 + 名字 + 性别。 */
-function HomePairChip({ snapshot, resident }: { snapshot: AccountSnapshot; resident: HomeResident }) {
-  const pet = petOf(snapshot, resident);
+function HomePairChip({ pet, resident }: { pet?: OwnedPet; resident: HomeResident }) {
   const fullName = resident.name || pet?.name || `精灵 ${resident.instanceId}`;
   // 多形态只写基础名（形态由头像区分），完整名字放 title（与紧凑卡同一口径）
   const displayName = fullName.split('_')[0] || fullName;
@@ -108,6 +113,11 @@ function HomePairChip({ snapshot, resident }: { snapshot: AccountSnapshot; resid
 
 function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: string }) {
   const home = snapshot.home;
+  // 先建索引再判空：hook 不能写在条件 return 之后
+  const pets = useMemo(
+    () => (home ? petsByInstance(snapshot) : new Map<string, OwnedPet>()),
+    [snapshot, home],
+  );
   if (!home) return null;
   const academy = home.nests.filter((nest) => nest.nestType === 'academy').length;
   const byActor = new Map(home.residents.map((resident) => [resident.actorId, resident]));
@@ -192,11 +202,13 @@ function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: st
                     </span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1">
-                    {female ? <HomePairChip snapshot={snapshot} resident={female} /> : null}
+                    {female ? (
+                      <HomePairChip pet={pets.get(female.instanceId)} resident={female} />
+                    ) : null}
                     {males.map((resident) => (
                       <HomePairChip
                         key={resident.instanceId}
-                        snapshot={snapshot}
+                        pet={pets.get(resident.instanceId)}
                         resident={resident}
                       />
                     ))}
@@ -218,7 +230,11 @@ function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: st
         ) : (
           <div className="mt-1.5 flex flex-wrap gap-2" data-testid="home-residents">
             {home.residents.map((resident) => (
-              <HomePetCard key={resident.instanceId} snapshot={snapshot} resident={resident} />
+              <HomePetCard
+                key={resident.instanceId}
+                pet={pets.get(resident.instanceId)}
+                resident={resident}
+              />
             ))}
           </div>
         )}
