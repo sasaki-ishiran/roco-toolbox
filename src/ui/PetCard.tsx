@@ -9,7 +9,6 @@ const RARITY_TEXT: Record<string, string> = {
   shiny: '异色',
   colorful: '炫彩',
   'shiny-colorful': '异色炫彩',
-  'shiny-bw': '异色黑白',
 };
 
 export interface PetCardProps {

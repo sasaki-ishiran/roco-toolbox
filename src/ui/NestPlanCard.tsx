@@ -67,7 +67,7 @@ const viewKeyOf = (pairing: NestPairing): string =>
  * 摆位图：按坐标把窝画出来（绿块=学院小窝），线=会配对的边。
  * 图层顺序 = 窝块 → 连线 → 名字：线画在窝块**之上**（否则会被方块盖住），名字再压在线上（保证读得清）。
  */
-export function NestLayoutMap({ plan, styleByKey }: { plan: NestPlan; styleByKey: Map<string, PairingStyle> }) {
+function NestLayoutMap({ plan, styleByKey }: { plan: NestPlan; styleByKey: Map<string, PairingStyle> }) {
   if (plan.slots.length === 0) return null;
   const xs = plan.slots.map((slot) => slot.position.x);
   const ys = plan.slots.map((slot) => slot.position.y);

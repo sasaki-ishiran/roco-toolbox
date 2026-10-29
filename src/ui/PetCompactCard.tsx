@@ -35,7 +35,7 @@ export interface PetCompactCardProps {
   roleLabel?: string;
   /** 学院小窝整卡绿色 */
   academy?: boolean;
-  /** home = 家园（110 高、不显示位置）；demand = 需求中心（120 高、显示盒位） */
+  /** home = 家园（115 高、不显示位置）；demand = 需求中心（120 高、显示盒位） */
   variant?: 'home' | 'demand';
   testId?: string;
 }
