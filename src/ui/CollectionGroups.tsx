@@ -21,9 +21,15 @@ import { useSnapshots } from './useSnapshots';
 import { useDraftLeaveGuard } from './useDraftLeaveGuard';
 import {
   readCollectionInviteCode,
+  readDemandCompletionSeenAt,
   readPendingInviteCode,
+  saveDemandCompletionSeenAt,
   savePendingInviteCode,
 } from './collectionGroupStore';
+import {
+  newDemandCompletionNotice,
+  type DemandCompletionNotice,
+} from './demandCompletionNotice';
 
 export interface CollectionGroupsProps {
   onGoAccount?: () => void;
@@ -46,6 +52,45 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
   const { confirmLeave, leaveConfirmation } = useDraftLeaveGuard(hook.draftDirty);
   const [pendingCode, setPendingCode] = useState(() => readPendingInviteCode());
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [completionNotice, setCompletionNotice] = useState<DemandCompletionNotice | null>(null);
+  const completionGroupId = hook.currentGroup?.group.id ?? null;
+
+  /**
+   * 接单方的结单反馈：进入小组页时提示「你承接的 N 单已完成」。
+   * 用本机已读水位避免重复提示；第一次见到某组只记水位，不把历史当成新消息。
+   */
+  useEffect(() => {
+    const accountId = hook.accountId;
+    const group = hook.currentGroup;
+    if (!accountId || !group) {
+      setCompletionNotice(null);
+      return;
+    }
+    const seenAt = readDemandCompletionSeenAt(accountId, group.group.id);
+    const notice = newDemandCompletionNotice(
+      hook.demands,
+      accountId,
+      seenAt,
+      (id) => group.members.find((member) => member.accountId === id)?.displayName ?? null,
+    );
+    if (!notice) {
+      setCompletionNotice(null);
+      return;
+    }
+    if (notice.count === 0) {
+      if (seenAt == null) saveDemandCompletionSeenAt(accountId, group.group.id, notice.watermark);
+      setCompletionNotice(null);
+      return;
+    }
+    setCompletionNotice(notice);
+  }, [hook.accountId, hook.currentGroup, hook.demands]);
+
+  const dismissCompletionNotice = () => {
+    if (completionNotice && hook.accountId && completionGroupId) {
+      saveDemandCompletionSeenAt(hook.accountId, completionGroupId, completionNotice.watermark);
+    }
+    setCompletionNotice(null);
+  };
 
   const searchIndex = useMemo(() => buildEggSearchIndex(species), []);
   /**
@@ -198,6 +243,30 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
               </p>
             ) : null}
           </div>
+
+          {completionNotice ? (
+            <div
+              className="rounded-xl bg-emerald-50 px-3 py-2 text-emerald-800"
+              data-testid="demand-completion-notice"
+            >
+              <p className="text-sm font-medium">
+                {completionNotice.demanderNames.length > 0
+                  ? `${completionNotice.demanderNames.slice(0, 2).join('、')}${
+                      completionNotice.demanderNames.length > 2 ? '等' : ''
+                    }已确认你承接的 ${completionNotice.count} 单需求`
+                  : `你承接的 ${completionNotice.count} 单需求已完成`}
+              </p>
+              <p className="mt-0.5 text-xs opacity-90">感谢你对小组的贡献</p>
+              <button
+                type="button"
+                onClick={dismissCompletionNotice}
+                className="mt-1.5 min-h-[28px] rounded-lg bg-white/70 px-2.5 text-xs text-emerald-800"
+                data-testid="demand-completion-dismiss"
+              >
+                知道了
+              </button>
+            </div>
+          ) : null}
 
           {editing ? (
             <MotherResourceEditor

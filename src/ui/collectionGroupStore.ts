@@ -25,6 +25,8 @@ export interface CollectionGroupPrefs {
    * 导入后会自动把资源同步到小组，但不能把用户主动撤回的组又发回去。
    */
   sharingOff: Record<string, true>;
+  /** 各组「已确认完成」提示的已读水位（毫秒时间戳），避免同一条反复提示。 */
+  completionsSeenAt: Record<string, number>;
 }
 
 const EMPTY: CollectionGroupPrefs = {
@@ -33,16 +35,25 @@ const EMPTY: CollectionGroupPrefs = {
   lastGroupIds: {},
   inviteCodes: {},
   sharingOff: {},
+  completionsSeenAt: {},
 };
+
+const emptyPrefs = (): CollectionGroupPrefs => ({
+  ...EMPTY,
+  lastGroupIds: {},
+  inviteCodes: {},
+  sharingOff: {},
+  completionsSeenAt: {},
+});
 
 const storageKey = (accountId: string | null): string =>
   accountId ? `${KEY_PREFIX}${accountId}` : GUEST_KEY;
 
 export function readCollectionGroupPrefs(accountId: string | null): CollectionGroupPrefs {
-  if (typeof window === 'undefined') return { ...EMPTY, lastGroupIds: {}, inviteCodes: {}, sharingOff: {} };
+  if (typeof window === 'undefined') return emptyPrefs();
   try {
     const raw = window.localStorage.getItem(storageKey(accountId));
-    if (!raw) return { ...EMPTY, lastGroupIds: {}, inviteCodes: {}, sharingOff: {} };
+    if (!raw) return emptyPrefs();
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const lastGroupIds: Partial<Record<CollectionGroupType, string>> = {};
     if (typeof parsed.lastGroupIds === 'object' && parsed.lastGroupIds !== null) {
@@ -65,6 +76,19 @@ export function readCollectionGroupPrefs(accountId: string | null): CollectionGr
         if (value === true) sharingOff[key] = true;
       }
     }
+    const completionsSeenAt: Record<string, number> = {};
+    if (
+      typeof parsed.completionsSeenAt === 'object' &&
+      parsed.completionsSeenAt !== null
+    ) {
+      for (const [key, value] of Object.entries(
+        parsed.completionsSeenAt as Record<string, unknown>,
+      )) {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          completionsSeenAt[key] = value;
+        }
+      }
+    }
     return {
       mode: parsed.mode === 'group' ? 'group' : 'personal',
       // 小组只剩母本组：旧值 stud 统一归到 mother，避免进入已删除的种公组。
@@ -72,9 +96,10 @@ export function readCollectionGroupPrefs(accountId: string | null): CollectionGr
       lastGroupIds,
       inviteCodes,
       sharingOff,
+      completionsSeenAt,
     };
   } catch {
-    return { ...EMPTY, lastGroupIds: {}, inviteCodes: {}, sharingOff: {} };
+    return emptyPrefs();
   }
 }
 
@@ -146,6 +171,31 @@ export function saveCollectionInviteCode(
 export function clearCollectionGroupPrefs(accountId: string | null): void {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(storageKey(accountId));
+}
+
+/** 该组「已结单」提示的已读水位；`null` = 还没提示过（首次见到只记水位，不弹历史）。 */
+export function readDemandCompletionSeenAt(
+  accountId: string | null,
+  groupId: string,
+): number | null {
+  const value = readCollectionGroupPrefs(accountId).completionsSeenAt[groupId];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** 只前进不后退：并发 / 乱序写入时保留更大的水位。 */
+export function saveDemandCompletionSeenAt(
+  accountId: string | null,
+  groupId: string,
+  at: number,
+): void {
+  if (!Number.isFinite(at)) return;
+  const prefs = readCollectionGroupPrefs(accountId);
+  const current = prefs.completionsSeenAt[groupId] ?? 0;
+  if (at <= current) return;
+  write(accountId, {
+    ...prefs,
+    completionsSeenAt: { ...prefs.completionsSeenAt, [groupId]: at },
+  });
 }
 
 export function readPendingInviteCode(): string {
