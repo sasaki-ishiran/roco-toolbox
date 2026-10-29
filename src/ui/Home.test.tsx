@@ -160,6 +160,23 @@ describe('家园页', () => {
     expect(screen.getByTestId('home-no-eggs')).toBeTruthy();
   });
 
+  test('小窝总数按 nests 全量计，nestType 未知的小窝也算', () => {
+    const snapshot = snapshotWithHome();
+    snapshot.home!.nests.push({
+      furnitureGuid: '8803',
+      configId: 1001073,
+      nestType: null,
+      nestName: '木桩小窝',
+      residentIds: [],
+      roomName: '二楼',
+    });
+    h.snapshots = [snapshot];
+    render(<HomeLand />);
+
+    expect(screen.getByText('3')).toBeTruthy();
+    expect(screen.getByText('小窝（学院 1）')).toBeTruthy();
+  });
+
   test('学院小窝的精灵卡标记 academy 并整卡变绿', () => {
     h.snapshots = [snapshotWithHome()];
     render(<HomeLand />);
@@ -196,6 +213,19 @@ describe('家园页', () => {
 
     expect(screen.getByText('未选择游戏账号：上面点「全选」可恢复。')).toBeTruthy();
     expect(screen.queryByTestId('home-no-capture')).toBeNull();
+  });
+
+  test('配窝小卡同样只写基础名，完整名字放 title', () => {
+    const snapshot = snapshotWithHome();
+    snapshot.home!.residents[1].name = '雪绒鸟_夏天的样子';
+    h.snapshots = [snapshot];
+    render(<HomeLand />);
+
+    const chips = screen.getAllByTestId('home-pair-chip');
+    const chip = chips.find((item) => item.getAttribute('title') === '雪绒鸟_夏天的样子');
+    expect(chip).toBeTruthy();
+    expect(chip).not.toHaveTextContent('夏天的样子');
+    expect(chip).toHaveTextContent('雪绒鸟');
   });
 
   test('配对里缺少公本时降级成「公本未知」，不崩也不空白', () => {

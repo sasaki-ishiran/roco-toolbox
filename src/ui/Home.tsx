@@ -84,16 +84,23 @@ function HomePetCard({ snapshot, resident }: { snapshot: AccountSnapshot; reside
 /** 配窝卡片里的一只精灵：小头像 + 名字 + 性别。 */
 function HomePairChip({ snapshot, resident }: { snapshot: AccountSnapshot; resident: HomeResident }) {
   const pet = petOf(snapshot, resident);
-  const name = resident.name || pet?.name || `精灵 ${resident.instanceId}`;
+  const fullName = resident.name || pet?.name || `精灵 ${resident.instanceId}`;
+  // 多形态只写基础名（形态由头像区分），完整名字放 title（与紧凑卡同一口径）
+  const displayName = fullName.split('_')[0] || fullName;
   const gender = GENDER_OF(resident.gender || pet?.gender);
   return (
-    <span className="flex min-w-0 items-center gap-0.5 rounded-md bg-white/80 px-1 py-0.5">
+    <span
+      className="flex min-w-0 items-center gap-0.5 rounded-md bg-white/80 px-1 py-0.5"
+      data-testid="home-pair-chip"
+      title={fullName}
+    >
       <PetAvatar
         gameId={pet?.gameId ?? (Number(resident.baseId) || null)}
-        name={name}
+        name={fullName}
+        shiny={pet?.isShiny || pet?.isColorful}
         size={24}
       />
-      <span className="max-w-[4.5rem] truncate text-[10px] text-slate-700">{name}</span>
+      <span className="max-w-[4.5rem] truncate text-[10px] text-slate-700">{displayName}</span>
       <GenderMark gender={gender} />
     </span>
   );
@@ -102,7 +109,6 @@ function HomePairChip({ snapshot, resident }: { snapshot: AccountSnapshot; resid
 function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: string }) {
   const home = snapshot.home;
   if (!home) return null;
-  const ordinary = home.nests.filter((nest) => nest.nestType === 'ordinary').length;
   const academy = home.nests.filter((nest) => nest.nestType === 'academy').length;
   const byActor = new Map(home.residents.map((resident) => [resident.actorId, resident]));
   const eggCount = home.sceneEggs.length;
@@ -134,7 +140,7 @@ function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: st
           <div className={HINT}>家园精灵</div>
         </div>
         <div className={INSET}>
-          <div className={TITLE}>{ordinary + academy}</div>
+          <div className={TITLE}>{home.nests.length}</div>
           <div className={HINT}>小窝（学院 {academy}）</div>
         </div>
         <div className={INSET}>
