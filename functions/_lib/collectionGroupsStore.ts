@@ -1716,14 +1716,31 @@ export async function withdrawCollectionDemand(
   if (existing.status === 'done') {
     throw new MotherStoreError('DEMAND_ALREADY_DONE', '已完成的需求不能撤回');
   }
-  await db
+  const result = await db
     .prepare(
       `DELETE FROM collection_group_demands
         WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
-          AND gender = ? AND body = ? AND voice = ?`,
+          AND gender = ? AND body = ? AND voice = ?
+          AND status <> 'done'`,
     )
     .bind(groupId, accountId, eggGameId, nature, gender, body, voice)
     .run();
+  if ((result.meta.changes ?? 0) === 0) {
+    // 读到的快照与删除之间可能刚被确认完成：0 行删除不能当作撤回成功
+    const latest = await findDemand(db, groupId, {
+      demanderAccountId: accountId,
+      eggGameId,
+      nature,
+      gender,
+      body,
+      voice,
+    });
+    if (!latest) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+    if (latest.status === 'done') {
+      throw new MotherStoreError('DEMAND_ALREADY_DONE', '已完成的需求不能撤回');
+    }
+    throw new MotherStoreError('DEMAND_TAKEN', '需求状态已更新，刷新后再看');
+  }
 }
 
 export interface DemandActionInput {
@@ -1866,13 +1883,13 @@ export async function completeCollectionDemand(
     throw new MotherStoreError('DEMAND_NOT_CLAIMED', '还没有人接单，不能确认完成');
   }
   const now = Date.now();
-  await db
+  const result = await db
     .prepare(
       `UPDATE collection_group_demands
           SET status = 'done', version = version + 1, updated_at = ?
         WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
           AND gender = ? AND body = ? AND voice = ?
-          AND status = 'claimed'`,
+          AND status = 'claimed' AND version = ?`,
     )
     .bind(
       now,
@@ -1883,8 +1900,19 @@ export async function completeCollectionDemand(
       input.gender,
       input.body,
       input.voice,
+      input.expectedVersion ?? existing.version,
     )
     .run();
+  if ((result.meta.changes ?? 0) === 0) {
+    // 0 行更新不能当作成功：承接人可能刚放弃（改回 open），或别的设备已经完成
+    const latest = await findDemand(db, groupId, criteria);
+    if (!latest) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+    if (latest.status === 'done') return toDemand(latest);
+    if (latest.status !== 'claimed') {
+      throw new MotherStoreError('DEMAND_NOT_CLAIMED', '对方刚放弃了这条需求，请刷新后再看');
+    }
+    throw new MotherStoreError('DEMAND_TAKEN', '需求状态已更新，刷新后再看');
+  }
   const saved = await findDemand(db, groupId, criteria);
   if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   return toDemand(saved);
