@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  canonicalProductionLines,
   motherResourceCriteriaIdOf,
   type MotherResourceDraft,
   type SharedMotherAccount,
@@ -183,6 +184,12 @@ describe('buildMotherResource：共享全部母本（2026-10-28 去掉小组口�
     expect(perfect.criteriaId).toBe('all-mothers-v3-perfect');
     expect(medal.criteriaId).toBe('all-mothers-v3-medal');
     expect(diffMotherResources(perfect, medal).unchanged).toBe(false);
+  });
+
+  test('产线性格入库前 trim，带空格不会导致永远匹配不上', () => {
+    expect(
+      canonicalProductionLines([{ eggGameId: 101, grade: '大婉', natures: [' 固执 ', '固执'] }]),
+    ).toEqual([{ eggGameId: 101, grade: '大婉', natures: ['固执'] }]);
   });
 
   test('发布前预检：产线数 / 性格数 / 请求体超限都给出可读错误', () => {

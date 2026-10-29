@@ -107,7 +107,9 @@ export function canonicalProductionLines(
     const key = `${line.eggGameId}|${line.grade}`;
     const natures = byKey.get(key) ?? new Set<string>();
     for (const nature of line.natures) {
-      if (typeof nature === 'string' && nature.trim()) natures.add(nature);
+      // 存 trim 后的值：带首尾空格会让产线判定永远匹配不上目标性格（2026-10-29 审查 B2-L05）。
+      const trimmed = typeof nature === 'string' ? nature.trim() : '';
+      if (trimmed) natures.add(trimmed);
     }
     byKey.set(key, natures);
   }
