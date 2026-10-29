@@ -1126,8 +1126,9 @@ export async function listCollectionTasks(
     .filter((row) => !isMemberComparableForTarget(row, config))
     .map((row) => row.account_id);
   // 旧组 / 默认目标没有记录 catalogVersion：不能因此跳过图鉴比较。
-  // 此时要求所有已发布成员的图鉴版本彼此一致，否则全员按「待确认」处理。
-  if (targetCatalogOf(config).length === 0) {
+  // 2026-10-29：只对遗留的种公组生效——母本组各成员按自己导入的图鉴发布，
+  // 不能因为「组目标没存过图鉴版本」就把所有人卡在「待确认」。
+  if (config.groupType === 'stud' && targetCatalogOf(config).length === 0) {
     const catalogs = new Set(
       members
         .filter((row) => row.published_at != null && row.catalog_version != null)
