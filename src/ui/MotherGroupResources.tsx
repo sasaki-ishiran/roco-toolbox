@@ -85,6 +85,8 @@ interface TargetRow extends MotherCoverageRow {
   suppliersByNature: Map<string, string[]>;
   /** 是否有人能补「我还没收集的性格」（不是「有这颗蛋」）。 */
   canSupplyMissing: boolean;
+  /** 这颗蛋按我自己的收集口径要收的性格；空数组 = 不按性格收（2026-10-29 代码审查 B5-M01 预存）。 */
+  configuredNatures: string[];
 }
 
 export interface MotherGroupResourcesProps {
@@ -300,10 +302,9 @@ export function MotherGroupResources({
       );
     }
     /** 这颗蛋要看的性格：手选的优先；否则用个人收集口径；都没有 = 不限（''）。 */
-    const naturesOfRow = (eggGameId: number): string[] => {
+    const naturesOfRow = (configured: readonly string[]): string[] => {
       if (targetNature) return [targetNature];
-      const configured = configuredNaturesOf(eggGameId);
-      return configured.length > 0 ? configured : [''];
+      return configured.length > 0 ? [...configured] : [''];
     };
     const supplyOf = (memberId: string, eggGameId: number): boolean => {
       if (memberId === viewerAccountId && snapshots.length > 0) {
@@ -361,7 +362,8 @@ export function MotherGroupResources({
     };
 
     return rows.map((row) => {
-      const natures = naturesOfRow(row.eggGameId);
+      const configuredNatures = configuredNaturesOf(row.eggGameId);
+      const natures = naturesOfRow(configuredNatures);
       const viewerSupplied = suppliedNaturesOf(viewerAccountId, row.eggGameId, natures);
       const missingNatures = natures.filter((nature) => !viewerSupplied.has(nature));
       const holders: MotherCoverageRow['holders'] = [];
@@ -374,7 +376,11 @@ export function MotherGroupResources({
           unknownMemberIds.push(member.accountId);
           continue;
         }
-        const supplied = suppliedNaturesOf(member.accountId, row.eggGameId, natures);
+        // viewer 已在循环外算过，直接复用（2026-10-29 代码审查 B5-M01）
+        const supplied =
+          member.accountId === viewerAccountId
+            ? viewerSupplied
+            : suppliedNaturesOf(member.accountId, row.eggGameId, natures);
         if (supplied.size > 0) {
           const previous = row.holders.find((holder) => holder.accountId === member.accountId);
           holders.push({ accountId: member.accountId, accountKeys: previous?.accountKeys ?? [] });
@@ -397,6 +403,7 @@ export function MotherGroupResources({
         unknownMemberIds,
         missingNatures,
         suppliersByNature,
+        configuredNatures,
         canSupplyMissing:
           missingNatures.length > 0 &&
           [...suppliersByNature.values()].some((ids) => ids.length > 0),
@@ -1113,7 +1120,7 @@ export function MotherGroupResources({
     // 目标性格已经收齐（或手选的那一个已经收到）→ 没有可发的了
     if (rowMissing && rowMissing.length === 0) return null;
     const missingNamed = (rowMissing ?? []).filter(Boolean);
-    const preferred = configuredNaturesOf(eggGameId);
+    const preferred = targetRow?.configuredNatures ?? configuredNaturesOf(eggGameId);
     // 只发「我还缺的性格」；没有按性格收时再退回默认推荐
     const candidates = missingNamed.length > 0
       ? missingNamed
@@ -2003,7 +2010,7 @@ export function MotherGroupResources({
           {pageRows.map((row, index) => {
             // 瀑布流按整个列表的绝对位置判断分区标题。
             const absoluteIndex = index;
-            const natures = configuredNaturesOf(row.eggGameId);
+            const natures = row.configuredNatures;
             const { base } = splitDisplayName(row.name);
             const selectionKey = selectionKeyOf(row.eggGameId);
             const isSelected = selected.includes(selectionKey);
@@ -2285,7 +2292,7 @@ export function MotherGroupResources({
         {resourceDetailRow ? (() => {
           const eggGameId = resourceDetailRow.eggGameId;
           const { base } = splitDisplayName(resourceDetailRow.name);
-          const natures = configuredNaturesOf(eggGameId);
+          const natures = resourceDetailRow.configuredNatures;
           const missingNatures = resourceDetailRow.missingNatures.filter(Boolean);
           const missingSet = new Set(missingNatures);
           const supplierLines = [...resourceDetailRow.suppliersByNature.entries()].map(
