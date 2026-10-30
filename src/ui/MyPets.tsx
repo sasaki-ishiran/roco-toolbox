@@ -1,57 +1,28 @@
 import { useMemo } from 'react';
 import {
   buildChainSearchIndex,
-  buildEggSearchIndex,
   buildTagIndex,
   chainKeyOf,
   computeFacetCounts,
   filterByTags,
-  gradeLabel,
-  groupMothersByEgg,
-  TARGET_MODE_LABELS,
-  type PetView,
 } from '../domain/petFilters';
-import { ALL_GRADES, ALL_EGG_GROUP_IDS } from '../domain/coverageTargets';
-import { isBreedableGroup } from '../domain/eggs';
 import type { OwnedPet } from '../domain/types';
-import { describeStudTargets } from '../domain/studTargets';
 import { speciesDisplayName } from '../domain/speciesName';
 import { eggGroupNames, species, targetNaturePool } from '../data/catalog';
 import { AccountFilterBar } from './AccountFilterBar';
-import { AccountSection } from './AccountSection';
 import { EmptyState } from './EmptyState';
-import { MotherView } from './MotherView';
 import { PetList } from './PetList';
 import { FilterAccordion } from './FilterAccordion';
 import { FilterPanel } from './primitives/FilterPanel';
 import { SearchField } from './primitives/SearchField';
-import { SegmentedControl } from './primitives/SegmentedControl';
-import { useCoverageSlots } from './useCoverageSlots';
 import { useOwnedPets } from './useOwnedPets';
-import { useTargetMode } from './targetModeStore';
 import {
   clearInventoryFilters,
   setMyPetsFiltersOpen,
   setMyPetsSelected,
-  toggleStudGrade,
-  toggleStudGroup,
-  toggleStudNature,
   useMyPetsFilters,
 } from './myPetsFilterStore';
 import { setPersonalQuery, usePersonalList } from './listViewStore';
-
-const VIEW_LABELS: Array<{ id: PetView; label: string }> = [
-  { id: 'all', label: '全部' },
-  { id: 'stud', label: '种公' },
-  { id: 'mother', label: '母本' },
-];
-
-/** 种公视角的性格筛选选项：与覆盖度里可勾选的性格池同一套（八大性格）+ 「其他」 */
-const STUD_NATURE_OPTIONS = [
-  ...targetNaturePool.map((entry) => entry.name),
-  '其他',
-];
-const STUD_NATURE_NAMES = new Set(targetNaturePool.map((entry) => entry.name));
 
 /** 「全部」页筛选维度顺序（2026-10-05 用户拍板：第一行 性别/体型/声音，第二行 性格/蛋组/稀有度） */
 const FILTER_DIMENSIONS: Array<{ kind: string; label: string }> = [
@@ -62,6 +33,18 @@ const FILTER_DIMENSIONS: Array<{ kind: string; label: string }> = [
   { kind: 'eggGroup', label: '蛋组' },
   { kind: 'shiny', label: '稀有度' },
 ];
+
+/** 体型四个选项的展示顺序（2026-10-29）：奖牌两档在前，身高两档在后 */
+const BODY_TAG_ORDER = ['大块头', '小不点', '满身高', '零身高'];
+const sortBodyFirst = <T extends { label: string }>(tags: T[]): T[] =>
+  [...tags].sort((a, b) => {
+    const ia = BODY_TAG_ORDER.indexOf(a.label);
+    const ib = BODY_TAG_ORDER.indexOf(b.label);
+    if (ia === -1 && ib === -1) return a.label.localeCompare(b.label);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
 
 /** 性格选项：八大性格排前面，其余性格在后（2026-10-05 用户拍板） */
 const NATURE_POOL_ORDER = new Map(targetNaturePool.map((entry, index) => [entry.name, index]));
@@ -76,31 +59,27 @@ const sortNaturePoolFirst = <T extends { id: string; label: string }>(tags: T[])
   });
 
 export interface MyPetsProps {
-  view: PetView;
-  onViewChange: (view: PetView) => void;
-  /** 外层（收集页）已有视图分段时不再重复显示（2026-10-24） */
-  hideViewTabs?: boolean;
   /** 空数据时「去导入数据」按钮的跳转 */
   onGoImport?: () => void;
 }
 
-export function MyPets({ view, onViewChange, hideViewTabs = false, onGoImport }: MyPetsProps) {
+/**
+ * 精灵背包（原「我的精灵」）：只放**全部精灵**。
+ *
+ * 2026-10-29 用户口径：「合格种公」视图不要了——挑种公去「收集 · 种公」看种公阵列；
+ * 母本去看「收集 · 母本」。这里不再有视角切换。
+ */
+export function MyPets({ onGoImport }: MyPetsProps) {
   const { owned, accounts } = useOwnedPets();
-  const mode = useTargetMode();
   // 筛选状态提升到模块级 store：切页签 / 切视角都不丢（2026-10-04 用户拍板）
-  const { selected, filtersOpen, studGrades, studNatures, studGroups } = useMyPetsFilters();
+  const { selected, filtersOpen } = useMyPetsFilters();
   // 搜索是本次会话的临时查看条件（切页保留、重启清空），放 listViewStore
   const nameQuery = usePersonalList('inventory-all').query;
   const setNameQuery = (value: string) => setPersonalQuery('inventory-all', value);
-  // 种公视角的名称搜索（2026-10-05 用户拍板加入）
-  const studQuery = usePersonalList('inventory-stud').query;
-  const setStudQuery = (value: string) => setPersonalQuery('inventory-stud', value);
 
   const speciesByGameId = useMemo(() => new Map(species.map((s) => [s.gameId, s])), []);
   // 进化链搜索索引：搜链上任一成员名/图鉴号 → 命中整条链（火花→焰火/火神）
   const chainSearchIndex = useMemo(() => buildChainSearchIndex(species), []);
-  // 蛋搜索索引：母本清单按蛋分组，搜任一归属形态（火神/古卷执政官）都要命中那颗蛋
-  const eggSearchIndex = useMemo(() => buildEggSearchIndex(species), []);
   /** 该精灵是否命中搜索词（按进化链全员匹配，图鉴未收录时退回抓包原名） */
   const petMatchesQuery = (pet: OwnedPet, query: string): boolean => {
     const entry = speciesByGameId.get(pet.gameId);
@@ -109,7 +88,6 @@ export function MyPets({ view, onViewChange, hideViewTabs = false, onGoImport }:
       speciesDisplayName(entry, pet.name).toLowerCase();
     return text.includes(query);
   };
-  const slots = useCoverageSlots();
   const { tags, index } = useMemo(
     () => buildTagIndex(owned, speciesByGameId, eggGroupNames),
     [owned, speciesByGameId],
@@ -138,77 +116,6 @@ export function MyPets({ view, onViewChange, hideViewTabs = false, onGoImport }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredIndices, owned, nameQuery, speciesByGameId, chainSearchIndex]);
 
-  const motherGroups = useMemo(
-    // 以图鉴里的「蛋」为全集：完全没拥有的蛋也会出现在未收集里，与看板同口径
-    () => groupMothersByEgg(owned, speciesByGameId, species, mode),
-    [owned, speciesByGameId, mode],
-  );
-
-  /**
-   * 种公视角的名单：**公 + 档位达标**就算（性格不当门槛，否则「合格但性格不在目标池」
-   * 的精灵会凭空消失）；覆盖目标数只影响排序（`describeStudTargets` 里覆盖多的在前）。
-   */
-  const studEntries = useMemo(
-    () =>
-      describeStudTargets({ owned, species, slots, eggGroupNames, mode }).filter(
-        (hit) => hit.grade !== null,
-      ),
-    [owned, slots, mode],
-  );
-
-  /** 种公视角的蛋组筛选：每个可孵蛋组有多少只合格种公（用于选项计数与置灰） */
-  const studGroupCounts = useMemo(() => {
-    const counts = new Map<number, number>();
-    for (const hit of studEntries) {
-      const entries = speciesByGameId.get(owned[hit.petIndex].gameId)?.eggGroups ?? [];
-      for (const groupId of new Set(entries)) {
-        if (!isBreedableGroup(groupId)) continue;
-        counts.set(groupId, (counts.get(groupId) ?? 0) + 1);
-      }
-    }
-    return counts;
-  }, [studEntries, owned, speciesByGameId]);
-
-  /** 名单上再叠三层可选筛选（都不选 = 全部）：档位、性格（「其他」= 不在八大性格池里）、蛋组 */
-  const visibleStuds = useMemo(
-    () =>
-      studEntries.filter((hit) => {
-        if (studGrades.size > 0 && (hit.grade === null || !studGrades.has(hit.grade))) return false;
-        const pet = owned[hit.petIndex];
-        if (studNatures.size > 0) {
-          // 多选是并集语义：勾了「其他」只代表「接受八大门派之外的性格」，
-          // 不能把同时勾上的具体性格反过来滤掉
-          const matched =
-            studNatures.has(pet.nature) ||
-            (studNatures.has('其他') && !STUD_NATURE_NAMES.has(pet.nature));
-          if (!matched) return false;
-        }
-        if (studGroups.size > 0) {
-          const groups = (speciesByGameId.get(pet.gameId)?.eggGroups ?? []).map(String);
-          if (!groups.some((groupId) => studGroups.has(groupId))) return false;
-        }
-        const keyword = studQuery.trim().toLowerCase();
-        if (keyword && !petMatchesQuery(pet, keyword)) return false;
-        return true;
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [studEntries, studGrades, studNatures, studGroups, owned, studQuery, speciesByGameId, chainSearchIndex],
-  );
-  /** 其中真正覆盖了当前目标的只数（只用于提示，不再当门槛） */
-  const coveredStudCount = visibleStuds.filter((hit) => hit.targets.length > 0).length;
-
-  /** 种公卡片按账号分组（2026-10-05 拍板：展示层按账号聚拢，账号不做分组标题之外的统计口径改动） */
-  const studPetsByAccount = useMemo(() => {
-    const map = new Map<string, OwnedPet[]>();
-    for (const hit of visibleStuds) {
-      const pet = owned[hit.petIndex];
-      const list = map.get(pet.account) ?? [];
-      list.push(pet);
-      map.set(pet.account, list);
-    }
-    return [...map.entries()].map(([account, pets]) => ({ account, pets }));
-  }, [visibleStuds, owned]);
-
   const toggle = (tagId: string) => {
     const next = new Set(selected);
     if (next.has(tagId)) next.delete(tagId);
@@ -229,165 +136,72 @@ export function MyPets({ view, onViewChange, hideViewTabs = false, onGoImport }:
   const selectedLabels = displayTags.filter((tag) => selected.has(tag.id)).map((tag) => tag.label);
 
   return (
-    <main className="mx-auto max-w-md space-y-3 p-4">
-      {hideViewTabs ? null : (
-        <SegmentedControl
-          label="精灵库视图"
-          value={view}
-          options={VIEW_LABELS.map((item) => ({ value: item.id, label: item.label }))}
-          onValueChange={(next) => onViewChange(next as PetView)}
-        />
-      )}
-
-      <p className="px-1 text-[11px] text-slate-400" data-testid="mypets-mode">
-        当前模式 · {TARGET_MODE_LABELS[mode]}
-      </p>
-
+    <main className="mx-auto max-w-md space-y-1 px-4 pb-4 pt-0.5">
       <AccountFilterBar accounts={accounts} />
 
-      {view === 'mother' ? (
-        <MotherView
-          owned={owned}
-          searchIndex={eggSearchIndex}
-          eggGroupNames={eggGroupNames}
-          motherGroups={motherGroups}
-          mode={mode}
+      {/* 搜索常显、独立于高级筛选（2026-10-24 统一控件） */}
+      <SearchField
+        label="搜索精灵名"
+        value={nameQuery}
+        onValueChange={setNameQuery}
+        placeholder="搜索精灵名"
+        testId="pet-name-search"
+      />
+      <FilterPanel
+        title={`筛选${selected.size > 0 ? `（${selected.size}）` : ''}`}
+        dense
+        open={filtersOpen}
+        onOpenChange={setMyPetsFiltersOpen}
+        onClear={() => {
+          clearInventoryFilters();
+          setNameQuery('');
+        }}
+        clearLabel={`重置${selected.size > 0 ? `（${selected.size}）` : ''}`}
+        testId="pet-filters"
+        toggleTestId="pet-filters-toggle"
+        clearTestId="pet-filters-reset"
+        summary={selectedLabels.length > 0 ? `已选：${selectedLabels.join('、')}` : undefined}
+        summaryTestId="pet-filters-selected"
+      >
+        <FilterAccordion
+          dimensions={FILTER_DIMENSIONS.filter(({ kind }) =>
+            displayTags.some((tag) => tag.kind === kind),
+          ).map(({ kind, label }) => {
+            const rowTags =
+              kind === 'nature'
+                ? sortNaturePoolFirst(displayTags.filter((tag) => tag.kind === kind))
+                : kind === 'body'
+                  ? sortBodyFirst(displayTags.filter((tag) => tag.kind === kind))
+                  : displayTags.filter((tag) => tag.kind === kind);
+            return {
+              id: kind,
+              label,
+              options: rowTags.map((tag) => ({
+                value: tag.id,
+                label: `${tag.label} (${facetCounts[tag.id] ?? 0})`,
+                disabled: (facetCounts[tag.id] ?? 0) === 0,
+              })),
+              selected: rowTags.filter((tag) => selected.has(tag.id)).map((tag) => tag.id),
+              onToggle: (id) => toggle(id),
+              onClear: () =>
+                setMyPetsSelected(
+                  new Set([...selected].filter((id) => !id.startsWith(`${kind}:`))),
+                ),
+            };
+          })}
         />
-      ) : view === 'stud' ? (
-        <>
-          {/* 搜索常显、独立于高级筛选（2026-10-24 统一控件）：支持进化链全员命中 */}
-          <SearchField
-            label="搜索种公名称"
-            value={studQuery}
-            onValueChange={setStudQuery}
-            placeholder="搜索种公名称（支持进化链）"
-            testId="stud-search"
-          />
-          {/* 档位 / 性格 / 蛋组 统一成与「全部」页一致的手风琴（白卡包一层，与其它筛选区统一） */}
-          <section className="rounded-xl bg-white p-3 shadow-sm" data-testid="stud-filters">
-            <FilterAccordion
-              dimensions={[
-                {
-                  id: 'studGrade',
-                  label: '档位',
-                  options: ALL_GRADES.map((grade) => ({ value: grade, label: gradeLabel(grade, mode) })),
-                  selected: [...studGrades],
-                  onToggle: (grade) => toggleStudGrade(grade as (typeof ALL_GRADES)[number]),
-                  onClear: () => [...studGrades].forEach((grade) => toggleStudGrade(grade)),
-                },
-                {
-                  id: 'studNature',
-                  label: '性格',
-                  options: STUD_NATURE_OPTIONS.map((name) => ({ value: name, label: name })),
-                  selected: [...studNatures],
-                  onToggle: (name) => toggleStudNature(name),
-                  onClear: () => [...studNatures].forEach((name) => toggleStudNature(name)),
-                },
-                {
-                  id: 'studGroup',
-                  label: '蛋组',
-                  options: ALL_EGG_GROUP_IDS.filter((groupId) => studGroupCounts.has(groupId)).map(
-                    (groupId) => ({
-                      value: String(groupId),
-                      label: `${eggGroupNames[groupId] ?? `蛋组${groupId}`} (${studGroupCounts.get(groupId) ?? 0})`,
-                    }),
-                  ),
-                  selected: [...studGroups],
-                  onToggle: (groupId) => toggleStudGroup(groupId),
-                  onClear: () => [...studGroups].forEach((groupId) => toggleStudGroup(groupId)),
-                },
-              ]}
-            />
-          </section>
-          <p className="text-xs text-slate-400" data-testid="stud-view-hint">
-            手里的种公（公 · 档位达标）{visibleStuds.length} 只 · 其中覆盖当前目标{' '}
-            {coveredStudCount} 只
-          </p>
-          {visibleStuds.length === 0 ? (
-            <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500" data-testid="stud-empty">
-              当前筛选下没有种公。可清掉档位 / 性格 / 蛋组筛选，或到「覆盖度」调整目标。
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {studPetsByAccount.map(({ account, pets }) => (
-                <AccountSection key={account} account={account}>
-                  <PetList
-                    pets={pets}
-                    speciesByGameId={speciesByGameId}
-                    eggGroupNames={eggGroupNames}
-                    resetKey={`${slots.length}|${[...studGrades].join(',')}|${[...studGroups].join(',')}|${studQuery.trim()}`}
-                  />
-                </AccountSection>
-              ))}
-            </div>
-          )}
-        </>
+      </FilterPanel>
+      {visiblePets.length === 0 ? (
+        <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+          没有符合条件的精灵，试试取消部分标签。
+        </div>
       ) : (
-        <>
-          {/* 搜索常显、独立于高级筛选（2026-10-24 统一控件） */}
-          <SearchField
-            label="搜索精灵名"
-            value={nameQuery}
-            onValueChange={setNameQuery}
-            placeholder="搜索精灵名"
-            testId="pet-name-search"
-          />
-          <FilterPanel
-            title={`筛选${selected.size > 0 ? `（${selected.size}）` : ''}`}
-            open={filtersOpen}
-            onOpenChange={setMyPetsFiltersOpen}
-            onClear={() => {
-              clearInventoryFilters('all');
-              setNameQuery('');
-            }}
-            clearLabel={`重置${selected.size > 0 ? `（${selected.size}）` : ''}`}
-            testId="pet-filters"
-            toggleTestId="pet-filters-toggle"
-            clearTestId="pet-filters-reset"
-            summary={
-              selectedLabels.length > 0 ? `已选：${selectedLabels.join('、')}` : undefined
-            }
-            summaryTestId="pet-filters-selected"
-          >
-            <FilterAccordion
-              dimensions={FILTER_DIMENSIONS.filter(({ kind }) =>
-                displayTags.some((tag) => tag.kind === kind),
-              ).map(({ kind, label }) => {
-                const rowTags =
-                  kind === 'nature'
-                    ? sortNaturePoolFirst(displayTags.filter((tag) => tag.kind === kind))
-                    : displayTags.filter((tag) => tag.kind === kind);
-                return {
-                  id: kind,
-                  label,
-                  options: rowTags.map((tag) => ({
-                    value: tag.id,
-                    label: `${tag.label} (${facetCounts[tag.id] ?? 0})`,
-                    disabled: (facetCounts[tag.id] ?? 0) === 0,
-                  })),
-                  selected: rowTags.filter((tag) => selected.has(tag.id)).map((tag) => tag.id),
-                  onToggle: (id) => toggle(id),
-                  onClear: () =>
-                    setMyPetsSelected(
-                      new Set([...selected].filter((id) => !id.startsWith(`${kind}:`))),
-                    ),
-                };
-              })}
-            />
-          </FilterPanel>
-          {visiblePets.length === 0 ? (
-            <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-              没有符合条件的精灵，试试取消部分标签。
-            </div>
-          ) : (
-            <PetList
-              pets={visiblePets}
-              speciesByGameId={speciesByGameId}
-              eggGroupNames={eggGroupNames}
-              resetKey={[...selected].sort().join('|') + `|${nameQuery.trim()}`}
-            />
-          )}
-        </>
+        <PetList
+          pets={visiblePets}
+          speciesByGameId={speciesByGameId}
+          eggGroupNames={eggGroupNames}
+          resetKey={[...selected].sort().join('|') + `|${nameQuery.trim()}`}
+        />
       )}
     </main>
   );

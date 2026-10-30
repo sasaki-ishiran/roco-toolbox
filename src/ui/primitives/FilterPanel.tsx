@@ -9,6 +9,8 @@ export interface FilterPanelProps {
   onOpenChange: (open: boolean) => void;
   onClear?: () => void;
   clearLabel?: string;
+  /** 紧凑档：贴在搜索框下面时上下留白更小（精灵背包用） */
+  dense?: boolean;
   testId?: string;
   toggleTestId?: string;
   clearTestId?: string;
@@ -29,6 +31,7 @@ export function FilterPanel({
   onOpenChange,
   onClear,
   clearLabel = '清除',
+  dense = false,
   testId,
   toggleTestId,
   clearTestId,
@@ -36,7 +39,10 @@ export function FilterPanel({
   children,
 }: FilterPanelProps) {
   return (
-    <section className={TOOL_CARD} data-testid={testId}>
+    <section
+      className={dense ? 'rounded-xl bg-white px-2 pb-2 pt-0.5 shadow-sm' : TOOL_CARD}
+      data-testid={testId}
+    >
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"

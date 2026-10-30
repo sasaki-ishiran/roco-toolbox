@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react';
-import { buildEggSearchIndex } from '../domain/petFilters';
+import { buildEggSearchIndex, TARGET_MODE_LABELS } from '../domain/petFilters';
 import { eggGroupNames, species } from '../data/catalog';
 import type { CollectionLocation, NavigationIntent } from './navigation';
 import { MotherGradeInventory } from './MotherGradeInventory';
 import { MyPets } from './MyPets';
 import { MotherView } from './MotherView';
-import { SegmentedControl } from './primitives/SegmentedControl';
 import { StudCollection } from './StudCollection';
 import { useCollectionSummary } from './useCollectionSummary';
 
@@ -19,17 +18,21 @@ export interface CollectionProps {
 
 type Kind = CollectionLocation['kind'];
 
-const KINDS = [
-  { value: 'mothers', label: '母本' },
-  { value: 'studs', label: '种公' },
-  { value: 'inventory', label: '精灵库' },
+/**
+ * 三个入口卡（2026-10-29 用户拍板）：每张卡写清「这一页干什么」，
+ * 不再用一排分段按钮让人猜「精灵库」和「种公」有什么区别。
+ */
+const KINDS: Array<{ value: Kind; label: string; hint: string }> = [
+  { value: 'inventory', label: '精灵背包', hint: '看全部精灵' },
+  { value: 'mothers', label: '母本', hint: '看我的所有母本' },
+  { value: 'studs', label: '种公', hint: '挑种公去孵蛋' },
 ];
 
 /**
- * 收集（2026-10-24 重构任务 7）：母本 / 种公 / 精灵库三类目标工具。
+ * 收集（2026-10-24 重构任务 7）：精灵背包 / 母本 / 种公三类目标工具。
  *
- * 目标与缺口来自 useCollectionSummary（与看板同源）；子视图只发导航意图。
- * 精灵库只放真实个体；「按代表档位查看」是明确标注的次视角。
+ * 2026-10-29 简化：精灵背包只放全部精灵（「合格种公」页取消，种公只留种公阵列）；
+ * 母本看自己的所有母本；种公挑种公去孵蛋。
  */
 export function Collection({
   location,
@@ -49,21 +52,44 @@ export function Collection({
         ? { kind: 'mothers', status: 'missing' }
         : next === 'studs'
           ? { kind: 'studs', view: 'coverage' }
-          : { kind: 'inventory', view: 'all' };
+          : { kind: 'inventory' };
     onNavigate({ type: 'open-collection', location: target });
   };
 
   return (
     <>
-      <div className="mx-auto max-w-md px-3 pt-2">
-        <SegmentedControl
-          label="收集视图"
-          value={kind}
-          options={KINDS}
-          onValueChange={(next) => switchKind(next as Kind)}
-          optionTestId={(value) => `collection-kind-${value}`}
-        />
-      </div>
+      <nav className="mx-auto max-w-md px-3 pt-2" aria-label="收集视图">
+        <div className="grid grid-cols-3 gap-1.5" data-testid="collection-kinds">
+          {KINDS.map((item) => {
+            const active = item.value === kind;
+            return (
+              <button
+                key={item.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => switchKind(item.value)}
+                data-testid={`collection-kind-${item.value}`}
+                className={`min-h-[44px] rounded-xl border px-2 py-1.5 text-left shadow-sm ${
+                  active
+                    ? 'border-emerald-500 bg-emerald-50'
+                    : 'border-slate-200 bg-white'
+                }`}
+              >
+                <span
+                  className={`block text-sm font-semibold leading-tight ${
+                    active ? 'text-emerald-700' : 'text-slate-700'
+                  }`}
+                >
+                  {item.label}
+                </span>
+                <span className="mt-0.5 block text-[10px] leading-tight text-slate-400">
+                  {item.hint}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
       {location.kind === 'mothers' ? (
         <main className="mx-auto max-w-md space-y-2 p-3">
@@ -84,22 +110,8 @@ export function Collection({
         />
       ) : (
         <>
-          <div className="mx-auto max-w-md space-y-2 px-4 pt-2">
-            <SegmentedControl
-              label="精灵库视图"
-              value={location.view}
-              options={[
-                { value: 'all', label: '全部' },
-                { value: 'stud', label: '合格种公' },
-              ]}
-              onValueChange={(next) =>
-                onNavigate({
-                  type: 'open-collection',
-                  location: { kind: 'inventory', view: next as 'all' | 'stud' },
-                })
-              }
-              optionTestId={(value) => `inventory-view-${value}`}
-            />
+          {/* 当前模式与「按代表档位查看母本」并成一行：精灵背包上半部分不再堆四行（2026-10-30） */}
+          <div className="mx-auto flex max-w-md items-center justify-between gap-2 px-4 pt-1">
             <button
               type="button"
               aria-expanded={showGradeInventory}
@@ -109,27 +121,16 @@ export function Collection({
             >
               按代表档位查看母本{showGradeInventory ? ' ▲' : ' ▼'}
             </button>
+            <span className="shrink-0 text-[10px] text-slate-400" data-testid="mypets-mode">
+              当前模式 · {TARGET_MODE_LABELS[mode]}
+            </span>
           </div>
           {showGradeInventory ? (
-            <div className="mx-auto max-w-md px-4 pt-3">
+            <div className="mx-auto max-w-md px-4 pt-2">
               <MotherGradeInventory motherGroups={motherGroups} owned={owned} mode={mode} />
             </div>
           ) : null}
-          <MyPets
-            view={location.view}
-            hideViewTabs
-            onViewChange={(view) => {
-              if (view === 'mother') {
-                onNavigate({
-                  type: 'open-collection',
-                  location: { kind: 'mothers', status: 'missing' },
-                });
-                return;
-              }
-              onNavigate({ type: 'open-collection', location: { kind: 'inventory', view } });
-            }}
-            onGoImport={() => onNavigate({ type: 'open-profile', section: 'data' })}
-          />
+          <MyPets onGoImport={() => onNavigate({ type: 'open-profile', section: 'data' })} />
         </>
       )}
     </>

@@ -186,7 +186,7 @@ export default function App() {
       ) : navigation.page === 'groups' ? (
         <CollectionGroups
           onDraftDirtyChange={setGroupsDraftDirty}
-          focus={{ groupType: navigation.groupType, eggGameId: navigation.groupEggGameId }}
+          focus={{ groupType: navigation.groupType }}
           onGoAccount={() =>
             navigate({ type: 'open-profile', section: 'identity', returnToGroups: true })
           }

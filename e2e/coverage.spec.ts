@@ -8,6 +8,12 @@ const importSample = async (page: import('@playwright/test').Page) => {
   await page.getByTestId('collection-kind-studs').click();
 };
 
+/** 筛选收在种公阵列右上角（2026-10-29）：用筛选前先展开。 */
+const openFilter = async (page: import('@playwright/test').Page) => {
+  const toggle = page.getByTestId('stud-matrix-filter-toggle');
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+};
+
 test('覆盖度页：14 个蛋组行 + 四态图例 + 主数字是「已通 N / 14 组」', async ({ page }) => {
   await importSample(page);
 
@@ -48,7 +54,8 @@ test('覆盖度页：第一次进来给极简说明，点「知道了」后不�
   const intro = page.getByTestId('coverage-intro');
   await expect(intro).toBeVisible();
   await expect(intro).toContainText('怎么看这页');
-  await expect(intro).toContainText('可迭代');
+  // 2026-10-30 按新页面重写：说种公阵列 / 筛选 / 淡黄推荐格
+  await expect(intro).toContainText('淡黄格');
   await expect(intro.locator('li')).toHaveCount(3);
 
   await page.getByTestId('coverage-intro-dismiss').click();
@@ -88,7 +95,8 @@ test('覆盖度页：分母只随蛋组变化（14 → 13），档位不再改�
   await importSample(page);
   await expect(page.getByTestId('coverage-total')).toHaveText(/\/ 14 组/);
 
-  // 蛋组筛选默认收起，展开后取消一个 → 少一行、分母变 13
+  // 蛋组筛选收在种公阵列右上角，展开筛选后再展开蛋组 → 少一行、分母变 13
+  await openFilter(page);
   await page.getByTestId('coverage-groups-toggle').click();
   await page.getByTestId('coverage-group-2').click();
   await expect(page.getByTestId('coverage-group-row')).toHaveCount(13);
@@ -101,6 +109,7 @@ test('覆盖度页：分母只随蛋组变化（14 → 13），档位不再改�
   await page.getByTestId('target-editor').getByRole('button', { name: '完成' }).click();
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
+  await openFilter(page);
   // 覆盖度页只显示当前档位（只读、不再自己控制）
   await expect(page.getByTestId('coverage-grade-readonly')).toContainText('满分小婉');
   await expect(page.getByTestId('coverage-total')).toHaveText(/\/ 13 组/);
@@ -132,8 +141,9 @@ test('覆盖度页：空数据给出可读空状态且不出现 NaN', async ({ p
   await expect(page.getByText('NaN')).toHaveCount(0);
 });
 
-test('覆盖度页：自选性格模式 + 性别比例特殊物种区块', async ({ page }) => {
+test('覆盖度页：自选性格模式（筛选收在种公阵列右上角）', async ({ page }) => {
   await importSample(page);
+  await openFilter(page);
 
   // 推荐模式默认选中；切到自选 → 全局性格面板出现，未勾选时矩阵为空并给提示
   await expect(page.getByTestId('nature-mode-recommended')).toHaveAttribute('aria-pressed', 'true');
@@ -158,29 +168,4 @@ test('覆盖度页：自选性格模式 + 性别比例特殊物种区块', async
   await page.getByTestId('custom-nature-select-all').click();
   await expect(page.getByTestId('custom-nature-固执')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('custom-nature-select-all')).toHaveText('全部取消');
-
-  // 性别比例特殊精灵（2026-10-05 改名）：手风琴 声音×体型×性格 + 名称搜索 + 卡片
-  const section = page.getByTestId('gender-ratio-section');
-  await expect(section).toBeVisible();
-  await expect(section.getByRole('heading', { name: '性别比例特殊精灵' })).toBeVisible();
-  // 默认：声音/体型 各已选 2（±100 × 大块头+小不点），瓦片显示数字徽章；档位默认大婉
-  await expect(section.getByTestId('filter-tile-voice')).toContainText('2');
-  await expect(section.getByTestId('filter-tile-body')).toContainText('2');
-  await expect(section.getByTestId('gr-grade-大婉')).toHaveAttribute('aria-pressed', 'true');
-  await section.getByTestId('gr-grade-小婉').click();
-  await expect(section.getByTestId('gr-grade-小婉')).toHaveAttribute('aria-pressed', 'true');
-  // 展开体型：大块头/小不点 默认勾选
-  await section.getByTestId('filter-tile-body').click();
-  await expect(section.getByTestId('filter-opt-body-大块头')).toHaveAttribute('aria-pressed', 'true');
-  // 性格瓦片：只列出背包里已有的性格（如固执）
-  await section.getByTestId('filter-tile-nature').click();
-  await expect(section.getByTestId('filter-panel-nature')).toContainText('固执');
-  // 有符合条件的精灵卡片
-  await expect(section.locator('article').first()).toBeVisible();
-
-  // 名称搜索：搜不存在的名字 → 空；清空恢复
-  await section.getByTestId('gr-name-search').fill('不存在的精灵');
-  await expect(section.getByTestId('gender-ratio-empty')).toBeVisible();
-  await section.getByTestId('gr-name-search').fill('');
-  await expect(section.locator('article').first()).toBeVisible();
 });

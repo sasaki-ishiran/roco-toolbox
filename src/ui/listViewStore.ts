@@ -18,7 +18,7 @@ import {
  * 长期目标与达标条件不在这里（见 motherCriteriaStore / coverageFilterStore）。
  */
 
-export type PersonalListId = 'inventory-all' | 'inventory-stud' | 'mothers';
+export type PersonalListId = 'inventory-all' | 'mothers';
 
 export interface PersonalListState {
   query: string;
@@ -28,7 +28,6 @@ type PersonalLists = Record<PersonalListId, PersonalListState>;
 
 const PERSONAL_INITIAL: PersonalLists = {
   'inventory-all': { query: '' },
-  'inventory-stud': { query: '' },
   mothers: { query: '' },
 };
 
@@ -47,7 +46,6 @@ export function setPersonalQuery(id: PersonalListId, query: string): void {
 export function resetPersonalListViewsForTest(): void {
   personalStore.set({
     'inventory-all': { query: '' },
-    'inventory-stud': { query: '' },
     mothers: { query: '' },
   });
 }
@@ -140,7 +138,6 @@ export function clearGroupListSession(): void {
 export function resetListViews(): void {
   personalStore.set({
     'inventory-all': { query: '' },
-    'inventory-stud': { query: '' },
     mothers: { query: '' },
   });
   clearGroupListSession();

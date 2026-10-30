@@ -18,8 +18,10 @@ export interface CollectionGroupSetupProps {
   onJoin: (inviteCode: string, displayName: string) => Promise<unknown>;
   preflightInvite: (inviteCode: string) => Promise<InvitePreviewShape>;
   initialInviteCode?: string;
-  /** 已入组时默认收起（2026-10-26 小组页精简）；个人求蛋模式默认展开。 */
+  /** 未入组时默认展开；已入组时默认收起（2026-10-26 小组页精简）。 */
   defaultOpen?: boolean;
+  /** 并进小组顶部那张卡时不带自己的卡片外壳（2026-10-29 四卡合一）。 */
+  embedded?: boolean;
 }
 
 /** 小组不再设母本口径：加入后每个人按自己的本地筛选查看缺口。 */
@@ -38,6 +40,7 @@ export function CollectionGroupSetup({
   preflightInvite,
   initialInviteCode = '',
   defaultOpen = true,
+  embedded = false,
 }: CollectionGroupSetupProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [mode, setMode] = useState<'create' | 'join'>(initialInviteCode ? 'join' : 'create');
@@ -70,7 +73,7 @@ export function CollectionGroupSetup({
 
   return (
     <section className="space-y-2" data-testid="group-setup">
-      <div className="rounded-2xl bg-white p-3 shadow-sm">
+      <div className={embedded ? 'py-1' : 'rounded-2xl bg-white p-3 shadow-sm'}>
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium text-slate-500">新建 / 加入小组</h2>
           <button

@@ -26,9 +26,10 @@ export interface PetCardProps {
  */
 export function PetCard({ pet, species, eggGroupNames }: PetCardProps) {
   const displayName = speciesDisplayName(species, pet.name);
-  // 头像按形态 gameId 取；异色 / 炫彩 / 异色炫彩都用异色图，官方没收录时逐级兜底（见 PetAvatar）
+  // 头像按形态 gameId 取；只有异色 / 异色炫彩用异色图。炫彩是游戏内染色、官方没有炫彩立绘，
+  // 套异色图会把「原色 + 炫彩」的精灵显示成异色（2026-10-29 用户反馈：伊贝儿 / 云梦豚）。
   const avatarGameId = species?.gameId ?? pet.gameId;
-  const shinyAvatar = Boolean(pet.isShiny || pet.isColorful);
+  const shinyAvatar = Boolean(pet.isShiny);
   const eggGroups = (species?.eggGroups ?? [])
     .filter((group) => group >= 2 && group <= 15)
     .map((group) => eggGroupNames[group] ?? `蛋组${group}`)

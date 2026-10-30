@@ -15,7 +15,10 @@ describe('CoverageIntroCard', () => {
 
     const card = screen.getByTestId('coverage-intro');
     expect(card).toHaveTextContent('怎么看这页');
-    expect(card).toHaveTextContent('可迭代');
+    // 2026-10-30 按新页面重写：说明种公阵列 / 筛选 / 淡黄推荐格
+    expect(card).toHaveTextContent('已通');
+    expect(card).toHaveTextContent('筛选');
+    expect(card).toHaveTextContent('淡黄格');
     expect(card.querySelectorAll('li')).toHaveLength(3);
   });
 

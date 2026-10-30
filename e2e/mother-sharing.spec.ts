@@ -6,11 +6,13 @@ const openGroups = async (page: import('@playwright/test').Page) => {
   await expect(page.getByTestId('collection-groups')).toBeVisible();
 };
 
-test('没有本地账号也能进入个人求蛋；未登录可去登录，待加入码保留', async ({ page }) => {
+test('未登录的小组页只给登录提示，待加入码保留', async ({ page }) => {
   await page.goto('/');
   await openGroups(page);
 
-  await expect(page.getByTestId('personal-eggs')).toBeVisible();
+  // 个人求蛋已删除（2026-10-30）：未登录不再有清单，只有登录 + 待加入码
+  await expect(page.getByTestId('group-login-hint')).toBeVisible();
+  await expect(page.getByTestId('personal-eggs')).toHaveCount(0);
   await page.getByTestId('group-pending-invite').fill('abcd2345');
   const pending = await page.evaluate(() =>
     window.localStorage.getItem('roco.collectionGroups.pendingInvite'),

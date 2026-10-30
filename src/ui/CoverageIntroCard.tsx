@@ -9,7 +9,7 @@ import { useState } from 'react';
  * 与教程一样记**版本号**：以后文案改了把版本号 +1，就能再给所有用户展示一次。
  */
 const INTRO_SEEN_KEY = 'roco.coverageIntroSeen';
-export const COVERAGE_INTRO_VERSION = '1';
+export const COVERAGE_INTRO_VERSION = '2';
 
 export function coverageIntroPending(): boolean {
   if (typeof window === 'undefined') return false;
@@ -30,9 +30,9 @@ export function markCoverageIntroSeen(): void {
 }
 
 const LINES = [
-  '每个蛋组一行，看这组还缺哪些「性格 × 档位」；行首圆点：灰＝未收集 · 蓝＝可迭代 · 绿＝已通',
-  '点开一行看明细：谁进学院小窝、旁边配哪只（蓝色那行会直接给出这一对）',
-  '下面只管筛选这页看哪些组 / 性格；目标档位在看板顶部选，全站通用；缺的精灵去「换什么」弄',
+  '已通 N / 14 组按当前档位算；点带数字的格子可以换代表种公',
+  '右上角「筛选」选蛋组与性格；档位是全局口径，在「看板」顶部切换',
+  '淡黄格 = 还没收集的推荐种公，点一下加到小组需求中心',
 ];
 
 export function CoverageIntroCard() {

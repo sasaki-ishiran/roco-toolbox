@@ -21,6 +21,8 @@ export interface MotherGroupMembersProps {
   /** 本组母本口径；不传时按一期固定口径。 */
   targetCriteriaId?: string;
   inviteCode: string | null;
+  /** 并进小组顶部那张卡时不带自己的卡片外壳（2026-10-29 四卡合一）。 */
+  embedded?: boolean;
   /** 组内需求：用于统计每人「已结单」数（全时段，按承接人）。 */
   demands?: CollectionDemand[];
   onRename: (displayName: string) => Promise<void>;
@@ -42,6 +44,7 @@ export function MotherGroupMembers({
   groupType = 'mother',
   targetCriteriaId,
   inviteCode,
+  embedded = false,
   demands = [],
   onRename,
   onResetInvite,
@@ -150,7 +153,10 @@ export function MotherGroupMembers({
   };
 
   return (
-    <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="mother-members">
+    <section
+      className={embedded ? 'py-1' : 'rounded-2xl bg-white p-3 shadow-sm'}
+      data-testid="mother-members"
+    >
       <div className="flex items-baseline justify-between gap-2">
         <button
           type="button"

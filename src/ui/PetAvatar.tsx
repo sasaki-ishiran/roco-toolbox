@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import { petAvatarUrl } from '../domain/petAvatar';
 
 /** 尺寸只允许这几档，用静态类名（Tailwind 不能拼字符串） */
-export type PetAvatarSize = 20 | 24 | 32 | 40 | 56 | 72;
+export type PetAvatarSize = 20 | 24 | 32 | 36 | 40 | 56 | 64 | 72;
 
 const SIZE_CLASS: Record<PetAvatarSize, string> = {
   20: 'h-5 w-5 text-[10px]',
   24: 'h-6 w-6 text-[11px]',
   32: 'h-8 w-8 text-sm',
+  36: 'h-9 w-9 text-sm',
   40: 'h-10 w-10 text-sm',
   56: 'h-14 w-14 text-lg',
+  64: 'h-16 w-16 text-lg',
   72: 'h-[4.5rem] w-[4.5rem] text-xl',
 };
 
@@ -17,7 +19,7 @@ export interface PetAvatarProps {
   gameId: number | null | undefined;
   /** 加载失败时用它的首字占位 */
   name: string;
-  /** 异色 / 炫彩 / 异色炫彩 → 异色图（`icon_yise.png`） */
+  /** 异色 / 异色炫彩 → 异色图（`icon_yise.png`）；炫彩不传（官方没有炫彩立绘） */
   shiny?: boolean;
   size?: PetAvatarSize;
   className?: string;

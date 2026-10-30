@@ -18,10 +18,10 @@ beforeEach(() => {
 describe('个人清单搜索（仅本次会话）', () => {
   test('各清单互不影响', () => {
     const all = renderHook(() => usePersonalList('inventory-all'));
-    const stud = renderHook(() => usePersonalList('inventory-stud'));
+    const mothers = renderHook(() => usePersonalList('mothers'));
     act(() => setPersonalQuery('inventory-all', '布灵'));
     expect(all.result.current.query).toBe('布灵');
-    expect(stud.result.current.query).toBe('');
+    expect(mothers.result.current.query).toBe('');
   });
 
   test('重新加载（复位）清空', () => {

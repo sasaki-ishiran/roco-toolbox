@@ -4,6 +4,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
  * 筛选状态存在 localStorage 的 `roco.myPetsFilter`，用户手改 / 旧版本数据都可能
  * 把字段写成非数组。模块顶层会用 `new Set(...)` 读它——脏值会让模块求值直接抛错，
  * 应用白屏且无法自愈。这里验证各种脏值都退回空筛选。
+ *
+ * 2026-10-29：种公视角取消后只剩「全部」页标签，旧版本残留的 stud* 字段一律忽略。
  */
 const KEY = 'roco.myPetsFilter';
 
@@ -14,17 +16,11 @@ afterEach(() => {
 
 describe('myPetsFilterStore 持久化读取', () => {
   test('字段被污染成非数组时不抛错，退回空筛选', async () => {
-    localStorage.setItem(
-      KEY,
-      JSON.stringify({ selected: 5, studGrades: {}, studNatures: 'x', studGroups: null }),
-    );
+    localStorage.setItem(KEY, JSON.stringify({ selected: 5, studGrades: {}, studNatures: 'x' }));
 
     const store = await import('./myPetsFilterStore');
 
     expect([...store.getMyPetsSelected()]).toEqual([]);
-    expect([...store.getStudGrades()]).toEqual([]);
-    expect([...store.getStudNatures()]).toEqual([]);
-    expect([...store.getStudGroups()]).toEqual([]);
   });
 
   test('数组里混入非字符串元素时只保留字符串', async () => {
@@ -44,37 +40,21 @@ describe('myPetsFilterStore 持久化读取', () => {
   });
 
   test('正常持久化能完整读回', async () => {
-    localStorage.setItem(
-      KEY,
-      JSON.stringify({ selected: ['body:大块头'], studGrades: ['大婉'], studNatures: ['固执'] }),
-    );
+    localStorage.setItem(KEY, JSON.stringify({ selected: ['body:大块头'] }));
 
     const store = await import('./myPetsFilterStore');
 
     expect([...store.getMyPetsSelected()]).toEqual(['body:大块头']);
-    expect([...store.getStudGrades()]).toEqual(['大婉']);
-    expect([...store.getStudNatures()]).toEqual(['固执']);
   });
 });
 
-describe('本页筛选只清本页（2026-10-24）', () => {
-  test('清全部库存筛选不清种公条件', async () => {
+describe('重置只清精灵背包的标签', () => {
+  test('重置后标签清空，且写回 localStorage', async () => {
     localStorage.clear();
     const s = await import('./myPetsFilterStore');
-    s.setMyPetsSelected(new Set(['body:大块头']));
-    s.toggleStudNature('加速度');
-    s.clearInventoryFilters('all');
+    s.setMyPetsSelected(new Set(['body:满身高']));
+    s.clearInventoryFilters();
     expect([...s.getMyPetsSelected()]).toEqual([]);
-    expect([...s.getStudNatures()]).toEqual(['加速度']);
-  });
-
-  test('清种公筛选不清全部页标签', async () => {
-    localStorage.clear();
-    const s = await import('./myPetsFilterStore');
-    s.setMyPetsSelected(new Set(['body:大块头']));
-    s.toggleStudGrade('大婉');
-    s.clearInventoryFilters('stud');
-    expect([...s.getStudGrades()]).toEqual([]);
-    expect([...s.getMyPetsSelected()]).toEqual(['body:大块头']);
+    expect(localStorage.getItem(KEY)).toBe(JSON.stringify({ selected: [] }));
   });
 });

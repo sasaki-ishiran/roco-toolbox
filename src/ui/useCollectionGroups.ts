@@ -56,7 +56,6 @@ import {
   saveCollectionInviteCode,
   saveLastGroupId,
   savePageMode,
-  savePersonalType,
   setGroupSharingOff,
   type GroupPageMode,
 } from './collectionGroupStore';
@@ -104,13 +103,13 @@ export type CollectionPublishPreview = MotherPublishPreview | StudPublishPreview
 
 export interface CollectionGroupsHook {
   accountId: string | null;
+  /** `group` = 已经打开某个组；`personal` = 未入组（只有新建 / 加入）。 */
   pageMode: GroupPageMode;
-  personalType: CollectionGroupType;
   groups: CollectionGroupSummary[];
   groupsLoaded: boolean;
   currentGroupId: string | null;
   currentGroup: CollectionGroupDetail | null;
-  /** 当前组的类型；个人模式 / 未选组时为 null。 */
+  /** 当前组的类型；未选组时为 null。 */
   groupType: CollectionGroupType | null;
   /** 当前组的目标；旧组为 null（界面按默认口径展示）。 */
   target: GroupTargetConfig | null;
@@ -152,8 +151,6 @@ export interface CollectionGroupsHook {
   releaseDemand: (demand: CollectionDemand) => Promise<CollectionDemand>;
   completeDemand: (demand: CollectionDemand) => Promise<CollectionDemand>;
   selectGroup: (groupId: string, groupTypeHint?: CollectionGroupType) => void;
-  selectPersonal: () => void;
-  setPersonalType: (type: CollectionGroupType) => void;
   setDraftSelection: (accountKeys: string[]) => void;
   refresh: () => Promise<void>;
   createGroup: (
@@ -216,7 +213,6 @@ const EMPTY_TASKS: CollectionTasksResponse = {
 interface Boot {
   accountId: string | null;
   pageMode: GroupPageMode;
-  personalType: CollectionGroupType;
   groups: CollectionGroupSummary[];
   groupsLoaded: boolean;
   currentGroupId: string | null;
@@ -231,16 +227,14 @@ const bootState = (): Boot => {
   // 2026-10-27 起小组只剩母本组：缓存里残留的种公组不能再用来恢复页面。
   const groups = (cache?.groups ?? []).filter((group) => group.groupType === 'mother');
   const lastMother = readLastGroupId(accountId, 'mother');
-  const stored = prefs.mode === 'group'
-    ? (lastMother && (groups.length === 0 || groups.some((group) => group.id === lastMother))
-        ? lastMother
-        : groups[0]?.id ?? null)
-    : null;
+  // 2026-10-30 个人求蛋删除后：只要本地知道有小组，就直接进组，不再停在「个人模式」。
+  const stored = lastMother && (groups.length === 0 || groups.some((group) => group.id === lastMother))
+    ? lastMother
+    : groups[0]?.id ?? null;
   const detail = stored ? cache?.details[stored] ?? null : null;
   return {
     accountId,
-    pageMode: prefs.mode,
-    personalType: prefs.personalType,
+    pageMode: stored ? 'group' : prefs.mode,
     groups,
     groupsLoaded: cache != null,
     currentGroupId: detail?.group.id ?? stored ?? null,
@@ -250,19 +244,18 @@ const bootState = (): Boot => {
 };
 
 /**
- * 小组页的会话作用域状态：个人模式 / 小组模式、组列表、当前组详情、草稿与发布预览。
+ * 小组页的会话作用域状态：是否已入组、组列表、当前组详情、草稿与发布预览。
  *
  * 与一期 `useMotherGroups` 的关键差异：
- * - 走 `/api/collection-groups`，同时支持母本组与种公组；
- * - 个人模式不需要登录，也不会自动上传本机需求；
- * - 本机记住「每种类型上次打开的组」，切类型不会互相覆盖；
+ * - 走 `/api/collection-groups`；
+ * - 2026-10-30 起不再有「个人求蛋」：没有小组时页面只给新建 / 加入；
+ * - 本机记住上次打开的组；
  * - 发布预览按组类型产出母本或种公摘要，绝不混用。
  */
 export function useCollectionGroups(input: UseCollectionGroupsInput): CollectionGroupsHook {
   const [boot] = useState(bootState);
   const [accountId, setAccountId] = useState<string | null>(boot.accountId);
   const [pageMode, setPageMode] = useState<GroupPageMode>(boot.pageMode);
-  const [personalType, setPersonalTypeState] = useState<CollectionGroupType>(boot.personalType);
   const [groups, setGroups] = useState<CollectionGroupSummary[]>(boot.groups);
   const [groupsLoaded, setGroupsLoaded] = useState(boot.groupsLoaded);
   const [currentGroupId, setCurrentGroupId] = useState<string | null>(boot.currentGroupId);
@@ -477,9 +470,8 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         const prefs = readCollectionGroupPrefs(next);
         const cache = readCollectionGroupCache(next);
         const cachedGroups = (cache?.groups ?? []).filter((group) => group.groupType === 'mother');
-        const nextGroupId = prefs.mode === 'group'
-          ? readLastGroupId(next, 'mother') ?? cachedGroups[0]?.id ?? null
-          : null;
+        // 只要有已知小组就直接进组（个人模式已删除，2026-10-30）
+        const nextGroupId = readLastGroupId(next, 'mother') ?? cachedGroups[0]?.id ?? null;
         const detail = nextGroupId ? cache?.details[nextGroupId] ?? null : null;
         const selection = selectionOf(detail, next);
         groupRef.current = nextGroupId;
@@ -488,8 +480,7 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         dirtyRef.current = false;
         nextPollAtRef.current = null;
         setAccountId(next);
-        setPageMode(prefs.mode);
-        setPersonalTypeState(prefs.personalType);
+        setPageMode(nextGroupId ? 'group' : prefs.mode);
         setGroups(cachedGroups);
         setGroupsLoaded(cache != null);
         setCurrentGroupId(nextGroupId);
@@ -534,7 +525,13 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     if (groupRef.current !== target) groupEpochRef.current += 1;
     groupRef.current = target;
     setCurrentGroupId(target);
-    if (target) saveLastGroupId(account, 'mother', target);
+    if (target) {
+      saveLastGroupId(account, 'mother', target);
+      // 有组就自动进组：界面不再有「个人求蛋」这个常驻状态
+      modeRef.current = 'group';
+      setPageMode('group');
+      savePageMode(account, 'group');
+    }
   }, []);
 
   useEffect(() => {
@@ -556,7 +553,8 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
         setGroups(list);
         setGroupsLoaded(true);
         saveCollectionGroupCacheGroups(accountId, list);
-        if (modeRef.current === 'group' && groupRef.current == null) applyGroupList(list, accountId);
+        // 有组就自动进组（个人求蛋已删除）；没有组时停在「新建 / 加入」
+        if (groupRef.current == null) applyGroupList(list, accountId);
         setOffline(false);
         setError('');
       } catch (failure) {
@@ -740,11 +738,6 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     setNextPollAt(null);
     clearTasks();
   }, [clearTasks]);
-
-  const setPersonalType = useCallback((type: CollectionGroupType) => {
-    setPersonalTypeState(type);
-    savePersonalType(accountRef.current, type);
-  }, []);
 
   const setDraftSelection = useCallback((accountKeys: string[]) => {
     draftRevisionRef.current += 1;
@@ -1104,6 +1097,16 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     [reloadCurrent, refreshGroups, scope],
   );
 
+  /** 退出 / 解散后：还有别的组就接着进，没有才回到「新建 / 加入」。 */
+  const fallbackToNextGroup = useCallback(
+    async (account: string | null) => {
+      selectPersonal();
+      const list = await refreshGroups().catch(() => null);
+      if (account && list && list.length > 0) applyGroupList(list, account);
+    },
+    [applyGroupList, refreshGroups, selectPersonal],
+  );
+
   const leave = useCallback(async () => {
     const groupId = groupRef.current;
     const account = accountRef.current;
@@ -1114,9 +1117,8 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     const group = groups.find((item) => item.id === groupId);
     if (account && group) saveLastGroupId(account, group.groupType, null);
     clearCollectionGroupCacheDetail(account, groupId);
-    selectPersonal();
-    await refreshGroups().catch(() => {});
-  }, [groups, refreshGroups, scope, selectPersonal]);
+    await fallbackToNextGroup(account);
+  }, [fallbackToNextGroup, groups, scope]);
 
   const dissolve = useCallback(async () => {
     const groupId = groupRef.current;
@@ -1128,14 +1130,12 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     const group = groups.find((item) => item.id === groupId);
     if (account && group) saveLastGroupId(account, group.groupType, null);
     clearCollectionGroupCacheDetail(account, groupId);
-    selectPersonal();
-    await refreshGroups().catch(() => {});
-  }, [groups, refreshGroups, scope, selectPersonal]);
+    await fallbackToNextGroup(account);
+  }, [fallbackToNextGroup, groups, scope]);
 
   return {
     accountId,
     pageMode,
-    personalType,
     groups,
     groupsLoaded,
     currentGroupId,
@@ -1171,8 +1171,6 @@ export function useCollectionGroups(input: UseCollectionGroupsInput): Collection
     releaseDemand: (demand: CollectionDemand) => demandAction('release', demand),
     completeDemand: (demand: CollectionDemand) => demandAction('complete', demand),
     selectGroup,
-    selectPersonal,
-    setPersonalType,
     setDraftSelection,
     refresh,
     createGroup,

@@ -1,7 +1,7 @@
 import type { OwnedPet, SpeciesEntry } from './types';
 import { isBreedableGroup } from './eggs';
 import { speciesDisplayName } from './speciesName';
-import { bodyGradeOf } from '../shared/bodySize.js';
+import { bodyGradeOf, heightBodyOf } from '../shared/bodySize.js';
 
 export type TagKind = 'account' | 'body' | 'voice' | 'gender' | 'shiny' | 'eggGroup' | 'nature';
 
@@ -110,6 +110,9 @@ export function classifyMother(pet: OwnedPet, mode: TargetMode): MotherClass | n
 const FIXED_TAGS: Array<{ id: string; kind: TagKind; label: string }> = [
   { id: 'body:大块头', kind: 'body', label: '大块头' },
   { id: 'body:小不点', kind: 'body', label: '小不点' },
+  // 身高到顶 / 到底单独两档（2026-10-29 用户要求）：奖牌按体重判，这两档按身高判
+  { id: 'body:满身高', kind: 'body', label: '满身高' },
+  { id: 'body:零身高', kind: 'body', label: '零身高' },
   { id: 'voice:婉转声', kind: 'voice', label: '婉转声' },
   // 满分按方向拆开（2026-10-04 用户拍板）：+100 婉转声满分 / -100 粗嗓门满分
   { id: 'voice:+100', kind: 'voice', label: '+100' },
@@ -174,6 +177,11 @@ export function buildTagIndex(
 
     if (pet.medalBody === '大块头') addTag('body:大块头', 'body', '大块头', i);
     else if (pet.medalBody === '小不点') addTag('body:小不点', 'body', '小不点', i);
+
+    // 身高正好到顶 / 到底（与合格口径同一个判定，100% / 0% 才算）
+    const heightExtreme = heightBodyOf(pet.heightPercent);
+    if (heightExtreme === BIG_BODY) addTag('body:满身高', 'body', '满身高', i);
+    else if (heightExtreme === SMALL_BODY) addTag('body:零身高', 'body', '零身高', i);
 
     if (matchesVoiceOption(pet.voiceDb, '婉转声')) {
       addTag('voice:婉转声', 'voice', '婉转声', i);
@@ -275,8 +283,6 @@ export function computeFacetCounts(
   }
   return counts;
 }
-
-export type PetView = 'all' | 'stud' | 'mother';
 
 /**
  * 一只精灵/一条链所属的进化链键（与 `buildChainSearchIndex` 的键同一口径）：

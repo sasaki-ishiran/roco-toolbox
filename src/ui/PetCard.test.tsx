@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import type { OwnedPet, SpeciesEntry } from '../domain/types';
 import { PetCard } from './PetCard';
@@ -37,15 +37,20 @@ describe('PetCard 头像', () => {
     expect(screen.getByTestId('pet-avatar-fallback').textContent).toBe('喵');
   });
 
-  test('异色 / 炫彩精灵用异色头像', () => {
+  test('异色精灵用异色头像；炫彩仍用原色头像（官方没有炫彩立绘）', () => {
     render(<PetCard pet={{ ...pet, isShiny: true }} species={species} eggGroupNames={{}} />);
     expect((screen.getByTestId('pet-avatar') as HTMLImageElement).src).toBe(
       'https://game.gtimg.cn/images/rocom/rocodata/jingling/3001/icon_yise.png',
     );
+    cleanup();
+    render(<PetCard pet={{ ...pet, isColorful: true }} species={species} eggGroupNames={{}} />);
+    expect((screen.getByTestId('pet-avatar') as HTMLImageElement).src).toBe(
+      'https://game.gtimg.cn/images/rocom/rocodata/jingling/3001/icon.png',
+    );
   });
 
   test('异色头像加载失败时先退回普通头像，再失败才用首字占位', () => {
-    render(<PetCard pet={{ ...pet, isColorful: true }} species={species} eggGroupNames={{}} />);
+    render(<PetCard pet={{ ...pet, isShiny: true }} species={species} eggGroupNames={{}} />);
     fireEvent.error(screen.getByTestId('pet-avatar'));
     expect((screen.getByTestId('pet-avatar') as HTMLImageElement).src).toBe(
       'https://game.gtimg.cn/images/rocom/rocodata/jingling/3001/icon.png',

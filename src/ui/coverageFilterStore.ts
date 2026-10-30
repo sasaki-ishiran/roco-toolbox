@@ -5,7 +5,7 @@ import {
   type CoverageFilter,
 } from '../domain/coverageTargets';
 import type { PetGrade } from '../domain/petFilters';
-import { targetNatures, targetNaturePool } from '../data/catalog';
+import { allNatureNames, targetNatures, targetNaturePool } from '../data/catalog';
 import { createModuleStore } from './createModuleStore';
 
 /**
@@ -21,11 +21,13 @@ import { createModuleStore } from './createModuleStore';
  * 2026-10-04 重构：样板（listeners/commit/useXxx）提取到 createModuleStore。
  */
 
-const POOL_ORDER = new Map(targetNaturePool.map((entry, index) => [entry.name, index]));
-
-/** 按八大池的顺序排一下，保证矩阵里性格的排列不随点击顺序变化。 */
+/** 按八大池的顺序排一下，保证矩阵里性格的排列不随点击顺序变化；池外性格排后面。 */
+const POOL_ORDER = new Map<string, number>([
+  ...targetNaturePool.map((entry, index) => [entry.name, index] as const),
+  ...allNatureNames.map((name, index) => [name, 100 + index] as const),
+]);
 const sortNatures = (names: string[]): string[] =>
-  [...names].sort((a, b) => (POOL_ORDER.get(a) ?? 99) - (POOL_ORDER.get(b) ?? 99));
+  [...names].sort((a, b) => (POOL_ORDER.get(a) ?? 999) - (POOL_ORDER.get(b) ?? 999));
 
 const isGrade = (value: unknown): value is PetGrade =>
   (ALL_GRADES as readonly string[]).includes(value as string);

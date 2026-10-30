@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildEggSearchIndex, type TargetMode } from '../domain/petFilters';
+import { useEffect, useRef, useState } from 'react';
+import type { TargetMode } from '../domain/petFilters';
 import { groupPublicationStatus } from '../domain/collectionPublication';
-import { CATALOG_VERSION, eggGroupNames, species } from '../data/catalog';
+import { CATALOG_VERSION, species } from '../data/catalog';
 import {
   GROUP_TYPE_LABELS,
   type CollectionGroupType,
@@ -13,9 +13,6 @@ import { useCollectionGroups } from './useCollectionGroups';
 import { MotherGroupMembers } from './MotherGroupMembers';
 import { MotherGroupResources } from './MotherGroupResources';
 import { MotherResourceEditor } from './MotherResourceEditor';
-import { MotherView } from './MotherView';
-import { SegmentedControl } from './primitives/SegmentedControl';
-import { Swap } from './Swap';
 import { useCollectionSummary } from './useCollectionSummary';
 import { useSnapshots } from './useSnapshots';
 import { useDraftLeaveGuard } from './useDraftLeaveGuard';
@@ -34,15 +31,15 @@ import {
 export interface CollectionGroupsProps {
   onGoAccount?: () => void;
   onDraftDirtyChange?: (dirty: boolean) => void;
-  /** 从看板 / 收集页直达：类型与目标（目前只用于切到个人求蛋）。 */
-  focus?: { groupType?: CollectionGroupType; eggGameId?: number } | null;
+  /** 从看板 / 收集页直达：进入同类型的小组（个人求蛋已删除，2026-10-30）。 */
+  focus?: { groupType?: CollectionGroupType } | null;
 }
 
 /**
- * 小组页（二期）：个人求蛋 + 母本组 + 种公组。
+ * 小组页（二期）：母本组 + 种公组。
  *
- * 个人模式不需要登录，也不会自动上传本机需求；小组模式才要求成员资格。
- * 两种组共用组列表、成员管理与发布交互，但目标、摘要和缺口各自计算，绝不混用。
+ * 2026-10-30 用户口径：个人求蛋已删除——不在组里时只留「新建 / 加入小组」。
+ * 小组模式要求成员资格；本机数据只在用户手动选号发布时上传。
  */
 export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: CollectionGroupsProps) {
   const { snapshots } = useSnapshots();
@@ -87,7 +84,6 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
     setCompletionNotice(null);
   };
 
-  const searchIndex = useMemo(() => buildEggSearchIndex(species), []);
   /**
    * 小组页一律用**组目标**的模式：已发布的产线就是这个模式算的，
    * 用个人模式会让同组内的产线口径混用（2026-10-29 代码审查 B2-H01/M01）。
@@ -105,7 +101,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
     return () => onDraftDirtyChange?.(false);
   }, [hook.draftDirty, onDraftDirtyChange]);
 
-  // 直达：优先进入同类型的组；没有兼容组时才落到个人求蛋。
+  // 直达：优先进入同类型的组；没有兼容组时什么都不做（个人求蛋已删除，2026-10-30）。
   // 同一次 focus 只消费一次：依赖 currentGroup 会让详情回来后重跑，把用户手动打开的
   // 收集小组又踢回个人模式（2026-10-29 审查 B6-H01）。
   const appliedFocusRef = useRef<string | null>(null);
@@ -115,10 +111,9 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
       appliedFocusRef.current = null;
       return;
     }
-    const key = `${type}:${focus?.eggGameId ?? ''}`;
+    const key = type;
     if (appliedFocusRef.current === key) return;
     // 组列表（缓存或接口）还没读到：等它回来再决定，别把 focus 消费成「没有兼容组」。
-    // 未登录时不会有任何小组，列表永远不会就绪，直接落到个人求蛋。
     if (hook.accountId != null && !hook.groupsLoaded) return;
     if (hook.currentGroup?.group.groupType === type) {
       appliedFocusRef.current = key;
@@ -127,14 +122,9 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
     if (hook.pageMode === 'group' && hook.currentGroupId && hook.currentGroup == null) return;
     const compatible = hook.groups.find((group) => group.groupType === type);
     appliedFocusRef.current = key;
-    if (compatible) {
-      hook.selectGroup(compatible.id, type);
-      return;
-    }
-    hook.selectPersonal();
-    hook.setPersonalType(type);
+    if (compatible) hook.selectGroup(compatible.id, type);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus?.groupType, focus?.eggGameId, hook.groupsLoaded, hook.currentGroup?.group.id]);
+  }, [focus?.groupType, hook.groupsLoaded, hook.currentGroup?.group.id]);
 
   const selectGroup = async (groupId: string) => {
     if (groupId === hook.currentGroupId && hook.pageMode === 'group') return;
@@ -147,10 +137,11 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
     )?.displayName ?? '组长';
 
   /** 新建 / 加入小组：个人模式默认展开，已入组时放在成员区下面并默认收起。 */
-  const setupNode = (defaultOpen: boolean) => (
+  const setupNode = (defaultOpen: boolean, embedded = false) => (
     <CollectionGroupSetup
       key={`setup:${hook.pageMode}:${hook.currentGroupId ?? ''}:${hook.accountId}`}
       defaultOpen={defaultOpen}
+      embedded={embedded}
       onCreate={async (name, displayName, groupType) => {
         if (!(await confirmLeave())) return false;
         // 小组不再设母本口径；共享全部母本/产线，缺口由各自的本地筛选决定。
@@ -170,14 +161,6 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
 
   return (
     <section className="mx-auto max-w-md space-y-2 p-4" data-testid="collection-groups">
-      <GroupSwitcher
-        groups={hook.groups}
-        currentGroupId={hook.pageMode === 'group' ? hook.currentGroupId : null}
-        pageMode={hook.pageMode}
-        onSelect={(groupId) => void selectGroup(groupId)}
-        onSelectPersonal={() => void (confirmLeave().then((ok) => ok && hook.selectPersonal()))}
-      />
-
       {hook.error ? (
         <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600" data-testid="group-error">
           {hook.error}
@@ -204,54 +187,97 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
         </div>
       ) : inGroup && hook.currentGroup ? (
         <>
+          {/*
+            2026-10-29 用户口径：顶部 4 张卡（收集范围 / 收集小组 + 我的资源 / 成员与邀请 /
+            新建加入）合成一张卡；成员与新建加入折叠成一行，点开就地展开。
+          */}
           <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-card">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span
-                    className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
-                      hook.groupType === 'stud'
-                        ? 'bg-sky-50 text-sky-700'
-                        : 'bg-emerald-50 text-emerald-700'
-                    }`}
-                    data-testid="group-type-label"
-                  >
-                    {hook.groupType ? GROUP_TYPE_LABELS[hook.groupType] : ''}
-                  </span>
-                  <h2 className="truncate text-base font-semibold text-slate-800">
-                    {hook.currentGroup.group.name}
-                  </h2>
+            <GroupSwitcher
+              bare
+              groups={hook.groups}
+              currentGroupId={hook.pageMode === 'group' ? hook.currentGroupId : null}
+              onSelect={(groupId) => void selectGroup(groupId)}
+            />
+
+            <div className="mt-2 border-t border-slate-100 pt-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
+                        hook.groupType === 'stud'
+                          ? 'bg-sky-50 text-sky-700'
+                          : 'bg-emerald-50 text-emerald-700'
+                      }`}
+                      data-testid="group-type-label"
+                    >
+                      {hook.groupType ? GROUP_TYPE_LABELS[hook.groupType] : ''}
+                    </span>
+                    <h2 className="truncate text-base font-semibold text-slate-800">
+                      {hook.currentGroup.group.name}
+                    </h2>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    {hook.currentGroup.members.length} 人 · 组长 {ownerName}
+                  </p>
                 </div>
-                <p className="mt-0.5 text-[11px] text-slate-400">
-                  {hook.currentGroup.members.length} 人 · 组长 {ownerName}
-                </p>
+                <button
+                  type="button"
+                  onClick={() => void hook.refresh()}
+                  disabled={hook.refreshing}
+                  className="min-h-[30px] shrink-0 rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500 disabled:opacity-50"
+                  data-testid="group-refresh"
+                >
+                  {hook.refreshing ? '刷新中…' : '刷新'}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => void hook.refresh()}
-                disabled={hook.refreshing}
-                className="min-h-[30px] shrink-0 rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500 disabled:opacity-50"
-                data-testid="group-refresh"
-              >
-                {hook.refreshing ? '刷新中…' : '刷新'}
-              </button>
+
+              <div className="mt-1.5 border-t border-slate-100 pt-1.5">
+                <PublicationCard
+                  hook={hook}
+                  editing={editing}
+                  onToggle={() => setEditingGroupId(editing ? null : hook.currentGroupId)}
+                  onGoAccount={onGoAccount}
+                  snapshots={snapshots}
+                />
+              </div>
+
+              {hook.offline || hook.nextPollAt ? (
+                <p className="mt-1 text-[10px] text-amber-700" data-testid="group-sync-status">
+                  {hook.offline ? '离线，显示上次获取的数据' : '已触发限流，稍后自动重试'}
+                </p>
+              ) : null}
             </div>
 
-            <div className="mt-1.5 border-t border-slate-100 pt-1.5">
-              <PublicationCard
-                hook={hook}
-                editing={editing}
-                onToggle={() => setEditingGroupId(editing ? null : hook.currentGroupId)}
-                onGoAccount={onGoAccount}
-                snapshots={snapshots}
+            <div className="mt-1 border-t border-slate-100 pt-1">
+              <MotherGroupMembers
+                key={`members:${hook.currentGroup.group.id}:${hook.accountId}`}
+                embedded
+                group={hook.currentGroup}
+                accountId={hook.accountId ?? ''}
+                catalogVersion={CATALOG_VERSION}
+                groupType={hook.currentGroup.group.groupType}
+                targetCriteriaId={motherResourceCriteriaId}
+                inviteCode={
+                  hook.accountId ? readCollectionInviteCode(hook.accountId, hook.currentGroup.group.id) : null
+                }
+                demands={hook.demands}
+                onRename={hook.updateProfile}
+                onResetInvite={hook.resetInvite}
+                onRemove={hook.removeMember}
+                onLeave={async () => {
+                  await hook.leave();
+                }}
+                onDissolve={async () => {
+                  await hook.dissolve();
+                }}
               />
+              {hook.accountId ? (
+                <div className="mt-1 border-t border-slate-100 pt-1">
+                  {setupNode(false, true)}
+                </div>
+              ) : null}
             </div>
-
-            {hook.offline || hook.nextPollAt ? (
-              <p className="mt-1 text-[10px] text-amber-700" data-testid="group-sync-status">
-                {hook.offline ? '离线，显示上次获取的数据' : '已触发限流，稍后自动重试'}
-              </p>
-            ) : null}
           </div>
 
           {/* 需求接口失败时不能静默当成「没有需求」：给出错误与重试（2026-10-29 审查 B6-M02）。 */}
@@ -306,30 +332,6 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             />
           ) : null}
 
-          <MotherGroupMembers
-            key={`members:${hook.currentGroup.group.id}:${hook.accountId}`}
-            group={hook.currentGroup}
-            accountId={hook.accountId ?? ''}
-            catalogVersion={CATALOG_VERSION}
-            groupType={hook.currentGroup.group.groupType}
-            targetCriteriaId={motherResourceCriteriaId}
-            inviteCode={
-              hook.accountId ? readCollectionInviteCode(hook.accountId, hook.currentGroup.group.id) : null
-            }
-            demands={hook.demands}
-            onRename={hook.updateProfile}
-            onResetInvite={hook.resetInvite}
-            onRemove={hook.removeMember}
-            onLeave={async () => {
-              await hook.leave();
-            }}
-            onDissolve={async () => {
-              await hook.dissolve();
-            }}
-          />
-
-          {hook.accountId ? setupNode(false) : null}
-
           <MotherGroupResources
             key={`mother-resources:${hook.currentGroup.group.id}:${hook.accountId}`}
             group={hook.currentGroup}
@@ -360,16 +362,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             onCompleteDemand={hook.completeDemand}
           />
         </>
-      ) : (
-        <PersonalEggs
-          type={hook.personalType}
-          onTypeChange={hook.setPersonalType}
-          summary={summary}
-          searchIndex={searchIndex}
-          onGoImport={onGoAccount}
-          eggGameId={focus?.eggGameId}
-        />
-      )}
+      ) : null}
 
       {hook.accountId && hook.pageMode === 'group' && !hook.currentGroupId && !hook.groupsLoaded ? (
         hook.loading ? (
@@ -395,11 +388,11 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
       ) : null}
 
       {hook.accountId ? (
-        hook.pageMode === 'personal' ? setupNode(true) : null
+        inGroup ? null : setupNode(true)
       ) : (
         <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-login-hint">
           <p className="text-xs text-slate-500">
-            个人求蛋不需要登录；加入小组、共享资源和成员管理才需要识别「同一个人」。
+            新建 / 加入小组、共享资源与成员管理都要先登录，才能识别「同一个人」。
           </p>
           <button
             type="button"
@@ -431,33 +424,21 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
 function GroupSwitcher({
   groups,
   currentGroupId,
-  pageMode,
   onSelect,
-  onSelectPersonal,
+  bare = false,
 }: {
   groups: ReturnType<typeof useCollectionGroups>['groups'];
   currentGroupId: string | null;
-  pageMode: 'personal' | 'group';
   onSelect: (groupId: string) => void;
-  onSelectPersonal: () => void;
+  /** 并进小组顶部那张卡时不带自己的卡片外壳。 */
+  bare?: boolean;
 }) {
-  return (
-    <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-list">
+  /** 没有小组时不画空的「收集范围」标题：未入组统一走下面的新建 / 加入（2026-10-30）。 */
+  if (groups.length === 0) return null;
+  const body = (
+    <>
       <h2 className="text-xs font-medium text-slate-500">收集范围</h2>
       <div className="mt-1.5 flex gap-1.5 overflow-x-auto pb-1">
-        <button
-          type="button"
-          onClick={onSelectPersonal}
-          aria-pressed={pageMode === 'personal'}
-          data-testid="group-personal"
-          className={`min-h-[28px] shrink-0 rounded-md border px-2 text-xs ${
-            pageMode === 'personal'
-              ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
-              : 'border-slate-200 bg-white text-slate-500'
-          }`}
-        >
-          个人求蛋
-        </button>
         {groups.map((group) => (
           <button
             key={group.id}
@@ -476,60 +457,12 @@ function GroupSwitcher({
           </button>
         ))}
       </div>
-    </div>
+    </>
   );
-}
-
-function PersonalEggs({
-  type,
-  onTypeChange,
-  summary,
-  searchIndex,
-  onGoImport,
-  eggGameId,
-}: {
-  type: CollectionGroupType;
-  onTypeChange: (type: CollectionGroupType) => void;
-  summary: ReturnType<typeof useCollectionSummary>;
-  searchIndex: Map<string, string>;
-  onGoImport?: () => void;
-  eggGameId?: number;
-}) {
+  if (bare) return <div data-testid="group-list">{body}</div>;
   return (
-    <div className="space-y-2" data-testid="personal-eggs">
-      <div className="rounded-2xl bg-white p-3 shadow-sm">
-        <SegmentedControl
-          label="个人求蛋类型"
-          value={type}
-          options={[
-            { value: 'mother', label: '求母本' },
-            { value: 'stud', label: '求种公' },
-          ]}
-          onValueChange={(next) => onTypeChange(next as CollectionGroupType)}
-          optionTestId={(value) => `personal-type-${value}`}
-        />
-        <p className="mt-1 text-[11px] text-slate-400">
-          只使用本机数据与个人目标；不要求登录，也不会自动上传给任何小组。
-        </p>
-        {eggGameId ? (
-          <p className="mt-1 text-[11px] text-amber-700" data-testid="personal-focus">
-            已定位到蛋血脉 {eggGameId}
-          </p>
-        ) : null}
-      </div>
-
-      {type === 'mother' ? (
-        <MotherView
-          owned={summary.owned}
-          searchIndex={searchIndex}
-          eggGroupNames={eggGroupNames}
-          motherGroups={summary.motherGroups}
-          mode={summary.mode}
-          status="missing"
-        />
-      ) : (
-        <Swap embedded onGoImport={onGoImport} />
-      )}
+    <div className="rounded-2xl bg-white p-3 shadow-sm" data-testid="group-list">
+      {body}
     </div>
   );
 }

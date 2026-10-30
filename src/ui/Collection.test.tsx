@@ -17,7 +17,6 @@ vi.mock('./useCollectionSummary', () => ({
 vi.mock('./MotherView', () => ({ MotherView: () => <div data-testid="stub-mother-view" /> }));
 vi.mock('./MyPets', () => ({ MyPets: () => <div data-testid="stub-mypets" /> }));
 vi.mock('./Coverage', () => ({ Coverage: () => <div data-testid="stub-coverage" /> }));
-vi.mock('./Swap', () => ({ Swap: () => <div data-testid="stub-swap" /> }));
 
 describe('Collection（收集）', () => {
   test('母本不再在顶部重复「未收集 / 已收集」：列表内那个控件是唯一入口', () => {
@@ -48,28 +47,25 @@ describe('Collection（收集）', () => {
     expect(screen.queryByTestId('stub-swap')).not.toBeInTheDocument();
   });
 
-  test('精灵库固定入口：全部 / 合格种公，并有按代表档位查看的次入口', () => {
+  test('精灵背包只放全部精灵：不再有「合格种公」视图，按代表档位查看仍在', () => {
     const onNavigate = vi.fn();
     render(
       <Collection
-        location={{ kind: 'inventory', view: 'all' }}
+        location={{ kind: 'inventory' }}
         focusRevision={0}
         onNavigate={onNavigate}
       />,
     );
     expect(screen.getByTestId('stub-mypets')).toBeTruthy();
-    expect(screen.getByTestId('inventory-view-all')).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByTestId('inventory-view-stud'));
-    expect(onNavigate).toHaveBeenCalledWith({
-      type: 'open-collection',
-      location: { kind: 'inventory', view: 'stud' },
-    });
+    // 2026-10-29 用户口径：合格种公页不要了，种公只留种公阵列
+    expect(screen.queryByTestId('inventory-view-all')).toBeNull();
+    expect(screen.queryByTestId('inventory-view-stud')).toBeNull();
 
     fireEvent.click(screen.getByTestId('inventory-grade-toggle'));
     expect(screen.getByTestId('mother-grade-inventory')).toBeTruthy();
   });
 
-  test('顶部三类视图可互相切换', () => {
+  test('顶部三张卡可互相切换，卡片写清各自职责', () => {
     const onNavigate = vi.fn();
     render(
       <Collection
@@ -78,6 +74,11 @@ describe('Collection（收集）', () => {
         onNavigate={onNavigate}
       />,
     );
+    expect(screen.getByTestId('collection-kind-inventory')).toHaveTextContent('精灵背包');
+    expect(screen.getByTestId('collection-kind-inventory')).toHaveTextContent('看全部精灵');
+    expect(screen.getByTestId('collection-kind-mothers')).toHaveTextContent('看我的所有母本');
+    expect(screen.getByTestId('collection-kind-studs')).toHaveTextContent('挑种公去孵蛋');
+
     fireEvent.click(screen.getByTestId('collection-kind-studs'));
     expect(onNavigate).toHaveBeenCalledWith({
       type: 'open-collection',
@@ -86,7 +87,7 @@ describe('Collection（收集）', () => {
     fireEvent.click(screen.getByTestId('collection-kind-inventory'));
     expect(onNavigate).toHaveBeenCalledWith({
       type: 'open-collection',
-      location: { kind: 'inventory', view: 'all' },
+      location: { kind: 'inventory' },
     });
   });
 });

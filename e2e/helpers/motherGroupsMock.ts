@@ -22,7 +22,8 @@ const resource = (
   accounts: Array<{ accountKey: string; accountName: string; eggGameIds: number[] }>,
 ) => ({
   schemaVersion: 1,
-  criteriaId: 'all-mothers-v2',
+  // 与客户端当前口径一致（all-mothers-v3 起按目标模式分版）；不一致会被判成「不可比」，列表不再渲染。
+  criteriaId: 'all-mothers-v3-perfect',
   catalogVersion: CATALOG_VERSION,
   accounts: accounts.map((account) => ({
     ...account,
@@ -44,7 +45,7 @@ export const groupDetail = {
     resourceEpoch: 1,
     target: {
       kind: 'mother',
-      criteriaId: 'all-mothers-v2',
+      criteriaId: 'all-mothers-v3-perfect',
       mode: 'perfect',
       bodies: ['大块头'],
       voices: ['+100'],

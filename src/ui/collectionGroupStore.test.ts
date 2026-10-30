@@ -6,7 +6,6 @@ import {
   saveDemandCompletionSeenAt,
   saveLastGroupId,
   savePageMode,
-  savePersonalType,
 } from './collectionGroupStore';
 
 beforeEach(() => {
@@ -23,19 +22,16 @@ describe('小组页本机偏好（二期）', () => {
     expect(readLastGroupId('A', 'mother')).toBeNull();
   });
 
-  test('页面模式与个人求蛋类型按身份隔离；旧 stud 类型归到 mother', () => {
+  test('页面模式按身份隔离', () => {
     savePageMode('A', 'group');
-    savePersonalType('A', 'stud');
     expect(readCollectionGroupPrefs('A').mode).toBe('group');
-    expect(readCollectionGroupPrefs('A').personalType).toBe('mother');
     expect(readCollectionGroupPrefs('B').mode).toBe('personal');
   });
 
   test('未登录时用设备级草稿，不串到登录后的身份', () => {
     savePageMode(null, 'personal');
-    savePersonalType(null, 'stud');
-    expect(readCollectionGroupPrefs(null).personalType).toBe('mother');
-    expect(readCollectionGroupPrefs('A').personalType).toBe('mother');
+    expect(readCollectionGroupPrefs(null).mode).toBe('personal');
+    expect(readCollectionGroupPrefs('A').mode).toBe('personal');
   });
 
   test('旧 localStorage 里的种公组类型与组 id 被忽略，避免进入已删除的组', () => {
@@ -48,7 +44,6 @@ describe('小组页本机偏好（二期）', () => {
       }),
     );
     const prefs = readCollectionGroupPrefs('A');
-    expect(prefs.personalType).toBe('mother');
     expect(prefs.lastGroupIds).toEqual({ mother: 'g-mother' });
   });
 

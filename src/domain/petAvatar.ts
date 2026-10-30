@@ -1,7 +1,7 @@
 /** 腾讯官方素材 CDN（资源清单取自蛋神助手 1.2.8 的 official-resources manifest） */
 const OFFICIAL_CDN_ROOT = 'https://game.gtimg.cn/images/rocom/rocodata';
 
-/** 头像档位：普通 / 异色（炫彩、异色炫彩在官方素材里同样只有这一套异色图） */
+/** 头像档位：普通 / 异色（炫彩是游戏内染色，官方素材里没有单独的炫彩立绘） */
 export type PetAvatarVariant = 'normal' | 'shiny';
 
 /**

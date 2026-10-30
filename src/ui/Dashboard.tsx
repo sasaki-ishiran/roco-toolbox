@@ -143,7 +143,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           denominator={stud.groupCount}
           hint={`${coverageFilter.groupIds.length} 个蛋组 · 组内目标全达标才算通`}
           onClick={() =>
-            onNavigate({ type: 'open-collection', location: { kind: 'inventory', view: 'stud' } })
+            onNavigate({ type: 'open-collection', location: { kind: 'studs', view: 'coverage' } })
           }
           action="看我的种公"
           actionTestId="progress-card-action-stud"

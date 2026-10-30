@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { GRADE_BODY, gradeLabel, type PetGrade, type TargetMode } from '../domain/petFilters';
 import {
   buildStudMatrix,
@@ -25,6 +25,15 @@ const GRADE_LABEL: Record<PetGrade, string> = {
   小粗: '小粗',
 };
 
+/**
+ * 列宽 / 格子高度（2026-10-29 用户要求「左侧蛋组太占地方，卡片再收缩一点」）：
+ * 蛋组列 64 → 52 → 35（2026-10-30 再缩到约 2/3），性格列 60，格子 52（头像仍 32）。
+ * 蛋组列只有 35px：「巨灵组」这类三字名会截断，靠 title 悬停看全名。
+ */
+const EGG_GROUP_COL_WIDTH = 35;
+const NATURE_COL_WIDTH = 60;
+const CELL_HEIGHT = 52;
+
 export interface StudMatrixProps {
   /** 覆盖度槽位（蛋组 × 目标性格 × 档位），来自全局筛选 */
   slots: CoverageSlot[];
@@ -41,6 +50,12 @@ export interface StudMatrixProps {
   demandGroupsError?: string;
   onLoadDemandGroups?: () => void;
   onPublishStudDemand?: (input: StudDemandPublishInput) => Promise<void>;
+  /** 筛选内容收在卡片右上角（2026-10-29 用户要求）：传了才有「筛选」按钮与折叠面板。 */
+  filterPanel?: ReactNode;
+  filterOpen?: boolean;
+  onToggleFilter?: () => void;
+  /** 筛选与默认值不同：右上角小圆点提示。 */
+  filterActive?: boolean;
 }
 
 export interface StudDemandGroup {
@@ -98,6 +113,10 @@ export function StudMatrix({
   demandGroupsError = '',
   onLoadDemandGroups,
   onPublishStudDemand,
+  filterPanel,
+  filterOpen = false,
+  onToggleFilter,
+  filterActive = false,
 }: StudMatrixProps) {
   const grades = useMemo(() => {
     const order: PetGrade[] = ['大婉', '小婉', '大粗', '小粗'];
@@ -218,28 +237,41 @@ export function StudMatrix({
     }
   };
 
-  if (grades.length === 0) {
-    return (
-      <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="stud-matrix-empty">
-        <h2 className="text-sm font-medium text-slate-500">种公阵列</h2>
-        <p className="mt-1 text-xs text-slate-400">
-          覆盖度里还没选目标档位，先到「覆盖度」勾选要追的档位与性格。
-        </p>
-      </section>
-    );
-  }
-
   return (
-    <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="stud-matrix">
+    <section className="rounded-2xl bg-white p-2.5 shadow-sm" data-testid="stud-matrix">
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-sm font-medium text-slate-500">种公阵列</h2>
-          <p className="mt-0.5 text-[10px] text-slate-400">
-            跟随「覆盖度」目标 · 左右滑动看更多性格 · 点带数字的格子可换代表种公
-            {onPublishStudDemand ? ' · 点淡黄推荐格可加到需求中心' : ''}
+          <p className="mt-0.5 truncate text-[10px] text-slate-400">
+            跟随「覆盖度」目标 · 点带数字的格子换代表
           </p>
         </div>
-        <div className="flex shrink-0 gap-1" role="group" aria-label="阵列档位">
+        {filterPanel ? (
+          <button
+            type="button"
+            aria-expanded={filterOpen}
+            onClick={onToggleFilter}
+            data-testid="stud-matrix-filter-toggle"
+            className={`relative min-h-[26px] shrink-0 rounded-md border px-2 text-[11px] ${
+              filterOpen
+                ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
+                : 'border-slate-200 text-slate-500'
+            }`}
+          >
+            筛选<span aria-hidden className="ml-0.5 text-[9px]">{filterOpen ? '▲' : '▼'}</span>
+            {filterActive ? (
+              <span
+                className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500"
+                data-testid="stud-matrix-filter-dot"
+                aria-hidden
+              />
+            ) : null}
+          </button>
+        ) : null}
+      </header>
+
+      {grades.length > 0 ? (
+        <div className="mt-1.5 flex items-center gap-1" role="group" aria-label="阵列档位">
           {grades.map((item) => (
             <button
               key={item}
@@ -248,19 +280,34 @@ export function StudMatrix({
               aria-pressed={item === grade}
               data-testid={`stud-matrix-grade-${item}`}
               className={`rounded-md px-1.5 text-[10px] leading-[1.6] ${
-                item === grade
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-slate-100 text-slate-500'
+                item === grade ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
               }`}
             >
               {GRADE_LABEL[item]}
             </button>
           ))}
+          <span className="ml-auto truncate text-[10px] text-slate-400">
+            左右滑动看更多性格
+            {onPublishStudDemand ? ' · 点淡黄格可求蛋' : ''}
+          </span>
         </div>
-      </header>
+      ) : null}
+
+      {filterPanel && filterOpen ? (
+        <div
+          className="mt-2 rounded-xl bg-slate-50 p-2"
+          data-testid="stud-matrix-filter"
+        >
+          {filterPanel}
+        </div>
+      ) : null}
 
       {/* 2026-10-28：表格只做横向滚动；不要加 touch-pan-x，否则触摸表格区域时整页上下也滑不动 */}
-      {matrix.natures.length === 0 ? (
+      {grades.length === 0 ? (
+        <p className="mt-2 text-xs text-slate-400" data-testid="stud-matrix-empty">
+          覆盖度里还没选目标档位与性格：先点右上角「筛选」勾选要追的档位与性格。
+        </p>
+      ) : matrix.natures.length === 0 ? (
         <p className="mt-2 text-xs text-slate-400" data-testid="stud-matrix-no-nature">
           当前档位下没有选中的目标性格。
         </p>
@@ -268,18 +315,23 @@ export function StudMatrix({
         <div className="mt-2 overflow-x-auto overscroll-x-contain" data-testid="stud-matrix-scroll">
           <table
             className="table-fixed border-separate border-spacing-0 text-[10px]"
-            style={{ width: `${(matrix.natures.length + 1) * 64}px` }}
+            style={{ width: `${EGG_GROUP_COL_WIDTH + matrix.natures.length * NATURE_COL_WIDTH}px` }}
           >
             <colgroup>
-              <col className="w-[64px]" />
+              <col style={{ width: `${EGG_GROUP_COL_WIDTH}px` }} />
               {matrix.natures.map((nature) => (
-                <col key={nature} className="w-[64px]" />
+                <col key={nature} style={{ width: `${NATURE_COL_WIDTH}px` }} />
               ))}
             </colgroup>
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 whitespace-nowrap bg-white px-1 pb-1 text-left font-normal text-slate-400">
-                  蛋组 / 性格
+                {/* 左上角只写「蛋组」：列宽 35px 放不下「蛋组 / 性格」一行，
+                    右侧表头本来就是性格名（2026-10-30 用户口径「一横显示」） */}
+                <th
+                  className="sticky left-0 z-10 bg-white px-0.5 pb-1 text-left font-normal text-[9px] leading-tight text-slate-400"
+                  aria-label="蛋组"
+                >
+                  蛋组
                 </th>
                 {matrix.natures.map((nature) => (
                   <th
@@ -294,7 +346,10 @@ export function StudMatrix({
             <tbody>
               {matrix.rows.map((row) => (
                 <tr key={row.groupId}>
-                  <th className="sticky left-0 z-10 truncate whitespace-nowrap bg-white px-1 py-0.5 text-left text-[10px] font-normal text-slate-500">
+                  <th
+                    className="sticky left-0 z-10 truncate whitespace-nowrap bg-white px-0.5 py-0.5 text-left text-[9px] font-normal leading-tight text-slate-500"
+                    title={row.groupLabel}
+                  >
                     {row.groupLabel}
                   </th>
                   {row.cells.map((cell) => {
@@ -412,7 +467,10 @@ function MatrixCell({
 }) {
   if (!cell.targeted) {
     return (
-      <span className="flex h-[58px] w-full items-center justify-center rounded bg-slate-50 text-slate-300">
+      <span
+        className="flex w-full items-center justify-center rounded bg-slate-50 text-slate-300"
+        style={{ height: CELL_HEIGHT }}
+      >
         —
       </span>
     );
@@ -434,11 +492,12 @@ function MatrixCell({
         </>
       );
       const shell =
-        'relative flex h-[58px] w-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded bg-amber-50 px-0.5 py-0.5 ring-1 ring-inset ring-amber-200';
+        'relative flex w-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded bg-amber-50 px-0.5 py-0.5 ring-1 ring-inset ring-amber-200';
       if (!onRecommend) {
         return (
           <div
             className={shell}
+            style={{ height: CELL_HEIGHT }}
             data-testid={`stud-cell-recommend-${cell.groupId}-${cell.natureName}`}
             title={`推荐种公：${recommendation.displayName}`}
           >
@@ -451,6 +510,7 @@ function MatrixCell({
           type="button"
           onClick={onRecommend}
           className={shell}
+          style={{ height: CELL_HEIGHT }}
           data-testid={`stud-cell-recommend-${cell.groupId}-${cell.natureName}`}
           title={`推荐种公：${recommendation.displayName}；点击加到需求中心`}
         >
@@ -460,7 +520,8 @@ function MatrixCell({
     }
     return (
       <span
-        className="flex h-[58px] w-full items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400"
+        className="flex w-full items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400"
+        style={{ height: CELL_HEIGHT }}
         data-testid={`stud-cell-empty-${cell.groupId}-${cell.natureName}`}
       >
         缺
@@ -475,12 +536,13 @@ function MatrixCell({
       onClick={onOpen}
       aria-label={`${cell.natureName} 种公 ${rep.name}，共 ${count} 只，点击选择代表`}
       data-testid={`stud-cell-${cell.groupId}-${cell.natureName}`}
-      className="relative flex h-[58px] w-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded bg-emerald-50/50 px-0.5 py-0.5 ring-1 ring-inset ring-emerald-100"
+      className="relative flex w-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded bg-emerald-50/50 px-0.5 py-0.5 ring-1 ring-inset ring-emerald-100"
+      style={{ height: CELL_HEIGHT }}
     >
       <PetAvatar
         gameId={rep.gameId}
         name={cellName}
-        shiny={rep.isShiny || rep.isColorful}
+        shiny={rep.isShiny}
         size={32}
       />
       <span
@@ -554,7 +616,7 @@ function PickerSheet({
                   <PetAvatar
                     gameId={pet.gameId}
                     name={pet.name}
-                    shiny={pet.isShiny || pet.isColorful}
+                    shiny={pet.isShiny}
                     size={32}
                   />
                   <span className="min-w-0 flex-1">

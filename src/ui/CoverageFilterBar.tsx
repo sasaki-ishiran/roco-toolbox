@@ -19,7 +19,7 @@ const CHIP_BASE = 'min-h-[28px] rounded-md border px-2 text-xs';
 const chipClass = (active: boolean): string => `${CHIP_BASE} ${active ? CHIP_ON : CHIP_OFF}`;
 
 /**
- * 覆盖矩阵的筛选条：档位（只读，跟随看板）+ 蛋组（默认收起）。
+ * 覆盖矩阵的筛选内容（2026-10-29 起收进「种公阵列」卡片的右上角，自己不再是一张卡）。
  *
  * **档位 2026-10-06 起是全局口径**（用户拍板）：看板 / 覆盖度 / 母本 / 配窝共用一份，
  * 入口只在看板的「当前模式」，这里只显示当前值，避免两处各有一套、看着像两码事。
@@ -39,10 +39,13 @@ export function CoverageFilterBar({ filter, onToggleGroup, onReset, onOpenTarget
   ].filter((label): label is string => label !== null);
 
   return (
-    <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="coverage-filter">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-medium text-slate-500">筛选</h2>
-        <div className="flex items-center gap-2">
+    <div data-testid="coverage-filter">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="coverage-grade-readonly">
+          <span className="text-xs text-slate-400">档位</span>
+          <span className="text-xs font-medium text-slate-600">{gradeText || '未选'}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
           {onOpenTargetEditor ? (
             <button
               type="button"
@@ -64,41 +67,33 @@ export function CoverageFilterBar({ filter, onToggleGroup, onReset, onOpenTarget
         </div>
       </div>
 
-      <div className="mt-2 space-y-2">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="coverage-grade-readonly">
-          <span className="text-xs text-slate-400">档位</span>
-          <span className="text-xs font-medium text-slate-600">{gradeText || '未选'}</span>
-          <span className="text-[11px] text-slate-400">跟随看板「当前模式」</span>
-        </div>
-
-        <div>
-          <button
-            type="button"
-            aria-expanded={groupsOpen}
-            onClick={() => setGroupsOpen((open) => !open)}
-            className="flex min-h-[28px] w-full items-center justify-between text-xs text-slate-400"
-            data-testid="coverage-groups-toggle"
-          >
-            <span>蛋组（{groupCount}/14）</span>
-            <span aria-hidden>{groupsOpen ? '▲' : '▼'}</span>
-          </button>
-          {groupsOpen ? (
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {ALL_EGG_GROUP_IDS.map((groupId) => (
-                <button
-                  key={groupId}
-                  type="button"
-                  aria-pressed={filter.groupIds.includes(groupId)}
-                  onClick={() => onToggleGroup(groupId)}
-                  className={chipClass(filter.groupIds.includes(groupId))}
-                  data-testid={`coverage-group-${groupId}`}
-                >
-                  {eggGroupNames[groupId] ?? `蛋组${groupId}`}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+      <div className="mt-1">
+        <button
+          type="button"
+          aria-expanded={groupsOpen}
+          onClick={() => setGroupsOpen((open) => !open)}
+          className="flex min-h-[28px] w-full items-center justify-between text-xs text-slate-400"
+          data-testid="coverage-groups-toggle"
+        >
+          <span>蛋组（{groupCount}/14）</span>
+          <span aria-hidden>{groupsOpen ? '▲' : '▼'}</span>
+        </button>
+        {groupsOpen ? (
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {ALL_EGG_GROUP_IDS.map((groupId) => (
+              <button
+                key={groupId}
+                type="button"
+                aria-pressed={filter.groupIds.includes(groupId)}
+                onClick={() => onToggleGroup(groupId)}
+                className={chipClass(filter.groupIds.includes(groupId))}
+                data-testid={`coverage-group-${groupId}`}
+              >
+                {eggGroupNames[groupId] ?? `蛋组${groupId}`}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {emptyDimensions.length > 0 ? (
@@ -106,6 +101,6 @@ export function CoverageFilterBar({ filter, onToggleGroup, onReset, onOpenTarget
           请至少勾选一个{emptyDimensions.join('、')}，否则没有目标槽位。
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }

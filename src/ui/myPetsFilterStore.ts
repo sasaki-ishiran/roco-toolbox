@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { PetGrade } from '../domain/petFilters';
 
 /**
- * 「我的精灵」页的筛选状态（进程内共享，纯内存）。
+ * 「精灵背包」页的筛选状态（进程内共享，纯内存）。
  *
  * 2026-10-04 用户拍板：筛选面板收起后设置要保留（不清后台），切页签 / 切视角
  * 都不丢。原来这些是 MyPets 组件内的 useState，页面组件一卸载就重置，
@@ -12,15 +11,14 @@ type Listener = () => void;
 
 /**
  * 筛选值持久化（2026-10-05 筛选持久化专项，用户拍板）：
- * 重启后「全部」页选的标签、种公页的档位/性格还在；面板展开态（filtersOpen）
- * 属 UI 态不持久。Set 序列化成数组存储。
+ * 重启后「全部」页选的标签还在；面板展开态（filtersOpen）属 UI 态不持久。
+ * Set 序列化成数组存储。
+ *
+ * 2026-10-29：种公视角收进种公阵列后，本 store 只保留「全部」页标签。
  */
 const STORAGE_KEY = 'roco.myPetsFilter';
 interface PersistedFilter {
   selected?: string[];
-  studGrades?: PetGrade[];
-  studNatures?: string[];
-  studGroups?: string[];
 }
 
 const readPersisted = (): PersistedFilter => {
@@ -47,11 +45,6 @@ const toStringSet = <T extends string>(value: unknown): Set<T> =>
 let selected: ReadonlySet<string> = toStringSet(persisted.selected);
 let filtersOpen = true;
 
-/** 种公视角：档位 + 性格（8 大性格 + 「其他」）+ 蛋组（2026-10-05 加蛋组筛选） */
-let studGrades: ReadonlySet<PetGrade> = toStringSet<PetGrade>(persisted.studGrades);
-let studNatures: ReadonlySet<string> = toStringSet(persisted.studNatures);
-let studGroups: ReadonlySet<string> = toStringSet(persisted.studGroups);
-
 const listeners = new Set<Listener>();
 
 const persist = (): void => {
@@ -60,9 +53,6 @@ const persist = (): void => {
       STORAGE_KEY,
       JSON.stringify({
         selected: [...selected],
-        studGrades: [...studGrades],
-        studNatures: [...studNatures],
-        studGroups: [...studGroups],
       }),
     );
   } catch {
@@ -83,18 +73,6 @@ export function getMyPetsFiltersOpen(): boolean {
   return filtersOpen;
 }
 
-export function getStudGrades(): ReadonlySet<PetGrade> {
-  return studGrades;
-}
-
-export function getStudNatures(): ReadonlySet<string> {
-  return studNatures;
-}
-
-export function getStudGroups(): ReadonlySet<string> {
-  return studGroups;
-}
-
 export function setMyPetsSelected(next: ReadonlySet<string>): void {
   selected = next;
   commit();
@@ -105,73 +83,28 @@ export function setMyPetsFiltersOpen(next: boolean): void {
   commit();
 }
 
-export function toggleStudGrade(grade: PetGrade): void {
-  const next = new Set(studGrades);
-  if (next.has(grade)) next.delete(grade);
-  else next.add(grade);
-  studGrades = next;
-  commit();
-}
-
-export function toggleStudNature(nature: string): void {
-  const next = new Set(studNatures);
-  if (next.has(nature)) next.delete(nature);
-  else next.add(nature);
-  studNatures = next;
-  commit();
-}
-
-export function toggleStudGroup(groupId: string): void {
-  const next = new Set(studGroups);
-  if (next.has(groupId)) next.delete(groupId);
-  else next.add(groupId);
-  studGroups = next;
-  commit();
-}
-
 export function clearMyPetsFilters(): void {
   selected = new Set();
-  studGrades = new Set();
-  studNatures = new Set();
-  studGroups = new Set();
   commit();
 }
 
-/**
- * 清除某一视角的本页筛选（2026-10-24 重构任务 4）。
- *
- * 以前全量复位会把另一个视角的条件一起清掉：在「全部」页点重置，
- * 种公视角的档位 / 性格 / 蛋组也悄悄没了。本页按钮只清本页。
- */
-export function clearInventoryFilters(view: 'all' | 'stud'): void {
-  if (view === 'all') {
-    selected = new Set();
-  } else {
-    studGrades = new Set();
-    studNatures = new Set();
-    studGroups = new Set();
-  }
+/** 精灵背包页的「重置」：只清本页标签（2026-10-24 重构任务 4）。 */
+export function clearInventoryFilters(): void {
+  selected = new Set();
   commit();
 }
 
 export function useMyPetsFilters(): {
   selected: ReadonlySet<string>;
   filtersOpen: boolean;
-  studGrades: ReadonlySet<PetGrade>;
-  studNatures: ReadonlySet<string>;
-  studGroups: ReadonlySet<string>;
 } {
   const [value, setValue] = useState({
     selected,
     filtersOpen,
-    studGrades,
-    studNatures,
-    studGroups,
   });
 
   useEffect(() => {
-    const listener = () =>
-      setValue({ selected, filtersOpen, studGrades, studNatures, studGroups });
+    const listener = () => setValue({ selected, filtersOpen });
     listeners.add(listener);
     listener();
     return () => {
@@ -186,9 +119,6 @@ export function useMyPetsFilters(): {
 export function resetMyPetsFiltersForTest(): void {
   selected = new Set();
   filtersOpen = false;
-  studGrades = new Set();
-  studNatures = new Set();
-  studGroups = new Set();
   try {
     window.localStorage.removeItem(STORAGE_KEY);
   } catch {
@@ -196,3 +126,4 @@ export function resetMyPetsFiltersForTest(): void {
   }
   commit();
 }
+

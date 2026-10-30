@@ -2,6 +2,7 @@ import { clearAllSnapshots } from '../storage/snapshots';
 import { refreshSnapshots } from '../storage/snapshotStore';
 import { clearLastImportHistory, clearLastImportResult } from '../storage/lastImportStore';
 import { clearAccountFilter } from './accountFilterStore';
+import { clearDemandPicks } from './demandPickStore';
 import { resetImportOutcome } from './importOutcomeStore';
 import { setImportMessage } from './importMessageStore';
 import { resetListViews } from './listViewStore';
@@ -9,7 +10,6 @@ import { clearMyPetsFilters } from './myPetsFilterStore';
 import { clearMotherPlan } from './motherPlanStore';
 import { clearSuggestionCard } from './suggestionCardStore';
 import { clearSyncFeedback } from './syncNoticeStore';
-import { resetSwapView } from './swapViewStore';
 
 /**
  * 重置本机导入数据（2026-10-25）。
@@ -29,7 +29,7 @@ export async function resetImportedData(): Promise<void> {
   clearSuggestionCard();
   clearMotherPlan();
   clearAccountFilter();
+  clearDemandPicks();
   clearMyPetsFilters();
-  resetSwapView();
   resetListViews();
 }

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { species } from '../data/catalog';
 import type { AccountSnapshot } from '../domain/parseBackup';
 import type { HomeResident, HomeSnapshot, OwnedPet } from '../domain/types';
@@ -6,9 +6,11 @@ import { useAccountFilter } from './accountFilterStore';
 import { AccountFilterBar } from './AccountFilterBar';
 import { EmptyState } from './EmptyState';
 import { GenderMark } from './GenderMark';
+import { HomeDemandPlacements } from './HomeDemandPlacements';
 import { PetAvatar } from './PetAvatar';
 import { PetCompactCard } from './PetCompactCard';
 import { BODY, CARD, HINT, INSET, PAGE, TITLE } from './primitives/styles';
+import { SegmentedControl } from './primitives/SegmentedControl';
 import { useSnapshots } from './useSnapshots';
 import { labelerFor } from './useOwnedPets';
 
@@ -102,7 +104,7 @@ function HomePairChip({ pet, resident }: { pet?: OwnedPet; resident: HomeResiden
       <PetAvatar
         gameId={pet?.gameId ?? (Number(resident.baseId) || null)}
         name={fullName}
-        shiny={pet?.isShiny || pet?.isColorful}
+        shiny={pet?.isShiny}
         size={24}
       />
       <span className="max-w-[4.5rem] truncate text-[10px] text-slate-700">{displayName}</span>
@@ -260,6 +262,19 @@ function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: st
   );
 }
 
+const HOME_VIEW_KEY = 'roco.homeView';
+type HomeView = 'nests' | 'demands';
+
+const readHomeView = (): HomeView => {
+  if (typeof window === 'undefined') return 'nests';
+  return window.localStorage.getItem(HOME_VIEW_KEY) === 'demands' ? 'demands' : 'nests';
+};
+
+/**
+ * 家园页（2026-10-30 加分页）：
+ * - 家园现状：抓包里的住户、实际配对、地上的蛋；
+ * - 接单上窝：需求中心里我接的单，按账号给出母本 / 种公名单。
+ */
 export function HomeLand({ onGoImport }: HomeLandProps = {}) {
   const { snapshots, loaded } = useSnapshots();
   const { excluded } = useAccountFilter();
@@ -267,15 +282,32 @@ export function HomeLand({ onGoImport }: HomeLandProps = {}) {
   const accounts = snapshots.map(labelOf);
   const visible = snapshots.filter((snapshot) => !excluded.has(labelOf(snapshot)));
   const withHome = visible.filter((snapshot) => snapshot.home);
+  const [view, setView] = useState<HomeView>(() => readHomeView());
 
-  if (!loaded) {
-    return <p className={`${PAGE} ${HINT}`}>正在读取本地数据…</p>;
-  }
+  const changeView = (next: string) => {
+    const target: HomeView = next === 'demands' ? 'demands' : 'nests';
+    setView(target);
+    if (typeof window !== 'undefined') window.localStorage.setItem(HOME_VIEW_KEY, target);
+  };
 
   return (
     <div className={PAGE}>
-      <AccountFilterBar accounts={accounts} />
-      {snapshots.length === 0 ? (
+      <SegmentedControl
+        label="家园视图"
+        value={view}
+        options={[
+          { value: 'nests', label: '家园现状' },
+          { value: 'demands', label: '接单上窝' },
+        ]}
+        onValueChange={changeView}
+        optionTestId={(value) => `home-view-${value}`}
+      />
+      {snapshots.length > 0 ? <AccountFilterBar accounts={accounts} /> : null}
+      {!loaded ? (
+        <p className={`${HINT}`}>正在读取本地数据…</p>
+      ) : view === 'demands' ? (
+        <HomeDemandPlacements snapshots={visible} labelOf={labelOf} loaded={loaded} />
+      ) : snapshots.length === 0 ? (
         <EmptyState onGoImport={onGoImport} />
       ) : visible.length === 0 ? (
         <p className={`${HINT}`}>未选择游戏账号：上面点「全选」可恢复。</p>

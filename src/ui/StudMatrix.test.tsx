@@ -108,11 +108,75 @@ describe('StudMatrix', () => {
     const cells = within(scroll).getAllByRole('button');
     expect(cells.length).toBeGreaterThan(0);
     for (const cell of cells) {
-      expect(cell.className).toContain('h-[58px]');
+      // 2026-10-29 起高度走内联样式（52px，比原来的 58 再收一点）
+      expect(cell.style.height).toBe('52px');
       expect(cell.className).toContain('overflow-hidden');
     }
     // 列宽固定后，长名字只会在格子里省略，不会把整列撑宽
     expect(within(scroll).getByText('单组兽').className).toContain('truncate');
+  });
+
+  test('筛选在卡片右上角：收起时只露按钮，展开后才出现筛选内容', () => {
+    const onToggleFilter = vi.fn();
+    const { rerender } = render(
+      <StudMatrix
+        slots={slots}
+        owned={owned}
+        species={species}
+        speciesByGameId={speciesByGameId}
+        eggGroupNames={eggGroupNames}
+        mode="perfect"
+        filterPanel={<div data-testid="stub-filter">筛选内容</div>}
+        filterOpen={false}
+        onToggleFilter={onToggleFilter}
+        filterActive
+      />,
+    );
+    expect(screen.queryByTestId('stud-matrix-filter')).toBeNull();
+    expect(screen.getByTestId('stud-matrix-filter-dot')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('stud-matrix-filter-toggle'));
+    expect(onToggleFilter).toHaveBeenCalled();
+
+    rerender(
+      <StudMatrix
+        slots={slots}
+        owned={owned}
+        species={species}
+        speciesByGameId={speciesByGameId}
+        eggGroupNames={eggGroupNames}
+        mode="perfect"
+        filterPanel={<div data-testid="stub-filter">筛选内容</div>}
+        filterOpen
+        onToggleFilter={onToggleFilter}
+      />,
+    );
+    expect(within(screen.getByTestId('stud-matrix-filter')).getByTestId('stub-filter')).toBeTruthy();
+  });
+
+  test('没有目标档位 / 性格时仍保留右上角筛选，否则自选性格后没法再勾回来', () => {
+    render(
+      <StudMatrix
+        slots={[]}
+        owned={owned}
+        species={species}
+        speciesByGameId={speciesByGameId}
+        eggGroupNames={eggGroupNames}
+        mode="perfect"
+        filterPanel={<div data-testid="stub-filter">筛选内容</div>}
+        filterOpen
+        onToggleFilter={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('stud-matrix-empty')).toBeTruthy();
+    expect(screen.getByTestId('stub-filter')).toBeTruthy();
+  });
+
+  test('蛋组列收到 35px、性格列 60px，左侧不再占掉大半张卡', () => {
+    renderMatrix();
+    const table = within(screen.getByTestId('stud-matrix-scroll')).getByRole('table');
+    const cols = table.querySelectorAll('col');
+    expect((cols[0] as HTMLElement).style.width).toBe('35px');
+    expect((cols[1] as HTMLElement).style.width).toBe('60px');
   });
 
   test('名字过长时只显示基础名，不展示形态', () => {

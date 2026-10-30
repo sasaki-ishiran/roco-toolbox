@@ -29,11 +29,8 @@ describe('initialNavigation：旧页签 / 子视图映射', () => {
     expect(initialNavigation(lastTab, swapView).page).toBe(page);
   });
 
-  test('旧 myPets 进入精灵库的全部', () => {
-    expect(initialNavigation('myPets', null).collection).toEqual({
-      kind: 'inventory',
-      view: 'all',
-    });
+  test('旧 myPets 进入精灵背包的全部精灵', () => {
+    expect(initialNavigation('myPets', null).collection).toEqual({ kind: 'inventory' });
   });
 
   test('旧 coverage 进入种公覆盖矩阵', () => {
@@ -191,8 +188,7 @@ describe('legacyLocation：新页面写回旧键', () => {
 
   test('库存 / 母本 → myPets；我的 → import；看板 → dashboard', () => {
     expect(
-      legacyLocation({ ...base, page: 'collection', collection: { kind: 'inventory', view: 'all' } })
-        .lastTab,
+      legacyLocation({ ...base, page: 'collection', collection: { kind: 'inventory' } }).lastTab,
     ).toBe('myPets');
     expect(
       legacyLocation({ ...base, page: 'collection', collection: { kind: 'mothers', status: 'plan' } })

@@ -19,15 +19,18 @@ import { PetAvatar } from './PetAvatar';
 const PRIMARY_NATURES = targetNaturePool.map((nature) => nature.name);
 const EXTRA_NATURES = allNatureNames.filter((nature) => !PRIMARY_NATURES.includes(nature));
 
-const GENDER_LABELS: Record<DemandGender, string> = { 母: '母', 公: '公', '': '不挑' };
-const BODY_LABELS: Record<DemandBody, string> = { 大块头: '大块头', 小不点: '小不点', '': '不限' };
-const VOICE_LABELS: Record<DemandVoice, string> = {
+export const GENDER_LABELS: Record<DemandGender, string> = { 母: '母', 公: '公', '': '不挑' };
+export const BODY_LABELS: Record<DemandBody, string> = { 大块头: '大块头', 小不点: '小不点', '': '不限' };
+export const VOICE_LABELS: Record<DemandVoice, string> = {
   '+100': '+100',
   '-100': '-100',
   婉转声: '婉转声',
   粗嗓门: '粗嗓门',
   '': '不限',
 };
+/** 体型 / 声音必须二选一：发需求不再提供「不限」（2026-10-30 用户口径）。 */
+export const PICKABLE_BODIES = DEMAND_BODIES.filter((body) => body !== '');
+export const PICKABLE_VOICES = DEMAND_VOICES.filter((voice) => voice !== '');
 
 export interface DemandPublishItem {
   eggGameId: number;
@@ -74,8 +77,8 @@ export function DemandPublishSheet({
   /** 展开「更多性格」的精灵（按蛋 id）：只展开点的那一只，不连带其他精灵。 */
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const [gender, setGender] = useState<DemandGender>(defaultCriteria?.gender ?? DEFAULT_DEMAND_GENDER);
-  const [body, setBody] = useState<DemandBody>(defaultCriteria?.body ?? DEFAULT_DEMAND_BODY);
-  const [voice, setVoice] = useState<DemandVoice>(defaultCriteria?.voice ?? DEFAULT_DEMAND_VOICE);
+  const [body, setBody] = useState<DemandBody>(defaultCriteria?.body || DEFAULT_DEMAND_BODY);
+  const [voice, setVoice] = useState<DemandVoice>(defaultCriteria?.voice || DEFAULT_DEMAND_VOICE);
 
   // 每次打开按 items 的默认性格与当前目标口径重置草稿，避免带上一次的选择。
   // 依赖按字段拆开：父组件每次渲染都会新建 defaultCriteria 对象，用对象当依赖会把草稿重置掉。
@@ -84,8 +87,8 @@ export function DemandPublishSheet({
     setExpanded(new Set());
     setDraft(Object.fromEntries(items.map((item) => [item.eggGameId, [...item.natures]])));
     setGender(defaultCriteria?.gender ?? DEFAULT_DEMAND_GENDER);
-    setBody(defaultCriteria?.body ?? DEFAULT_DEMAND_BODY);
-    setVoice(defaultCriteria?.voice ?? DEFAULT_DEMAND_VOICE);
+    setBody(defaultCriteria?.body || DEFAULT_DEMAND_BODY);
+    setVoice(defaultCriteria?.voice || DEFAULT_DEMAND_VOICE);
   }, [open, items, defaultCriteria?.gender, defaultCriteria?.body, defaultCriteria?.voice]);
 
   const toggle = (eggGameId: number, nature: string) => {
@@ -175,12 +178,12 @@ export function DemandPublishSheet({
       <div className="space-y-2 p-3" data-testid="demand-publish-body">
         <p className="text-[11px] leading-snug text-slate-400">
           给每颗蛋选性格，一个性格算一条需求；性别 / 体型 / 声音对本次选中的蛋统一生效。
-          不选表示不挑 / 不限，只会校验你选了的字段。
+          体型和声音必须选一个，性别可以「不挑」。
         </p>
         <div className="space-y-1 rounded-lg bg-slate-50 px-2 py-1.5" data-testid="demand-publish-criteria">
           {optionRow('性别', DEMAND_GENDERS, gender, GENDER_LABELS, setGender, 'demand-gender')}
-          {optionRow('体型', DEMAND_BODIES, body, BODY_LABELS, setBody, 'demand-body')}
-          {optionRow('声音', DEMAND_VOICES, voice, VOICE_LABELS, setVoice, 'demand-voice')}
+          {optionRow('体型', PICKABLE_BODIES, body, BODY_LABELS, setBody, 'demand-body')}
+          {optionRow('声音', PICKABLE_VOICES, voice, VOICE_LABELS, setVoice, 'demand-voice')}
         </div>
         {warning ? (
           <p className="rounded-lg bg-amber-50 px-2 py-1 text-[11px] leading-snug text-amber-800" data-testid="demand-publish-warning">

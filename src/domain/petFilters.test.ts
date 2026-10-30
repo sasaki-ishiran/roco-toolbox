@@ -72,6 +72,20 @@ describe('buildTagIndex', () => {
     expect(result.index['voice:粗嗓门']).toEqual([3, 5]); // -100 与 -96；-50 不算
   });
 
+  test('身高到顶 / 到底单独成标签：满身高 = 身高 100%，零身高 = 身高 0%', () => {
+    const full = pet({ gameId: 101, gender: '母', heightPercent: 100, weightPercent: 100 });
+    const zero = pet({ gameId: 102, gender: '母', heightPercent: 0, weightPercent: 2 });
+    const near = pet({ gameId: 103, gender: '母', heightPercent: 99.5, weightPercent: 90 });
+    const result = buildTagIndex([...owned, full, zero, near], speciesByGameId, eggGroupNames);
+
+    expect(result.index['body:满身高']).toEqual([3]);
+    expect(result.index['body:零身高']).toEqual([4]);
+    // 没到顶 / 到底的不进这两个标签，避免把「接近满身高」也当成满身高
+    expect(result.index['body:满身高']).not.toContain(5);
+    const bodyLabels = result.tags.filter((tag) => tag.kind === 'body').map((tag) => tag.label);
+    expect(new Set(bodyLabels)).toEqual(new Set(['大块头', '小不点', '满身高', '零身高']));
+  });
+
   test('双蛋组精灵在两个蛋组标签都命中', () => {
     const result = buildTagIndex(owned, speciesByGameId, eggGroupNames);
     expect(result.index['eggGroup:5']).toEqual([1]);

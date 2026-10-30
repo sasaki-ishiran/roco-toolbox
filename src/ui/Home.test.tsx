@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { AccountSnapshot } from '../domain/parseBackup';
 import { clearAccountFilter, toggleAccount } from './accountFilterStore';
@@ -15,6 +15,16 @@ vi.mock('./useSnapshots', () => ({
     loaded: h.loaded,
     refreshError: null,
     refreshedAt: null,
+  }),
+}));
+
+vi.mock('./useClaimedDemands', () => ({
+  useClaimedDemands: () => ({
+    accountId: null,
+    items: [],
+    loading: false,
+    error: '',
+    reload: () => {},
   }),
 }));
 
@@ -107,6 +117,7 @@ const snapshotWithHome = (): AccountSnapshot => ({
 afterEach(() => {
   cleanup();
   clearAccountFilter();
+  window.localStorage.removeItem('roco.homeView');
   h.snapshots = [];
   h.loaded = true;
 });
@@ -236,5 +247,21 @@ describe('家园页', () => {
 
     expect(screen.getByTestId('home-pair-card')).toHaveTextContent('公本未知');
     expect(screen.getAllByTestId('home-pair-card')).toHaveLength(1);
+  });
+
+  test('家园分页：默认家园现状，可切到接单上窝并记住选择', () => {
+    h.snapshots = [snapshotWithHome()];
+    render(<HomeLand />);
+
+    expect(screen.getByTestId('home-view-nests')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('home-residents')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('home-view-demands'));
+    expect(screen.getByTestId('home-demand-placements')).toBeTruthy();
+    expect(screen.queryByTestId('home-residents')).toBeNull();
+    expect(window.localStorage.getItem('roco.homeView')).toBe('demands');
+
+    fireEvent.click(screen.getByTestId('home-view-nests'));
+    expect(screen.getByTestId('home-residents')).toBeTruthy();
   });
 });

@@ -93,13 +93,12 @@ describe('MotherGroupResources 三视图', () => {
         .find((row) => row.textContent?.includes('火花'));
     expect(fireRow()).toBeTruthy();
     const naturesOf = () => within(fireRow()!).getByTestId('mother-resource-natures');
-    // 2026-10-28：全部展示、不收起（不再有 +N / 收起）
+    // 2026-10-30 用户口径：卡片只写第一个性格，多性格时右上角浮一个纯数字小角标（不占排版）
     expect(naturesOf()).toHaveTextContent('固执');
-    expect(naturesOf()).toHaveTextContent('开朗');
-    expect(naturesOf()).toHaveTextContent('胆小');
-    expect(within(naturesOf()).queryByTestId('mother-nature-more')).toBeNull();
+    expect(within(fireRow()!).getByTestId('mother-resource-nature-more')).toHaveTextContent('2');
+    expect(fireRow()!.style.height).toBe('83px');
 
-    // 不开该口径 → 条目上不显示性格
+    // 不开该口径 → 条目上不显示性格，也没有角标；卡片高度不变（角标不参与排版）
     rerender(
       <MotherGroupResources
         group={group}
@@ -111,6 +110,8 @@ describe('MotherGroupResources 三视图', () => {
     );
     expect(fireRow()).toBeTruthy();
     expect(within(fireRow()!).queryByTestId('mother-resource-natures')).toBeNull();
+    expect(within(fireRow()!).queryByTestId('mother-resource-nature-more')).toBeNull();
+    expect(fireRow()!.style.height).toBe('83px');
   });
 
   test('自己能产的蛋仍然展示，也可以勾选发需求（2026-10-29 取消限制）', () => {
@@ -314,12 +315,14 @@ describe('MotherGroupResources 三视图', () => {
     );
     fireEvent.click(screen.getByTestId('mother-view-mine'));
     const card = within(screen.getByTestId('demand-section-can-claim')).getByTestId('mother-demand-row');
-    expect(card).toHaveTextContent('巨灵组');
+    // 2026-10-30：种公需求卡的标题改成组内代表蛋（不再是蛋组名），蛋组进详情看
+    expect(card).toHaveTextContent('火花');
     expect(card).toHaveTextContent('固执');
     expect(card).not.toHaveTextContent('怎么配');
     expect(within(card).getByTestId('mother-demand-claim')).toBeTruthy();
-    // 左上角奖牌（公 · 大块头 · +100 → 体型 + 声音两张图）
-    expect(within(card).getByTestId('mother-demand-medals').querySelectorAll('img')).toHaveLength(2);
+    // 奖牌和性格 / 性别同一行显示（大块头 + 婉转声两张图）
+    expect(within(card).getByTestId('mother-demand-body')).toBeTruthy();
+    expect(within(card).getByTestId('mother-demand-voice')).toBeTruthy();
   });
 
   test('三视图顺序：我缺的 / 需求中心 / 共同寻找', () => {
@@ -832,13 +835,14 @@ describe('MotherGroupResources 三视图', () => {
     expect(screen.getAllByTestId('mother-resource-row').length).toBeGreaterThan(24);
   });
 
-  test('我缺的：体型可选小不点，声音可选 -100 / 婉转声 / 粗嗓门', () => {
+  test('我缺的：体型 / 声音没有「不限」，可选小不点以及 -100 / 婉转声 / 粗嗓门', () => {
     renderResources();
 
     fireEvent.click(screen.getByTestId('mother-target-body'));
     expect(screen.getByTestId('mother-target-body-option-大块头')).toBeInTheDocument();
     expect(screen.getByTestId('mother-target-body-option-小不点')).toBeInTheDocument();
-    expect(screen.getByTestId('mother-target-body-option-any')).toBeInTheDocument();
+    // 2026-10-30 用户口径：体型必须二选一，不再提供「不限」
+    expect(screen.queryByTestId('mother-target-body-option-any')).toBeNull();
     fireEvent.click(screen.getByTestId('mother-target-body-option-小不点'));
     expect(screen.getByTestId('mother-target-body')).toHaveTextContent('小不点');
 
@@ -847,6 +851,7 @@ describe('MotherGroupResources 三视图', () => {
     expect(screen.getByTestId('mother-target-voice-option--100')).toBeInTheDocument();
     expect(screen.getByTestId('mother-target-voice-option-婉转声')).toBeInTheDocument();
     expect(screen.getByTestId('mother-target-voice-option-粗嗓门')).toBeInTheDocument();
+    expect(screen.queryByTestId('mother-target-voice-option-any')).toBeNull();
     fireEvent.click(screen.getByTestId('mother-target-voice-option--100'));
     expect(screen.getByTestId('mother-target-voice')).toHaveTextContent('-100');
   });
@@ -993,6 +998,64 @@ describe('MotherGroupResources 三视图', () => {
     expect(publish).not.toHaveBeenCalled();
   });
 
+  test('我的需求写清四个条件标签，并用不同颜色区分', () => {
+    render(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        demands={[demandOf({ eggGameId: 201 })]}
+      />,
+    );
+    const row = screen
+      .getAllByTestId('mother-resource-row')
+      .find((item) => item.textContent?.includes('水蓝蓝'))!;
+    fireEvent.click(within(row).getByTestId('mother-resource-open'));
+    const demandRow = screen.getAllByTestId('mother-resource-detail-demand')[0];
+
+    const gender = within(demandRow).getByTestId('demand-criteria-gender');
+    expect(gender).toHaveTextContent('母');
+    expect(gender.className).toContain('bg-pink-50');
+
+    const body = within(demandRow).getByTestId('demand-criteria-body');
+    expect(body).toHaveTextContent('大块头');
+    expect(body.className).toContain('bg-emerald-50');
+
+    const voice = within(demandRow).getByTestId('demand-criteria-voice');
+    expect(voice).toHaveTextContent('+100');
+    expect(voice.className).toContain('bg-amber-50');
+
+    const nature = within(demandRow).getByTestId('demand-criteria-nature');
+    expect(nature).toHaveTextContent('胆小');
+    expect(nature.className).toContain('bg-violet-50');
+  });
+
+  test('性别标签母粉、公蓝，颜色有区分', () => {
+    render(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        demands={[demandOf({ eggGameId: 201, nature: '胆小' }), demandOf({ eggGameId: 201, gender: '公' })]}
+      />,
+    );
+    const row = screen
+      .getAllByTestId('mother-resource-row')
+      .find((item) => item.textContent?.includes('水蓝蓝'))!;
+    fireEvent.click(within(row).getByTestId('mother-resource-open'));
+    const rows = screen.getAllByTestId('mother-resource-detail-demand');
+
+    const female = within(rows[0]).getByTestId('demand-criteria-gender');
+    expect(female).toHaveTextContent('母');
+    expect(female.className).toContain('bg-pink-50');
+
+    const male = within(rows[1]).getByTestId('demand-criteria-gender');
+    expect(male).toHaveTextContent('公');
+    expect(male.className).toContain('bg-sky-50');
+  });
+
   test('我缺的：已发过的需求显示「已发需求」并可撤回', async () => {
     const withdraw = vi.fn().mockResolvedValue(undefined);
     render(
@@ -1130,9 +1193,9 @@ describe('MotherGroupResources 三视图', () => {
     const detail = screen.getByTestId('mother-resource-detail');
     expect(within(detail).getByTestId('mother-resource-detail-suppliers')).toHaveTextContent('B 能补');
 
-    fireEvent.click(within(detail).getByTestId('mother-resource-publish'));
-    const sheet = await screen.findByTestId('demand-publish');
-    fireEvent.click(within(sheet).getByTestId('demand-publish-confirm'));
+    // 2026-10-30：发需求面板常驻展开，不再需要先点「发需求」
+    const panel = within(detail).getByTestId('mother-resource-publish-panel');
+    fireEvent.click(within(panel).getByTestId('mother-resource-publish-confirm'));
     await waitFor(() =>
       expect(publish).toHaveBeenCalledWith(
         201,
@@ -1352,6 +1415,39 @@ describe('MotherGroupResources 三视图', () => {
     expect(pureRow).not.toHaveAttribute('data-blocked');
   });
 
+  test('需求中心：我发布的单独成组，可撤回；点卡片能看到谁能接', async () => {
+    const withdraw = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        demands={[demandOf({ eggGameId: 201, nature: '胆小', status: 'open' })]}
+        onWithdrawDemand={withdraw}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('mother-view-mine'));
+
+    const mine = screen.getByTestId('demand-section-mine-open');
+    expect(mine).toHaveTextContent('我发布的');
+    // 自己发的单不再混进「发布了没人接的」
+    expect(screen.queryByTestId('demand-section-unclaimed')).toBeNull();
+
+    // 整卡可点：点卡片正文（不是按钮）也能打开详情
+    fireEvent.click(within(mine).getAllByTestId('mother-demand-row')[0]);
+    expect(screen.getByTestId('mother-demand-detail-suppliers')).toHaveTextContent('谁能接');
+
+    fireEvent.click(within(mine).getByTestId('mother-demand-withdraw'));
+    fireEvent.click(within(mine).getByTestId('mother-demand-withdraw-confirm'));
+    await waitFor(() =>
+      expect(withdraw).toHaveBeenCalledWith(
+        201,
+        expect.objectContaining({ eggGameId: 201, nature: '胆小' }),
+      ),
+    );
+  });
+
   test('需求中心：四段顺序固定，其他人接的按成员分组并显示已结单数', () => {
     const demands: CollectionDemand[] = [
       demandOf({
@@ -1383,6 +1479,13 @@ describe('MotherGroupResources 三视图', () => {
         updatedAt: 2,
       }),
       demandOf({
+        demanderAccountId: 'B',
+        eggGameId: 201,
+        nature: '胆小',
+        status: 'open',
+        updatedAt: 1,
+      }),
+      demandOf({
         eggGameId: 101,
         nature: '淘气',
         status: 'done',
@@ -1401,7 +1504,8 @@ describe('MotherGroupResources 三视图', () => {
     );
     fireEvent.click(screen.getByTestId('mother-view-mine'));
 
-    const ids = ['mine-claimed', 'can-claim', 'others-claimed', 'unclaimed'];
+    // 2026-10-30 用户口径：自己发的单单独成「我发布的」，不再混进「发布了没人接的」
+    const ids = ['mine-open', 'mine-claimed', 'can-claim', 'others-claimed', 'unclaimed'];
     const sections = ids.map((id) => screen.getByTestId(`demand-section-${id}`));
     for (let index = 0; index < sections.length - 1; index += 1) {
       expect(
@@ -1412,13 +1516,14 @@ describe('MotherGroupResources 三视图', () => {
 
     expect(within(sections[0]).getAllByTestId('mother-demand-row')).toHaveLength(1);
     expect(within(sections[1]).getAllByTestId('mother-demand-row')).toHaveLength(1);
-    expect(sections[2]).toHaveTextContent('B');
-    expect(within(sections[2]).getByTestId('mother-completed-count')).toHaveTextContent(
+    expect(within(sections[2]).getAllByTestId('mother-demand-row')).toHaveLength(1);
+    expect(sections[3]).toHaveTextContent('B');
+    expect(within(sections[3]).getByTestId('mother-completed-count')).toHaveTextContent(
       '已结 1 单',
     );
-    expect(within(sections[2]).getAllByTestId('mother-demand-row')).toHaveLength(1);
     expect(within(sections[3]).getAllByTestId('mother-demand-row')).toHaveLength(1);
-    expect(screen.getByTestId('mother-resource-count')).toHaveTextContent('共 4 条');
+    expect(within(sections[4]).getAllByTestId('mother-demand-row')).toHaveLength(1);
+    expect(screen.getByTestId('mother-resource-count')).toHaveTextContent('共 5 条');
   });
 
   test('搜索按蛋聚合：搜「火神」能命中「火花」那颗蛋', () => {
@@ -1438,24 +1543,25 @@ describe('MotherGroupResources 三视图', () => {
     expect(rows[0]).toHaveTextContent('火花');
   });
 
-  test('固定卡片：我缺的与共同寻找都四列，长名字与卡片内部对齐', () => {
+  test('固定卡片：我缺的与共同寻找都是四列 79px，卡内按 95×100 绝对定位', () => {
     renderResources();
     const rows = screen.getAllByTestId('mother-resource-row');
     const list = rows[0].parentElement;
-    expect(list?.className).toContain('grid-cols-4');
-    expect(list?.className).toContain('items-stretch');
+    // 2026-10-30：改成固定 79px 四列（内层 95×100 设计稿等比缩放），不再是 grid-cols-4 自适应
+    expect(list?.getAttribute('style')).toContain('repeat(4, minmax(0, 79px))');
     for (const row of rows) {
-      expect(row.className).toContain('h-full');
       expect(row.className).toContain('flex-col');
       expect(row.className).toContain('items-center');
-      expect(row.querySelector('.truncate')).toBeNull();
-      expect(row.firstElementChild?.className).toContain('justify-center');
+      // 卡片高度固定 83（共同寻找卡底有认领按钮，用最小高度），角标浮在右上角不参与排版
+      expect(row.style.height || row.style.minHeight).toBe('83px');
+      // 名字过长按设计稿截断，不再换行把卡片撑高
+      expect(row.querySelector('.truncate')).toBeTruthy();
     }
 
     fireEvent.click(screen.getByTestId('mother-view-seeking'));
-    expect(screen.getAllByTestId('mother-resource-row')[0].parentElement?.className).toContain(
-      'grid-cols-4',
-    );
+    expect(
+      screen.getAllByTestId('mother-resource-row')[0].parentElement?.getAttribute('style'),
+    ).toContain('repeat(4, minmax(0, 79px))');
   });
 
   test('小组卡片：左上角奖牌竖排、头像居中、名字在头像下面、性格在名字下面', () => {
@@ -1492,7 +1598,7 @@ describe('MotherGroupResources 三视图', () => {
     expect(avatar.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test('长名字只显示基础名，不显示形态', () => {
+  test('长名字写基础名 + 形态缩略（形态小字跟在后面）', () => {
     const bang: SpeciesEntry = {
       key: 'bang',
       gameId: 601,
@@ -1519,8 +1625,8 @@ describe('MotherGroupResources 三视图', () => {
       .find((item) => item.textContent?.includes('蹦蹦种子'));
     expect(row).toBeTruthy();
     expect(row).toHaveTextContent('蹦蹦种子');
-    expect(row).not.toHaveTextContent('海神球');
-    expect(screen.queryByTestId('mother-resource-form')).toBeNull();
+    // 2026-10-29 用户口径：形态缩略写在名字后面，不再直接丢掉
+    expect(row).toHaveTextContent('·海神球');
   });
 
   test('性格全部展示，且排在名字之后（不会把头像顶下去）', () => {
@@ -1546,12 +1652,10 @@ describe('MotherGroupResources 三视图', () => {
     const fireRow = screen
       .getAllByTestId('mother-resource-row')
       .find((row) => row.textContent?.includes('火花'))!;
-    const name = within(fireRow).getByTestId('mother-resource-name');
     const natures = within(fireRow).getByTestId('mother-resource-natures');
-    // 3 个性格全部展示
-    expect(natures.children).toHaveLength(3);
-    // 性格在名字之后 = 不影响头像纵向位置
-    expect(name.compareDocumentPosition(natures) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 2026-10-30 用户口径：只写第一个性格，其余用右上角 +N 角标（不逐条铺开）
+    expect(natures.children).toHaveLength(1);
+    expect(within(fireRow).getByTestId('mother-resource-nature-more')).toHaveTextContent('2');
   });
 
   test('我缺的：已有非目标性格的母本，仍按自己设定的收集性格判定缺口', async () => {
@@ -1594,16 +1698,45 @@ describe('MotherGroupResources 三视图', () => {
     expect(within(detail).getByTestId('mother-resource-detail-suppliers')).toHaveTextContent(
       '固执：B',
     );
-    fireEvent.click(within(detail).getByTestId('mother-resource-publish'));
-    const sheet = await screen.findByTestId('demand-publish');
-    expect(within(sheet).getByTestId('demand-nature-101-固执')).toHaveAttribute(
+    // 2026-10-30：面板常驻，直接就能看到默认选中的性格
+    const panel = within(detail).getByTestId('mother-resource-publish-panel');
+    expect(within(panel).getByTestId('demand-nature-101-固执')).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    expect(within(sheet).getByTestId('demand-nature-101-开朗')).toHaveAttribute(
+    expect(within(panel).getByTestId('demand-nature-101-开朗')).toHaveAttribute(
       'aria-pressed',
       'false',
     );
+  });
+
+  test('我缺的：已收到一部分目标性格的蛋排在完全没收到之后', () => {
+    render(
+      <MotherGroupResources
+        group={{
+          ...group,
+          members: [
+            member('A', resourceWith([101, 201])),
+            member('B', resourceWith([101, 201])),
+            member('C', resourceWith([])),
+          ],
+        }}
+        viewerAccountId="A"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        natureOverrides={{ '101': ['固执', '开朗'], '201': ['固执', '开朗'] }}
+        // 火花只收到「固执」，水蓝蓝一个都没收到 → 水蓝蓝排前面
+        snapshots={[snapshot(1001, '甲', [mother(101, { nature: '固执' })])]}
+      />,
+    );
+    const names = screen
+      .getAllByTestId('mother-resource-row')
+      .map((row) => within(row).getByTestId('mother-resource-name').textContent ?? '');
+    const fire = names.findIndex((name) => name.includes('火花'));
+    const blue = names.findIndex((name) => name.includes('水蓝蓝'));
+    expect(fire).toBeGreaterThanOrEqual(0);
+    expect(blue).toBeGreaterThanOrEqual(0);
+    expect(blue).toBeLessThan(fire);
   });
 
   test('我缺的：目标性格都收齐后，这颗蛋不再出现在缺口里', () => {
@@ -1675,5 +1808,95 @@ describe('MotherGroupResources 三视图', () => {
     expect(claim.mock.calls.map((call) => call[0].eggGameId)).toEqual(
       expect.arrayContaining([201, -3]),
     );
+  });
+
+  test('种公需求卡按组内产线给代表蛋头像与角标，点开可选自己用哪颗接单', () => {
+    const eggX: SpeciesEntry = {
+      key: 'egg-x',
+      gameId: 901,
+      name: '测试蛋甲',
+      number: '901',
+      eggGroups: [3],
+      maleCapable: true,
+      eggGameId: 901,
+    };
+    const eggY: SpeciesEntry = {
+      key: 'egg-y',
+      gameId: 902,
+      name: '测试蛋乙',
+      number: '902',
+      eggGroups: [3, 4],
+      maleCapable: true,
+      eggGameId: 902,
+    };
+    const lines = [
+      { eggGameId: 901, grade: '大婉' as const, natures: ['固执'] },
+      { eggGameId: 902, grade: '大婉' as const, natures: ['固执'] },
+    ];
+    render(
+      <MotherGroupResources
+        group={{
+          ...group,
+          members: [
+            member('A', resourceWith([], { accounts: [sharedAccount(1001, [], { lines })] })),
+            member('B', resourceWith([], { accounts: [sharedAccount(1002, [])] })),
+          ],
+        }}
+        viewerAccountId="A"
+        species={[eggX, eggY]}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        demands={[demandOf({ demanderAccountId: 'B', eggGameId: -3, nature: '固执', gender: '公' })]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('mother-view-mine'));
+    const row = within(screen.getByTestId('demand-section-can-claim')).getByTestId(
+      'mother-demand-row',
+    );
+    // 双蛋组的「测试蛋乙」当代表与标题；还有 1 颗也能孵 → 角标只写数字 1
+    expect(within(row).getByTestId('mother-demand-candidate-badge')).toHaveTextContent('1');
+    expect(within(row).getByTestId('mother-demand-stud-avatar')).toBeTruthy();
+    expect(row).toHaveTextContent('测试蛋乙');
+
+    fireEvent.click(within(row).getByTestId('mother-demand-open'));
+    const detail = screen.getByTestId('mother-demand-detail');
+    const list = within(detail).getByTestId('mother-demand-stud-candidates');
+    // 双蛋组之间直接写出两个蛋组：两栖 × 昆虫
+    expect(within(list).getAllByTestId('stud-candidate-groups')[0]).toHaveTextContent(
+      '两栖 × 昆虫',
+    );
+    // 我能补两颗，都能点「用这颗」；另一颗只是组内别人的候选
+    const pick = within(list).getByTestId('stud-candidate-pick-901');
+    expect(pick).toHaveTextContent('用这颗');
+    fireEvent.click(pick);
+    expect(within(list).getByTestId('stud-candidate-pick-901')).toHaveTextContent('已选');
+  });
+
+  test('需求方结单后，承接人看到完成回执，点「知道了」后不再提示', () => {
+    window.localStorage.removeItem('roco.demandCompletionRead:B');
+    render(
+      <MotherGroupResources
+        group={group}
+        viewerAccountId="B"
+        species={catalog}
+        catalogVersion={FIXTURE_CATALOG_VERSION}
+        demands={[
+          demandOf({
+            demanderAccountId: 'A',
+            claimerAccountId: 'B',
+            status: 'done',
+            updatedAt: 900,
+          }),
+        ]}
+      />,
+    );
+
+    const notice = screen.getByTestId('demand-completion-thanks');
+    // 2026-10-30 用户口径：是「别人孵出来了」的回执，写清性格性别·精灵名字，并给结单数 / 组内排名
+    expect(notice).toHaveTextContent('有任务完成啦');
+    expect(notice).toHaveTextContent('成功孵出');
+    expect(notice).toHaveTextContent('胆小♀·');
+    expect(notice).toHaveTextContent('继续加油喵');
+    fireEvent.click(screen.getByTestId('demand-completion-thanks-ack'));
+    expect(screen.queryByTestId('demand-completion-thanks')).toBeNull();
   });
 });

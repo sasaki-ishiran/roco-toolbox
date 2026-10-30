@@ -1,4 +1,3 @@
-import type { PetGrade } from '../domain/petFilters';
 import type { CollectionGroupType } from '../shared/collectionGroups';
 
 /**
@@ -16,7 +15,8 @@ export type AppPage = 'dashboard' | 'home' | 'collection' | 'groups' | 'profile'
 export type CollectionLocation =
   | { kind: 'mothers'; status: 'missing' | 'collected' | 'plan'; eggGameId?: number }
   | { kind: 'studs'; view: 'coverage' | 'eggs'; groupId?: number }
-  | { kind: 'inventory'; view: 'all' | 'stud'; motherGrade?: PetGrade };
+  /** 精灵背包只剩「全部精灵」（2026-10-29：「合格种公」页取消）。 */
+  | { kind: 'inventory' };
 
 export type ProfileSection = 'identity' | 'data' | 'sync';
 
@@ -62,8 +62,8 @@ const BASE: AppNavigation = {
  * - `import` / 空 / 未知值 → 我的 · 游戏数据（首启默认）
  * - `myPets` → 收集 · 精灵库 · 全部
  * - `coverage` → 收集 · 种公 · 覆盖矩阵
- * - `swap` + `sharing` → 小组；`swap` + `eggs`/空 → 小组 · 个人求种公
- *   （旧求蛋子页已迁入小组，不再落到收集页的空视图）
+ * - `swap` + `sharing` → 小组；`swap` + `eggs`/空 → 小组 · 求种公
+ *   （旧求蛋子页已迁入小组；「个人求蛋」2026-10-30 已删除，统一落到小组页）
  */
 export function initialNavigation(lastTab: string | null, swapView: string | null): AppNavigation {
   switch (lastTab) {
@@ -72,7 +72,7 @@ export function initialNavigation(lastTab: string | null, swapView: string | nul
     case 'home':
       return { ...BASE, page: 'home' };
     case 'myPets':
-      return { ...BASE, page: 'collection', collection: { kind: 'inventory', view: 'all' } };
+      return { ...BASE, page: 'collection', collection: { kind: 'inventory' } };
     case 'coverage':
       return { ...BASE, page: 'collection', collection: { kind: 'studs', view: 'coverage' } };
     case 'swap':

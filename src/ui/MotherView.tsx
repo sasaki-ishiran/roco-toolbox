@@ -684,8 +684,9 @@ function MotherEggRow({
                 </span>
               </div>
               <div className="text-slate-400">
-                {mother.voiceDb}dB · {mother.medalBody || '无体型牌'} · {mother.account} ·{' '}
-                {boxLabel(mother)}
+                {mother.voiceDb}dB · 体重{' '}
+                {mother.weightPercent != null ? `${mother.weightPercent.toFixed(2)}%` : '—'} ·{' '}
+                {mother.medalBody || '无体型牌'} · {mother.account} · {boxLabel(mother)}
               </div>
             </li>
           ))}

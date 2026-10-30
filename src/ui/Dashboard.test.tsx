@@ -171,7 +171,7 @@ describe('Dashboard（看板）', () => {
     fireEvent.click(screen.getByTestId('progress-card-action-stud'));
     expect(onNavigate).toHaveBeenCalledWith({
       type: 'open-collection',
-      location: { kind: 'inventory', view: 'stud' },
+      location: { kind: 'studs', view: 'coverage' },
     });
 
     fireEvent.click(screen.getByTestId('progress-card-action-mother'));

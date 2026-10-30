@@ -43,7 +43,7 @@ describe('App', () => {
     presetFirstRunSeen();
     window.localStorage.setItem('roco.lastTab', 'swap');
     render(<App />);
-    expect(screen.getByTestId('personal-type-stud')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('collection-groups')).toBeTruthy();
   });
 
   test('壳把分享内容注入时自动切到「导入数据」页（否则分享会被静默搁置）', async () => {
@@ -61,7 +61,7 @@ describe('App', () => {
     expect(screen.getByText('导入游戏数据')).toBeTruthy();
   });
 
-  test('已在小组时从看板点求蛋，落到个人求种公而不是母本共享', async () => {
+  test('没有登录时小组页只给登录提示（个人求蛋已删除）', async () => {
     presetFirstRunSeen();
     await saveSnapshot(snapshot('账号甲'));
     resetSnapshotCacheForTest();
@@ -69,15 +69,10 @@ describe('App', () => {
     window.localStorage.setItem('roco.swapView', 'sharing');
 
     render(<App />);
-    // 启动落回小组页；没有登录时先给个人求蛋
-    expect(screen.getByTestId('personal-eggs')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: '看板' }));
-    fireEvent.click(screen.getByTestId('recommend-quantity-all'));
-
-    await waitFor(() =>
-      expect(screen.getByTestId('personal-type-stud')).toHaveAttribute('aria-pressed', 'true'),
-    );
+    // 启动落回小组页；未登录只有登录提示，不再有「个人求蛋」
+    expect(screen.getByTestId('group-login-hint')).toBeTruthy();
+    expect(screen.queryByTestId('personal-eggs')).toBeNull();
+    expect(screen.queryByTestId('group-personal')).toBeNull();
   });
 
   test('打开教程不会把当前页面卸载重挂（页内选择保留）', () => {

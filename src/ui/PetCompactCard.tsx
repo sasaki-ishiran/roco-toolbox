@@ -118,7 +118,7 @@ export function PetCompactCard({
     >
       <div className="absolute" style={at('avatar')}>
         <div className="relative h-10 w-10">
-          <PetAvatar gameId={gameId} name={name} shiny={isShiny || isColorful} size={40} />
+          <PetAvatar gameId={gameId} name={name} shiny={isShiny} size={40} />
           {raritySrc ? (
             <img
               src={raritySrc}

@@ -1,8 +1,8 @@
 /**
- * 小组页本机偏好（二期）：个人模式 / 小组模式、个人求蛋类型、按类型记住的当前组。
+ * 小组页本机偏好（二期）：是否已入组、上次打开的组、邀请码等。
  *
  * 与 `motherGroupStore.ts` 的区别：那份是一期只服务母本共享的单槽记忆；
- * 二期两类组并存后必须按类型分开记住，否则种公组会把母本组的当前组顶掉。
+ * 二期按类型分开记住当前组。
  */
 import type { CollectionGroupType } from '../shared/collectionGroups';
 
@@ -10,12 +10,11 @@ const KEY_PREFIX = 'roco.collectionGroups:';
 const GUEST_KEY = `${KEY_PREFIX}guest`;
 const PENDING_INVITE_KEY = 'roco.collectionGroups.pendingInvite';
 
+/** `group` = 已经打开某个组；`personal` = 未入组（2026-10-30 起没有「个人求蛋」页）。 */
 export type GroupPageMode = 'personal' | 'group';
 
 export interface CollectionGroupPrefs {
   mode: GroupPageMode;
-  /** 个人求蛋当前类型；两种类型分别保留搜索与勾选由组件自己管理。 */
-  personalType: CollectionGroupType;
   /** 每种类型上次打开的组。 */
   lastGroupIds: Partial<Record<CollectionGroupType, string>>;
   /** 组长本机看到的邀请码明文。 */
@@ -31,7 +30,6 @@ export interface CollectionGroupPrefs {
 
 const EMPTY: CollectionGroupPrefs = {
   mode: 'personal',
-  personalType: 'mother',
   lastGroupIds: {},
   inviteCodes: {},
   sharingOff: {},
@@ -91,8 +89,6 @@ export function readCollectionGroupPrefs(accountId: string | null): CollectionGr
     }
     return {
       mode: parsed.mode === 'group' ? 'group' : 'personal',
-      // 小组只剩母本组：旧值 stud 统一归到 mother，避免进入已删除的种公组。
-      personalType: 'mother',
       lastGroupIds,
       inviteCodes,
       sharingOff,
@@ -114,11 +110,6 @@ function write(accountId: string | null, prefs: CollectionGroupPrefs): void {
 
 export function savePageMode(accountId: string | null, mode: GroupPageMode): void {
   write(accountId, { ...readCollectionGroupPrefs(accountId), mode });
-}
-
-export function savePersonalType(accountId: string | null, _personalType: CollectionGroupType): void {
-  // 小组只剩母本组；保留参数是为了旧调用方兼容。
-  write(accountId, { ...readCollectionGroupPrefs(accountId), personalType: 'mother' });
 }
 
 export function readLastGroupId(
