@@ -24,10 +24,25 @@ const colorOf = (kinds: readonly string[]): string => {
 };
 const kindText = (kinds: readonly string[]) => kinds.map((kind) => KIND_LABEL[kind] || kind).join('·');
 
-/** 默认视野宽度（米）：只比最外圈（200m）大一点，避免圈外空白占满屏 */
-const DEFAULT_VIEW_METERS = 420;
+/** 默认视野半径 150m（= 横向 300m），刚好把 120m 圈完整包住 */
+const DEFAULT_VIEW_METERS = 300;
+/** 唯一的距离参考圈（半径 120m） */
+const VIEW_RING_METERS = 120;
+const ZOOM_KEY = 'roco.nearbyMapZoom';
 const MIN_SCALE = 0.04;
 const MAX_SCALE = 6;
+
+/** 读取上次的缩放倍率；没有 / 非法时回默认 1（= 150m 视野）。导出仅供测试。 */
+export function readSavedZoom(): number {
+  if (typeof window === 'undefined') return 1;
+  try {
+    const value = Number(window.localStorage.getItem(ZOOM_KEY));
+    if (Number.isFinite(value) && value >= 0.25 && value <= 8) return value;
+  } catch {
+    /* 忽略 */
+  }
+  return 1;
+}
 
 export interface NearbyMapProps {
   pets: readonly LiveNearbyPet[];
@@ -57,6 +72,24 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
   const [view, setView] = useState<ViewState>({ scale: 0.6, tx: 0, ty: 0 });
   const [selected, setSelected] = useState<string | null>(null);
   const interacted = useRef(false);
+  /** 用户缩放倍率（1 = 默认 150m）；存在 localStorage，下次打开沿用 */
+  const zoom = useRef(readSavedZoom());
+
+  const baseScale = useCallback((width: number) => {
+    if (!map || width === 0) return 1;
+    return width / (DEFAULT_VIEW_METERS / metersPerPixel(map));
+  }, [map]);
+
+  const saveZoom = useCallback((scale: number, width: number) => {
+    const base = baseScale(width);
+    if (!base) return;
+    zoom.current = scale / base;
+    try {
+      window.localStorage.setItem(ZOOM_KEY, String(zoom.current));
+    } catch {
+      /* 忽略 */
+    }
+  }, [baseScale]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -87,13 +120,13 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
     if (!map || size.width === 0) return;
     const point = self ?? { x: map.originX + map.sideUnits / 2, y: map.originY + map.sideUnits / 2 };
     const { px, py } = projectToPixel(map, point);
-    const scale = size.width / (DEFAULT_VIEW_METERS / metersPerPixel(map));
+    const scale = baseScale(size.width) * zoom.current;
     setView({
       scale,
       tx: size.width / 2 - px * scale,
       ty: size.height / 2 - py * scale,
     });
-  }, [map, self, size.width, size.height]);
+  }, [map, self, size.width, size.height, baseScale]);
 
   // 首屏 / 换场景 / 面板尺寸变化时自动对到自身；用户手动拖动过就不再抢镜头
   useEffect(() => {
@@ -106,13 +139,14 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
     setView((current) => {
       const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, current.scale * factor));
       const ratio = scale / current.scale;
+      saveZoom(scale, size.width);
       return {
         scale,
         tx: focusX - (focusX - current.tx) * ratio,
         ty: focusY - (focusY - current.ty) * ratio,
       };
     });
-  }, []);
+  }, [saveZoom, size.width]);
 
   const drag = useRef<{ id: number; x: number; y: number } | null>(null);
   const pinch = useRef<Map<number, { x: number; y: number }>>(new Map());
@@ -141,6 +175,7 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
         setView((current) => {
           const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, pinchStart.current!.scale * (distance / pinchStart.current!.distance)));
           const ratio = scale / current.scale;
+          saveZoom(scale, size.width);
           return { scale, tx: size.width / 2 - (size.width / 2 - current.tx) * ratio, ty: size.height / 2 - (size.height / 2 - current.ty) * ratio };
         });
       }
@@ -190,7 +225,7 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
         src={worldMapImageUrl(map)}
         alt={`${map.name}地图`}
         draggable={false}
-        className="pointer-events-none absolute left-0 top-0 select-none"
+        className="pointer-events-none absolute left-0 top-0 max-w-none select-none"
         style={{
           width: map.width * scale,
           height: map.height * scale,
@@ -200,17 +235,22 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
       />
 
       {/* 视野圈（以自身为圆心，帮助判断远近） */}
-      {selfScreen ? [100, 300].map((meters) => (
+      {selfScreen ? [VIEW_RING_METERS].map((meters) => (
         <div
           key={meters}
-          className="pointer-events-none absolute rounded-full border border-white/35"
+          className="pointer-events-none absolute rounded-full border border-white/70"
           style={{
             left: selfScreen.x - (meters / metersPerPixel(map)) * scale,
             top: selfScreen.y - (meters / metersPerPixel(map)) * scale,
             width: (meters / metersPerPixel(map)) * scale * 2,
             height: (meters / metersPerPixel(map)) * scale * 2,
+            boxShadow: '0 0 0 1px rgba(15,23,42,0.35)',
           }}
-        />
+        >
+          <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-full rounded bg-slate-900/70 px-1 text-[9px] leading-3 text-white">
+            {meters}m
+          </span>
+        </div>
       )) : null}
 
       {pets.map((pet) => {

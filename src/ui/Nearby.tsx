@@ -9,6 +9,9 @@ import { readNearbyRetained, writeNearbyRetained } from '../collector/nearbyReta
 import { readNearbySnapshot } from '../collector/nearbyStore';
 import { useRareAlert } from '../collector/rareAlertStore';
 import { useNearbyFeed } from '../collector/useNearbyFeed';
+import { buildNearbyOverlayPayload } from '../nearby/overlayPayload';
+import { hasNearbyOverlayShell, pushNearbyOverlayToShell } from '../nearby/overlayBridge';
+import { isLastEnabledNearbyOverlayPanel, setNearbyOverlayPanel, useNearbyOverlayPanels } from '../nearby/overlayPanels';
 import { species, eggGroupNames } from '../data/catalog';
 import { demandHitsForPet, demandSpeciesIndex, type DemandHit } from '../pcap/demandMatch';
 import { buildRadar, DEFAULT_RADAR_RADIUS_M, type RadarData } from '../pcap/nearbyRadar';
@@ -162,6 +165,9 @@ export function Nearby({ onNavigate }: NearbyProps) {
   const flow = useAutoImport();
   const { items: demands } = useDemandCenter();
   const rareAlertOn = useRareAlert();
+  /** 手机悬浮球展开后显示哪些面板（本机记忆，只影响安卓壳，不重排本页） */
+  const overlayPanels = useNearbyOverlayPanels();
+  const shellOverlaySupported = hasNearbyOverlayShell();
   const [view, setView] = useState<NearbyView>('map');
   const [filter, setFilter] = useState<NearbyFilter>('all');
   const [fullscreen, setFullscreen] = useState(false);
@@ -450,6 +456,38 @@ export function Nearby({ onNavigate }: NearbyProps) {
     }
   }, [overlaySupported, capturing, snapshot, pets, progress, mapSelf, radar]);
 
+  // 安卓壳：把「面板配置 + 附近 payload」推给原生悬浮球（节流 800ms，与 PC 同一口径）。
+  // 旧 APK 没有 updateNearbyOverlay 时 pushNearbyOverlayToShell 静默返回 false，网页不受影响。
+  const lastShellPush = useRef(0);
+  const shellPanelsSignature = useRef('');
+  useEffect(() => {
+    if (!shellOverlaySupported) return;
+    const signature = `${overlayPanels.battle}-${overlayPanels.nearby}`;
+    const panelsChanged = shellPanelsSignature.current !== signature;
+    shellPanelsSignature.current = signature;
+    if (!capturing) {
+      // 停止采集：推一次 visible=false，壳侧收起并隐藏悬浮球（没推过就不用推）
+      if (lastShellPush.current > 0) {
+        lastShellPush.current = 0;
+        void pushNearbyOverlayToShell(buildNearbyOverlayPayload({
+          capturing: false,
+          hasKey: Boolean(progress?.analysis.hasKey),
+          snapshot,
+        }));
+      }
+      return;
+    }
+    const now = Date.now();
+    // 开关变化立即重推（否则用户要点开球才看到旧配置）
+    if (!panelsChanged && now - lastShellPush.current < 800) return;
+    lastShellPush.current = now;
+    void pushNearbyOverlayToShell(buildNearbyOverlayPayload({
+      capturing: true,
+      hasKey: Boolean(progress?.analysis.hasKey),
+      snapshot,
+    }));
+  }, [shellOverlaySupported, capturing, snapshot, progress, overlayPanels]);
+
   // 全屏时支持 Esc 退出
   useEffect(() => {
     if (!fullscreen) return;
@@ -526,6 +564,35 @@ export function Nearby({ onNavigate }: NearbyProps) {
         <p className="text-[11px] text-slate-400">
           {snapshot ? `更新于 ${timeText(snapshot.updatedAt)}` : '尚未收到采集数据'}
         </p>
+        {shellOverlaySupported ? (
+          <div className="mt-1 flex flex-wrap items-center gap-1" data-testid="nearby-panel-settings">
+            <span className="text-[11px] text-slate-400">悬浮球展开显示</span>
+            {(['battle', 'nearby'] as const).map((key) => {
+              const on = overlayPanels[key];
+              const locked = isLastEnabledNearbyOverlayPanel(overlayPanels, key);
+              const label = key === 'battle' ? '战斗命中' : '附近面板';
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={locked}
+                  title={locked ? '至少保留一项' : `展开${on ? '隐藏' : '显示'}${label}`}
+                  onClick={() => setNearbyOverlayPanel(key, !on)}
+                  data-testid={`nearby-panel-${key}`}
+                  className={`min-h-[28px] rounded-lg border px-2 text-xs ${
+                    on ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-400'
+                  } ${locked ? 'opacity-50' : ''}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            {!overlayPanels.battle || !overlayPanels.nearby ? (
+              <span className="text-[11px] text-slate-400">至少保留一项</span>
+            ) : null}
+          </div>
+        ) : null}
         {captureSupported ? (
           <p className="text-[11px] text-slate-400">
             这里开始的采集只刷新地图与列表，不会自动停止 / 导入；要入库请到「我的 · 游戏数据」。

@@ -9,6 +9,7 @@ import type { NearbySnapshot } from '../collector/nearbyStore';
 import type { SeasonEncounter } from '../collector/captureProgress';
 import { useRareAlert } from '../collector/rareAlertStore';
 import { useNearbyFeed } from '../collector/useNearbyFeed';
+import { readNearbyOverlayPanels, resetNearbyOverlayPanelsForTest } from '../nearby/overlayPanels';
 import type { DemandCenterItem } from './useDemandCenter';
 import { useDemandCenter } from './useDemandCenter';
 import { Nearby } from './Nearby';
@@ -84,12 +85,24 @@ const demandCenter = (items: DemandCenterItem[] = []) => {
   });
 };
 
+/** 安卓壳带悬浮面板桥（window.RocoCapture.updateNearbyOverlay）：返回推送 spy */
+const shellWithOverlay = () => {
+  const updateNearbyOverlay = vi.fn((_json: string) => 'ok');
+  window.RocoCapture = {
+    getState: () => '{}',
+    updateBattleOverlay: vi.fn(() => 'ok'),
+    updateNearbyOverlay,
+  } as unknown as Window['RocoCapture'];
+  return updateNearbyOverlay;
+};
+
 const openList = () => fireEvent.click(screen.getByRole('button', { name: '列表' }));
 
 beforeEach(() => {
   resetNearbyRetainedForTest();
   resetNearbyAlertGateForTest();
   resetCaptureOriginForTest();
+  resetNearbyOverlayPanelsForTest();
   window.localStorage.clear();
   vi.mocked(useRareAlert).mockReturnValue(false);
   vi.mocked(useAutoImport).mockReturnValue({ session: null, stage: 'idle', completion: null, completionError: null, error: null });
@@ -293,6 +306,71 @@ describe('附近页', () => {
     await waitFor(() => expect(bridge.startCapture).toHaveBeenCalledWith('battle'));
     expect(screen.queryByTestId('overlay-permission-dialog')).toBeNull();
     expect(bridge.requestOverlayPermission).not.toHaveBeenCalled();
+  });
+
+  test('网页端 / 旧壳没有 updateNearbyOverlay 时不显示展开内容开关', () => {
+    feed();
+    render(<Nearby onNavigate={vi.fn()} />);
+    expect(screen.queryByTestId('nearby-panel-settings')).toBeNull();
+  });
+
+  test('有悬浮面板桥时，状态卡里默认两个面板都开启', () => {
+    shellWithOverlay();
+    feed();
+    render(<Nearby onNavigate={vi.fn()} />);
+    expect(screen.getByTestId('nearby-panel-settings')).toBeTruthy();
+    expect(screen.getByTestId('nearby-panel-battle').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('nearby-panel-nearby').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByText('至少保留一项')).toBeNull();
+  });
+
+  test('关掉附近面板后只剩战斗命中：最后一个开关置灰并提示', () => {
+    shellWithOverlay();
+    feed();
+    render(<Nearby onNavigate={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('nearby-panel-nearby'));
+    expect(readNearbyOverlayPanels()).toEqual({ battle: true, nearby: false });
+    expect(screen.getByTestId('nearby-panel-nearby').getAttribute('aria-pressed')).toBe('false');
+    const battle = screen.getByTestId('nearby-panel-battle') as HTMLButtonElement;
+    expect(battle.disabled).toBe(true);
+    expect(screen.getByText('至少保留一项')).toBeTruthy();
+    fireEvent.click(battle);
+    expect(readNearbyOverlayPanels()).toEqual({ battle: true, nearby: false });
+  });
+
+  test('采集中把面板配置随 payload 推给安卓壳', async () => {
+    const update = shellWithOverlay();
+    feed();
+    render(<Nearby onNavigate={vi.fn()} />);
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    const sent = JSON.parse(String(update.mock.calls[0][0]));
+    expect(sent.panels).toEqual({ battle: true, nearby: true });
+    expect(sent.visible).toBe(true);
+    expect(sent.pets.length).toBeGreaterThan(0);
+  });
+
+  test('切换开关后推给壳的配置立即更新', async () => {
+    const update = shellWithOverlay();
+    feed();
+    render(<Nearby onNavigate={vi.fn()} />);
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    update.mockClear();
+    fireEvent.click(screen.getByTestId('nearby-panel-nearby'));
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(JSON.parse(String(update.mock.calls[update.mock.calls.length - 1][0])).panels).toEqual({ battle: true, nearby: false });
+  });
+
+  test('停止采集后推一次隐藏，壳侧据收起悬浮球', async () => {
+    const update = shellWithOverlay();
+    feed();
+    const view = render(<Nearby onNavigate={vi.fn()} />);
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    feed(null, 'idle');
+    view.rerender(<Nearby onNavigate={vi.fn()} />);
+    await waitFor(() => {
+      const sent = JSON.parse(String(update.mock.calls[update.mock.calls.length - 1][0]));
+      expect(sent.visible).toBe(false);
+    });
   });
 
   test('「数据已收齐」时触发全局自动导入（附近页只是发起方，跳不跳由归属决定）', () => {
