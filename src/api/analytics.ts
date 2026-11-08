@@ -140,6 +140,7 @@ export const ANALYTICS_EVENT = {
   planImport: 'plan_import',
   planStart: 'plan_start',
   offerMark: 'offer_mark',
+  demandFail: 'demand_fail',
 } as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT)[keyof typeof ANALYTICS_EVENT];
@@ -162,6 +163,11 @@ export function trackDemandComplete(count = 1): void {
 /** 撤回自己发布的需求：一次一条，只报数量。 */
 export function trackDemandWithdraw(count = 1): void {
   track(ANALYTICS_EVENT.demandWithdraw, { count });
+}
+
+/** 需求/计划动作失败（2026-11-08）：只报步骤与错误码，不带用户文案，失败路径也能查到。 */
+export function trackDemandFail(step: string, code: string): void {
+  track(ANALYTICS_EVENT.demandFail, { step, code });
 }
 
 /** 家园需求上窝页里勾「已上窝」：count = 勾完这一下之后已标记的总行数（取消勾选不报）。 */

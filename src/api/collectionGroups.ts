@@ -50,6 +50,7 @@ import {
 import {
   trackDemandClaim,
   trackDemandComplete,
+  trackDemandFail,
   trackDemandPublish,
   trackDemandWithdraw,
   trackGroupJoin,
@@ -85,6 +86,22 @@ const asNumber = (value: unknown, field: string): number =>
 
 const asArray = (value: unknown, field: string): unknown[] =>
   Array.isArray(value) ? value : bad(`${field} 不是数组`);
+
+/**
+ * 失败路径埋点（2026-11-08）：需求/计划动作被拒绝时也要留痕，否则「点了没反应」
+ * 永远查不到。只报步骤与错误码，不带用户文案；切页取消不算失败。
+ */
+async function trackFailure<T>(step: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!(error instanceof Error && error.name === 'AbortError')) {
+      const code = error instanceof MotherGroupsApiError ? error.code : 'unknown';
+      trackDemandFail(step, code);
+    }
+    throw error;
+  }
+}
 
 const parseProductionLine = (value: unknown, field: string): SharedProductionLine => {
   const record = asRecord(value, field);
@@ -656,9 +673,11 @@ export async function publishCollectionDemand(
   signal?: AbortSignal,
 ): Promise<CollectionDemand[]> {
   const data = asRecord(
-    await request(
-      `/api/collection-groups/${encodeURIComponent(groupId)}/demands`,
-      jsonInit('POST', input, signal),
+    await trackFailure('publish', () =>
+      request(
+        `/api/collection-groups/${encodeURIComponent(groupId)}/demands`,
+        jsonInit('POST', input, signal),
+      ),
     ),
     '响应',
   );
@@ -679,9 +698,11 @@ export async function withdrawCollectionDemand(
     body: criteria.body,
     voice: criteria.voice,
   });
-  await request(
-    `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${eggGameId}?${params.toString()}`,
-    jsonInit('DELETE', undefined, signal),
+  await trackFailure('withdraw', () =>
+    request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${eggGameId}?${params.toString()}`,
+      jsonInit('DELETE', undefined, signal),
+    ),
   );
   trackDemandWithdraw();
 }
@@ -694,9 +715,11 @@ async function demandAction(
   signal?: AbortSignal,
 ): Promise<CollectionDemand> {
   const data = asRecord(
-    await request(
-      `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${eggGameId}/${action}`,
-      jsonInit('POST', body, signal),
+    await trackFailure(action, () =>
+      request(
+        `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${eggGameId}/${action}`,
+        jsonInit('POST', body, signal),
+      ),
     ),
     '响应',
   );
@@ -995,9 +1018,11 @@ export async function startCollectionPlan(
   signal?: AbortSignal,
 ): Promise<CollectionPlan> {
   const data = asRecord(
-    await request(
-      `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}/start`,
-      jsonInit('POST', undefined, signal),
+    await trackFailure('start', () =>
+      request(
+        `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}/start`,
+        jsonInit('POST', undefined, signal),
+      ),
     ),
     '响应',
   );
@@ -1042,9 +1067,11 @@ export async function markPlanOffer(
   signal?: AbortSignal,
 ): Promise<PlanOffer> {
   const data = asRecord(
-    await request(
-      `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}/offers/me`,
-      jsonInit('PUT', { note }, signal),
+    await trackFailure('offer', () =>
+      request(
+        `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}/offers/me`,
+        jsonInit('PUT', { note }, signal),
+      ),
     ),
     '响应',
   );

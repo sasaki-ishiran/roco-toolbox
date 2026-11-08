@@ -10,7 +10,14 @@ import {
   releaseCollectionDemand,
   withdrawCollectionDemand,
 } from './collectionGroups';
-import { flushEvents, setAnalyticsEnabled } from './analytics';
+import { flushEvents, setAnalyticsEnabled, trackDemandFail } from './analytics';
+
+// 失败埋点单独抓：成功路径的埋点仍走真实实现
+const trackFail = vi.hoisted(() => vi.fn());
+vi.mock('./analytics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./analytics')>();
+  return { ...actual, trackDemandFail: trackFail };
+});
 
 const response = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -64,6 +71,7 @@ beforeEach(() => {
   window.localStorage.setItem('roco.deviceToken', 'token-1');
   window.localStorage.setItem('roco.accountId', 'A');
   fetchMock.mockReset();
+  trackFail.mockClear();
   vi.stubGlobal('fetch', fetchMock);
 });
 
@@ -216,6 +224,9 @@ describe('需求契约（归档行 / 旧口径 / 错误码）', () => {
         version: 1,
       }),
     ).rejects.toMatchObject({ status: 409, code: 'DEMAND_TAKEN' });
+    // 失败路径也要留痕：只报步骤与错误码
+    expect(trackFail).toHaveBeenCalledWith('claim', 'DEMAND_TAKEN');
+    expect(trackDemandFail).toBe(trackFail);
   });
 
   test('未知错误码退回 HTTP_ERROR，不硬塞进窄联合', async () => {
