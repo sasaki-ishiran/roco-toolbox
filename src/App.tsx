@@ -165,7 +165,7 @@ export default function App() {
     return installFlushOnHide();
   }, []);
   // 页签曝光：只在页签名真的变化时上报一次（之前依赖整个 navigation 对象会重复上报）
-  useTabViewTracking(navigation.page, activeTab, tour);
+  useTabViewTracking(navigation.page, activeTab, Boolean(tour));
   useEffect(() => {
     // 引导自己会切好几页，别把这几次跳转算成用户行为
     if (tour) return;
