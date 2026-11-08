@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useCaptureProgress } from '../collector/useCaptureProgress';
 import type { CollectorState } from '../collector/nativeCollector';
-import { notifyRareAlert } from '../collector/nativeCollector';
+import { isDesktopShell, notifyRareAlert } from '../collector/nativeCollector';
 import { nearbyAlertGate } from '../collector/nearbyAlert';
 import { rareAlertTitle } from '../pcap/rareRules';
 import { StateNotice } from './primitives/StateNotice';
@@ -64,7 +64,8 @@ export function CaptureProgressView({ state, onReady, live = false, rareAlertOn 
           : !analysis!.eggInventoryComplete ? '蛋仓数据尚未收齐，请等待分页加载' : '仍在收集数据，请等待页面加载'; break;
       case 'stabilizing': title = `已识别内容正在稳定，还需 ${Math.ceil(progress.remainingMs / 1000)} 秒`; break;
       case 'ready': title = live ? '数据已收齐 · 持续获取中，可随时停止导入'
-        : verifying ? '有新流量，正在复核已识别内容' : '已识别内容稳定，正在自动停止保存'; break;
+        : isDesktopShell() ? '数据已收齐 · 需要入库时点「停止并保存」'
+          : verifying ? '有新流量，正在复核已识别内容' : '已识别内容稳定，正在自动停止保存'; break;
     }
   }
   return <div className="space-y-2" data-testid="capture-progress">

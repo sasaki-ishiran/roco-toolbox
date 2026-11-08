@@ -3,7 +3,7 @@ import { getImportOutcome } from '../ui/importOutcomeStore';
 import { hasAutoImported, hasAutoStopped, markAutoImported, markAutoStopped, unmarkAutoStopped } from './captureSessionStore';
 import { isNearbyOwnedSession } from './captureOriginStore';
 import { getLiveMode } from './liveModeStore';
-import { collectorAction, readCollectorState } from './nativeCollector';
+import { collectorAction, isDesktopShell, readCollectorState } from './nativeCollector';
 
 /**
  * 全局自动导入流程（2026-11-07 还原：数据收齐 → 自动停止 → 保存 → 导入工具箱）。
@@ -67,6 +67,10 @@ const delay = (ms: number) => new Promise<void>((resolve) => { window.setTimeout
  */
 export function requestAutoImport(session: string | null | undefined): boolean {
   if (!session) return false;
+  // 桌面版（2026-11-08）：登录握手才拿得到 key，自动停止后要重登很麻烦，
+  // 所以 PC 一律按「实时采集」处理：只更新地图/列表，不自动停止、不自动导入。
+  // 需要入库时由用户手动「停止并保存」→ 文件列表点「解析并导入」。
+  if (isDesktopShell()) return false;
   if (getLiveMode()) return false;
   if (isNearbyOwnedSession(session)) return false;
   if (hasAutoStopped(session)) return false;

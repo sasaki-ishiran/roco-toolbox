@@ -250,7 +250,7 @@ export function NativeCollectorPanel() {
             <ol className="list-decimal space-y-0.5 pl-5 text-xs text-slate-500">
               <li>保持网络连接，点「开始采集」。</li>
               <li>打开游戏并登录，进入野外或家园场景。</li>
-              <li>{liveMode ? '持续获取已开启：数据会边玩边更新，不收齐也不自动停止；想结束时点「停止并保存」。' : '查看数据进度；内容稳定（进度条走满）后会自动停止、保存并开始导入。'}</li>
+              <li>桌面版是实时采集：数据收齐也<b>不会自动停止</b>；要入库时点「停止并保存」，再到下面文件列表点「解析并导入」。</li>
             </ol>
           </> : (
             <ol className="list-decimal space-y-0.5 pl-5 text-xs text-slate-500">
