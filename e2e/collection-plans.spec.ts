@@ -52,8 +52,8 @@ test('我的收集：按待我确认优先排序，点卡进二级页，全部�
   // 待我确认（火花 3003）排第一
   await expect(cards.first()).toContainText('火花');
   await expect(cards.first().getByTestId('plan-card-progress')).toContainText('已上窝 · 等你确认');
-  // 卡面用 4 段细进度条代替五步点阵
-  await expect(cards.first().getByTestId('plan-card-bar').locator('span')).toHaveCount(4);
+  // 卡面用 5 段细进度条代替五步点阵，与详情页五步一一对应
+  await expect(cards.first().getByTestId('plan-card-bar').locator('span')).toHaveCount(5);
   // 性格竖排：本次需求对应的「固执」高亮
   await expect(
     cards.first().getByTestId('plan-card-natures').locator('[data-active="true"]'),

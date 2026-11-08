@@ -186,18 +186,18 @@ export function planPills(
   return pills;
 }
 
-/** 卡面细进度条：4 段（待接单 → 已认领 → 已上窝 → 待我确认），完成变绿、当前琥珀。 */
+/** 卡面细进度条：5 段，与详情页五步一一对应（待接单 / 已认领 / 已上窝 / 待我确认 / 已完成）。 */
 export type PlanBarState = 'done' | 'current' | 'todo';
 
 export function planBarSegments(
   plan: Pick<CollectionPlanView, 'progressStep' | 'status' | 'needsConfirm'>,
 ): PlanBarState[] {
-  const states: PlanBarState[] = ['todo', 'todo', 'todo', 'todo'];
+  const states: PlanBarState[] = ['todo', 'todo', 'todo', 'todo', 'todo'];
   if (plan.status === 'backlog' || plan.progressStep <= 0) return states;
   if (plan.status === 'done' || plan.progressStep >= 5) {
-    return ['done', 'done', 'done', 'done'];
+    return ['done', 'done', 'done', 'done', 'done'];
   }
-  // 待我确认 / 已上窝都算走到第 4 段
+  // 待我确认与已上窝分开成两段，和详情页保持一致
   const step = plan.needsConfirm || plan.progressStep >= 4 ? 4 : plan.progressStep;
   return states.map((_, index) =>
     index < step - 1 ? 'done' : index === step - 1 ? 'current' : 'todo',
