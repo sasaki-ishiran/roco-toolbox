@@ -14,6 +14,14 @@ export interface DemandCancelledNotice {
   count: number;
 }
 
+/**
+ * 提示条副文案（B-4）：只说「需求已结束」，不猜原因。
+ *
+ * 除了「需求方离开小组」，发布人完成 / 删除计划也会物理删掉未结单需求，
+ * 写死「需求方已离开小组」会在这条路径上误导承接人。
+ */
+export const DEMAND_CANCELLED_HINT = '需求已结束，不用再上窝了。';
+
 export interface DemandCancelledState {
   /** 上次刷新时「我承接且未完成」的单（key 带 updatedAt，重发后会换新 key）。 */
   claimed: string[];

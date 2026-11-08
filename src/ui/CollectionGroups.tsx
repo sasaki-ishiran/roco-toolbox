@@ -28,6 +28,7 @@ import {
   type DemandCompletionNotice,
 } from './demandCompletionNotice';
 import {
+  DEMAND_CANCELLED_HINT,
   readDemandCancelledState,
   resolveDemandCancelledNotice,
   saveDemandCancelledState,
@@ -341,7 +342,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
               data-testid="demand-cancelled-notice"
             >
               <p className="text-sm font-medium">你接的 {cancelledNotice.count} 条需求已被取消</p>
-              <p className="mt-0.5 text-xs opacity-90">需求方已离开小组。</p>
+              <p className="mt-0.5 text-xs opacity-90">{DEMAND_CANCELLED_HINT}</p>
               <button
                 type="button"
                 onClick={dismissCancelledNotice}

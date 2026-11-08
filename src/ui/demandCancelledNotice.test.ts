@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { CollectionDemand } from '../shared/collectionGroups';
 import {
   cancelledDemandKey,
+  DEMAND_CANCELLED_HINT,
   resolveDemandCancelledNotice,
   type DemandCancelledState,
 } from './demandCancelledNotice';
@@ -69,6 +70,12 @@ describe('resolveDemandCancelledNotice', () => {
       stateOf([cached], [cancelledDemandKey('g1', cached)]),
     );
     expect(decision.notice).toBeNull();
+  });
+
+  test('提示条的副文案不猜取消原因（B-4）', () => {
+    // 计划被发布人完成 / 删除时需求也会消失，不能再写死「需求方已离开小组」
+    expect(DEMAND_CANCELLED_HINT).not.toContain('离开小组');
+    expect(DEMAND_CANCELLED_HINT).toContain('已结束');
   });
 
   test('别人接的单消失不影响我', () => {
