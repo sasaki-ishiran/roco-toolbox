@@ -39,6 +39,7 @@ import { useSnapshots } from './ui/useSnapshots';
 import { useDraftLeaveGuard } from './ui/useDraftLeaveGuard';
 import { SnapshotRefreshNotice } from './ui/SnapshotRefreshNotice';
 import { usePlanBadge } from './ui/plan/usePlanBadge';
+import { useTabViewTracking } from './ui/useTabViewTracking';
 
 /**
  * 旧键 `roco.swapView`：原「换什么」页的视图记忆（该页 2026-10-30 已删）。
@@ -163,11 +164,11 @@ export default function App() {
     track('app_open', { platform: platform() });
     return installFlushOnHide();
   }, []);
+  // 页签曝光：只在页签名真的变化时上报一次（之前依赖整个 navigation 对象会重复上报）
+  useTabViewTracking(navigation.page, activeTab, tour);
   useEffect(() => {
     // 引导自己会切好几页，别把这几次跳转算成用户行为
     if (tour) return;
-    // 兼容桥阶段仍上报旧页签名（任务 9 再换新页面名，避免埋点口径提前断档）
-    track('tab_view', { tab: activeTab });
     // 记住停留的页签：关后台后重开不会莫名其妙回到「导入数据」。
     // **不把四个新 page 字符串直接写进旧键**：旧版安装升级 / 降级都要能理解。
     const legacy = legacyLocation(navigation);
@@ -179,7 +180,7 @@ export default function App() {
         // 隐私模式 / 配额满：记不住视图不影响功能
       }
     }
-  }, [navigation, activeTab, tour]);
+  }, [navigation, tour]);
   // 覆盖度矩阵的展开态放在这里，切页签回来不会收起
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null);
   /**
