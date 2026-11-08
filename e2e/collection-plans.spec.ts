@@ -115,6 +115,14 @@ test('组内广场：三个分区 + 一键接单 + 卡面撤回', async ({ page 
   // 点撤回回到「你能接的」
   await needsYou.getByTestId('plan-card-action').first().click();
   await expect(page.getByTestId('group-square-can-take')).toContainText('喵喵');
+
+  // 想收（还没发需求）单独一区：自己的给「开始」，别人的才给「我可提供」
+  const wish = page.getByTestId('group-square-wish');
+  await expect(wish).toContainText('组员在收');
+  await expect(wish).toContainText('火神');
+  await expect(wish.getByTestId('plan-card-progress').first()).toContainText('想收 · 还没发需求');
+  await expect(wish.getByTestId('plan-card-action').first()).toContainText('开始');
+  await expect(canTake).not.toContainText('火神');
 });
 
 test('添加想收：弹层多选落想收，条件行不空白，已有计划幂等跳过', async ({ page }) => {
@@ -223,6 +231,8 @@ test('截图：我的收集 / 组内广场 / 红点入口 375 与 390', async ({
       // 阿乙的两条，用来在截图中同时展示「需要你处理」和「其他人在收」
       { id: 'pB2', memberAccountId: 'B', eggGameId: 3002, status: 'active' as const },
       { id: 'pB3', memberAccountId: 'B', eggGameId: 3006, status: 'active' as const },
+      // 阿乙的想收：截图里展示「组员在收」+ 别人的「我可提供」
+      { id: 'pB4', memberAccountId: 'B', eggGameId: 3008, status: 'backlog' as const },
     ],
     demands: [
       ...demands,
@@ -288,6 +298,17 @@ test('截图：我的收集 / 组内广场 / 红点入口 375 与 390', async ({
     await page.getByTestId('plan-hub-tab-square').click();
     await page.screenshot({
       path: `docs/screenshots/收集计划-组内广场-${width}.png`,
+      fullPage: true,
+    });
+    // 「组员在收」：自己的想收给「开始」，别人的想收给「我可提供」
+    const wishSection = page.getByTestId('group-square-wish');
+    await expect(wishSection).toContainText('组员在收');
+    await expect(wishSection).toContainText('草头鸭');
+    await expect(
+      wishSection.getByTestId('plan-card-action').filter({ hasText: '我可提供' }),
+    ).toHaveCount(1);
+    await page.screenshot({
+      path: `docs/screenshots/收集计划-组内广场-组员在收-${width}.png`,
       fullPage: true,
     });
   }

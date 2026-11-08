@@ -417,6 +417,7 @@ export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
                   error={plans.error ?? null}
                   busy={plans.busy}
                   species={species}
+                  natureOverrides={resources.natureOverrides}
                   onOpenPlan={setDetailPlan}
                   onAction={(plan, kind) => void handleAction(plan, kind)}
                 />

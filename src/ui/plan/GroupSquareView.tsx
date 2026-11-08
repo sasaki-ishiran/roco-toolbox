@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import type { CollectionPlansResponse, CollectionPlanView } from '../../api/collectionGroups';
+import type { NatureOverrides } from '../../domain/recommendedNatures';
 import type { SpeciesEntry } from '../../domain/types';
 import { PlanCard, type PlanCardAction, type PlanCardActionKind } from './PlanCard';
-import { planPills, planReason, sortPlansForMe } from './planCardModel';
+import { planConditions, planPills, planReason, sortPlansForMe } from './planCardModel';
 
 export interface GroupSquareViewProps {
   viewerAccountId: string;
@@ -11,6 +12,7 @@ export interface GroupSquareViewProps {
   error: string | null;
   busy: boolean;
   species: readonly SpeciesEntry[];
+  natureOverrides?: NatureOverrides;
   onOpenPlan: (plan: CollectionPlanView) => void;
   onAction: (plan: CollectionPlanView, kind: PlanCardActionKind) => void;
 }
@@ -36,6 +38,9 @@ function hasStrictConditions(plan: CollectionPlanView): boolean {
  * 1. 需要你处理：我接的单（还没上窝 / 停太久）；
  * 2. 你能接的：别人还没人接的计划，按「我号里有蛋 > 图鉴有要现孵 > 条件可能不符」排；
  * 3. 其他人在收：已经被别人接走的计划，只看不动。
+ *
+ * 最后补一块「组员在收」：还没发需求的想收计划（含自己的），按创建时间倒序。
+ * 没有需求就没有可接的东西，所以只能看、只能留备注，不出现接单 / 上窝。
  */
 export function GroupSquareView({
   viewerAccountId,
@@ -44,6 +49,7 @@ export function GroupSquareView({
   error,
   busy,
   species,
+  natureOverrides,
   onOpenPlan,
   onAction,
 }: GroupSquareViewProps) {
@@ -52,10 +58,14 @@ export function GroupSquareView({
   const memberName = (accountId: string) =>
     data?.members.find((member) => member.accountId === accountId)?.displayName ?? '组员';
 
-  const { needsYou, canTake, others } = useMemo(() => {
+  const { needsYou, canTake, others, backlog } = useMemo(() => {
     const active = (data?.plans ?? []).filter(
       (plan) => plan.memberAccountId !== viewerAccountId && plan.status === 'active',
     );
+    // 想收：自己的和别人的都放这一块；只按创建时间倒序，不引入推荐排序。
+    const wish = (data?.plans ?? [])
+      .filter((plan) => plan.status === 'backlog')
+      .sort((a, b) => b.createdAt - a.createdAt);
     const matchable = new Set(data?.matchableEggIds ?? []);
     // 按「需求」分区，不是按计划：一条计划里只要还有没人接的需求，就仍然可接。
     const needsYou: CollectionPlanView[] = [];
@@ -81,6 +91,7 @@ export function GroupSquareView({
       needsYou: sortPlansForMe(needsYou),
       canTake: sortPlansForMe(canTake).sort((a, b) => tier(a) - tier(b)),
       others: sortPlansForMe(others),
+      backlog: wish,
     };
   }, [data, viewerAccountId]);
 
@@ -113,7 +124,7 @@ export function GroupSquareView({
     );
   }
 
-  const total = needsYou.length + canTake.length + others.length;
+  const total = needsYou.length + canTake.length + others.length + backlog.length;
 
   return (
     <section data-testid="group-square" className="flex flex-col gap-3 p-3">
@@ -196,6 +207,31 @@ export function GroupSquareView({
                 reason={planReason(plan, viewerAccountId, memberName, now).text}
               />
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {backlog.length > 0 ? (
+        <div data-testid="group-square-wish">
+          <SectionTitle title="组员在收" count={backlog.length} tone="text-slate-500" />
+          <div className="grid grid-cols-2 gap-2">
+            {backlog.map((plan) => {
+              const mine = plan.memberAccountId === viewerAccountId;
+              return (
+                <PlanCard
+                  key={plan.id}
+                  {...cardProps(
+                    plan,
+                    // 自己的想收和「我的收集」一致：给「开始」，不给「我可提供」。
+                    mine
+                      ? { label: '开始', kind: 'start', variant: 'outline' }
+                      : { label: '我可提供', kind: 'offer', variant: 'outline' },
+                  )}
+                  natures={planConditions(plan, { species, overrides: natureOverrides }).natures}
+                  reason="想收 · 还没发需求"
+                />
+              );
+            })}
           </div>
         </div>
       ) : null}
