@@ -49,8 +49,8 @@ export interface GroupPlanHubProps extends MotherGroupResourcesProps {
 export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
   const plans = useCollectionPlans(resources.group.group.id);
   const [tab, setTab] = useState<HubTab>('mine');
-  const [gapsOpen, setGapsOpen] = useState(false);
-  const [loopOpen, setLoopOpen] = useState(false);
+  /** 旧需求中心（未重做）：从一行入口整屏进入，保证同一屏只有一套卡型。 */
+  const [legacyView, setLegacyView] = useState<'missing' | 'mine' | null>(null);
   const [detailPlan, setDetailPlan] = useState<CollectionPlanView | null>(null);
   const [publishPlan, setPublishPlan] = useState<CollectionPlanView | null>(null);
   const [publishing, setPublishing] = useState(false);
@@ -285,160 +285,173 @@ export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
 
   return (
     <section className={className ?? 'space-y-2'} data-testid="group-plan-hub">
-      {removedNotice ? (
-        <p
-          className="rounded-xl bg-rose-50 px-3 py-2 text-[11px] text-rose-700"
-          data-testid="plan-hub-removed"
-        >
-          {removedNotice}
-        </p>
-      ) : null}
-      <div className="flex rounded-xl bg-slate-100 p-0.5" data-testid="group-plan-hub-tabs">
-        {(
-          [
-            { id: 'mine', label: '我的收集' },
-            { id: 'square', label: '组内广场' },
-          ] as const
-        ).map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setTab(item.id)}
-            aria-pressed={tab === item.id}
-            data-testid={`plan-hub-tab-${item.id}`}
-            className={`min-h-[32px] flex-1 rounded-lg text-xs ${
-              tab === item.id ? 'bg-white font-semibold text-slate-800 shadow-sm' : 'text-slate-500'
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {plans.notice ?? localNotice ? (
-        <p className="rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800" data-testid="plan-hub-notice">
-          {(localNotice ?? plans.notice) as string}
+      {legacyView ? (
+        <>
           <button
             type="button"
-            onClick={() => {
-              setLocalNotice(null);
-              plans.clearNotice();
-            }}
-            className="ml-2 underline"
+            onClick={() => setLegacyView(null)}
+            data-testid="plan-hub-legacy-back"
+            className="flex min-h-[32px] items-center gap-1 text-xs text-slate-500"
           >
-            知道了
+            <span aria-hidden>←</span> 返回收集计划
           </button>
-        </p>
-      ) : null}
-
-      {tab === 'mine' ? (
-        <div className="rounded-2xl bg-white shadow-sm">
-          <MyCollectionView
-            viewerAccountId={viewerAccountId}
-            data={plans.data}
-            loading={plans.loading}
-            error={plans.error ?? null}
-            species={species}
-            gapEggIds={gapEggIds}
-            alertSeenAt={alertSeenAt}
-            busy={plans.busy}
-            onOpenPlan={setDetailPlan}
-            onAction={(plan, kind) => void handleAction(plan, kind)}
-            onBulkImport={() => void bulkImport()}
-            onOpenGaps={() => setGapsOpen((open) => !open)}
-          />
-          {gapsOpen ? (
-            <div className="border-t border-slate-100 p-2" data-testid="my-collection-gaps">
-              <MotherGroupResources {...resources} viewLock="missing" />
-            </div>
-          ) : null}
-        </div>
+          <div className="rounded-2xl bg-white p-2 shadow-sm" data-testid="plan-hub-legacy">
+            <MotherGroupResources {...resources} viewLock={legacyView} />
+          </div>
+        </>
       ) : (
-        <div className="space-y-2">
-          <div className="rounded-2xl bg-white shadow-sm">
-            <GroupSquareView
-              viewerAccountId={viewerAccountId}
-              data={plans.data}
-              loading={plans.loading}
-              error={plans.error ?? null}
-              busy={plans.busy}
-              species={species}
-              onOpenPlan={setDetailPlan}
-              onAction={(plan, kind) => void handleAction(plan, kind)}
-            />
-          </div>
-          <div className="rounded-2xl bg-white shadow-sm">
-            <button
-              type="button"
-              onClick={() => setLoopOpen((open) => !open)}
-              aria-expanded={loopOpen}
-              data-testid="group-square-loop-toggle"
-              className="flex w-full items-center justify-between px-3 py-2.5 text-left text-xs"
+        <>
+          {removedNotice ? (
+            <p
+              className="rounded-xl bg-rose-50 px-3 py-2 text-[11px] text-rose-700"
+              data-testid="plan-hub-removed"
             >
-              <span className="font-medium text-slate-700">接单与结单</span>
-              <span className="text-[11px] text-slate-400">
-                {resources.demands?.length ?? 0} 条需求 · {loopOpen ? '收起' : '展开'}
-              </span>
-            </button>
-            {loopOpen ? (
-              <div className="border-t border-slate-100 p-2">
-                <MotherGroupResources {...resources} viewLock="mine" />
-              </div>
-            ) : null}
+              {removedNotice}
+            </p>
+          ) : null}
+          <div className="flex rounded-xl bg-slate-100 p-0.5" data-testid="group-plan-hub-tabs">
+            {(
+              [
+                { id: 'mine', label: '我的收集' },
+                { id: 'square', label: '组内广场' },
+              ] as const
+            ).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTab(item.id)}
+                aria-pressed={tab === item.id}
+                data-testid={`plan-hub-tab-${item.id}`}
+                className={`min-h-[32px] flex-1 rounded-lg text-xs ${
+                  tab === item.id
+                    ? 'bg-white font-semibold text-slate-800 shadow-sm'
+                    : 'text-slate-500'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
-        </div>
+
+          {plans.notice ?? localNotice ? (
+            <p
+              className="rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800"
+              data-testid="plan-hub-notice"
+            >
+              {(localNotice ?? plans.notice) as string}
+              <button
+                type="button"
+                onClick={() => {
+                  setLocalNotice(null);
+                  plans.clearNotice();
+                }}
+                className="ml-2 underline"
+              >
+                知道了
+              </button>
+            </p>
+          ) : null}
+
+          {tab === 'mine' ? (
+            <div className="rounded-2xl bg-white shadow-sm">
+              <MyCollectionView
+                viewerAccountId={viewerAccountId}
+                data={plans.data}
+                loading={plans.loading}
+                error={plans.error ?? null}
+                species={species}
+                gapEggIds={gapEggIds}
+                alertSeenAt={alertSeenAt}
+                busy={plans.busy}
+                onOpenPlan={setDetailPlan}
+                onAction={(plan, kind) => void handleAction(plan, kind)}
+                onBulkImport={() => void bulkImport()}
+                onOpenGaps={() => setLegacyView('missing')}
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="rounded-2xl bg-white shadow-sm">
+                <GroupSquareView
+                  viewerAccountId={viewerAccountId}
+                  data={plans.data}
+                  loading={plans.loading}
+                  error={plans.error ?? null}
+                  busy={plans.busy}
+                  species={species}
+                  onOpenPlan={setDetailPlan}
+                  onAction={(plan, kind) => void handleAction(plan, kind)}
+                />
+              </div>
+              {/* 旧需求中心只保留一行入口：不再外嵌 4 列小卡，避免同屏两套卡型。 */}
+              <div className="rounded-2xl bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setLegacyView('mine')}
+                  data-testid="group-square-loop-entry"
+                  className="flex w-full items-center justify-between px-3 py-2.5 text-left text-xs"
+                >
+                  <span className="font-medium text-slate-700">接单与结单</span>
+                  <span className="text-[11px] text-slate-400">
+                    {resources.demands?.length ?? 0} 条需求 · 去旧需求中心 ›
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <PlanDetailSheet
+            plan={detail}
+            species={species}
+            members={plans.data?.members ?? group.members.map((member) => ({
+              accountId: member.accountId,
+              displayName: member.displayName,
+            }))}
+            viewerAccountId={viewerAccountId}
+            onClose={closeDetail}
+            onStart={(plan) => safe(plans.actions.start(plan))}
+            onComplete={(plan) => safe(plans.actions.complete(plan))}
+            onDelete={(plan) => {
+              closeDetail();
+              safe(plans.actions.remove(plan));
+            }}
+            onSaveOffer={(plan, note) => safe(plans.actions.offer(plan, note))}
+            onWithdrawOffer={(plan) => safe(plans.actions.withdrawOffer(plan))}
+            onPublishDemand={(plan) => {
+              closeDetail();
+              openPublish(plan);
+            }}
+            onPlaceDemand={(plan) => void handleAction(plan, 'place')}
+          />
+
+          <DemandPublishSheet
+            open={publishPlan != null}
+            items={publishItems}
+            busy={publishing}
+            error={publishError}
+            onClose={() => setPublishPlan(null)}
+            onConfirm={(items, criteria) => {
+              setPublishing(true);
+              setPublishError('');
+              void (async () => {
+                try {
+                  for (const item of items) {
+                    await resources.onPublishDemand?.(item.eggGameId, item.natures, criteria);
+                  }
+                  setPublishPlan(null);
+                  await plans.refresh();
+                } catch (failure) {
+                  setPublishError(
+                    failure instanceof Error && failure.message ? failure.message : '发需求失败',
+                  );
+                } finally {
+                  setPublishing(false);
+                }
+              })();
+            }}
+          />
+        </>
       )}
-
-      <PlanDetailSheet
-        plan={detail}
-        species={species}
-        members={plans.data?.members ?? group.members.map((member) => ({
-          accountId: member.accountId,
-          displayName: member.displayName,
-        }))}
-        viewerAccountId={viewerAccountId}
-        onClose={closeDetail}
-        onStart={(plan) => safe(plans.actions.start(plan))}
-        onComplete={(plan) => safe(plans.actions.complete(plan))}
-        onDelete={(plan) => {
-          closeDetail();
-          safe(plans.actions.remove(plan));
-        }}
-        onSaveOffer={(plan, note) => safe(plans.actions.offer(plan, note))}
-        onWithdrawOffer={(plan) => safe(plans.actions.withdrawOffer(plan))}
-        onPublishDemand={(plan) => {
-          closeDetail();
-          openPublish(plan);
-        }}
-        onPlaceDemand={(plan) => void handleAction(plan, 'place')}
-      />
-
-      <DemandPublishSheet
-        open={publishPlan != null}
-        items={publishItems}
-        busy={publishing}
-        error={publishError}
-        onClose={() => setPublishPlan(null)}
-        onConfirm={(items, criteria) => {
-          setPublishing(true);
-          setPublishError('');
-          void (async () => {
-            try {
-              for (const item of items) {
-                await resources.onPublishDemand?.(item.eggGameId, item.natures, criteria);
-              }
-              setPublishPlan(null);
-              await plans.refresh();
-            } catch (failure) {
-              setPublishError(
-                failure instanceof Error && failure.message ? failure.message : '发需求失败',
-              );
-            } finally {
-              setPublishing(false);
-            }
-          })();
-        }}
-      />
     </section>
   );
 }

@@ -215,6 +215,20 @@ describe('计划卡状态徽标流（0 未发需求 / 1 待接单 / 2 已认领 
     ).toBe(2);
   });
 
+  test('已上窝的视角差异：发布人看「待我确认」，认领人看停在「已上窝」', () => {
+    const placed = {
+      plan: plan({ memberAccountId: 'owner' }),
+      demands: [demand({ demanderAccountId: 'owner', status: 'claimed' as const, placedAt: 1730000000000 })],
+      completions: [],
+    };
+    // 发布人（或不带视角）→ 4
+    expect(planProgressStep(placed)).toBe(4);
+    expect(planProgressStep({ ...placed, viewerAccountId: 'owner' })).toBe(4);
+    // 认领人 / 旁人 → 3（已上窝），不提前看到「待我确认」
+    expect(planProgressStep({ ...placed, viewerAccountId: 'claimer' })).toBe(3);
+    expect(planNeedsConfirm(3)).toBe(false);
+  });
+
   test('有归档但又被重新发单 → 优先显示待接单', () => {
     expect(
       planProgressStep({

@@ -129,7 +129,13 @@ export function PlanDetailSheet({
                       type="button"
                       onClick={() => {
                         setMenuOpen(false);
-                        onComplete(plan);
+                        if (
+                          window.confirm(
+                            '直接完成会把这条计划下还没结单的需求一起撤回，确定吗？',
+                          )
+                        ) {
+                          onComplete(plan);
+                        }
                       }}
                       className="block w-full px-3 py-2 text-left text-xs text-slate-600"
                       data-testid="plan-detail-complete"

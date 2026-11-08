@@ -57,30 +57,30 @@ export function GroupSquareView({
       (plan) => plan.memberAccountId !== viewerAccountId && plan.status === 'active',
     );
     const matchable = new Set(data?.matchableEggIds ?? []);
-    const claimedByMe: CollectionPlanView[] = [];
-    const claimedByOther: CollectionPlanView[] = [];
-    const open: CollectionPlanView[] = [];
+    // 按「需求」分区，不是按计划：一条计划里只要还有没人接的需求，就仍然可接。
+    const needsYou: CollectionPlanView[] = [];
+    const canTake: CollectionPlanView[] = [];
+    const others: CollectionPlanView[] = [];
     for (const plan of active) {
-      if (plan.demands.some((demand) => demand.claimerAccountId === viewerAccountId)) {
-        claimedByMe.push(plan);
-        continue;
+      const mineClaimed = plan.demands.some(
+        (demand) => demand.claimerAccountId === viewerAccountId,
+      );
+      const stillOpen = plan.demands.some((demand) => !demand.claimerAccountId);
+      if (mineClaimed) {
+        needsYou.push(plan);
+      } else if (plan.demands.length === 0 || stillOpen) {
+        // 没有需求的计划也放这里：动作给「我可提供」，不再点出假报错。
+        canTake.push(plan);
+      } else {
+        others.push(plan);
       }
-      if (
-        plan.demands.some(
-          (demand) => demand.claimerAccountId != null && demand.claimerAccountId !== viewerAccountId,
-        )
-      ) {
-        claimedByOther.push(plan);
-        continue;
-      }
-      open.push(plan);
     }
     const tier = (plan: CollectionPlanView) =>
       matchable.has(plan.eggGameId) ? 1 : hasStrictConditions(plan) ? 3 : 2;
     return {
-      needsYou: sortPlansForMe(claimedByMe),
-      canTake: sortPlansForMe(open).sort((a, b) => tier(a) - tier(b)),
-      others: sortPlansForMe(claimedByOther),
+      needsYou: sortPlansForMe(needsYou),
+      canTake: sortPlansForMe(canTake).sort((a, b) => tier(a) - tier(b)),
+      others: sortPlansForMe(others),
     };
   }, [data, viewerAccountId]);
 
@@ -162,13 +162,25 @@ export function GroupSquareView({
             hint="按匹配度排"
           />
           <div className="grid grid-cols-2 gap-2">
-            {canTake.map((plan) => (
-              <PlanCard
-                key={plan.id}
-                {...cardProps(plan, { label: '接单', kind: 'claim', variant: 'primary' })}
-                reason={cageReason(plan)}
-              />
-            ))}
+            {canTake.map((plan) => {
+              const noDemand = plan.demands.length === 0;
+              return (
+                <PlanCard
+                  key={plan.id}
+                  {...cardProps(
+                    plan,
+                    noDemand
+                      ? { label: '我可提供', kind: 'offer', variant: 'outline' }
+                      : { label: '接单', kind: 'claim', variant: 'primary' },
+                  )}
+                  reason={
+                    noDemand
+                      ? planReason(plan, viewerAccountId, memberName, now).text
+                      : cageReason(plan)
+                  }
+                />
+              );
+            })}
           </div>
         </div>
       ) : null}

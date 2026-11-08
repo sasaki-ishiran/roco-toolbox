@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { CollectionPlansResponse, CollectionPlanView } from '../../api/collectionGroups';
 import type { SpeciesEntry } from '../../domain/types';
 import { PlanCard, type PlanCardActionKind } from './PlanCard';
@@ -42,6 +42,7 @@ export function MyCollectionView({
   onOpenGaps,
 }: MyCollectionViewProps) {
   const [wishOpen, setWishOpen] = useState(false);
+  const [doneOpen, setDoneOpen] = useState(false);
   const now = Date.now();
 
   const mine = useMemo(
@@ -55,6 +56,11 @@ export function MyCollectionView({
   );
   const backlog = useMemo(
     () => mine.filter((plan) => plan.status === 'backlog'),
+    [mine],
+  );
+  /** 已完成回看：只陈列历史，不参与上面的排序与提醒口径。 */
+  const done = useMemo(
+    () => mine.filter((plan) => plan.status === 'done').sort((a, b) => b.updatedAt - a.updatedAt),
     [mine],
   );
 
@@ -116,7 +122,7 @@ export function MyCollectionView({
         <p className="rounded-lg bg-rose-50 px-2.5 py-2 text-[11px] text-rose-600">{error}</p>
       ) : null}
 
-      {active.length === 0 && backlog.length === 0 ? (
+      {active.length === 0 && backlog.length === 0 && done.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center">
           <p className="text-xs text-slate-400">还没有计划</p>
           <button
@@ -137,38 +143,42 @@ export function MyCollectionView({
       ) : null}
 
       {backlog.length > 0 ? (
-        <div data-testid="my-collection-wish">
+        <FoldSection
+          testId="my-collection-wish"
+          title="想收"
+          count={backlog.length}
+          open={wishOpen}
+          onToggle={() => setWishOpen((open) => !open)}
+        >
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {backlog.map(renderCard)}
+          </div>
           <button
             type="button"
-            onClick={() => setWishOpen((open) => !open)}
-            className="flex w-full items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 text-left"
-            aria-expanded={wishOpen}
+            disabled={busy || gapEggIds.length === 0}
+            onClick={onBulkImport}
+            className="mt-2 w-full rounded-lg border border-emerald-200 py-1.5 text-[11px] font-semibold text-emerald-700 disabled:opacity-50"
+            data-testid="my-collection-bulk-import"
           >
-            <span className="text-xs font-semibold text-slate-600">想收</span>
-            <span className="text-[11px] text-slate-400">{backlog.length}</span>
-            <span className="ml-auto text-[11px] text-slate-400">
-              {wishOpen ? '收起' : '展开'}
-            </span>
+            {gapEggIds.length > 0
+              ? `批量导入全部缺口（${gapEggIds.length}）`
+              : '没有可导入的缺口'}
           </button>
-          {wishOpen ? (
-            <>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {backlog.map(renderCard)}
-              </div>
-              <button
-                type="button"
-                disabled={busy || gapEggIds.length === 0}
-                onClick={onBulkImport}
-                className="mt-2 w-full rounded-lg border border-emerald-200 py-1.5 text-[11px] font-semibold text-emerald-700 disabled:opacity-50"
-                data-testid="my-collection-bulk-import"
-              >
-                {gapEggIds.length > 0
-                  ? `批量导入全部缺口（${gapEggIds.length}）`
-                  : '没有可导入的缺口'}
-              </button>
-            </>
-          ) : null}
-        </div>
+        </FoldSection>
+      ) : null}
+
+      {done.length > 0 ? (
+        <FoldSection
+          testId="my-collection-done"
+          title="已完成"
+          count={done.length}
+          open={doneOpen}
+          onToggle={() => setDoneOpen((open) => !open)}
+        >
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {done.map(renderCard)}
+          </div>
+        </FoldSection>
       ) : null}
 
       <button
@@ -180,5 +190,38 @@ export function MyCollectionView({
         全部缺口（次要入口）
       </button>
     </section>
+  );
+}
+
+/** 「想收 / 已完成」共用同一个折叠壳，避免两套观感。 */
+function FoldSection({
+  testId,
+  title,
+  count,
+  open,
+  onToggle,
+  children,
+}: {
+  testId: string;
+  title: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div data-testid={testId}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 text-left"
+        aria-expanded={open}
+      >
+        <span className="text-xs font-semibold text-slate-600">{title}</span>
+        <span className="text-[11px] text-slate-400">{count}</span>
+        <span className="ml-auto text-[11px] text-slate-400">{open ? '收起' : '展开'}</span>
+      </button>
+      {open ? children : null}
+    </div>
   );
 }

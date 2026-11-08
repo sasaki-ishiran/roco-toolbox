@@ -1954,6 +1954,9 @@ export async function publishCollectionDemand(
   }
 
   // 一次取回这几条（原来是按性格各查一次，N 个性格 = N 条 SQL）
+  if (newRows > 0) {
+    await touchPlanUpdatedAt(db, groupId, accountId, eggGameId, now);
+  }
   const savedRows = await db
     .prepare(
       `SELECT ${DEMAND_COLUMNS} FROM collection_group_demands
@@ -1972,6 +1975,23 @@ export async function publishCollectionDemand(
     .map((nature) => byNature.get(nature))
     .filter((row): row is DemandRow => row != null)
     .map(toDemand);
+}
+
+/** 需求状态变化时同步推进计划的 updated_at：卡面「停几天」以最近一次状态变更为准。 */
+async function touchPlanUpdatedAt(
+  db: D1Database,
+  groupId: string,
+  demanderAccountId: string,
+  eggGameId: number,
+  at = Date.now(),
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE collection_plans SET updated_at = ?
+        WHERE group_id = ? AND member_account_id = ? AND egg_game_id = ? AND status = 'active'`,
+    )
+    .bind(at, groupId, demanderAccountId, eggGameId)
+    .run();
 }
 
 /** 撤回自己的某一条需求（按蛋 + 性格 + 性别 / 体型 / 声音单独撤回）。 */
@@ -2103,6 +2123,7 @@ export async function claimCollectionDemand(
   if ((result.meta?.changes ?? 0) === 0) {
     throw new MotherStoreError('DEMAND_TAKEN', '这条需求刚被抢走了，刷新后再看');
   }
+  await touchPlanUpdatedAt(db, groupId, demanderAccountId, input.eggGameId, now);
   const saved = await findDemand(db, groupId, criteria);
   if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   return toDemand(saved);
@@ -2151,6 +2172,7 @@ export async function releaseCollectionDemand(
     }
     throw new MotherStoreError('DEMAND_TAKEN', '需求状态已更新，刷新后再看');
   }
+  await touchPlanUpdatedAt(db, groupId, demanderAccountId, input.eggGameId, now);
   const saved = await findDemand(db, groupId, criteria);
   if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   return toDemand(saved);
@@ -2435,6 +2457,7 @@ export async function readCollectionPlans(
       plan,
       demands: planDemandLikes,
       completions: completionLikes,
+      viewerAccountId,
     });
     return {
       ...plan,
@@ -2695,15 +2718,23 @@ export async function completeCollectionPlan(
   const row = await requireOwnPlan(db, groupId, accountId, planId);
   if (normalizePlanStatus(row.status) === 'done') return toPlan(row);
   const now = Date.now();
-  const updated = await db
-    .prepare(
-      `UPDATE collection_plans
-          SET status = 'done', version = version + 1, updated_at = ?
-        WHERE id = ? AND group_id = ? AND member_account_id = ? AND status <> 'done'`,
-    )
-    .bind(now, planId, groupId, accountId)
-    .run();
-  if ((updated.meta.changes ?? 0) === 0) {
+  // 计划直接完成后，未结单需求一起撤回：否则计划从广场消失，需求仍可被接单，发布人反而没入口处理。
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE collection_plans
+            SET status = 'done', version = version + 1, updated_at = ?
+          WHERE id = ? AND group_id = ? AND member_account_id = ? AND status <> 'done'`,
+      )
+      .bind(now, planId, groupId, accountId),
+    db
+      .prepare(
+        `DELETE FROM collection_group_demands
+          WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND status <> 'done'`,
+      )
+      .bind(groupId, accountId, row.egg_game_id),
+  ]);
+  if ((results[0]?.meta.changes ?? 0) === 0) {
     const latest = await findPlanRow(db, groupId, planId);
     if (!latest) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
     return toPlan(latest);
@@ -2874,6 +2905,7 @@ export async function markDemandPlaced(
   if ((result.meta.changes ?? 0) === 0) {
     throw new MotherStoreError('DEMAND_TAKEN', '需求状态已更新，刷新后再看');
   }
+  await touchPlanUpdatedAt(db, groupId, input.demanderAccountId, input.eggGameId, now);
   const saved = await findDemand(db, groupId, criteria);
   if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
   return toDemand(saved);

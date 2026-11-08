@@ -147,11 +147,19 @@ export function planProgressStep(input: {
   plan: Pick<CollectionPlan, 'status' | 'memberAccountId' | 'eggGameId'>;
   demands: readonly PlanDemandLike[];
   completions: readonly PlanCompletionLike[];
+  /**
+   * 当前查看者：认领人自己看停在 3（已上窝），发布人看才合并成 4（待我确认）。
+   * 不传按发布人视角，兼容旧调用。
+   */
+  viewerAccountId?: string;
 }): PlanProgressStep {
-  const { plan, demands, completions } = input;
+  const { plan, demands, completions, viewerAccountId } = input;
   if (plan.status === 'done') return 5;
   const mine = demands.filter((row) => belongsToPlan(plan, row));
-  if (mine.some((row) => row.placedAt != null)) return 4;
+  if (mine.some((row) => row.placedAt != null)) {
+    // 发布人（或不带视角）看到「待我确认」；其他人看到里程碑「已上窝」。
+    return viewerAccountId && viewerAccountId !== plan.memberAccountId ? 3 : 4;
+  }
   if (mine.some((row) => row.status === 'claimed')) return 2;
   if (mine.length > 0) return 1;
   if (completions.some((row) => belongsToPlan(plan, row))) return 5;

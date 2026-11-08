@@ -64,11 +64,15 @@ test('我的收集：按待我确认优先排序，点卡进二级页，全部�
   await page.getByTestId('my-collection-wish').getByRole('button').first().click();
   await expect(page.getByTestId('my-collection-bulk-import')).toBeVisible();
 
-  // 全部缺口是次要入口：点开才出现老资源视图，且没有三视图切换
+  // 旧需求中心只留一行入口：整屏进入，不再和两列卡同屏
   await expect(page.getByTestId('mother-resources')).toHaveCount(0);
   await page.getByTestId('my-collection-all-gaps').click();
-  await expect(page.getByTestId('my-collection-gaps')).toBeVisible();
+  await expect(page.getByTestId('plan-hub-legacy')).toBeVisible();
+  await expect(page.getByTestId('mother-resources')).toBeVisible();
+  await expect(page.getByTestId('my-collection')).toHaveCount(0);
   await expect(page.getByTestId('mother-view-mine')).toHaveCount(0);
+  await page.getByTestId('plan-hub-legacy-back').click();
+  await expect(page.getByTestId('my-collection')).toBeVisible();
 
   // 卡片 → 二级页（sheet）
   await cards.first().click();
@@ -174,6 +178,17 @@ test('截图：我的收集 / 组内广场 / 红点入口 375 与 390', async ({
     ],
     offers: [{ planId: 'pA1', offerAccountId: 'B', note: '这窝今晚出壳，明早给你' }],
   });
+  // 先把「水蓝蓝」直接完成（两个宽度下都能看到「已完成」折叠区）
+  await page.setViewportSize({ width: 375, height: 844 });
+  await page.goto('/');
+  await openGroups(page);
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByTestId('plan-card').filter({ hasText: '水蓝蓝' }).first().click();
+  await page.getByTestId('plan-detail-more').click();
+  await page.getByTestId('plan-detail-complete').click();
+  await page.getByTestId('plan-detail-close').click();
+  await expect(page.getByTestId('my-collection-done')).toBeVisible();
+
   for (const width of [375, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/');
@@ -185,6 +200,13 @@ test('截图：我的收集 / 组内广场 / 红点入口 375 与 390', async ({
     });
     await page.screenshot({
       path: `docs/screenshots/收集计划-我的收集-${width}.png`,
+      fullPage: true,
+    });
+    // 已完成回看：默认收起，展开后能看到结单的计划
+    await page.getByTestId('my-collection-done').getByRole('button').first().click();
+    await expect(page.getByTestId('my-collection-done')).toContainText('水蓝蓝');
+    await page.screenshot({
+      path: `docs/screenshots/收集计划-我的收集-已完成-${width}.png`,
       fullPage: true,
     });
     await page.getByTestId('plan-hub-tab-square').click();

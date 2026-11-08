@@ -43,6 +43,9 @@ export function planProgressText(
       return '等组里接单';
     case 2:
       return '已有人认领';
+    case 3:
+      // 认领人视角停在 3：已上窝、还没被发布人确认。
+      return '已上窝 · 等发布人确认';
     case 4:
       return '等你确认收货';
     default:
