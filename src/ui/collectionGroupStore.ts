@@ -112,6 +112,18 @@ export function savePageMode(accountId: string | null, mode: GroupPageMode): voi
   write(accountId, { ...readCollectionGroupPrefs(accountId), mode });
 }
 
+type LastGroupListener = (accountId: string | null, groupId: string | null) => void;
+
+const lastGroupListeners = new Set<LastGroupListener>();
+
+/** 订阅「当前小组」变化：页签红点等外部逻辑要在切组后立刻按新组重算（2026-11-08）。 */
+export function subscribeLastGroupId(listener: LastGroupListener): () => void {
+  lastGroupListeners.add(listener);
+  return () => {
+    lastGroupListeners.delete(listener);
+  };
+}
+
 export function readLastGroupId(
   accountId: string | null,
   groupType: CollectionGroupType,
@@ -131,6 +143,7 @@ export function saveLastGroupId(
   if (groupId) lastGroupIds.mother = groupId;
   else delete lastGroupIds.mother;
   write(accountId, { ...prefs, lastGroupIds });
+  for (const listener of lastGroupListeners) listener(accountId, groupId);
 }
 
 export function readCollectionInviteCode(accountId: string | null, groupId: string): string | null {

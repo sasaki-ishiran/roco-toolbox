@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getCollectionPlans } from '../../api/collectionGroups';
 import { readAccountId, subscribeSession } from '../../api/session';
-import { readLastGroupId } from '../collectionGroupStore';
+import { readLastGroupId, subscribeLastGroupId } from '../collectionGroupStore';
 import {
   planAlertCounts,
   publishPlanAlertBadge,
@@ -17,11 +17,27 @@ import {
  */
 export function usePlanBadge(): void {
   const [accountId, setAccountId] = useState<string | null>(() => readAccountId());
+  const [groupId, setGroupId] = useState<string | null>(() =>
+    readLastGroupId(readAccountId(), 'mother'),
+  );
 
   useEffect(() => subscribeSession(() => setAccountId(readAccountId())), []);
 
+  // 切组要立刻按新组重算：只依赖 accountId 会让红点一直按旧组算到刷新（2026-11-08）。
   useEffect(() => {
-    const groupId = readLastGroupId(accountId, 'mother');
+    setGroupId(readLastGroupId(accountId, 'mother'));
+  }, [accountId]);
+
+  useEffect(
+    () =>
+      subscribeLastGroupId((nextAccountId, nextGroupId) => {
+        if (nextAccountId !== accountId) return;
+        setGroupId(nextGroupId);
+      }),
+    [accountId],
+  );
+
+  useEffect(() => {
     if (!accountId || !groupId) {
       publishPlanAlertBadge(0);
       return;
@@ -49,5 +65,5 @@ export function usePlanBadge(): void {
       controller?.abort();
       window.clearInterval(timer);
     };
-  }, [accountId]);
+  }, [accountId, groupId]);
 }
