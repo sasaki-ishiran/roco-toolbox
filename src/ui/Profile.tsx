@@ -106,6 +106,11 @@ export function Profile({
         </>
       ) : null}
 
+      {/* 构建时间（原顶栏版本标记）：排障时确认「拿到的是不是最新一版」 */}
+      <p className="pt-1 text-center text-[10px] text-slate-300" data-testid="app-version">
+        版本 {__APP_BUILD__}
+      </p>
+
       {/* AccountPanel 常驻：数据分区只是隐藏，切回来恢复码与同步提示仍在 */}
       <div className={section === 'data' ? 'hidden' : 'space-y-3'} data-testid="profile-account-slot">
         <AccountPanel

@@ -26,7 +26,7 @@ export interface SpeciesEntry {
   catchable?: boolean;
   /** 能否出公（抓取建议用） */
   maleCapable?: boolean;
-  /** 成体体重的大小体型边界（kg），与 eggSize 的蛋重区分。 */
+  /** 成体体重的大小体型边界（kg）。 */
   bodySize?: { small: number; big: number };
   /**
    * 成体身高区间（米，2026-10-26）。用来算身高百分位：100% = 上限、0% = 下限。
@@ -34,18 +34,6 @@ export interface SpeciesEntry {
    * **只参与「合格」判定，不改大块头 / 小不点奖牌**（奖牌仍按体重 98% / 2%）。
    */
   heightSize?: { min: number; max: number };
-  /**
-   * 蛋的重量区间（判定这枚蛋孵出来是不是大块头 / 小不点）。
-   * 大块头 = 蛋重 >= hugeMin，小不点 = 蛋重 <= miniMax；
-   * 换成百分位就是 (蛋重 - min) / (max - min)，hugeMin 约在 98%、miniMax 约在 2% 处。
-   * 少部分物种没有这个数据（625 个物种里有 47 个缺）。
-   */
-  eggSize?: {
-    min: number;
-    miniMax: number;
-    hugeMin: number;
-    max: number;
-  };
   /**
    * 种族值六围（推荐算法专项，2026-10-04 烘焙进图鉴）。兜底推荐性格用。
    * 625 个物种全覆盖。

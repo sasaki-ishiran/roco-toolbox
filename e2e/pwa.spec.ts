@@ -48,10 +48,11 @@ test('PWA：manifest 可访问且 Service Worker 注册成功', async ({ page })
 
 /**
  * 部署新版本后，手机上打开的可能是被 Service Worker 缓存下来的旧页面。
- * 顶部显示构建时间，就能一眼确认"我拿到的到底是不是最新一版"。
+ * 「我的」页底部显示构建时间，就能一眼确认"我拿到的到底是不是最新一版"。
  */
-test('页面顶部显示版本标记', async ({ page }) => {
+test('「我的」页显示版本标记', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: '我的', exact: true }).click();
 
   const version = page.getByTestId('app-version');
   await expect(version).toBeVisible();
@@ -75,5 +76,5 @@ test('顶部「刷新」按钮会带时间戳重新加载（绕过旧缓存）',
     page.waitForURL(/[?&]v=\d+/, { timeout: 20000 }),
     page.getByTestId('app-refresh').click(),
   ]);
-  await expect(page.getByTestId('app-version')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '洛克工具箱' })).toBeVisible();
 });

@@ -101,22 +101,6 @@ const { merged: officialNames, conflicts, overridden } = loadOfficialNames();
 const eggMap = loadEggMap();
 
 /**
- * 蛋的重量区间。判定「这枚蛋孵出来是不是大块头 / 小不点」要用：
- * 大块头 = 蛋重 >= hugeMin（约在 [min,max] 区间的 98% 处），小不点 = <= miniMax（约 2% 处）。
- *
- * 四个阈值必须齐全才输出：缺任何一个就不能瞎兜底 —— 例如把 missing 的 hugeMin 兜成 0，
- * 会让「蛋重 >= 0」恒成立，等于把每枚蛋都判成大块头。缺数据的物种直接不给 eggSize，
- * 由消费方按「没有数据、判不了」处理。
- */
-function toEggSize(size) {
-  if (!size) return undefined;
-  const { min, mini_max: miniMax, huge_min: hugeMin, max } = size;
-  const values = [min, miniMax, hugeMin, max];
-  if (values.some((value) => typeof value !== 'number' || !Number.isFinite(value))) return undefined;
-  return { min, miniMax, hugeMin, max };
-}
-
-/**
  * 身高区间（米，2026-10-26）。
  *
  * 游戏里的身高百分位以物种区间 [min, max] 为 0~100%：100% = 上限、0% = 下限。
@@ -162,7 +146,6 @@ const species = pets.pets.map((p) => ({
     p.gender_ratio && (p.gender_ratio.male > 0 || p.gender_ratio.female > 0)
       ? { male: p.gender_ratio.male, female: p.gender_ratio.female }
       : undefined,
-  eggSize: toEggSize(p.egg_size),
   // 与内置采集解析器共用成体体型规则；旧 JSON 缺奖牌时可由精确体重恢复。
   bodySize: resolveBodySize({ ...decoderByGameId.get(p.game_id), weight: p.weight }) ?? undefined,
   // 身高区间：算身高百分位用（合格判定放宽，见 toHeightSize）

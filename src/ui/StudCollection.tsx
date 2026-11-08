@@ -10,7 +10,7 @@ export interface StudCollectionProps {
 /**
  * 种公工具只剩覆盖矩阵（2026-10-25 二期）。
  *
- * 「求什么 / 换蛋清单」已迁到「小组 · 个人求种公」，不再在收集页保留重复入口。
+ * 「求什么 / 换蛋清单」已并入小组页，不再在收集页保留重复入口。
  */
 export function StudCollection({
   expandedGroupId,

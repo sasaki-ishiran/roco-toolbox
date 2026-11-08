@@ -145,7 +145,7 @@ export interface LegacyLocation {
  */
 export function legacyLocation(state: AppNavigation): LegacyLocation {
   if (state.page === 'groups') {
-    // 旧版「交换蛋」页最接近个人求种公；母本组仍记成 sharing
+    // 旧版「交换蛋」页的种公子视图（已删除）对应旧键 eggs；母本组仍记成 sharing
     return { lastTab: 'swap', swapView: state.groupType === 'stud' ? 'eggs' : 'sharing' };
   }
   if (state.page === 'profile') return { lastTab: 'import', swapView: 'eggs' };

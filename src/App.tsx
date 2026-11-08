@@ -33,15 +33,27 @@ import {
   type NavigationIntent,
 } from './ui/navigation';
 import { readLastTab, saveLastTab } from './ui/lastTab';
-import { readSwapMainView, saveSwapMainView } from './ui/swapViewStore';
 import { getImportOutcome, useImportOutcome } from './ui/importOutcomeStore';
 import { useSnapshots } from './ui/useSnapshots';
 import { useDraftLeaveGuard } from './ui/useDraftLeaveGuard';
 import { SnapshotRefreshNotice } from './ui/SnapshotRefreshNotice';
 
+/**
+ * 旧键 `roco.swapView`：原「换什么」页的视图记忆（该页 2026-10-30 已删）。
+ * 只用于老用户启动落点：仅 `sharing` 有意义，其余值与读失败都按「没有旧键」处理。
+ */
+function legacySwapView(): 'sharing' | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem('roco.swapView') === 'sharing' ? 'sharing' : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [navigation, setNavigation] = useState<AppNavigation>(() =>
-    initialNavigation(readLastTab(), readSwapMainView()),
+    initialNavigation(readLastTab(), legacySwapView()),
   );
   const navigationRef = useRef(navigation);
   navigationRef.current = navigation;
@@ -154,7 +166,13 @@ export default function App() {
     // **不把四个新 page 字符串直接写进旧键**：旧版安装升级 / 降级都要能理解。
     const legacy = legacyLocation(navigation);
     saveLastTab(legacy.lastTab);
-    if (legacy.lastTab === 'swap') saveSwapMainView(legacy.swapView);
+    if (legacy.lastTab === 'swap') {
+      try {
+        window.localStorage.setItem('roco.swapView', legacy.swapView);
+      } catch {
+        // 隐私模式 / 配额满：记不住视图不影响功能
+      }
+    }
   }, [navigation, activeTab, tour]);
   // 覆盖度矩阵的展开态放在这里，切页签回来不会收起
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null);
@@ -218,9 +236,6 @@ export default function App() {
             >
               教程
             </button>
-            <span className="text-[10px] text-slate-300" data-testid="app-version">
-              版本 {__APP_BUILD__}
-            </span>
           </div>
         </header>
         <TabNav active={activeTab} onChange={(page) => navigate({ type: 'tab', page })} />
