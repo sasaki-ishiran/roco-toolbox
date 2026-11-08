@@ -338,40 +338,8 @@ describe('附近页', () => {
     expect(readNearbyOverlayPanels()).toEqual({ battle: true, nearby: false });
   });
 
-  test('采集中把面板配置随 payload 推给安卓壳', async () => {
-    const update = shellWithOverlay();
-    feed();
-    render(<Nearby onNavigate={vi.fn()} />);
-    await waitFor(() => expect(update).toHaveBeenCalled());
-    const sent = JSON.parse(String(update.mock.calls[0][0]));
-    expect(sent.panels).toEqual({ battle: true, nearby: true });
-    expect(sent.visible).toBe(true);
-    expect(sent.pets.length).toBeGreaterThan(0);
-  });
-
-  test('切换开关后推给壳的配置立即更新', async () => {
-    const update = shellWithOverlay();
-    feed();
-    render(<Nearby onNavigate={vi.fn()} />);
-    await waitFor(() => expect(update).toHaveBeenCalled());
-    update.mockClear();
-    fireEvent.click(screen.getByTestId('nearby-panel-nearby'));
-    await waitFor(() => expect(update).toHaveBeenCalled());
-    expect(JSON.parse(String(update.mock.calls[update.mock.calls.length - 1][0])).panels).toEqual({ battle: true, nearby: false });
-  });
-
-  test('停止采集后推一次隐藏，壳侧据收起悬浮球', async () => {
-    const update = shellWithOverlay();
-    feed();
-    const view = render(<Nearby onNavigate={vi.fn()} />);
-    await waitFor(() => expect(update).toHaveBeenCalled());
-    feed(null, 'idle');
-    view.rerender(<Nearby onNavigate={vi.fn()} />);
-    await waitFor(() => {
-      const sent = JSON.parse(String(update.mock.calls[update.mock.calls.length - 1][0]));
-      expect(sent.visible).toBe(false);
-    });
-  });
+  // 悬浮面板推送到安卓壳的生命周期已移到应用级：见 src/nearby/useNearbyOverlayPush.test.tsx
+  // （推送跟随采集状态，不再随本页挂载 / 卸载）
 
   test('「数据已收齐」时触发全局自动导入（附近页只是发起方，跳不跳由归属决定）', () => {
     feed(null, 'idle', readyProgress);

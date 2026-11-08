@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { LiveNearbyPet } from '../collector/captureProgress';
 import { buildRadar, geometricMedian, niceCeil } from './nearbyRadar';
+import { projectToPixel, WORLD_MAPS } from './worldMap';
 
 const pet = (overrides: Partial<LiveNearbyPet> & { key: string }): LiveNearbyPet => ({
   cfgId: 10000, name: '未知精灵', level: 1, voiceDb: 0,
@@ -77,12 +78,12 @@ describe('buildRadar', () => {
     expect(data.unplaced.map((item) => item.key)).toEqual(['no-pos']);
   });
 
-  test('八方向标签与箭头', () => {
+  test('八方向标签与箭头（世界坐标 y 轴指向南，与地图同一套）', () => {
     const center = { x: 0, y: 0, z: 0 };
     const cases: Array<[number, number, string, string]> = [
-      [0, 1000, '北', '↑'],
+      [0, 1000, '南', '↓'],
       [1000, 0, '东', '→'],
-      [0, -1000, '南', '↓'],
+      [0, -1000, '北', '↑'],
       [-1000, 0, '西', '←'],
     ];
     for (const [x, y, label, arrow] of cases) {
@@ -105,8 +106,30 @@ describe('buildRadar', () => {
       [pet({ key: 'a', pos: { x: 0, y: 100, z: 0 } })],
       { origin: { x: 0, y: 0 }, minRadiusM: 30 },
     );
-    expect(data.points[0]).toMatchObject({ key: 'a', distanceM: 1, bearingLabel: '北' });
+    expect(data.points[0]).toMatchObject({ key: 'a', distanceM: 1, bearingLabel: '南' });
     expect(data.maxDistanceM).toBe(30);
+  });
+
+  test('雷达与地图同向：正 y（南）的点在中心下方，负 y（北）在上方', () => {
+    const data = buildRadar(
+      [
+        pet({ key: 'south', pos: { x: 0, y: 1000, z: 0 } }),
+        pet({ key: 'north', pos: { x: 0, y: -1000, z: 0 } }),
+      ],
+      { origin: { x: 0, y: 0 }, radiusM: 115 },
+    );
+    const south = data.points.find((point) => point.key === 'south')!;
+    const north = data.points.find((point) => point.key === 'north')!;
+    // 渲染端是 cy = center + ny * radius（向下为正），所以南必须是正 ny
+    expect(south.ny).toBeGreaterThan(0);
+    expect(north.ny).toBeLessThan(0);
+    expect(south.bearingLabel).toBe('南');
+    expect(north.bearingLabel).toBe('北');
+    // 地图落图：世界 y 增大 → 像素 py 增大（向下），与雷达一致
+    const map = WORLD_MAPS[10003];
+    const lower = projectToPixel(map, { x: map.originX, y: map.originY + 1000 });
+    const upper = projectToPixel(map, { x: map.originX, y: map.originY - 1000 });
+    expect(lower.py).toBeGreaterThan(upper.py);
   });
 
   test('视野半径下限：精灵很近时仍保留至少 30 米视野', () => {

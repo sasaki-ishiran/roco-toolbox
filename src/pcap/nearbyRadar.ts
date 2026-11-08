@@ -71,7 +71,7 @@ export interface RadarPoint {
   bearingLabel: string;
   bearingArrow: string;
   distanceM: number;
-  /** 归一化坐标 [-1,1]，y 轴向上为北 */
+  /** 归一化坐标 [-1,1]，y 轴向下为南（与地图落图同一套） */
   nx: number;
   ny: number;
 }
@@ -96,7 +96,9 @@ function hasPosition(pet: LiveNearbyPet): pet is LiveNearbyPet & { pos: { x: num
 }
 
 function bearingOf(dx: number, dy: number): { deg: number; label: string; arrow: string } {
-  const deg = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+  // 世界坐标 y 轴指向南（与 `public/maps/maps.json` 的 "y":"south" 一致）：
+  // 北是 -dy，所以用 atan2(dx, -dy) 才能得到「0 = 北、顺时针」。
+  const deg = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
   const index = Math.round(deg / 45) % 8;
   return { deg, label: BEARING_LABELS[index], arrow: BEARING_ARROWS[index] };
 }
@@ -194,8 +196,8 @@ export function buildRadar(pets: readonly LiveNearbyPet[], options: RadarOptions
       bearingArrow: bearing.arrow,
       distanceM: rawDistances[index],
       nx: dx / scale,
-      // 避免产生 -0（测试与显示都会把它当成另一个值）
-      ny: dy === 0 ? 0 : -dy / scale,
+      // 渲染端是 cy = center + ny * radius（向下为正），与地图「y 向南」一致
+      ny: dy === 0 ? 0 : dy / scale,
     };
   });
   return { origin, maxDistanceM, points, unplaced, outsideRadius: placed.length - keep.length };

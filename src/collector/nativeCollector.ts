@@ -157,12 +157,12 @@ export function resetCaptureBytesCacheForTest(): void {
  * （新壳的拦截器支持 ?from=N；旧壳响应头对不上时自动回退全量），
  * 拼接后交给 worker 解码——解码仍是全量扫，但那是纯 CPU，耗时远小于搬运。
  */
-export async function readCaptureSnapshotBytes(snapshot: CaptureSnapshot): Promise<Uint8Array> {
+export async function readCaptureSnapshotBytes(snapshot: CaptureSnapshot, signal?: AbortSignal): Promise<Uint8Array> {
   const cached = liveBytes;
   if (cached && cached.id === snapshot.id && cached.bytes.length <= snapshot.size) {
     if (cached.bytes.length === snapshot.size) return cached.bytes;
     try {
-      const delta = await fetchCaptureDelta(snapshot.url, cached.bytes.length);
+      const delta = await fetchCaptureDelta(snapshot.url, cached.bytes.length, signal);
       if (cached.bytes.length + delta.length > MAX_CAPTURE_BYTES) throw new Error('抓包超过 128MiB');
       const merged = new Uint8Array(cached.bytes.length + delta.length);
       merged.set(cached.bytes, 0);
@@ -171,18 +171,20 @@ export async function readCaptureSnapshotBytes(snapshot: CaptureSnapshot): Promi
       return merged;
     } catch (error) {
       if (error instanceof Error && error.message.includes('128MiB')) throw error;
+      // 主动取消（切页 / 后台心跳重启卡死轮次）：不要再回退全量读一遍
+      if ((error as { name?: string } | null)?.name === 'AbortError') throw error;
       // 旧壳不支持 from / 响应头对不上：回退全量读取
     }
   }
-  const response = await fetch(snapshot.url, { cache: 'no-store', credentials: 'omit' });
+  const response = await fetch(snapshot.url, { cache: 'no-store', credentials: 'omit', signal });
   if (!response.ok) throw new Error('无法读取本机原包，请返回工具箱重新导入');
   const bytes = new Uint8Array(await response.arrayBuffer());
   liveBytes = { id: snapshot.id, bytes };
   return bytes;
 }
 
-async function fetchCaptureDelta(url: string, from: number): Promise<Uint8Array> {
-  const response = await fetch(`${url}?from=${from}`, { cache: 'no-store', credentials: 'omit' });
+async function fetchCaptureDelta(url: string, from: number, signal?: AbortSignal): Promise<Uint8Array> {
+  const response = await fetch(`${url}?from=${from}`, { cache: 'no-store', credentials: 'omit', signal });
   if (!response.ok) throw new Error('无法增量读取本机原包');
   // 校验拦截器确实理解了 from（旧壳会忽略 query 返回全量，那会让拼接错位，必须识别出来）
   const servedFrom = Number(response.headers.get('X-Capture-From'));

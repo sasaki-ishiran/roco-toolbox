@@ -9,8 +9,8 @@ import { resetDecodeWorkerForTest } from '../pcap/decodeInWorker';
 const analysis: CaptureAnalysis = { fingerprint: 'a', hasGameTraffic: true, hasKey: true, hasProfile: true, accountCount: 1, boxes: 1, records: 1, missingRecords: 0, hasEggInventory: true, eggInventoryComplete: true, eggRecords: 0, completionCandidate: true, truncated: false, flowErrors: 0, stableWaitMs: 12000 };
 const state: CollectorState = { version: 1, supported: true, phase: 'capturing', message: '', packets: 2, bytes: 100, files: [], progressVersion: 1, fileId: 'capture-1.pcap', savedBytes: 100 };
 beforeEach(() => { clearCaptureProgressCache(); });
-afterEach(() => { resetDecodeWorkerForTest(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); delete window.RocoCapture; });
-function setup(options: { live?: boolean } = {}) {
+afterEach(() => { resetDecodeWorkerForTest(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); delete window.RocoCapture; delete window.__rocoLiveTick; });
+function setup(options: { live?: boolean; background?: boolean; windowBytes?: number } = {}) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
   let fail = false;
   let size = 100;
@@ -93,6 +93,16 @@ describe('采集进度生命周期', () => {
     const calls = hook.inspectCalls();
     hook.grow();
     await tick(2500);
+    expect(hook.inspectCalls()).toBeGreaterThan(calls);
+    expect(hook.result.current.sourceBytes).toBe(200);
+  });
+  test('后台心跳能直接唤醒一轮刷新，不依赖被节流的页面定时器', async () => {
+    const hook = setup({ live: true, background: true, windowBytes: 2 * 1024 * 1024 });
+    await tick(0);
+    const calls = hook.inspectCalls();
+    hook.grow();
+    // 页面定时器不推进，只模拟安卓壳每秒调一次 __rocoLiveTick
+    await act(async () => { window.__rocoLiveTick?.(); await Promise.resolve(); });
     expect(hook.inspectCalls()).toBeGreaterThan(calls);
     expect(hook.result.current.sourceBytes).toBe(200);
   });

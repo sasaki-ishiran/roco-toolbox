@@ -16,6 +16,8 @@ export interface NearbySnapshot {
   self: { x: number; y: number } | null;
   /** 最近一次赛季奇遇战守卫的个体数据；没有奇遇战为 null */
   encounter: SeasonEncounter | null;
+  /** 这段采集里抓到登录密钥没有（悬浮面板据此提示「还没拿到密钥」） */
+  hasKey?: boolean;
   updatedAt: number;
 }
 

@@ -9,8 +9,7 @@ import { readNearbyRetained, writeNearbyRetained } from '../collector/nearbyReta
 import { readNearbySnapshot } from '../collector/nearbyStore';
 import { useRareAlert } from '../collector/rareAlertStore';
 import { useNearbyFeed } from '../collector/useNearbyFeed';
-import { buildNearbyOverlayPayload } from '../nearby/overlayPayload';
-import { hasNearbyOverlayShell, pushNearbyOverlayToShell } from '../nearby/overlayBridge';
+import { hasNearbyOverlayShell } from '../nearby/overlayBridge';
 import { isLastEnabledNearbyOverlayPanel, setNearbyOverlayPanel, useNearbyOverlayPanels } from '../nearby/overlayPanels';
 import { species, eggGroupNames } from '../data/catalog';
 import { demandHitsForPet, demandSpeciesIndex, type DemandHit } from '../pcap/demandMatch';
@@ -456,37 +455,8 @@ export function Nearby({ onNavigate }: NearbyProps) {
     }
   }, [overlaySupported, capturing, snapshot, pets, progress, mapSelf, radar]);
 
-  // 安卓壳：把「面板配置 + 附近 payload」推给原生悬浮球（节流 800ms，与 PC 同一口径）。
-  // 旧 APK 没有 updateNearbyOverlay 时 pushNearbyOverlayToShell 静默返回 false，网页不受影响。
-  const lastShellPush = useRef(0);
-  const shellPanelsSignature = useRef('');
-  useEffect(() => {
-    if (!shellOverlaySupported) return;
-    const signature = `${overlayPanels.battle}-${overlayPanels.nearby}`;
-    const panelsChanged = shellPanelsSignature.current !== signature;
-    shellPanelsSignature.current = signature;
-    if (!capturing) {
-      // 停止采集：推一次 visible=false，壳侧收起并隐藏悬浮球（没推过就不用推）
-      if (lastShellPush.current > 0) {
-        lastShellPush.current = 0;
-        void pushNearbyOverlayToShell(buildNearbyOverlayPayload({
-          capturing: false,
-          hasKey: Boolean(progress?.analysis.hasKey),
-          snapshot,
-        }));
-      }
-      return;
-    }
-    const now = Date.now();
-    // 开关变化立即重推（否则用户要点开球才看到旧配置）
-    if (!panelsChanged && now - lastShellPush.current < 800) return;
-    lastShellPush.current = now;
-    void pushNearbyOverlayToShell(buildNearbyOverlayPayload({
-      capturing: true,
-      hasKey: Boolean(progress?.analysis.hasKey),
-      snapshot,
-    }));
-  }, [shellOverlaySupported, capturing, snapshot, progress, overlayPanels]);
+  // 安卓壳悬浮面板的推送已移到应用级（src/nearby/useNearbyOverlayPush.ts）：
+  // 推送跟随采集状态，不随本页卸载，从「我的」页发起采集也照样有面板。
 
   // 全屏时支持 Esc 退出
   useEffect(() => {

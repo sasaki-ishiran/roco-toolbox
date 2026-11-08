@@ -21,6 +21,7 @@ import { Collection } from './ui/Collection';
 import { CollectionGroups } from './ui/CollectionGroups';
 import { Nearby } from './ui/Nearby';
 import { BattleHudOrb } from './ui/BattleHudOrb';
+import { useNearbyOverlayPush } from './nearby/useNearbyOverlayPush';
 import { Profile } from './ui/Profile';
 import { TabNav } from './ui/TabNav';
 import {
@@ -82,6 +83,8 @@ export default function App() {
   const { snapshots, loaded, refreshError, refreshedAt } = useSnapshots();
   // 「小组」页签红点：待我确认 + 新提供（本机已读水位）
   usePlanBadge();
+  // 安卓壳悬浮面板推送：应用级，跟随采集状态而不是跟随「附近」页
+  useNearbyOverlayPush();
   // 壳（APK）把分享内容注入**当前页面**，而消费分享的监听挂在「导入数据」页里（只挂载当前页）：
   // 应用开着且停在别的页签时，分享会被静默搁置（看起来像「分享过来什么都没发生」）。
   // 所以一收到分享事件就切到导入页；导入完成后**不再自动跳看板**（2026-10-25 用户要求）：

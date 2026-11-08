@@ -11,6 +11,34 @@ const empty: ProgressState = { progress: null, sourceBytes: 0, error: null, chec
 /** live 刷新的自适应区间：解一次很快就在 500ms 后继续，慢则最多等 1.5s，避免连续占满 CPU。 */
 const LIVE_INTERVAL_MIN_MS = 500;
 const LIVE_INTERVAL_MAX_MS = 1500;
+/** 一轮解析超过这个时间还没结束就认定卡死，由后台心跳重开（2MiB 尾窗正常 1~5s）。 */
+const LIVE_STALL_MS = 15000;
+
+/**
+ * 后台心跳订阅（2026-11-08）。
+ *
+ * 用户切到游戏后工具箱页面不可见，WebView 会把 setTimeout / setInterval 节流到
+ * 每分钟一次甚至暂停，表现就是悬浮球「有时候一直不刷新」。安卓壳在主线程每秒
+ * 调一次 `window.__rocoLiveTick()` 来绕过定时器节流；这里登记需要被唤醒的轮询。
+ */
+declare global {
+  interface Window { __rocoLiveTick?: () => void }
+}
+const liveTicks = new Set<() => void>();
+export function registerLiveTick(tick: () => void): () => void {
+  liveTicks.add(tick);
+  if (typeof window !== 'undefined' && !window.__rocoLiveTick) {
+    window.__rocoLiveTick = () => {
+      liveTicks.forEach((fn) => {
+        try { fn(); } catch { /* 单个订阅失败不影响其它订阅 */ }
+      });
+    };
+  }
+  return () => {
+    liveTicks.delete(tick);
+    if (liveTicks.size === 0 && typeof window !== 'undefined') delete window.__rocoLiveTick;
+  };
+}
 export interface CaptureProgressOptions {
   /** 持续获取模式：进度走满也不停止轮询，继续按固定间隔刷新实时计数。 */
   live?: boolean;
@@ -81,6 +109,9 @@ export function useCaptureProgress(state: CollectorState | null, options: Captur
       ? { size: cached.sourceBytes, analysis: cached.analysis }
       : null;
     const active = (run: number) => !disposed && (background || !document.hidden) && run === epoch;
+    /** 当前是否有一轮在跑 + 开始时间：后台心跳据此判断「卡死」并重开。 */
+    let running = false;
+    let runningSince = 0;
 
     const persist = (next: ProgressState, analysis: CaptureAnalysis | null) => {
       if (!persistCache || !analysis || !next.progress) return;
@@ -94,8 +125,7 @@ export function useCaptureProgress(state: CollectorState | null, options: Captur
       });
     };
 
-    const check = async (run: number) => {
-      if (!active(run) || settled) return;
+    const runCheck = async (run: number) => {
       const startedAt = performance.now();
       try {
         const snapshot = await readCaptureSnapshot();
@@ -114,7 +144,7 @@ export function useCaptureProgress(state: CollectorState | null, options: Captur
             if (live) {
               // 增量读取（2026-11-08）：只搬新增的一段，拼接后送 worker。
               // run() 会 transfer 走传入的 buffer，slice 一份保住主线程的增量缓存。
-              const bytes = await readCaptureSnapshotBytes(snapshot);
+              const bytes = await readCaptureSnapshotBytes(snapshot, controller.signal);
               // 冷启动恢复点：Worker 被回收后靠它继续解裁剪过的文件（见 liveDecodeStore）
               const resume = windowBytes ? readLiveDecodeState(snapshot.id) : null;
               analysis = await inspectBytesInWorker(bytes.slice(), snapshot.id, controller.signal, undefined, windowBytes, resume ?? undefined);
@@ -131,6 +161,7 @@ export function useCaptureProgress(state: CollectorState | null, options: Captur
             pets: analysis.nearby ?? [],
             self: analysis.nearbySelf ?? null,
             encounter: analysis.encounter ?? null,
+            hasKey: Boolean(analysis.hasKey),
             updatedAt: Date.now(),
           });
           previous = nextCaptureProgress(previous, analysis, performance.now(), session);
@@ -177,6 +208,33 @@ export function useCaptureProgress(state: CollectorState | null, options: Captur
       }
     };
 
+    /** 包一层只为记录「这一轮是否还在跑」，不影响原有逻辑。 */
+    const check = async (run: number) => {
+      if (!active(run) || settled) return;
+      running = true;
+      runningSince = performance.now();
+      try {
+        await runCheck(run);
+      } finally {
+        // 被心跳重开后旧轮次才结束：别把新轮次的 running 清掉
+        if (run === epoch) running = false;
+      }
+    };
+
+    // 后台心跳：页面不可见时由安卓壳唤醒；卡死超过阈值就中止旧轮次重开
+    let unregisterTick: (() => void) | null = null;
+    if (background && windowBytes > 0) {
+      unregisterTick = registerLiveTick(() => {
+        if (disposed || settled) return;
+        const stalled = running && performance.now() - runningSince > LIVE_STALL_MS;
+        if (running && !stalled) return;
+        const run = ++epoch;
+        window.clearTimeout(timer);
+        controller?.abort();
+        void check(run);
+      });
+    }
+
     const visibility = () => {
       if (settled) return;
       const run = ++epoch;
@@ -187,6 +245,7 @@ export function useCaptureProgress(state: CollectorState | null, options: Captur
     document.addEventListener('visibilitychange', visibility);
     return () => {
       disposed = true; epoch++; window.clearTimeout(timer); controller?.abort();
+      if (unregisterTick) unregisterTick();
       document.removeEventListener('visibilitychange', visibility);
     };
   }, [enabled, session, live, refreshKey, background, windowBytes]);
