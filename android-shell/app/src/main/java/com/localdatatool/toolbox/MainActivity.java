@@ -8,6 +8,8 @@ import android.content.pm.ApplicationInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.provider.OpenableColumns;
 import android.webkit.JavascriptInterface;
@@ -41,6 +43,7 @@ import com.localdatatool.toolbox.capture.CaptureController;
 import com.localdatatool.toolbox.capture.CaptureBridgePolicy;
 import com.localdatatool.toolbox.capture.CaptureVpnService;
 import com.localdatatool.toolbox.capture.BattleOverlayController;
+import com.localdatatool.toolbox.update.UpdateController;
 
 /**
  * 「洛克工具箱」的原生壳。只做三件事：
@@ -95,6 +98,31 @@ public class MainActivity extends Activity {
     private CaptureController collector;
     /** 战斗采集悬浮球（系统级，浮在游戏上方；2026-11-08） */
     private BattleOverlayController battleOverlay;
+    /** 应用内更新：启动静默检查 + 网页「检查更新」手动检查（2026-11-08） */
+    private UpdateController updater;
+    /**
+     * 启动后延迟几秒静默检查一次更新。
+     * 等首屏渲染完再查，避免更新提示和页面加载抢焦点；无更新 / 失败都不打扰用户。
+     */
+    private final Runnable silentUpdateCheck = () -> {
+        if (updater != null) updater.checkSilently();
+    };
+    /**
+     * 后台实时刷新的心跳（2026-11-08）。
+     *
+     * 用户切到游戏后，工具箱页面不可见，WebView 会把 setTimeout / setInterval 节流到
+     * 每分钟一次甚至暂停，悬浮球就会「有时候一直不刷新」。这里由原生每秒唤醒页面一次
+     * （evaluateJavascript 不受页面定时器节流影响），网页侧再按需补一轮解析。
+     */
+    private final Handler liveTick = new Handler(Looper.getMainLooper());
+    private final Runnable liveTickTask = new Runnable() {
+        @Override public void run() {
+            if (webView != null && !webView.isShown() && CaptureVpnService.STATE.busy()) {
+                webView.evaluateJavascript("window.__rocoLiveTick&&window.__rocoLiveTick()", null);
+            }
+            liveTick.postDelayed(this, 1200);
+        }
+    };
     private boolean captureBridgeInstalled;
     private String collectedCaptureUrl;
     /** 等文件选择器回结果的回调；WebView 只认一次，回完必须置空 */
@@ -128,12 +156,15 @@ public class MainActivity extends Activity {
             injectPendingShare();
         });
         battleOverlay = new BattleOverlayController(this);
+        updater = new UpdateController(this);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         webView.setBackgroundColor(PAGE_BACKGROUND);
         // 网页「导出全部数据」改为分享：壳从这里把备份文本拿出去调起系统分享面板
         webView.addJavascriptInterface(new ShareBridge(), "RocoShare");
+        // 网页「设置 / 关于」页的「检查更新」入口（网页侧调用 window.RocoUpdate.check()）
+        webView.addJavascriptInterface(new UpdateBridge(), "RocoUpdate");
         installCaptureWebMessageBridge();
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
@@ -264,6 +295,9 @@ public class MainActivity extends Activity {
         setContentView(webView);
         handleShareIntent(getIntent());
         webView.loadUrl(SITE_URL);
+        liveTick.postDelayed(liveTickTask, 1500);
+        // 首屏加载完再看有没有新版，避免更新弹窗和页面加载抢焦点
+        liveTick.postDelayed(silentUpdateCheck, 3000);
     }
 
     private void installCaptureWebMessageBridge() {
@@ -292,6 +326,8 @@ public class MainActivity extends Activity {
                         request.optString("title"), request.optString("body"));
                     // 系统悬浮窗：球浮在游戏上方，网页只推状态（2026-11-08）
                     else if ("updateBattleOverlay".equals(action)) result = battleOverlay.update(readOverlay(request));
+                    // 附近面板：地图 + 紧凑列表 + 可选的顶部命中区（2026-11-08）
+                    else if ("updateNearbyOverlay".equals(action)) result = battleOverlay.updateNearby(readJson(request, "nearby"));
                     else if ("requestOverlayPermission".equals(action)) result = battleOverlay.requestPermission();
                     else if ("canDrawOverlay".equals(action)) result = battleOverlay.canDraw() ? "true" : "false";
                     else throw new IllegalArgumentException("未知的采集操作");
@@ -315,9 +351,14 @@ public class MainActivity extends Activity {
      * 二次 stringify 了）。两种都收下，避免网页缓存旧版时球彻底不显示。
      */
     private static JSONObject readOverlay(JSONObject request) {
-        JSONObject overlay = request.optJSONObject("overlay");
-        if (overlay != null) return overlay;
-        String raw = request.optString("overlay", "");
+        return readJson(request, "overlay");
+    }
+
+    /** 悬浮窗载荷既可能是对象，也可能是二次 stringify 的字符串，两种都收。 */
+    private static JSONObject readJson(JSONObject request, String key) {
+        JSONObject object = request.optJSONObject(key);
+        if (object != null) return object;
+        String raw = request.optString(key, "");
         if (raw.isEmpty()) return null;
         try {
             return new JSONObject(raw);
@@ -331,6 +372,8 @@ public class MainActivity extends Activity {
         super.onResume();
         // 用户可能刚去系统设置里授予了悬浮窗权限：回来时把还在采集的球重新画上
         if (battleOverlay != null) battleOverlay.onResume();
+        // 用户可能刚从「安装未知应用」设置页回来：权限拿到就把已下载的包接着装上
+        if (updater != null) updater.onResume();
     }
 
     @Override
@@ -351,14 +394,18 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        liveTick.removeCallbacks(liveTickTask);
+        liveTick.removeCallbacks(silentUpdateCheck);
         cancelPendingFileChooser();
         if (collector != null) collector.destroy();
+        if (updater != null) { updater.destroy(); updater = null; }
         // 悬浮窗必须在这里摘掉：Activity 没了还留着窗口会泄漏
         if (battleOverlay != null) { battleOverlay.destroy(); battleOverlay = null; }
         if (webView != null) {
             // WebView 持有 Activity 与 JS 引擎线程，不按标准序列销毁会一直泄漏。
             // 先摘掉注入的 JS 接口，再断开页面、销毁。
             webView.removeJavascriptInterface("RocoShare");
+            webView.removeJavascriptInterface("RocoUpdate");
             if (captureBridgeInstalled) WebViewCompat.removeWebMessageListener(webView, "RocoCaptureBridge");
             webView.loadUrl("about:blank");
             webView.removeAllViews();
@@ -562,23 +609,26 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 网页「导出全部数据」→ 分享（1.1.4，2026-10-04 用户拍板）。
+     * 网页「设置 / 关于」页的「检查更新」（2026-11-08）。
      *
-     * 网页端 `shareToNative()` 调用 `window.RocoShare.shareBackup(text, fileName)`；
-     * 壳把文本写进自己的缓存目录，用 FileProvider 生成 content:// 分享出去
-     * （QQ / 微信等收到的是一个 JSON 文件，另一台设备「用其他应用打开」即可导入）。
-     *
-     * 为什么写文件而不是直接塞 EXTRA_TEXT：备份可能超过 1 MB，Binder 传大文本会崩；
-     * 文件走 content:// 没有这个限制，且接收方拿到的是可保存的备份文件。
-     * FileProvider 拿不到（异常）时降级成 EXTRA_TEXT 文本分享。
-     *
-     * 2026-10-05 修复（华为平板拉不起分享面板）：
-     * - `@JavascriptInterface` 回调跑在 WebView 的 JavaBridge 后台线程，直接 startActivity
-     *   在华为 EMUI/HarmonyOS 上会被「后台弹出界面」管控静默拦下（小米较宽松所以正常）。
-     * - 现在把弹面板包进 runOnUiThread（回到主线程），并给 chooser 加
-     *   FLAG_ACTIVITY_NEW_TASK（以独立 Task 弹窗，国产 ROM 的标准要求）。
-     * - 文件写入仍留在当前线程（IO 不占主线程）。
+     * 网页侧调用 `window.RocoUpdate.check()` 即可；壳负责请求远端清单、弹提示、
+     * 下载 APK 并调起系统安装器。`version()` 供页面显示当前客户端版本。
      */
+    private class UpdateBridge {
+        @JavascriptInterface
+        public void check() {
+            runOnUiThread(() -> {
+                if (updater != null) updater.checkManually();
+            });
+        }
+
+        @JavascriptInterface
+        public String version() {
+            return BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")";
+        }
+    }
+
+    /** 网页「导出全部数据」→ 分享（1.1.4）：写缓存文件再经 FileProvider 交给系统分享面板。 */
     private class ShareBridge {
         /** 在当前线程（后台线程）准备好 Intent 后，切主线程弹系统分享面板。 */
         private void showChooser(Intent shareIntent, String fallbackText, Exception buildError) {

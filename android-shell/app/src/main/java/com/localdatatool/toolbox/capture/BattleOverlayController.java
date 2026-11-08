@@ -1,6 +1,5 @@
 package com.localdatatool.toolbox.capture;
 
-import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -14,8 +13,11 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.hardware.display.DisplayManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
@@ -23,6 +25,7 @@ import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.ReplacementSpan;
 import android.util.TypedValue;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -56,8 +59,9 @@ public final class BattleOverlayController {
     private static final String KEY_Y = "y";
     private static final String CARD_TITLE = "战斗采集 · 赛季奇遇";
 
-    private static final int COLOR_ORB_IDLE = 0xFF334155;
-    private static final int COLOR_ORB_HIT = 0xFFF43F5E;
+    private static final int COLOR_FRAME_BG = 0xFFFFFFFF;
+    private static final int COLOR_FRAME_BORDER = 0xFF059669;
+    private static final int COLOR_FRAME_HIT_BORDER = 0xFFE11D48;
     private static final int COLOR_CARD_BG = 0xFFFFFFFF;
     private static final int COLOR_TITLE = 0xFF1E293B;
     private static final int COLOR_CHIP_BG = 0xFFF1F5F9;
@@ -68,6 +72,10 @@ public final class BattleOverlayController {
     private static final int COLOR_EMPTY_TEXT = 0xFF94A3B8;
 
     private static final int ORB_DP = 52;
+    /** 图标与边框之间的留白：太小图标方角会顶出圆角，太大图标会显得小。 */
+    private static final int ORB_PADDING_DP = 4;
+    private static final int ORB_RADIUS_DP = 12;
+    private static final int ORB_BORDER_DP = 2;
     private static final int CARD_DP = 216;
     private static final int EDGE_DP = 8;
     private static final int DRAG_SLOP_DP = 8;
@@ -75,14 +83,16 @@ public final class BattleOverlayController {
     private final Activity activity;
     private final WindowManager windowManager;
     private final SharedPreferences prefs;
+    private final DisplayManager displayManager;
 
+    /** 展开面板（附近 + 命中区）；球的拖动 / 夹取 / 避让仍由本类负责（2026-11-08） */
+    private final NearbyPanelController nearbyPanel;
     private View orb;
     private WindowManager.LayoutParams orbParams;
     private LinearLayout card;
     private WindowManager.LayoutParams cardParams;
     private TextView fieldsView1;
     private TextView fieldsView2;
-    private ValueAnimator pulse;
     private JSONObject lastPayload;
 
     /** 拖动状态：down 时的原始坐标与球当时的左上角 */
@@ -91,12 +101,57 @@ public final class BattleOverlayController {
     private int startX;
     private int startY;
     private boolean dragged;
+    /** 点击球的回调；面板侧接管展开逻辑时设置，默认展开内置的命中卡。 */
+    private TapListener tapListener;
+
+    /** 点击球（非拖动）的回调。 */
+    public interface TapListener { void onTap(); }
+
+    /**
+     * 设置点击回调。面板侧实现自己的展开逻辑时用它接管，**不需要改拖动/位置代码**。
+     * 传 null 恢复默认（展开内置命中卡）。
+     */
+    public void setTapListener(TapListener listener) { this.tapListener = listener; }
 
     public BattleOverlayController(Activity activity) {
         this.activity = activity;
         this.windowManager = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
         this.prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        this.displayManager = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
+        this.nearbyPanel = new NearbyPanelController(activity, windowManager);
+        // 附近面板接管点击：有附近数据就展开面板（命中区 + 地图 + 列表），
+        // 没推过数据时仍是原来的命中卡，球的拖动 / 位置代码不动。
+        setTapListener(() -> {
+            if (nearbyPanel.hasNearbyData()) {
+                removeCard();
+                followPanel();
+                nearbyPanel.toggle();
+            } else {
+                toggleCard();
+            }
+        });
+        if (displayManager != null) {
+            displayManager.registerDisplayListener(displayListener, new Handler(Looper.getMainLooper()));
+        }
     }
+
+    /**
+     * 横竖屏切换 / 折叠屏展开时重新夹位置并让卡片重新避让（2026-11-08）。
+     *
+     * Activity 在后台（用户在游戏里）时也要响应旋转，所以监听的是显示服务，而不是 Activity 的配置变化。
+     */
+    private final DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener() {
+        @Override public void onDisplayAdded(int displayId) { }
+        @Override public void onDisplayRemoved(int displayId) { }
+        @Override public void onDisplayChanged(int displayId) {
+            if (displayId != Display.DEFAULT_DISPLAY) return;
+            if (orbParams != null) {
+                clampToScreen(orbParams);
+                safeUpdate(orb, orbParams);
+            }
+            placeCard();
+        }
+    };
 
     /** 有没有「显示在其他应用上层」权限。 */
     public boolean canDraw() {
@@ -111,22 +166,47 @@ public final class BattleOverlayController {
     public String update(JSONObject payload) {
         lastPayload = payload;
         boolean visible = payload != null && payload.optBoolean("visible", false);
+        nearbyPanel.updateBattle(payload);
         if (!canDraw()) {
             removeAll();
-            return visible ? "need-permission" : "ok";
+            return visible || nearbyPanel.nearbyVisible() ? "need-permission" : "ok";
         }
         if (!visible) {
-            removeAll();
+            removeCard();
+            if (!nearbyPanel.nearbyVisible()) removeAll();
             return "ok";
         }
         render(payload);
         return "ok";
     }
 
+    /**
+     * 网页推来「附近」面板数据（含 panels 配置）。
+     * 只负责显隐与转发，球的绘制仍走 {@link #update}。
+     */
+    public String updateNearby(JSONObject payload) {
+        if (!canDraw()) {
+            nearbyPanel.updateNearby(payload);
+            removeAll();
+            return "need-permission";
+        }
+        nearbyPanel.updateNearby(payload);
+        if (!nearbyPanel.nearbyVisible()) {
+            boolean battleVisible = lastPayload != null && lastPayload.optBoolean("visible", false);
+            if (!battleVisible) removeAll();
+            return "ok";
+        }
+        // 附近数据到了就以面板为准，旧命中卡不再叠在球旁边
+        removeCard();
+        if (orb == null) addOrb();
+        return "ok";
+    }
+
     /** 用户从系统设置页回来：如果还在采集，把上次的状态重新画上去。 */
     public void onResume() {
-        if (lastPayload == null) return;
-        update(lastPayload);
+        if (lastPayload != null) update(lastPayload);
+        nearbyPanel.reapply();
+        if (nearbyPanel.nearbyVisible() && orb == null && canDraw()) addOrb();
     }
 
     /** 跳系统设置授予悬浮窗权限。 */
@@ -143,7 +223,9 @@ public final class BattleOverlayController {
     }
 
     public void destroy() {
+        if (displayManager != null) displayManager.unregisterDisplayListener(displayListener);
         removeAll();
+        nearbyPanel.release();
         lastPayload = null;
     }
 
@@ -166,17 +248,14 @@ public final class BattleOverlayController {
         int size = dp(ORB_DP);
         ImageView view = new ImageView(activity);
         view.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        // 球里放工具箱的桌面图标，留一圈底色
-        view.setPadding(dp(10), dp(10), dp(10), dp(10));
+        // 项目图标 + 一圈边框；不再垫深色圆形底色（圆里套方图标会像铜钱）
+        view.setPadding(dp(ORB_PADDING_DP), dp(ORB_PADDING_DP), dp(ORB_PADDING_DP), dp(ORB_PADDING_DP));
         try {
             view.setImageDrawable(activity.getApplicationInfo().loadIcon(activity.getPackageManager()));
         } catch (Exception ignored) {
-            // 拿不到图标就只显示纯色球
+            // 拿不到图标就只显示纯色边框
         }
-        GradientDrawable shape = new GradientDrawable();
-        shape.setShape(GradientDrawable.OVAL);
-        shape.setColor(COLOR_ORB_IDLE);
-        view.setBackground(shape);
+        view.setBackground(orbFrame(false));
         orb = view;
 
         orbParams = new WindowManager.LayoutParams(
@@ -231,6 +310,8 @@ public final class BattleOverlayController {
                 if (dragged) {
                     prefs.edit().putInt(KEY_X, orbParams.x).putInt(KEY_Y, orbParams.y).apply();
                     placeCard();
+                } else if (tapListener != null) {
+                    tapListener.onTap();
                 } else {
                     toggleCard();
                 }
@@ -330,47 +411,20 @@ public final class BattleOverlayController {
      * 两边都挤不下时改为球的上方 / 下方，避免卡片盖住球。
      */
     private void placeCard() {
+        // 展开面板跟着球走；这里只是把球当前的屏幕坐标转给面板，不动球的任何行为
+        followPanel();
         if (card == null || cardParams == null || orbParams == null) return;
         Point screen = screenSize();
         int gap = dp(EDGE_DP);
         int width = cardWidth();
         int height = cardHeight(width);
-        int orbLeft = orbParams.x;
-        int orbTop = orbParams.y;
-        int orbRight = orbLeft + orbParams.width;
-        int orbBottom = orbTop + orbParams.height;
-
-        int x;
-        if (orbRight + gap + width <= screen.x - gap) {
-            x = orbRight + gap;
-        } else if (orbLeft - gap - width >= gap) {
-            x = orbLeft - gap - width;
-        } else {
-            // 左右都放不下：贴向空间更大的一侧，稍后改为上下排布
-            x = orbLeft + orbParams.width / 2 < screen.x / 2 ? screen.x - width - gap : gap;
-        }
-
-        int y = orbTop + orbParams.height / 2 - height / 2;
-        y = Math.max(gap, Math.min(y, Math.max(gap, screen.y - height - gap)));
-
-        // 左右都挤不下时卡片会压住球，这里统一兜底改成球的上方 / 下方
-        if (overlaps(x, y, width, height, orbLeft, orbTop, orbRight, orbBottom, gap)) {
-            int above = orbTop - gap - height;
-            int below = orbBottom + gap;
-            if (above >= gap) y = above;
-            else if (below + height <= screen.y - gap) y = below;
-        }
-
-        x = Math.max(gap, Math.min(x, Math.max(gap, screen.x - width - gap)));
-        y = Math.max(gap, Math.min(y, Math.max(gap, screen.y - height - gap)));
-        cardParams.x = x;
-        cardParams.y = y;
+        int[] position = OverlayGeometry.besideBall(
+            width, height,
+            orbParams.x, orbParams.y, orbParams.width, orbParams.height,
+            screen.x, screen.y, gap);
+        cardParams.x = position[0];
+        cardParams.y = position[1];
         safeUpdate(card, cardParams);
-    }
-
-    private static boolean overlaps(int x, int y, int width, int height,
-                                    int left, int top, int right, int bottom, int gap) {
-        return x < right + gap && x + width > left - gap && y < bottom + gap && y + height > top - gap;
     }
 
     /**
@@ -399,35 +453,19 @@ public final class BattleOverlayController {
         return Math.max(card.getMeasuredHeight(), dp(60));
     }
 
+    /** 不透明圆角方框：白底 + 项目绿边框；命中时边框变红。 */
+    private GradientDrawable orbFrame(boolean hit) {
+        GradientDrawable frame = new GradientDrawable();
+        frame.setShape(GradientDrawable.RECTANGLE);
+        frame.setCornerRadius(dpF(ORB_RADIUS_DP));
+        frame.setColor(COLOR_FRAME_BG);
+        frame.setStroke(dp(hit ? ORB_BORDER_DP + 1 : ORB_BORDER_DP), hit ? COLOR_FRAME_HIT_BORDER : COLOR_FRAME_BORDER);
+        return frame;
+    }
+
     private void setHit(boolean next) {
-        if (orb != null) {
-            GradientDrawable shape = new GradientDrawable();
-            shape.setShape(GradientDrawable.OVAL);
-            shape.setColor(next ? COLOR_ORB_HIT : COLOR_ORB_IDLE);
-            orb.setBackground(shape);
-        }
-        if (next) startPulse();
-        else stopPulse();
-    }
-
-    private void startPulse() {
-        if (pulse != null || orb == null) return;
-        pulse = ValueAnimator.ofFloat(1f, 0.72f);
-        pulse.setDuration(700);
-        pulse.setRepeatMode(ValueAnimator.REVERSE);
-        pulse.setRepeatCount(ValueAnimator.INFINITE);
-        pulse.addUpdateListener(animation -> {
-            if (orb != null) orb.setAlpha((float) animation.getAnimatedValue());
-        });
-        pulse.start();
-    }
-
-    private void stopPulse() {
-        if (pulse != null) {
-            pulse.cancel();
-            pulse = null;
-        }
-        if (orb != null) orb.setAlpha(1f);
+        // 完全不做透明度呼吸：半透明在小球尺寸下很费眼（用户反馈）
+        if (orb != null) orb.setBackground(orbFrame(next));
     }
 
     /** 详情字段：每个字段一个圆角小标签，和网页里的小标签保持一致；只取指定排。 */
@@ -461,7 +499,15 @@ public final class BattleOverlayController {
         return builder;
     }
 
+    /** 把球当前位置转给展开面板（面板只在展开时才有窗口，未展开时是空操作）。 */
+    private void followPanel() {
+        if (orbParams == null) return;
+        Point screen = screenSize();
+        nearbyPanel.followOrb(orbParams.x, orbParams.y, orbParams.width, screen.x, screen.y);
+    }
+
     private void removeAll() {
+        nearbyPanel.remove();
         removeCard();
         removeOrb();
     }
@@ -479,7 +525,6 @@ public final class BattleOverlayController {
     }
 
     private void removeOrb() {
-        stopPulse();
         if (orb == null) return;
         try {
             windowManager.removeView(orb);
@@ -500,7 +545,19 @@ public final class BattleOverlayController {
     }
 
     @SuppressWarnings("deprecation")
-    private Point screenSize() {
+    Point screenSize() {
+        // 悬浮窗的坐标是「整块屏幕」，不是 Activity 的窗口。Activity 退到后台后
+        // getCurrentWindowMetrics 可能还停在旋转前的尺寸（横屏时只有左半屏能拖动、
+        // 卡片避让到中间），所以直接问显示服务要当前旋转下的真实屏幕尺寸。
+        Display display = displayManager == null ? null : displayManager.getDisplay(Display.DEFAULT_DISPLAY);
+        if (display == null) {
+            display = Build.VERSION.SDK_INT >= 30 ? activity.getDisplay() : windowManager.getDefaultDisplay();
+        }
+        if (display != null) {
+            Point real = new Point();
+            display.getRealSize(real);
+            if (real.x > 0 && real.y > 0) return real;
+        }
         if (Build.VERSION.SDK_INT >= 30) {
             Rect bounds = windowManager.getCurrentWindowMetrics().getBounds();
             return new Point(bounds.width(), bounds.height());
@@ -522,16 +579,20 @@ public final class BattleOverlayController {
             return;
         }
         Point screen = screenSize();
-        params.x = Math.max(0, screen.x - params.width - dp(16));
-        params.y = Math.max(0, Math.round(screen.y * 0.42f));
+        int[] position = OverlayGeometry.startPosition(
+            params.width, params.height, screen.x, screen.y, dp(16), 0.42f);
+        params.x = position[0];
+        params.y = position[1];
         clampToScreen(params);
     }
 
-    /** 拖动 / 屏幕旋转后：只夹在屏幕内，绝不换位置。 */
+    /** 把球夹进屏幕（不留边距，允许贴到 0）。 */
     private void clampToScreen(WindowManager.LayoutParams params) {
         Point screen = screenSize();
-        params.x = Math.max(0, Math.min(params.x, Math.max(0, screen.x - params.width)));
-        params.y = Math.max(0, Math.min(params.y, Math.max(0, screen.y - params.height)));
+        int[] position = OverlayGeometry.clamp(
+            params.x, params.y, params.width, params.height, screen.x, screen.y, 0);
+        params.x = position[0];
+        params.y = position[1];
     }
 
     private static int overlayType() {
