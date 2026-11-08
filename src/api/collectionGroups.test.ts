@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   claimCollectionDemand,
+  completeCollectionDemand,
   getCollectionDemandFeed,
   getCollectionDemands,
   getCollectionGroup,
+  joinCollectionGroup,
   publishCollectionDemand,
+  releaseCollectionDemand,
+  withdrawCollectionDemand,
 } from './collectionGroups';
+import { flushEvents, setAnalyticsEnabled } from './analytics';
 
 const response = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -222,5 +227,122 @@ describe('需求契约（归档行 / 旧口径 / 错误码）', () => {
       status: 500,
       code: 'HTTP_ERROR',
     });
+  });
+});
+
+describe('换蛋核心链路埋点（2026-11-08）', () => {
+  type WireEvent = { name: string; props?: Record<string, unknown> };
+  const batches: Array<{ events: WireEvent[] }> = [];
+
+  const demand = {
+    groupId: 'g1',
+    demanderAccountId: 'A',
+    eggGameId: 101,
+    nature: '固执',
+    gender: '母',
+    body: '大块头',
+    voice: '+100',
+    status: 'open',
+    claimerAccountId: null,
+    version: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const criteria = {
+    demanderAccountId: 'A',
+    eggGameId: 101,
+    nature: '固执',
+    gender: '母' as const,
+    body: '大块头' as const,
+    voice: '+100' as const,
+    version: 1,
+  };
+
+  /** 业务接口返回 apiBody，埋点上报单独收进 batches（两条请求都走同一个 fetch）。 */
+  const routeFetch = (apiBody: unknown, status = 200) => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (String(url).includes('/api/event')) {
+        batches.push(JSON.parse(String(init?.body ?? '{}')) as { events: WireEvent[] });
+        return Promise.resolve(response({ ok: true }));
+      }
+      return Promise.resolve(response(apiBody, status));
+    });
+  };
+
+  const emitted = async (): Promise<WireEvent[]> => {
+    await flushEvents();
+    return batches.flatMap((batch) => batch.events);
+  };
+
+  beforeEach(() => {
+    batches.length = 0;
+    window.localStorage.setItem('roco.analyticsForce', '1');
+    setAnalyticsEnabled(false); // 清掉上一个用例可能残留的队列
+    setAnalyticsEnabled(true);
+  });
+
+  afterEach(() => {
+    setAnalyticsEnabled(false);
+  });
+
+  test('发布需求成功：demand_publish 带本次落库条数', async () => {
+    routeFetch({
+      ok: true,
+      demands: [demand, { ...demand, nature: '开朗' }],
+    });
+
+    await publishCollectionDemand('g1', {
+      eggGameId: 101,
+      natures: ['固执', '开朗'],
+      gender: '母',
+      body: '大块头',
+      voice: '+100',
+    });
+
+    expect(await emitted()).toEqual([
+      expect.objectContaining({ name: 'demand_publish', props: { count: 2 } }),
+    ]);
+  });
+
+  test('认领 / 结单 / 撤回各自上报一次；释放（release）不算认领', async () => {
+    routeFetch({ ok: true, demand: { ...demand, status: 'claimed', claimerAccountId: 'B' } });
+    await claimCollectionDemand('g1', criteria);
+
+    routeFetch({ ok: true, demand: { ...demand, status: 'open' } });
+    await releaseCollectionDemand('g1', criteria);
+
+    routeFetch({ ok: true, demand: { ...demand, status: 'done', claimerAccountId: 'B' } });
+    await completeCollectionDemand('g1', criteria);
+
+    routeFetch({ ok: true });
+    await withdrawCollectionDemand('g1', 101, {
+      nature: '固执',
+      gender: '母',
+      body: '大块头',
+      voice: '+100',
+    });
+
+    expect((await emitted()).map((event) => event.name)).toEqual([
+      'demand_claim',
+      'demand_complete',
+      'demand_withdraw',
+    ]);
+  });
+
+  test('加入小组成功才上报 group_join，且不带任何参数', async () => {
+    routeFetch({ ok: true, groupId: 'g1', groupType: 'mother' });
+
+    await joinCollectionGroup({ inviteCode: 'ABC123', displayName: '甲' });
+
+    expect(await emitted()).toEqual([expect.objectContaining({ name: 'group_join' })]);
+  });
+
+  test('接口失败不上报：被抢单的认领不算 demand_claim', async () => {
+    routeFetch({ ok: false, code: 'DEMAND_TAKEN', error: '这条需求已经被别人接了' }, 409);
+
+    await expect(claimCollectionDemand('g1', criteria)).rejects.toMatchObject({
+      code: 'DEMAND_TAKEN',
+    });
+    expect(await emitted()).toEqual([]);
   });
 });

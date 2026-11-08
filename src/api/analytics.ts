@@ -121,3 +121,77 @@ export function installFlushOnHide(): () => void {
     window.removeEventListener('pagehide', onHidden);
   };
 }
+
+/**
+ * 换蛋核心链路事件名（2026-11-08）。
+ *
+ * 与 `docs/superpowers/plans/2026-11-08-整合重构第一批-执行文档.md` §3-A 事件表一一对应；
+ * 后端 events 表只存 name/props，不需要为新事件改结构。
+ * props 只带数量与状态，不带精灵 / 性格 / 成员等任何内容（沿用现有隐私口径）。
+ */
+export const ANALYTICS_EVENT = {
+  demandPublish: 'demand_publish',
+  demandClaim: 'demand_claim',
+  demandComplete: 'demand_complete',
+  demandWithdraw: 'demand_withdraw',
+  placementMark: 'placement_mark',
+  groupJoin: 'group_join',
+  planCreate: 'plan_create',
+  planImport: 'plan_import',
+  planStart: 'plan_start',
+  offerMark: 'offer_mark',
+} as const;
+
+export type AnalyticsEventName = (typeof ANALYTICS_EVENT)[keyof typeof ANALYTICS_EVENT];
+
+/** 发布需求成功：count = 本次真正落库的需求条数（一个性格一条）。 */
+export function trackDemandPublish(count: number): void {
+  track(ANALYTICS_EVENT.demandPublish, { count });
+}
+
+/** 认领需求成功：一次一条，只报数量。 */
+export function trackDemandClaim(count = 1): void {
+  track(ANALYTICS_EVENT.demandClaim, { count });
+}
+
+/** 发布人结单成功：一次一条，只报数量。 */
+export function trackDemandComplete(count = 1): void {
+  track(ANALYTICS_EVENT.demandComplete, { count });
+}
+
+/** 撤回自己发布的需求：一次一条，只报数量。 */
+export function trackDemandWithdraw(count = 1): void {
+  track(ANALYTICS_EVENT.demandWithdraw, { count });
+}
+
+/** 家园需求上窝页里勾「已上窝」：count = 勾完这一下之后已标记的总行数（取消勾选不报）。 */
+export function trackPlacementMark(count: number): void {
+  track(ANALYTICS_EVENT.placementMark, { count });
+}
+
+/** 加入小组成功：不带任何参数（组名 / 邀请码都不上报）。 */
+export function trackGroupJoin(): void {
+  track(ANALYTICS_EVENT.groupJoin);
+}
+
+/* ---------- 收集计划（Track C 使用；2026-11-08 预定义，Track A 不触发） ---------- */
+
+/** 创建收集计划：count = 本次创建条数，bulk = 是否来自批量导入入口。 */
+export function trackPlanCreate(count: number, bulk = false): void {
+  track(ANALYTICS_EVENT.planCreate, { count, bulk });
+}
+
+/** 批量导入缺口到计划：count = 导入条数。 */
+export function trackPlanImport(count: number): void {
+  track(ANALYTICS_EVENT.planImport, { count });
+}
+
+/** 计划从「想收」变「进行中」：count = 本次开始条数。 */
+export function trackPlanStart(count = 1): void {
+  track(ANALYTICS_EVENT.planStart, { count });
+}
+
+/** 点「我能提供」：count = 本次标记条数。 */
+export function trackOfferMark(count = 1): void {
+  track(ANALYTICS_EVENT.offerMark, { count });
+}

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { flushEvents, setAnalyticsEnabled } from '../api/analytics';
 import {
   placementRowKey,
   readCollapsedAccounts,
@@ -38,6 +39,40 @@ describe('「已上窝」本机记忆', () => {
 
     expect(togglePlacementMark('me', key, false)[key]).toBeUndefined();
     expect(readPlacementMarks('me')).toEqual({});
+  });
+
+  test('标记上窝才上报 placement_mark，只带当前已标记数量（取消不报）', async () => {
+    window.localStorage.setItem('roco.analyticsForce', '1');
+    setAnalyticsEnabled(false);
+    setAnalyticsEnabled(true);
+    const batches: Array<{ events: Array<{ name: string; props?: unknown }> }> = [];
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      if (String(url).includes('/api/event')) {
+        batches.push(JSON.parse(String(init?.body ?? '{}')) as (typeof batches)[number]);
+        return Promise.resolve(new Response('{"ok":true}', { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    try {
+      const first = placementRowKey(row({ claimedAt: 1 }));
+      const second = placementRowKey(row({ claimedAt: 2 }));
+      togglePlacementMark('me', first, true);
+      togglePlacementMark('me', second, true);
+      await flushEvents();
+      expect(batches.flatMap((batch) => batch.events)).toEqual([
+        expect.objectContaining({ name: 'placement_mark', props: { count: 1 } }),
+        expect.objectContaining({ name: 'placement_mark', props: { count: 2 } }),
+      ]);
+
+      batches.length = 0;
+      togglePlacementMark('me', second, false);
+      await flushEvents();
+      expect(batches).toEqual([]);
+    } finally {
+      setAnalyticsEnabled(false);
+      vi.unstubAllGlobals();
+    }
   });
 });
 

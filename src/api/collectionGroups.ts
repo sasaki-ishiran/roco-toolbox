@@ -47,6 +47,13 @@ import {
   type StudSlotCoverage,
   type StudTargetConfig,
 } from '../shared/collectionGroups';
+import {
+  trackDemandClaim,
+  trackDemandComplete,
+  trackDemandPublish,
+  trackDemandWithdraw,
+  trackGroupJoin,
+} from './analytics';
 import { MotherGroupsApiError } from './motherGroups';
 import { authFetch } from './session';
 
@@ -344,7 +351,12 @@ export async function joinCollectionGroup(
     await request('/api/collection-groups/join', jsonInit('POST', input, signal)),
     '响应',
   );
-  return { groupId: asString(data.groupId, 'groupId'), groupType: asGroupType(data.groupType) };
+  const result = {
+    groupId: asString(data.groupId, 'groupId'),
+    groupType: asGroupType(data.groupType),
+  };
+  trackGroupJoin();
+  return result;
 }
 
 export interface InvitePreview {
@@ -635,7 +647,9 @@ export async function publishCollectionDemand(
     ),
     '响应',
   );
-  return asArray(data.demands, 'demands').map(parseDemand);
+  const demands = asArray(data.demands, 'demands').map(parseDemand);
+  trackDemandPublish(demands.length);
+  return demands;
 }
 
 export async function withdrawCollectionDemand(
@@ -654,6 +668,7 @@ export async function withdrawCollectionDemand(
     `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${eggGameId}?${params.toString()}`,
     jsonInit('DELETE', undefined, signal),
   );
+  trackDemandWithdraw();
 }
 
 async function demandAction(
@@ -670,7 +685,11 @@ async function demandAction(
     ),
     '响应',
   );
-  return parseDemand(data.demand);
+  const demand = parseDemand(data.demand);
+  // release（放开这单）不算认领，不上报；其余两个动作各记一次
+  if (action === 'claim') trackDemandClaim();
+  if (action === 'complete') trackDemandComplete();
+  return demand;
 }
 
 export const claimCollectionDemand = (

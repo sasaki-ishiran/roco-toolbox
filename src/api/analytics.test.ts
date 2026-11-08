@@ -1,11 +1,22 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
+  ANALYTICS_EVENT,
   analyticsEnabled,
   deviceId,
   flushEvents,
   platform,
   setAnalyticsEnabled,
   track,
+  trackDemandClaim,
+  trackDemandComplete,
+  trackDemandPublish,
+  trackDemandWithdraw,
+  trackGroupJoin,
+  trackOfferMark,
+  trackPlacementMark,
+  trackPlanCreate,
+  trackPlanImport,
+  trackPlanStart,
 } from './analytics';
 
 describe('匿名埋点', () => {
@@ -65,5 +76,84 @@ describe('匿名埋点', () => {
     await flushEvents();
     expect(calls).toHaveLength(1);
     expect((calls[0].body.events as Array<{ name: string }>)[0].name).toBe('app_open');
+  });
+
+  describe('换蛋核心链路事件（2026-11-08）', () => {
+    type Event = { name: string; props?: Record<string, unknown> };
+
+    const sent = async (): Promise<Event[]> => {
+      await flushEvents();
+      const last = calls[calls.length - 1];
+      return (last?.body.events ?? []) as Event[];
+    };
+
+    test('六个已接入事件的名字与执行文档一致', () => {
+      expect(ANALYTICS_EVENT).toMatchObject({
+        demandPublish: 'demand_publish',
+        demandClaim: 'demand_claim',
+        demandComplete: 'demand_complete',
+        demandWithdraw: 'demand_withdraw',
+        placementMark: 'placement_mark',
+        groupJoin: 'group_join',
+      });
+    });
+
+    test('需求四事件 + 上窝 + 加组：只带数量，不带精灵 / 性格等内容', async () => {
+      trackDemandPublish(3);
+      trackDemandClaim();
+      trackDemandComplete();
+      trackDemandWithdraw();
+      trackPlacementMark(2);
+      trackGroupJoin();
+
+      const events = await sent();
+      expect(events.map((event) => event.name)).toEqual([
+        'demand_publish',
+        'demand_claim',
+        'demand_complete',
+        'demand_withdraw',
+        'placement_mark',
+        'group_join',
+      ]);
+      expect(events.map((event) => event.props)).toEqual([
+        { count: 3 },
+        { count: 1 },
+        { count: 1 },
+        { count: 1 },
+        { count: 2 },
+        undefined,
+      ]);
+    });
+
+    test('计划四事件已预定义（Track C 使用），本轨不触发', async () => {
+      expect(ANALYTICS_EVENT).toMatchObject({
+        planCreate: 'plan_create',
+        planImport: 'plan_import',
+        planStart: 'plan_start',
+        offerMark: 'offer_mark',
+      });
+
+      trackPlanCreate(1, false);
+      trackPlanCreate(4, true);
+      trackPlanImport(12);
+      trackPlanStart(1);
+      trackOfferMark(1);
+
+      const events = await sent();
+      expect(events.map((event) => event.name)).toEqual([
+        'plan_create',
+        'plan_create',
+        'plan_import',
+        'plan_start',
+        'offer_mark',
+      ]);
+      expect(events.map((event) => event.props)).toEqual([
+        { count: 1, bulk: false },
+        { count: 4, bulk: true },
+        { count: 12 },
+        { count: 1 },
+        { count: 1 },
+      ]);
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { trackPlacementMark } from '../api/analytics';
 import {
   demandKeyOf,
   type DemandBody,
@@ -75,6 +76,8 @@ export function togglePlacementMark(
       // 隐私模式 / 配额满：记不住不影响本次勾选（同 lastTab.ts / demandPickStore.ts）
     }
   }
+  // 只有「勾上窝」算一次上窝动作；取消勾选不报（2026-11-08 埋点）
+  if (placed) trackPlacementMark(Object.keys(marks).length);
   return { ...marks };
 }
 
