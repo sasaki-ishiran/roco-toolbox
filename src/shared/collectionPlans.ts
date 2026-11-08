@@ -152,7 +152,7 @@ export function planProgressStep(input: {
    */
   viewerAccountId?: string;
 }): PlanProgressStep {
-  const { plan, demands, completions, viewerAccountId } = input;
+  const { plan, demands, viewerAccountId } = input;
   if (plan.status === 'done') return 5;
   const mine = demands.filter((row) => belongsToPlan(plan, row));
   if (mine.some((row) => row.placedAt != null)) {
@@ -161,7 +161,8 @@ export function planProgressStep(input: {
   }
   if (mine.some((row) => row.status === 'claimed')) return 2;
   if (mine.length > 0) return 1;
-  if (completions.some((row) => belongsToPlan(plan, row))) return 5;
+  // 归档只对真正完成的计划算第 5 步。进行中的空计划（复活后又撤回需求）
+  // 不能因为「这颗蛋曾经结过单」就一直显示已完成。
   return 0;
 }
 

@@ -236,6 +236,12 @@ describe('计划卡状态徽标流（0 未发需求 / 1 待接单 / 2 已认领 
     ).toBe(1);
   });
 
+  test('进行中但没有未结单需求、只有历史归档 → 0，不显示假「已完成」', () => {
+    expect(
+      planProgressStep({ plan: plan(), demands: [], completions: [completion()] }),
+    ).toBe(0);
+  });
+
   test('别人的需求不算进我的徽标流', () => {
     expect(
       planProgressStep({
