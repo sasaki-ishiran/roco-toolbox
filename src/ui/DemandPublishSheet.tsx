@@ -285,6 +285,7 @@ export function DemandPublishSheet({
               data-testid="wish-fill-gaps"
               className="ml-auto min-h-[26px] rounded-md border border-emerald-200 px-2 text-[11px] font-semibold text-emerald-700 disabled:opacity-50"
             >
+              {/* copy-lint-ignore 用户定稿要求写明「按你的口径算的全部缺口」 */}
               按你的口径算的全部缺口（{gapEggIds.length}）
             </button>
           </div>
