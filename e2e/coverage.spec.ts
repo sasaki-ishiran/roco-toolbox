@@ -47,16 +47,15 @@ test('覆盖度页：14 个蛋组行 + 四态图例 + 主数字是「已通 N / 
   await expect(page.getByTestId('coverage-nature-cell')).toHaveCount(0);
 });
 
-test('覆盖度页：第一次进来给极简说明，点「知道了」后不再出现', async ({ page }) => {
+test('覆盖度页：第一次进来给一条极简提示，点「知道了」后不再出现', async ({ page }) => {
   await importSample(page);
 
-  // 新用户不清楚这页有什么（一进来就是 14 行 + 一堆筛选）→ 页内给 3 条极简说明
   const intro = page.getByTestId('coverage-intro');
   await expect(intro).toBeVisible();
   await expect(intro).toContainText('怎么看这页');
-  // 2026-10-30 按新页面重写：说种公阵列 / 筛选 / 淡黄推荐格
+  // 2026-11-08 文案减负：矩阵/档位说明交给教程，页内只留淡黄推荐格
   await expect(intro).toContainText('淡黄格');
-  await expect(intro.locator('li')).toHaveCount(3);
+  await expect(intro.locator('li')).toHaveCount(1);
 
   await page.getByTestId('coverage-intro-dismiss').click();
   await expect(intro).toHaveCount(0);

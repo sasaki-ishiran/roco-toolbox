@@ -10,16 +10,14 @@ describe('CoverageIntroCard', () => {
     window.localStorage.clear();
   });
 
-  test('没看过 → 显示 3 条说明', () => {
+  test('没看过 → 只显示教程没讲到的那 1 条提示', () => {
     render(<CoverageIntroCard />);
 
     const card = screen.getByTestId('coverage-intro');
     expect(card).toHaveTextContent('怎么看这页');
-    // 2026-10-30 按新页面重写：说明种公阵列 / 筛选 / 淡黄推荐格
-    expect(card).toHaveTextContent('已通');
-    expect(card).toHaveTextContent('筛选');
+    // 2026-11-08 文案减负：矩阵/档位说明交给教程，页内只留淡黄推荐格
     expect(card).toHaveTextContent('淡黄格');
-    expect(card.querySelectorAll('li')).toHaveLength(3);
+    expect(card.querySelectorAll('li')).toHaveLength(1);
   });
 
   test('点「知道了」→ 关掉并记住版本，重新挂载也不再出现', () => {

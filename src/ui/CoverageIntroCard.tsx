@@ -1,15 +1,15 @@
 import { useState } from 'react';
 
 /**
- * 「覆盖度怎么看」的极简说明卡（2026-10-07）。
+ * 「覆盖度怎么看」的极简提示卡（2026-10-07，2026-11-08 按文案减负缩成 1 条）。
  *
  * 背景：新用户从看板「去看怎么迭代」跳过来时，不清楚这一页有什么、先看哪儿（一进来就是
- * 14 行蛋组 + 一堆筛选），容易懵。所以在页内给一张 3 条的极简说明，点「知道了」关掉并记住。
+ * 14 行蛋组 + 一堆筛选），容易懵。页内只留教程没讲到的那一条操作，点「知道了」关掉并记住。
  *
  * 与教程一样记**版本号**：以后文案改了把版本号 +1，就能再给所有用户展示一次。
  */
 const INTRO_SEEN_KEY = 'roco.coverageIntroSeen';
-export const COVERAGE_INTRO_VERSION = '2';
+export const COVERAGE_INTRO_VERSION = '3';
 
 export function coverageIntroPending(): boolean {
   if (typeof window === 'undefined') return false;
@@ -29,11 +29,7 @@ export function markCoverageIntroSeen(): void {
   }
 }
 
-const LINES = [
-  '已通 N / 14 组按当前档位算；点带数字的格子可以换代表种公',
-  '右上角「筛选」选蛋组与性格；档位是全局口径，在「看板」顶部切换',
-  '淡黄格 = 还没收集的推荐种公，点一下加到小组需求中心',
-];
+const LINES = ['淡黄格 = 还没收集的推荐种公，点一下加到小组需求中心'];
 
 export function CoverageIntroCard() {
   const [open, setOpen] = useState(() => coverageIntroPending());

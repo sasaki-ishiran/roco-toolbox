@@ -185,8 +185,7 @@ export function DemandPublishSheet({
     >
       <div className="space-y-2 p-3" data-testid="demand-publish-body">
         <p className="text-[11px] leading-snug text-slate-400">
-          给每颗蛋选性格，一个性格算一条需求；性别 / 体型 / 声音对本次选中的蛋统一生效。
-          体型和声音必须选一个，性别可以「不挑」。
+          一个性格算一条需求；性别 / 体型 / 声音对选中的蛋统一生效。
         </p>
         <div className="space-y-1 rounded-lg bg-slate-50 px-2 py-1.5" data-testid="demand-publish-criteria">
           {optionRow('性别', DEMAND_GENDERS, gender, GENDER_LABELS, setGender, 'demand-gender')}

@@ -55,7 +55,7 @@ export interface TourStep {
   hint?: boolean;
 }
 
-/** 收尾步：高亮顶部「教程」，告诉用户随时可以重看引导。 */
+/** 收尾步：高亮顶部「教程」，告诉用户随时可以重看引导（只在 start 段保留，其余分段不再重复）。 */
 const hintStep = (body: string): TourStep => ({
   id: TOUR_HINT_STEP_ID,
   title: '随时能重看引导',
@@ -107,7 +107,6 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
       body: '按账号给出 11 个窝怎么摆、谁和谁配、每条线在补什么。摆位按游戏的窝尺寸与配对距离画。',
       anchor: 'dashboard-nest',
     },
-    hintStep('随时点顶部「教程」，能重看这一页的引导。'),
   ],
   collection: [
     {
@@ -131,7 +130,6 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
       collection: { kind: 'mothers', status: 'missing' },
       anchor: 'collection-mothers',
     },
-    hintStep('随时点顶部「教程」，能重看这一页的引导。'),
   ],
   nearby: [
     {
@@ -147,7 +145,6 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
       body: '「稀有」筛掉普通精灵；「可提醒」只留 ±100dB 或体重牌 + 声音牌；「需求」只留需求中心在找的种族。普通精灵离开视野即清理，高价值会保留 10 分钟。',
       anchor: 'nearby-filters',
     },
-    hintStep('随时点顶部「教程」，能重看这一页的引导。'),
   ],
   groups: [
     {
@@ -169,7 +166,6 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
       body: '「我缺的」发需求，「需求中心」接别人的单，「共同寻找」一起认领全组都没有的缺口。',
       anchor: 'group-demands',
     },
-    hintStep('随时点顶部「教程」，能重看这一页的引导。'),
   ],
   home: [
     {
@@ -187,7 +183,6 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
       homeView: 'demands',
       anchor: 'home-placement',
     },
-    hintStep('随时点顶部「教程」，能重看这一页的引导。'),
   ],
   profile: [
     {
@@ -204,7 +199,6 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
       profileSection: 'identity',
       anchor: 'profile-account',
     },
-    hintStep('随时点顶部「教程」，能重看这一页的引导。'),
   ],
 };
 

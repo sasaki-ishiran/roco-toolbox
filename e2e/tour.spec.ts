@@ -76,12 +76,10 @@ test('首次进入看板自动弹一次；跳过后再进不再自动弹', async
   await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByTestId('tour-root')).toBeVisible();
   await expect(page.getByTestId('tour-title')).toHaveText('先定目标档位');
-  await expect(page.getByTestId('tour-progress')).toHaveText('第 1 / 4 步');
+  await expect(page.getByTestId('tour-progress')).toHaveText('第 1 / 3 步');
   await expect(page.getByTestId('tour-spotlight')).toBeVisible();
 
-  // 跳过 → 先给出「教程」入口提示，再点一次才关闭
-  await page.getByTestId('tour-skip').click();
-  await expect(page.getByTestId('tour-title')).toHaveText('随时能重看引导');
+  // 跳过直接关闭：收尾的「重看引导」提示只在首启段保留，页签段不再重复
   await page.getByTestId('tour-skip').click();
   await expect(page.getByTestId('tour-root')).toHaveCount(0);
 

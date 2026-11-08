@@ -243,7 +243,7 @@ describe('家园页', () => {
     h.snapshots = [snapshot];
     render(<HomeLand />);
 
-    expect(screen.getByTestId('home-stale')).toHaveTextContent('重新采集一次家园会更准');
+    expect(screen.getByTestId('home-stale')).toHaveTextContent('配对可能已过期');
   });
 
   test('增量快照提示可能不含全部住户', () => {

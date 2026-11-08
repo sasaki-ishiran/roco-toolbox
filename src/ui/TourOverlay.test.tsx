@@ -43,7 +43,7 @@ describe('新手引导', () => {
     }
   });
 
-  test('分段覆盖：首启讲导入，其余按页签各一段，末步都是「重看引导」', () => {
+  test('分段覆盖：首启讲导入，其余按页签各一段；只有首启带「重看引导」收尾', () => {
     expect(TOUR_SEGMENT_ORDER).toEqual([
       'start',
       'dashboard',
@@ -66,17 +66,21 @@ describe('新手引导', () => {
     expect(TOUR_SEGMENTS.home.map((step) => step.title).join('|')).toContain('接单上窝');
     expect(TOUR_SEGMENTS.profile.map((step) => step.title).join('|')).toContain('云同步');
 
+    const startSteps = TOUR_SEGMENTS.start;
+    expect(startSteps[startSteps.length - 1].id).toBe(TOUR_HINT_STEP_ID);
+    expect(startSteps[startSteps.length - 1].anchor).toBe('guide-open');
+
+    // 其余分段：收尾提示只留在一处，避免每页重复「随时点顶部教程」
     for (const segment of TOUR_SEGMENT_ORDER) {
-      const steps = TOUR_SEGMENTS[segment];
-      expect(steps[steps.length - 1].id).toBe(TOUR_HINT_STEP_ID);
-      expect(steps[steps.length - 1].anchor).toBe('guide-open');
+      if (segment === 'start') continue;
+      expect(TOUR_SEGMENTS[segment].some((step) => step.hint === true)).toBe(false);
     }
   });
 
   test('下一步 / 上一步 / 最后一步收尾', () => {
-    const steps = TOUR_SEGMENTS.dashboard;
+    const steps = TOUR_SEGMENTS.start;
     const onClose = vi.fn();
-    render(<TourOverlay steps={steps} onClose={onClose} />);
+    render(<TourOverlay steps={steps} onClose={onClose} importReady />);
 
     expect(screen.getByTestId('tour-progress')).toHaveTextContent(`1 / ${steps.length}`);
     fireEvent.click(screen.getByTestId('tour-next'));
@@ -92,13 +96,21 @@ describe('新手引导', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  test('任意一步点「跳过」：先给出「教程」入口提示，再点一次才关闭', () => {
+  test('带收尾提示的分段：点「跳过」先给出「教程」入口提示，再点一次才关闭', () => {
     const onClose = vi.fn();
-    render(<TourOverlay steps={TOUR_SEGMENTS.dashboard} onClose={onClose} />);
+    render(<TourOverlay steps={TOUR_SEGMENTS.start} onClose={onClose} />);
 
     fireEvent.click(screen.getByTestId('tour-skip'));
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId('tour-title')).toHaveTextContent('随时能重看引导');
+
+    fireEvent.click(screen.getByTestId('tour-skip'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('没有收尾提示的分段：点「跳过」直接关闭', () => {
+    const onClose = vi.fn();
+    render(<TourOverlay steps={TOUR_SEGMENTS.dashboard} onClose={onClose} />);
 
     fireEvent.click(screen.getByTestId('tour-skip'));
     expect(onClose).toHaveBeenCalledTimes(1);

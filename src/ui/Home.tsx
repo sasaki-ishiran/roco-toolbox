@@ -115,7 +115,7 @@ function HomeRefreshBar({ refresh }: { refresh: HomeRefreshController }) {
           <p className="text-xs font-medium text-slate-700">刷新家园</p>
           <p className="mt-0.5 text-[11px] text-slate-500" data-testid="home-refresh-hint">
             {available
-              ? '点开始后进游戏打开一次家园即可；只更新家园，宠物和蛋不动。'
+              ? '开始后进游戏打开一次家园，只更新家园。'
               : '当前环境没有本机采集（只在安卓工具箱安装包内可用）。'}
           </p>
         </div>
@@ -252,12 +252,12 @@ function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: st
 
       {home.couplesStale ? (
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" data-testid="home-stale">
-          采集期间有精灵进出，游戏配对可能已经过期；重新采集一次家园会更准。
+          采集期间有精灵进出，配对可能已过期。
         </p>
       ) : null}
       {home.snapshotKind === 'delta' ? (
         <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          这份是增量快照，可能不包含全部住户；建议重新采集一次完整的家园场景。
+          这份是增量快照，可能不含全部住户。
         </p>
       ) : null}
 
@@ -268,7 +268,7 @@ function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: st
         </div>
         {home.layEggCouples.length === 0 ? (
           <p className={HINT} data-testid="home-no-pairs">
-            游戏数据里没有当前配对（可能没有可配对的精灵，或采集时家园还没加载完）。
+            游戏数据里没有当前配对。
           </p>
         ) : (
           <div className="mt-1.5">
@@ -402,8 +402,7 @@ export function HomeLand({ onGoImport }: HomeLandProps = {}) {
         <section className={CARD} data-testid="home-no-capture">
           <h2 className={TITLE}>这份数据里没有家园记录</h2>
           <p className={`${HINT} mt-1`}>
-            家园数据来自抓包里的家园场景。采集时要进入家园走一圈（最好切一次楼层、打开一次小窝），
-            再退出并结束采集；否则抓包里没有家园。
+            采集时进入家园走一圈，抓包里才会有家园数据。
           </p>
         </section>
       ) : (

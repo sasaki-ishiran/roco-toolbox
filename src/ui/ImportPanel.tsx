@@ -134,7 +134,7 @@ export function ImportPanel() {
         // 网络/服务端异常也要留一条提示：这是导入后自动触发的，用户没主动点过任何按钮
         .catch(() => {
           updateImportOutcome(operationId, { cloud: 'failed' });
-          setSyncNotice('自动同步没成功（网络异常），到「我的 · 私有同步」点一次「立即同步」重试。');
+          setSyncNotice('自动同步没成功，到「我的 · 私有同步」点「立即同步」重试。');
         });
     }
   };
@@ -482,7 +482,7 @@ export function ImportPanel() {
         {importing ? '导入中…' : '导入游戏数据'}
       </button>
       <p className="-mt-1 text-center text-xs text-slate-400">
-        采集器里点「分享」选「洛克工具箱」会自动导入；也可以在这里手选文件（抓包 .pcap / 备份 .json，可多选）
+        支持抓包 .pcap 与备份 .json，可多选。
       </p>
       <input
         ref={fileInputRef}
@@ -517,7 +517,7 @@ export function ImportPanel() {
         </div>
       ) : snapshots.length === 0 ? (
         <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500" data-testid="import-empty">
-          还没有数据。用上面的「导入游戏数据」或本机采集导入一次，看板会自动算出两块进度。
+          还没有数据。
         </div>
       ) : null}
 
@@ -540,7 +540,7 @@ export function ImportPanel() {
           className="rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-700"
           data-testid="sync-conflict-notice"
         >
-          已保存到本机。云端刚被别的设备改过，这次自动同步没完成——到下面「云同步」点一次「立即同步」即可。
+          已保存到本机；云端刚被别的设备改过，到「我的 · 私有同步」点「立即同步」。
         </div>
       ) : null}
 
@@ -606,8 +606,7 @@ export function ImportPanel() {
               }}
             />
             <p className="mt-1 text-xs text-slate-400">
-              导出的是你自己的账号数据（几个账号打包成一个文件）。换设备首选上面的「云同步」；没开云同步时再用它：
-              两台设备各导出一份、互相合并导入一次。收到的备份也可以直接在微信/QQ 里「分享给洛克工具箱」。
+              导出的备份可在另一台设备合并导入。
             </p>
             {snapshots.length > 0 ? (
               <button
@@ -627,7 +626,7 @@ export function ImportPanel() {
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-700">匿名使用统计</p>
           <p className="mt-0.5 text-xs text-slate-400">
-            只记录「哪台设备用了哪个功能」，不含精灵内容；用来知道哪些功能真有人用
+            只记录用了哪个功能，不含精灵内容。
           </p>
         </div>
         <button

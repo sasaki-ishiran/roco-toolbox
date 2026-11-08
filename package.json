@@ -19,7 +19,7 @@
     "test:mother-groups:api": "node tools/test/run-mother-groups-local.mjs",
     "test:mother-groups:live": "node tools/test/run-mother-groups-local.mjs --live",
     "trim:catalog": "node tools/data-pipeline/trim-catalog.mjs",
-    "verify": "tsc -b && vitest run",
+    "verify": "tsc -b && vitest run && node tools/lint-copy.mjs",
     "deploy:test": "npm run verify && npm run build && wrangler pages deploy dist --project-name roco-toolbox --branch=test --commit-dirty=true",
     "deploy:prod": "npm run verify && npm run build && wrangler pages deploy dist --project-name roco-toolbox --branch=main --commit-dirty=true",
     "desktop": "npm run build && node desktop/prepare-app.mjs && electron desktop/main.cjs",

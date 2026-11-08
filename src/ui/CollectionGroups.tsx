@@ -341,9 +341,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
               data-testid="demand-cancelled-notice"
             >
               <p className="text-sm font-medium">你接的 {cancelledNotice.count} 条需求已被取消</p>
-              <p className="mt-0.5 text-xs opacity-90">
-                需求方已离开小组，这条单不会再出现在需求列表里
-              </p>
+              <p className="mt-0.5 text-xs opacity-90">需求方已离开小组。</p>
               <button
                 type="button"
                 onClick={dismissCancelledNotice}
@@ -367,7 +365,6 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
                     }已确认你承接的 ${completionNotice.count} 单需求`
                   : `你承接的 ${completionNotice.count} 单需求已完成`}
               </p>
-              <p className="mt-0.5 text-xs opacity-90">感谢你对小组的贡献</p>
               <button
                 type="button"
                 onClick={dismissCompletionNotice}
@@ -433,7 +430,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
             data-testid="group-groups-unavailable"
           >
-            暂时读不到你加入的小组（多半是网络问题）。小组还在，恢复网络后点重试即可。
+            暂时读不到小组，点重试。
             <button
               type="button"
               onClick={() => void hook.refresh()}
@@ -455,7 +452,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
           data-tour="group-setup"
         >
           <p className="text-xs text-slate-500">
-            新建 / 加入小组、共享资源与成员管理都要先登录，才能识别「同一个人」。
+            登录后才能新建 / 加入小组。
           </p>
           <button
             type="button"
@@ -559,10 +556,10 @@ function PublicationCard({
   const summary = hook.groupType === 'stud'
     ? stud
       ? `${stud.accounts.length} 个账号 · ${new Set(stud.accounts.flatMap((account) => account.covered.map((slot) => `${slot.groupId}:${slot.natureId}:${slot.grade}`))).size} 个覆盖格`
-      : '尚未向本小组发布资源，选号并预览后再手动发布。'
+      : '还没发布资源。'
     : mother
       ? `${new Set(mother.accounts.flatMap((account) => account.eggGameIds)).size} 种母本 · ${mother.accounts.length} 个账号。`
-      : '尚未向本小组发布资源，选号并预览后再手动发布。';
+      : '还没发布资源。';
 
   const badgeClass =
     status === '需更新'
@@ -587,7 +584,7 @@ function PublicationCard({
           <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{summary}</p>
           {status === '需更新' ? (
             <p className="mt-0.5 text-[10px] text-amber-700" data-testid="group-publish-needed">
-              本机数据有更新，发布后组员才能看到最新资源。
+              本机数据有更新，需重新发布。
             </p>
           ) : null}
           {!hasLocalData ? (
@@ -602,7 +599,7 @@ function PublicationCard({
           ) : null}
           {hook.draftDirty && !editing ? (
             <p className="mt-1 text-[10px] text-amber-700" data-testid="group-draft-collapsed">
-              有未发布的修改，点右侧按钮继续编辑。
+              有未发布的修改。
             </p>
           ) : null}
         </div>

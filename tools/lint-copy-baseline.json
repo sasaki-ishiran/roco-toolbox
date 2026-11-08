@@ -1,0 +1,31 @@
+{
+  "updatedAt": "2026-11-08",
+  "note": "存量基线：条数口径（文件 + 规则）。改写既有文案不加条，新增才拦截。",
+  "counts": {
+    "src/ui/AccountPanel.tsx": {
+      "long-hint": 1
+    },
+    "src/ui/CollectionTargetEditor.tsx": {
+      "keyword": 1
+    },
+    "src/ui/MotherGroupResources.tsx": {
+      "keyword": 3
+    },
+    "src/ui/MotherResourceEditor.tsx": {
+      "long-hint": 1
+    },
+    "src/ui/MotherSharing.tsx": {
+      "long-hint": 1
+    },
+    "src/ui/NativeCollectorPanel.tsx": {
+      "long-hint": 5
+    },
+    "src/ui/Nearby.tsx": {
+      "long-hint": 1
+    },
+    "src/ui/RecommendedNatureEditor.tsx": {
+      "keyword": 1,
+      "long-hint": 1
+    }
+  }
+}
