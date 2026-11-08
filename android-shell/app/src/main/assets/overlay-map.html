@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=120, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 120px; height: 120px;
+    background: transparent; overflow: hidden;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #map {
+    position: relative; width: 120px; height: 120px;
+    border-radius: 8px; overflow: hidden; background: #0d1a26;
+  }
+  #map img.art { position: absolute; display: block; max-width: none; pointer-events: none; }
+  .ring {
+    position: absolute; border: 1px dashed rgba(255,255,255,.75); border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(15,23,42,.35);
+  }
+  .n {
+    position: absolute; left: 50%; top: 2px; transform: translateX(-50%);
+    font: 8px/12px -apple-system, 'Microsoft YaHei UI', sans-serif;
+    color: rgba(255,255,255,.85); background: rgba(15,23,42,.6);
+    border-radius: 3px; padding: 0 3px;
+  }
+  .pt {
+    position: absolute; border-radius: 50%; border: 1.5px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.6); box-sizing: border-box;
+  }
+  .pt.rare { width: 9px; height: 9px; }
+  .pt.norm { width: 7px; height: 7px; }
+  .pt .alert-ring {
+    position: absolute; left: 50%; top: 50%; width: 17px; height: 17px;
+    margin: -8.5px 0 0 -8.5px; border: 1.5px solid #f43f5e; border-radius: 50%;
+    box-sizing: border-box;
+  }
+  .me {
+    position: absolute; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px;
+    border-radius: 50%; background: #0ea5e9; border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.6); box-sizing: border-box;
+  }
+  .me.est {
+    background: transparent; border: 1.5px dashed #f59e0b;
+    width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+(function () {
+  'use strict';
+  // 300m 视野铺满 120px；100 世界单位 = 1 米（单位换算来自 maps.json，不写死）
+  var SIZE = 120;
+  var VIEW_METERS = 300;
+  var DOT_RADIUS_METERS = 150;
+  var KIND_PRIORITY = ['pollution', 'shiny', 'colorful', 'big', 'small', 'high', 'low'];
+  var KIND_COLOR = {
+    pollution: '#7c3aed', shiny: '#f59e0b', colorful: '#ec4899',
+    big: '#0ea5e9', small: '#0ea5e9', high: '#059669', low: '#059669'
+  };
+
+  var catalog = null;
+  var state = null;
+  var root = document.getElementById('map');
+
+  function colorOfKinds(kinds) {
+    if (!kinds) return '#475569';
+    for (var index = 0; index < KIND_PRIORITY.length; index++) {
+      if (kinds.indexOf(KIND_PRIORITY[index]) >= 0) return KIND_COLOR[KIND_PRIORITY[index]];
+    }
+    return '#475569';
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function render() {
+    if (!catalog || !state || !state.scene || !state.self) { root.innerHTML = ''; return; }
+    var map = catalog.maps && catalog.maps[String(state.scene)];
+    if (!map) { root.innerHTML = ''; return; }
+    var unitsPerMeter = Number(catalog.coordinate_units_per_meter) || 100;
+    var pxPerMeter = SIZE / VIEW_METERS;
+    var pxPerUnit = pxPerMeter / unitsPerMeter;
+    var selfX = Number(state.self.x);
+    var selfY = Number(state.self.y);
+    if (!isFinite(selfX) || !isFinite(selfY)) { root.innerHTML = ''; return; }
+
+    var imageWidth = Number(map.side_units) * pxPerUnit;
+    var declaredWidth = Number(map.declared_width) || Number(map.side_units) || 1;
+    var declaredHeight = Number(map.declared_height) || declaredWidth;
+    var imageHeight = imageWidth * (declaredHeight / declaredWidth);
+    // 自身所在的地图图片像素 → 平移到画布正中
+    var selfImageX = (selfX - Number(map.origin_x)) / declaredWidth * imageWidth;
+    var selfImageY = (selfY - Number(map.origin_y)) / declaredHeight * imageHeight;
+    var imageLeft = SIZE / 2 - selfImageX;
+    var imageTop = SIZE / 2 - selfImageY;
+
+    var html = '<img class="art" alt="" draggable="false" src="maps/' + escapeHtml(map.image) +
+      '" style="width:' + imageWidth.toFixed(1) + 'px;height:' + imageHeight.toFixed(1) +
+      'px;left:' + imageLeft.toFixed(1) + 'px;top:' + imageTop.toFixed(1) + 'px">';
+
+    var ringRadius = 120 * pxPerMeter;
+    html += '<div class="ring" style="left:' + (SIZE / 2 - ringRadius).toFixed(1) +
+      'px;top:' + (SIZE / 2 - ringRadius).toFixed(1) + 'px;width:' + (ringRadius * 2).toFixed(1) +
+      'px;height:' + (ringRadius * 2).toFixed(1) + 'px"></div>';
+    html += '<div class="n">N</div>';
+
+    var pets = state.pets || [];
+    for (var index = 0; index < pets.length; index++) {
+      var pet = pets[index];
+      var petX = Number(pet.x);
+      var petY = Number(pet.y);
+      if (!isFinite(petX) || !isFinite(petY)) continue;
+      var dx = (petX - selfX) * pxPerUnit;
+      var dy = (petY - selfY) * pxPerUnit;
+      if (Math.hypot(dx, dy) / pxPerMeter > DOT_RADIUS_METERS) continue;
+      var size = pet.rare ? 9 : 7;
+      var left = SIZE / 2 + dx - size / 2;
+      var top = SIZE / 2 + dy - size / 2;
+      if (left < -size || left > SIZE || top < -size || top > SIZE) continue;
+      html += '<span class="pt ' + (pet.rare ? 'rare' : 'norm') +
+        '" style="left:' + left.toFixed(1) + 'px;top:' + top.toFixed(1) +
+        'px;background:' + colorOfKinds(pet.kinds) + '">' +
+        (pet.alert ? '<span class="alert-ring"></span>' : '') + '</span>';
+    }
+
+    html += '<span class="me' + (state.estimated ? ' est' : '') +
+      '" style="left:' + (SIZE / 2) + 'px;top:' + (SIZE / 2) + 'px"></span>';
+    root.innerHTML = html;
+  }
+
+  window.RocoOverlayMap = {
+    /** 与网页同一份 maps.json（由壳从 assets 读入后注入）。 */
+    init: function (json) {
+      try { catalog = typeof json === 'string' ? JSON.parse(json) : json; }
+      catch (error) { catalog = null; }
+      render();
+    },
+    /** 附近 payload 的地图子集：{scene, self, estimated, pets:[{x,y,rare,alert,kinds}]}。 */
+    update: function (json) {
+      try { state = typeof json === 'string' ? JSON.parse(json) : json; }
+      catch (error) { state = null; }
+      render();
+    }
+  };
+})();
+</script>
+</body>
+</html>

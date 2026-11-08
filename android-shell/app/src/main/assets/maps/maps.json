@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "coordinate_units_per_meter": 100,
+  "axis": { "x": "east", "y": "south" },
+  "source": {
+    "note": "场景 10003（卡洛西亚大陆）的图片与投影标定参考自 roco-kingdom-toolbox 2.3.0 的 NearbyMapView（static/maps/10003.webp 与内置投影公式）；图片版权归游戏方，仅在本地使用。",
+    "image_file": "10003.webp"
+  },
+  "maps": {
+    "10003": {
+      "name": "卡洛西亚大陆",
+      "origin_x": 306000,
+      "origin_y": 408000,
+      "side_units": 408000,
+      "declared_width": 4096,
+      "declared_height": 4096,
+      "image": "10003.webp"
+    }
+  }
+}
