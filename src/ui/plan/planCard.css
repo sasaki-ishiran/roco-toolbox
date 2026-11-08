@@ -1,0 +1,53 @@
+.pc-steps {
+  display: flex;
+  align-items: flex-start;
+}
+.pc-steps .pc-step {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+.pc-steps .pc-step i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+.pc-steps .pc-step::after {
+  content: '';
+  position: absolute;
+  top: 2.5px;
+  left: calc(50% + 4px);
+  right: calc(-50% + 4px);
+  height: 1px;
+  background: #e2e8f0;
+}
+.pc-steps .pc-step:last-child::after {
+  display: none;
+}
+.pc-steps .pc-step b {
+  display: block;
+  margin-top: 3px;
+  font-size: 8px;
+  line-height: 1.1;
+  font-weight: 400;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.pc-steps .pc-step.done i {
+  background: var(--pc-tone);
+}
+.pc-steps .pc-step.done b {
+  color: #64748b;
+}
+.pc-steps .pc-step.now i {
+  background: var(--pc-tone);
+  box-shadow: 0 0 0 2px var(--pc-soft);
+}
+.pc-steps .pc-step.now b {
+  color: var(--pc-tone-text);
+  font-weight: 700;
+}

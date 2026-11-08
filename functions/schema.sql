@@ -181,6 +181,8 @@ CREATE INDEX IF NOT EXISTS idx_collection_group_tasks_owner
 -- 一个性格算一条；空字符串统一表示「不挑 / 不限」，不参与匹配。
 -- 主键含性别 / 体型 / 声音，同蛋同性格的母、公需求可以并存，发布不会覆盖已接单的行。
 -- 增量文件 functions/migrations/2026-10-27-collection-demand-criteria.sql 必须与本区块一致。
+-- placed_at（2026-11-08「已上窝」同步服务端）由
+-- functions/migrations/2026-11-08-collection-demand-placed-at.sql 单独加列。
 CREATE TABLE IF NOT EXISTS collection_group_demands (
   group_id            TEXT NOT NULL,
   demander_account_id TEXT NOT NULL,
@@ -192,6 +194,11 @@ CREATE TABLE IF NOT EXISTS collection_group_demands (
   require_green_nest  INTEGER NOT NULL DEFAULT 0,
   status              TEXT NOT NULL DEFAULT 'open',
   claimer_account_id  TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+  -- 认领人标记「已上窝」的时间；NULL = 还没上窝。发布人据此看到「待我确认」
+  placed_at           INTEGER,
+  -- 上窝用的游戏账号（uid:<gameId>），多账号时便于发布人确认是谁放的；
+  -- 别人的视图只展示昵称，不展示这个标识本身
+  placed_by_account_key TEXT,
   version             INTEGER NOT NULL DEFAULT 0,
   created_at          INTEGER NOT NULL,
   updated_at          INTEGER NOT NULL,
@@ -227,3 +234,56 @@ CREATE INDEX IF NOT EXISTS idx_collection_group_demand_completions_demand
   ON collection_group_demand_completions
     (group_id, demander_account_id, egg_game_id, nature, gender, body, voice);
 -- <<< collection-demand-completions (2026-10-29)
+
+-- >>> collection-plans (2026-11-08)
+-- 收集计划：组内可见、成员级、按蛋（物种 / 进化链）粗粒度。同一位成员在同一个组里
+-- 同一颗蛋只有一条计划，重复导入按 UNIQUE 合并而不是新增。
+--
+-- status：backlog（想收，默认）/ active（进行中）/ done（已完成）。
+--   backlog → active：成员点「开始」，或直接给这条计划发需求（发需求自动进行中）。
+--   active → done：成员手动完成，或该蛋关联的需求「全部结单」自动完成（中途撤回不算）。
+--   删除 = 物理删除，plan_offers 级联清理。
+--
+-- 刻意**不存 demand_id**：需求主键是「发布人 + 蛋 + 性格 + 性别 + 体型 + 声音」，
+-- 且结单时整行搬进归档表，存 id 会悬空。计划与需求的关联统一按「同组成员 + 同蛋」现算。
+--
+-- 增量文件 functions/migrations/2026-11-08-collection-plans.sql 必须与本区块一致
+-- （tools/test/verify-mother-groups-schema.mjs 会逐列比较）。
+CREATE TABLE IF NOT EXISTS collection_plans (
+  id                TEXT PRIMARY KEY,
+  group_id          TEXT NOT NULL,
+  member_account_id TEXT NOT NULL,
+  egg_game_id       INTEGER NOT NULL,
+  note              TEXT NOT NULL DEFAULT '',
+  status            TEXT NOT NULL DEFAULT 'backlog',
+  version           INTEGER NOT NULL DEFAULT 0,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL,
+  UNIQUE (group_id, member_account_id, egg_game_id),
+  FOREIGN KEY (group_id, member_account_id)
+    REFERENCES mother_group_members (group_id, account_id) ON DELETE CASCADE
+);
+-- 组内广场按「组 + 状态」取成员计划；「我的收集」走 (group_id, member_account_id)
+CREATE INDEX IF NOT EXISTS idx_collection_plans_group_status
+  ON collection_plans (group_id, status);
+CREATE INDEX IF NOT EXISTS idx_collection_plans_member
+  ON collection_plans (group_id, member_account_id);
+
+-- 「我能提供」标记：一位成员对一条计划最多一条，可带自由备注。
+-- status 预留给后续的「已提供 / 已谢绝」，一期只有 pending（标记即生效）。
+CREATE TABLE IF NOT EXISTS plan_offers (
+  id               TEXT PRIMARY KEY,
+  group_id         TEXT NOT NULL,
+  plan_id          TEXT NOT NULL REFERENCES collection_plans (id) ON DELETE CASCADE,
+  offer_account_id TEXT NOT NULL,
+  note             TEXT NOT NULL DEFAULT '',
+  status           TEXT NOT NULL DEFAULT 'pending',
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL,
+  UNIQUE (plan_id, offer_account_id),
+  FOREIGN KEY (group_id, offer_account_id)
+    REFERENCES mother_group_members (group_id, account_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_plan_offers_account
+  ON plan_offers (group_id, offer_account_id);
+-- <<< collection-plans (2026-11-08)

@@ -74,9 +74,10 @@ function fnv1a(text) {
 let A;
 let B;
 let C;
+let D;
 
 before(async () => {
-  [A, B, C] = await Promise.all(['A', 'B', 'C'].map((label) => register(label)));
+  [A, B, C, D] = await Promise.all(['A', 'B', 'C', 'D'].map((label) => register(label)));
 });
 
 async function createGroup(owner, body) {
@@ -678,4 +679,427 @@ test('种公需求：负数蛋组 id 可发布、可读回；非法蛋组拒绝'
   });
   assert.equal(bad.status, 400, JSON.stringify(bad.body));
   assert.equal(bad.body.code, 'INVALID_INPUT');
+});
+
+/* ---------- 收集计划（2026-11-08） ---------- */
+
+async function planGroup(name) {
+  const created = await createGroup(A, {
+    name,
+    displayName: 'A',
+    groupType: 'mother',
+    target: {
+      kind: 'mother',
+      mode: 'perfect',
+      bodies: ['大块头'],
+      voices: ['+100'],
+      catalogVersion: 'test-v1',
+    },
+  });
+  assert.equal((await join(B, created.inviteCode)).status, 200);
+  assert.equal((await join(C, created.inviteCode)).status, 200);
+  return created;
+}
+
+test('计划：创建/批量导入去重、已有跳过，按组列表含自己并标成员名', async () => {
+  const created = await planGroup('计划创建组');
+  const base = `/api/collection-groups/${created.id}`;
+
+  const first = await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [101, 102, 101] });
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.plans.length, 2);
+  assert.deepEqual(first.body.plans.map((plan) => plan.status), ['backlog', 'backlog']);
+  assert.equal(first.body.skipped, 0);
+
+  const second = await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [101, 103] });
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(second.body.plans.length, 1);
+  assert.equal(second.body.plans[0].eggGameId, 103);
+  assert.equal(second.body.skipped, 1);
+
+  const listed = await call(B.token, 'GET', `${base}/plans`);
+  assert.equal(listed.status, 200, JSON.stringify(listed.body));
+  assert.equal(listed.body.plans.length, 3);
+  assert.equal(listed.body.plans[0].memberDisplayName, 'A');
+  assert.equal(listed.body.plans[0].progressStep, 0);
+  assert.equal(listed.body.myActiveCount, 0);
+  assert.equal(listed.body.maxActivePlans, 8);
+  assert.deepEqual(listed.body.matchableEggIds, []);
+});
+
+test('计划：进行中硬上限 8 条，超出部分自动落想收并给提示', async () => {
+  const created = await planGroup('计划额度组');
+  const base = `/api/collection-groups/${created.id}`;
+
+  const bulk = await call(A.token, 'POST', `${base}/plans`, {
+    eggGameIds: [201, 202, 203, 204, 205, 206, 207, 208, 209, 210],
+    start: true,
+  });
+  assert.equal(bulk.status, 200, JSON.stringify(bulk.body));
+  const active = bulk.body.plans.filter((plan) => plan.status === 'active');
+  const backlog = bulk.body.plans.filter((plan) => plan.status === 'backlog');
+  assert.equal(active.length, 8);
+  assert.equal(backlog.length, 2);
+  assert.equal(bulk.body.overflow, 2);
+  assert.equal(bulk.body.notice, '进行中已满 8 条，已放进想收');
+
+  const listed = await call(A.token, 'GET', `${base}/plans`);
+  assert.equal(listed.body.myActiveCount, 8);
+
+  // 满了之后再「开始」一条：不报错，仍是 backlog，并返回提示
+  const extra = await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [211], start: true });
+  assert.equal(extra.status, 200, JSON.stringify(extra.body));
+  assert.equal(extra.body.plans[0].status, 'backlog');
+  assert.equal(extra.body.overflow, 1);
+  assert.equal(extra.body.notice, '进行中已满 8 条，已放进想收');
+});
+
+test('计划：非组员不能看、不能建、不能标记', async () => {
+  const created = await planGroup('计划权限组');
+  const base = `/api/collection-groups/${created.id}`;
+  const plan = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [301] })).body.plans[0];
+
+  const read = await call(D.token, 'GET', `${base}/plans`);
+  assert.equal(read.status, 403);
+  assert.equal(read.body.code, 'NOT_MEMBER');
+
+  const create = await call(D.token, 'POST', `${base}/plans`, { eggGameIds: [302] });
+  assert.equal(create.status, 403);
+  assert.equal(create.body.code, 'NOT_MEMBER');
+
+  const offer = await call(D.token, 'PUT', `${base}/plans/${plan.id}/offers/me`, { note: '有' });
+  assert.equal(offer.status, 403);
+  assert.equal(offer.body.code, 'NOT_MEMBER');
+});
+
+test('计划：开始/完成/删除，想收可直接完成，删除连带清掉提供标记', async () => {
+  const created = await planGroup('计划流转组');
+  const base = `/api/collection-groups/${created.id}`;
+
+  const createdPlan = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [401] })).body
+    .plans[0];
+  // 别人的计划不能开始
+  const notMine = await call(B.token, 'POST', `${base}/plans/${createdPlan.id}/start`);
+  assert.equal(notMine.status, 403);
+  assert.equal(notMine.body.code, 'PLAN_NOT_YOURS');
+
+  const started = await call(A.token, 'POST', `${base}/plans/${createdPlan.id}/start`);
+  assert.equal(started.status, 200, JSON.stringify(started.body));
+  assert.equal(started.body.plan.status, 'active');
+  assert.equal(started.body.overflow, false);
+
+  const done = await call(A.token, 'POST', `${base}/plans/${createdPlan.id}/complete`);
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.plan.status, 'done');
+  // 已完成不可回退；重复完成幂等
+  const restart = await call(A.token, 'POST', `${base}/plans/${createdPlan.id}/start`);
+  assert.equal(restart.status, 409);
+  assert.equal(restart.body.code, 'PLAN_ALREADY_DONE');
+  const again = await call(A.token, 'POST', `${base}/plans/${createdPlan.id}/complete`);
+  assert.equal(again.status, 200);
+  assert.equal(again.body.plan.status, 'done');
+
+  // 想收 → 直接完成（手里已经有这颗蛋）
+  const direct = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [402] })).body.plans[0];
+  const directDone = await call(A.token, 'POST', `${base}/plans/${direct.id}/complete`);
+  assert.equal(directDone.status, 200, JSON.stringify(directDone.body));
+  assert.equal(directDone.body.plan.status, 'done');
+
+  // 删除：别人的不能删；自己的删掉后标记一并消失
+  const target = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [403] })).body.plans[0];
+  const offer = await call(B.token, 'PUT', `${base}/plans/${target.id}/offers/me`, { note: '我有' });
+  assert.equal(offer.status, 200, JSON.stringify(offer.body));
+  const deleteByOther = await call(B.token, 'DELETE', `${base}/plans/${target.id}`);
+  assert.equal(deleteByOther.status, 403);
+  assert.equal(deleteByOther.body.code, 'PLAN_NOT_YOURS');
+  const deleted = await call(A.token, 'DELETE', `${base}/plans/${target.id}`);
+  assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+
+  const listed = await call(A.token, 'GET', `${base}/plans`);
+  assert.equal(listed.body.plans.some((plan) => plan.id === target.id), false);
+  assert.equal(listed.body.plans.some((plan) => plan.id === direct.id && plan.progressStep === 5), true);
+});
+
+test('计划：我能提供的标记/改备注/撤回，不能标自己的计划', async () => {
+  const created = await planGroup('计划提供组');
+  const base = `/api/collection-groups/${created.id}`;
+  const plan = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [501] })).body.plans[0];
+
+  const marked = await call(B.token, 'PUT', `${base}/plans/${plan.id}/offers/me`, { note: '我有' });
+  assert.equal(marked.status, 200, JSON.stringify(marked.body));
+  assert.equal(marked.body.offer.offerAccountId, B.accountId);
+  assert.equal(marked.body.offer.note, '我有');
+
+  const edited = await call(B.token, 'PUT', `${base}/plans/${plan.id}/offers/me`, { note: '改一下' });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  assert.equal(edited.body.offer.note, '改一下');
+
+  const self = await call(A.token, 'PUT', `${base}/plans/${plan.id}/offers/me`, { note: '' });
+  assert.equal(self.status, 409);
+  assert.equal(self.body.code, 'PLAN_OFFER_SELF');
+
+  const listed = await call(A.token, 'GET', `${base}/plans`);
+  const view = listed.body.plans.find((item) => item.id === plan.id);
+  assert.equal(view.offers.length, 1);
+  assert.equal(view.offers[0].offerDisplayName, 'B');
+  assert.equal(view.offers[0].note, '改一下');
+
+  const withdrawn = await call(B.token, 'DELETE', `${base}/plans/${plan.id}/offers/me`);
+  assert.equal(withdrawn.status, 200, JSON.stringify(withdrawn.body));
+  const again = await call(B.token, 'DELETE', `${base}/plans/${plan.id}/offers/me`);
+  assert.equal(again.status, 404);
+  assert.equal(again.body.code, 'PLAN_OFFER_NOT_FOUND');
+});
+
+test('计划：「你能补的」只算别人进行中、我发布过的蛋；自己的计划不算', async () => {
+  const created = await planGroup('计划匹配组');
+  const base = `/api/collection-groups/${created.id}`;
+
+  const bPlan = (await call(B.token, 'POST', `${base}/plans`, { eggGameIds: [601], start: true }))
+    .body.plans[0];
+  const bBacklog = (await call(B.token, 'POST', `${base}/plans`, { eggGameIds: [602] })).body
+    .plans[0];
+  assert.equal(bPlan.status, 'active');
+  assert.equal(bBacklog.status, 'backlog');
+
+  const published = await call(A.token, 'PUT', `${base}/resources/me`, {
+    baseRevision: 0,
+    resource: motherDraft([motherAccount(7001, [601, 602])]),
+  });
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+
+  const listed = await call(A.token, 'GET', `${base}/plans`);
+  // 602 只是想收，不算「你能补的」；601 是别人进行中且我发布过
+  assert.deepEqual(listed.body.matchableEggIds, [601]);
+
+  const mine = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [603], start: true }))
+    .body.plans[0];
+  assert.equal(mine.status, 'active');
+  const listedForB = await call(B.token, 'GET', `${base}/plans`);
+  assert.equal(listedForB.body.matchableEggIds.includes(603), false);
+});
+
+test('计划：需求全部结单才自动完成，中途撤回不算', async () => {
+  const created = await planGroup('计划自动完成组');
+  const base = `/api/collection-groups/${created.id}`;
+  const plan = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [701], start: true }))
+    .body.plans[0];
+
+  const published = await call(A.token, 'POST', `${base}/demands`, {
+    eggGameId: 701,
+    natures: ['胆小', '保守'],
+  });
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  const [timid, calm] = published.body.demands;
+
+  const claimTimid = await call(B.token, 'POST', `${base}/demands/701/claim`, {
+    demanderAccountId: A.accountId,
+    eggGameId: 701,
+    nature: '胆小',
+    gender: '母',
+    body: '大块头',
+    voice: '+100',
+    version: timid.version,
+  });
+  assert.equal(claimTimid.status, 200, JSON.stringify(claimTimid.body));
+  const completeTimid = await call(A.token, 'POST', `${base}/demands/701/complete`, {
+    demanderAccountId: A.accountId,
+    eggGameId: 701,
+    nature: '胆小',
+    gender: '母',
+    body: '大块头',
+    voice: '+100',
+    version: claimTimid.body.demand.version,
+  });
+  assert.equal(completeTimid.status, 200, JSON.stringify(completeTimid.body));
+
+  // 还有一条「保守」没结单：计划保持进行中
+  let listed = await call(A.token, 'GET', `${base}/plans`);
+  assert.equal(listed.body.plans.find((item) => item.id === plan.id).status, 'active');
+
+  const claimCalm = await call(C.token, 'POST', `${base}/demands/701/claim`, {
+    demanderAccountId: A.accountId,
+    eggGameId: 701,
+    nature: '保守',
+    gender: '母',
+    body: '大块头',
+    voice: '+100',
+    version: calm.version,
+  });
+  const completeCalm = await call(A.token, 'POST', `${base}/demands/701/complete`, {
+    demanderAccountId: A.accountId,
+    eggGameId: 701,
+    nature: '保守',
+    gender: '母',
+    body: '大块头',
+    voice: '+100',
+    version: claimCalm.body.demand.version,
+  });
+  assert.equal(completeCalm.status, 200, JSON.stringify(completeCalm.body));
+
+  listed = await call(A.token, 'GET', `${base}/plans`);
+  const donePlan = listed.body.plans.find((item) => item.id === plan.id);
+  assert.equal(donePlan.status, 'done');
+  assert.equal(donePlan.progressStep, 5);
+
+  // 撤回不算完成：新计划发需求后撤回，计划仍是进行中
+  const withdrawnPlan = (
+    await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [702], start: true })
+  ).body.plans[0];
+  const withdrawDemand = await call(A.token, 'POST', `${base}/demands`, {
+    eggGameId: 702,
+    natures: [],
+  });
+  const withdraw = await call(
+    A.token,
+    'DELETE',
+    `${base}/demands/702?nature=&gender=%E6%AF%8D&body=%E5%A4%A7%E5%9D%97%E5%A4%B4&voice=%2B100`,
+  );
+  assert.equal(withdraw.status, 200, JSON.stringify(withdraw.body));
+  listed = await call(A.token, 'GET', `${base}/plans`);
+  assert.equal(listed.body.plans.find((item) => item.id === withdrawnPlan.id).status, 'active');
+});
+
+test('计划：认领人标记已上窝后，发布人看到「待我确认」且不泄露游戏账号', async () => {
+  const created = await planGroup('计划上窝组');
+  const base = `/api/collection-groups/${created.id}`;
+  const plan = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [801], start: true }))
+    .body.plans[0];
+  const published = await call(A.token, 'POST', `${base}/demands`, {
+    eggGameId: 801,
+    natures: [],
+  });
+  const demand = published.body.demands[0];
+
+  const claim = await call(B.token, 'POST', `${base}/demands/801/claim`, {
+    demanderAccountId: A.accountId,
+    eggGameId: 801,
+    nature: '',
+    gender: '母',
+    body: '大块头',
+    voice: '+100',
+    version: demand.version,
+  });
+  assert.equal(claim.status, 200, JSON.stringify(claim.body));
+
+  const criteria = {
+    demanderAccountId: A.accountId,
+    eggGameId: 801,
+    nature: '',
+    gender: '母',
+    body: '大块头',
+    voice: '+100',
+  };
+  // 非接单人不能标记
+  const notClaimer = await call(C.token, 'POST', `${base}/demands/801/placement`, {
+    ...criteria,
+    accountKey: 'uid:9001',
+  });
+  assert.equal(notClaimer.status, 403);
+  assert.equal(notClaimer.body.code, 'DEMAND_NOT_YOURS');
+
+  const placed = await call(B.token, 'POST', `${base}/demands/801/placement`, {
+    ...criteria,
+    accountKey: 'uid:9001',
+  });
+  assert.equal(placed.status, 200, JSON.stringify(placed.body));
+  assert.ok(placed.body.demand.placedAt > 0);
+  assert.equal('placedByAccountKey' in placed.body.demand, false);
+
+  const listed = await call(C.token, 'GET', `${base}/plans`);
+  const view = listed.body.plans.find((item) => item.id === plan.id);
+  assert.equal(view.progressStep, 4);
+  assert.equal(view.needsConfirm, true);
+  assert.ok(view.demands[0].placedAt > 0);
+  assert.equal(JSON.stringify(listed.body).includes('uid:9001'), false);
+});
+
+test('回归：计划的增删改与退出小组都不影响历史结单数据与旧接口结构', async () => {
+  const created = await planGroup('历史数据保护组');
+  const base = `/api/collection-groups/${created.id}`;
+
+  // 先造历史结单：B 发两条需求，A 全部接单并结单 → 归档 2 条
+  const published = await call(B.token, 'POST', `${base}/demands`, {
+    eggGameId: 901,
+    natures: ['胆小', '保守'],
+  });
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  for (const demand of published.body.demands) {
+    const claim = await call(A.token, 'POST', `${base}/demands/901/claim`, {
+      demanderAccountId: B.accountId,
+      eggGameId: 901,
+      nature: demand.nature,
+      gender: '母',
+      body: '大块头',
+      voice: '+100',
+      version: demand.version,
+    });
+    assert.equal(claim.status, 200, JSON.stringify(claim.body));
+    const done = await call(A.token, 'POST', `${base}/demands/901/complete`, {
+      demanderAccountId: B.accountId,
+      eggGameId: 901,
+      nature: demand.nature,
+      gender: '母',
+      body: '大块头',
+      voice: '+100',
+      version: claim.body.demand.version,
+    });
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+  }
+
+  const before = await call(A.token, 'GET', `${base}/demands`);
+  assert.equal(before.status, 200, JSON.stringify(before.body));
+  assert.equal(before.body.completedCounts[A.accountId], 2);
+  assert.equal(before.body.myRecentCompleted.length, 2);
+  assert.equal(before.body.demands.length, 0);
+
+  // 旧客户端依赖的字段仍在；新增的 placedAt 只是可空字段
+  const shape = before.body.myRecentCompleted[0];
+  for (const key of [
+    'groupId',
+    'demanderAccountId',
+    'eggGameId',
+    'nature',
+    'gender',
+    'body',
+    'voice',
+    'status',
+    'claimerAccountId',
+    'version',
+    'createdAt',
+    'updatedAt',
+  ]) {
+    assert.ok(key in shape, `旧字段 ${key} 不应消失`);
+  }
+  assert.equal('placedByAccountKey' in shape, false);
+
+  // 计划的各种操作：创建、开始、完成、被标记、删除（含级联清标记）
+  const keep = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [901], start: true }))
+    .body.plans[0];
+  const remove = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [902] })).body
+    .plans[0];
+  const complete = await call(A.token, 'POST', `${base}/plans/${keep.id}/complete`);
+  assert.equal(complete.status, 200);
+  const offer = await call(B.token, 'PUT', `${base}/plans/${remove.id}/offers/me`, {
+    note: '我能给',
+  });
+  assert.equal(offer.status, 200);
+  const removed = await call(A.token, 'DELETE', `${base}/plans/${remove.id}`);
+  assert.equal(removed.status, 200);
+
+  const afterPlans = await call(A.token, 'GET', `${base}/demands`);
+  assert.deepEqual(afterPlans.body.completedCounts, before.body.completedCounts);
+  assert.deepEqual(
+    afterPlans.body.myRecentCompleted.map((item) => [item.eggGameId, item.nature]),
+    before.body.myRecentCompleted.map((item) => [item.eggGameId, item.nature]),
+  );
+
+  // 退出小组：只清理成员的计划与进行中需求，历史归档保留
+  const left = await call(B.token, 'DELETE', `${base}/members/me`);
+  assert.equal(left.status, 200, JSON.stringify(left.body));
+  const afterLeave = await call(A.token, 'GET', `${base}/demands`);
+  assert.equal(afterLeave.body.completedCounts[A.accountId], 2);
+  assert.equal(afterLeave.body.myRecentCompleted.length, 2);
+  const plansAfterLeave = await call(A.token, 'GET', `${base}/plans`);
+  assert.equal(plansAfterLeave.body.plans.some((plan) => plan.id === keep.id), true);
 });

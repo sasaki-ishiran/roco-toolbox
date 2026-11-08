@@ -11,7 +11,7 @@ import { useNatureOverrides } from './natureOverrideStore';
 import { CollectionGroupSetup } from './CollectionGroupSetup';
 import { useCollectionGroups } from './useCollectionGroups';
 import { MotherGroupMembers } from './MotherGroupMembers';
-import { MotherGroupResources } from './MotherGroupResources';
+import { GroupPlanHub } from './plan/GroupPlanHub';
 import { MotherResourceEditor } from './MotherResourceEditor';
 import { useCollectionSummary } from './useCollectionSummary';
 import { useSnapshots } from './useSnapshots';
@@ -386,7 +386,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             />
           ) : null}
 
-          <MotherGroupResources
+          <GroupPlanHub
             key={`mother-resources:${hook.currentGroup.group.id}:${hook.accountId}`}
             group={hook.currentGroup}
             viewerAccountId={hook.accountId ?? ''}

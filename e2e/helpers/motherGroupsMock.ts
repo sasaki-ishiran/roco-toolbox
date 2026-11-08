@@ -2,6 +2,23 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page, Route } from '@playwright/test';
 
+/**
+ * 与 `src/shared/collectionPlans.ts` 同口径的进度推导（e2e 工程不 include src，避免跨工程 import）：
+ * 0 还没发需求 / 1 待接单 / 2 已认领 / 4 待我确认 / 5 已完成。
+ */
+function progressOf(input: {
+  status: 'backlog' | 'active' | 'done';
+  openRows: Array<{ claimed: boolean; placedAt: number | null }>;
+  doneCount: number;
+}): number {
+  if (input.status === 'done') return 5;
+  const met: number[] = input.openRows.map((row) =>
+    row.placedAt != null ? 4 : row.claimed ? 2 : 1,
+  );
+  if (met.length === 0) return input.doneCount > 0 ? 5 : 0;
+  return Math.max(...met);
+}
+
 /** 与客户端当前图鉴版本一致，否则摘要会被判成「需更新」。 */
 const CATALOG_VERSION = (
   JSON.parse(readFileSync(join(process.cwd(), 'src', 'data', 'catalog.gen.json'), 'utf8')) as {
@@ -98,6 +115,20 @@ const fulfill = (route: Route, body: unknown, status = 200) =>
     body: JSON.stringify(body),
   });
 
+export interface MockPlanSeed {
+  id: string;
+  memberAccountId: string;
+  eggGameId: number;
+  status: 'backlog' | 'active' | 'done';
+}
+
+/** 已有的「我能提供」记录（截图 / 详情态用例需要预置时用）。 */
+export interface MockOfferSeed {
+  planId: string;
+  offerAccountId: string;
+  note: string;
+}
+
 export interface MockOptions {
   /** 发布接口返回 409（模拟另一台设备刚改过） */
   publishConflict?: boolean;
@@ -105,11 +136,130 @@ export interface MockOptions {
   taskConflict?: boolean;
   /** 需求中心用的需求列表；不传 = 空。 */
   demands?: Array<Record<string, unknown>>;
+  /** 收集计划初始数据；不传 = 空。 */
+  plans?: MockPlanSeed[];
+  /** 预置的提供记录；不传 = 空。 */
+  offers?: MockOfferSeed[];
 }
+
+/** 需求行补上 mock 需要的默认字段，避免每条种子数据都写全。 */
+const demandRow = (input: Record<string, unknown>, index: number) => ({
+  groupId: GROUP_ID,
+  demanderAccountId: 'A',
+  eggGameId: 3001,
+  nature: '固执',
+  gender: '母',
+  body: '大块头',
+  voice: '+100',
+  status: 'open',
+  claimerAccountId: null,
+  placedAt: null,
+  version: 1,
+  createdAt: 1_760_000_000_000 + index,
+  updatedAt: 1_760_000_000_000 + index,
+  ...input,
+});
 
 export async function mockMotherGroups(page: Page, options: MockOptions = {}): Promise<void> {
   let revision = 2;
+  let planSeq = 0;
   const tasks: Array<Record<string, unknown>> = [];
+  const demands: Array<Record<string, unknown>> = (options.demands ?? []).map(demandRow);
+  const plans: Array<{
+    id: string;
+    groupId: string;
+    memberAccountId: string;
+    eggGameId: number;
+    note: string;
+    status: 'backlog' | 'active' | 'done';
+    version: number;
+    createdAt: number;
+    updatedAt: number;
+  }> = (options.plans ?? []).map((seed, index) => ({
+    id: seed.id,
+    groupId: GROUP_ID,
+    memberAccountId: seed.memberAccountId,
+    eggGameId: seed.eggGameId,
+    note: '',
+    status: seed.status,
+    version: 1,
+    createdAt: 1_760_000_000_000 + index,
+    // 默认停在 3 天前：截图里能看到「3 天没人接 / 3 天没上窝」的阻塞角标。
+    updatedAt: Date.now() - 3 * 24 * 60 * 60 * 1000 + index,
+  }));
+  const offers: Array<{
+    planId: string;
+    offerAccountId: string;
+    note: string;
+    createdAt: number;
+    updatedAt: number;
+  }> = (options.offers ?? []).map((seed, index) => ({
+    ...seed,
+    createdAt: 1_760_000_000_000 + index,
+    updatedAt: 1_760_000_000_000 + index,
+  }));
+
+  const displayNameOf = (accountId: string) =>
+    groupDetail.members.find((member) => member.accountId === accountId)?.displayName ?? accountId;
+
+  /** 与 shared/collectionPlans 同口径：由未结单需求 + 已完成归档推计划进度。 */
+  const planViewOf = (plan: (typeof plans)[number]) => {
+    const openRows = demands.filter(
+      (row) =>
+        row.demanderAccountId === plan.memberAccountId &&
+        row.eggGameId === plan.eggGameId &&
+        row.status !== 'done',
+    );
+    const doneRows = demands.filter(
+      (row) =>
+        row.demanderAccountId === plan.memberAccountId &&
+        row.eggGameId === plan.eggGameId &&
+        row.status === 'done',
+    );
+    const step = progressOf({
+      status: plan.status,
+      openRows: openRows.map((row) => ({
+        claimed: row.claimerAccountId != null,
+        placedAt: (row.placedAt as number | null) ?? null,
+      })),
+      doneCount: doneRows.length,
+    });
+    return {
+      ...plan,
+      memberDisplayName: displayNameOf(plan.memberAccountId),
+      progressStep: step,
+      needsConfirm: step === 4,
+      demands: openRows.map((row) => ({
+        nature: String(row.nature ?? ''),
+        gender: row.gender,
+        body: row.body,
+        voice: row.voice,
+        status: row.claimerAccountId ? 'claimed' : 'open',
+        claimerAccountId: row.claimerAccountId ?? null,
+        placedAt: (row.placedAt as number | null) ?? null,
+      })),
+      offers: offers
+        .filter((offer) => offer.planId === plan.id)
+        .map((offer) => ({
+          ...offer,
+          offerDisplayName: displayNameOf(offer.offerAccountId),
+        })),
+    };
+  };
+
+  const plansResponse = () => ({
+    ok: true,
+    plans: plans.map(planViewOf),
+    members: groupDetail.members.map((member) => ({
+      accountId: member.accountId,
+      displayName: member.displayName,
+    })),
+    // mock 里简单按「我有这颗蛋」的种子给：3001 是 A 资源里没有、B 在收的蛋
+    matchableEggIds: options.plans?.length ? [3001] : [],
+    myActiveCount: plans.filter((plan) => plan.status === 'active').length,
+    maxActivePlans: 8,
+  });
+
   await page.route('**/api/collection-groups**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -121,6 +271,98 @@ export async function mockMotherGroups(page: Page, options: MockOptions = {}): P
     }
     if (method === 'GET' && path === `/api/collection-groups/${GROUP_ID}`) {
       return fulfill(route, { ok: true, ...groupDetail });
+    }
+    // 收集计划（2026-11-08）：我的收集 / 组内广场共用
+    if (method === 'GET' && path === `/api/collection-groups/${GROUP_ID}/plans`) {
+      return fulfill(route, plansResponse());
+    }
+    if (method === 'POST' && path === `/api/collection-groups/${GROUP_ID}/plans`) {
+      const body = request.postDataJSON() as { eggGameIds: number[]; start?: boolean };
+      const existing = new Set(plans.map((plan) => plan.eggGameId));
+      const created = body.eggGameIds
+        .filter((eggGameId) => !existing.has(eggGameId))
+        .map((eggGameId) => {
+          planSeq += 1;
+          const row = {
+            id: `p${planSeq}`,
+            groupId: GROUP_ID,
+            memberAccountId: 'A',
+            eggGameId,
+            note: '',
+            status: (body.start ? 'active' : 'backlog') as 'backlog' | 'active',
+            version: 1,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          plans.push(row);
+          return row;
+        });
+      return fulfill(route, {
+        ok: true,
+        plans: created,
+        skipped: body.eggGameIds.length - created.length,
+        doneSkipped: 0,
+        overflow: 0,
+        notice: null,
+      });
+    }
+    const planMatch = path.match(
+      new RegExp(`^/api/collection-groups/${GROUP_ID}/plans/([^/]+)(?:/(.+))?$`),
+    );
+    if (planMatch) {
+      const plan = plans.find((item) => item.id === decodeURIComponent(planMatch[1]));
+      const action = planMatch[2] ?? '';
+      if (!plan) {
+        return fulfill(route, { ok: false, code: 'PLAN_NOT_FOUND', error: '没有这条计划' }, 404);
+      }
+      if (method === 'POST' && action === 'start') {
+        plan.status = 'active';
+        plan.version += 1;
+        plan.updatedAt = Date.now();
+        return fulfill(route, { ok: true, plan, overflow: false, notice: null });
+      }
+      if (method === 'POST' && action === 'complete') {
+        plan.status = 'done';
+        plan.version += 1;
+        plan.updatedAt = Date.now();
+        return fulfill(route, { ok: true, plan });
+      }
+      if (method === 'DELETE' && action === '') {
+        plans.splice(plans.indexOf(plan), 1);
+        return fulfill(route, { ok: true });
+      }
+      if (action === 'offers/me') {
+        const body = method === 'PUT' ? (request.postDataJSON() as { note?: string }) : {};
+        const index = offers.findIndex(
+          (offer) => offer.planId === plan.id && offer.offerAccountId === 'A',
+        );
+        if (method === 'DELETE') {
+          if (index >= 0) offers.splice(index, 1);
+          return fulfill(route, { ok: true });
+        }
+        const next = {
+          planId: plan.id,
+          offerAccountId: 'A',
+          note: body.note ?? '',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        if (index >= 0) offers[index] = next;
+        else offers.push(next);
+        return fulfill(route, {
+          ok: true,
+          offer: {
+            id: `o${offers.length}`,
+            groupId: GROUP_ID,
+            planId: plan.id,
+            offerAccountId: next.offerAccountId,
+            note: next.note,
+            status: 'pending',
+            createdAt: next.createdAt,
+            updatedAt: next.updatedAt,
+          },
+        });
+      }
     }
     // 轻量版本号（2026-10-31 起客户端先比版本再决定拉不拉整包）：三段串随 mock 状态变化，
     // 缺了这条路由时客户端会拿到 404 退回整包轮询，新主路径在 e2e 里就永远走不到。
@@ -142,8 +384,95 @@ export async function mockMotherGroups(page: Page, options: MockOptions = {}): P
         tasks,
       });
     }
-    if (method === 'GET' && path === `/api/collection-groups/${GROUP_ID}/demands`) {
-      return fulfill(route, { ok: true, demands: options.demands ?? [] });
+    if (path === `/api/collection-groups/${GROUP_ID}/demands`) {
+      if (method === 'GET') {
+        const completedCounts: Record<string, number> = {};
+        for (const row of demands) {
+          if (row.status !== 'done' || !row.claimerAccountId) continue;
+          const key = String(row.claimerAccountId);
+          completedCounts[key] = (completedCounts[key] ?? 0) + 1;
+        }
+        return fulfill(route, {
+          ok: true,
+          // 与真实服务端一致：已完成的单不再随列表下发
+          demands: demands.filter((row) => row.status !== 'done'),
+          completedCounts,
+          myRecentCompleted: demands.filter((row) => row.status === 'done'),
+        });
+      }
+      if (method === 'POST') {
+        const body = request.postDataJSON() as {
+          eggGameId: number;
+          natures: string[];
+          gender: string;
+          body: string;
+          voice: string;
+          requireGreenNest?: boolean;
+        };
+        const created = (body.natures.length > 0 ? body.natures : ['']).map((nature, index) => {
+          const row = demandRow(
+            {
+              eggGameId: body.eggGameId,
+              nature,
+              gender: body.gender,
+              body: body.body,
+              voice: body.voice,
+              requireGreenNest: body.requireGreenNest === true,
+            },
+            demands.length + index,
+          );
+          demands.push(row);
+          return row;
+        });
+        return fulfill(route, { ok: true, demands: created });
+      }
+    }
+    const demandMatch = path.match(
+      new RegExp(`^/api/collection-groups/${GROUP_ID}/demands/(\\d+)(?:/([a-z]+))?$`),
+    );
+    if (demandMatch) {
+      const eggGameId = Number(demandMatch[1]);
+      const action = demandMatch[2] ?? '';
+      if (method === 'DELETE') {
+        const nature = url.searchParams.get('nature') ?? '';
+        const index = demands.findIndex(
+          (row) =>
+            row.eggGameId === eggGameId &&
+            String(row.nature) === nature &&
+            row.claimerAccountId == null,
+        );
+        if (index >= 0) demands.splice(index, 1);
+        return fulfill(route, { ok: true });
+      }
+      if (method === 'POST') {
+        const body = request.postDataJSON() as { nature?: string; version?: number };
+        const row = demands.find(
+          (item) =>
+            item.eggGameId === eggGameId &&
+            (body.nature == null || item.nature === body.nature),
+        );
+        if (!row) {
+          return fulfill(route, { ok: false, code: 'DEMAND_NOT_FOUND', error: '没有这条需求' }, 404);
+        }
+        if (action === 'claim') {
+          if (row.claimerAccountId) {
+            return fulfill(route, { ok: false, code: 'DEMAND_TAKEN', error: '这单已被接走' }, 409);
+          }
+          row.claimerAccountId = 'A';
+          row.status = 'claimed';
+        } else if (action === 'release') {
+          row.claimerAccountId = null;
+          row.status = 'open';
+          row.placedAt = null;
+        } else if (action === 'complete') {
+          row.status = 'done';
+        } else if (action === 'placement') {
+          row.placedAt = Date.now();
+        }
+        row.version = Number(row.version) + 1;
+        row.updatedAt = Date.now();
+        return fulfill(route, { ok: true, demand: row });
+      }
     }
     if (method === 'POST' && path === `/api/collection-groups/${GROUP_ID}/tasks/claim`) {
       const body = request.postDataJSON() as { targetKey: string; version?: number };

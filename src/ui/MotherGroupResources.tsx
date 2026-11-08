@@ -194,6 +194,11 @@ export interface MotherGroupResourcesProps {
   onClaimDemand?: (demand: CollectionDemand) => Promise<unknown>;
   onReleaseDemand?: (demand: CollectionDemand) => Promise<unknown>;
   onCompleteDemand?: (demand: CollectionDemand) => Promise<unknown>;
+  /**
+   * 内嵌到「我的收集 / 组内广场」时锁定视图，并隐藏自己的视图切换。
+   * 不传时保持原来的三视图行为（旧调用方 / 测试）。
+   */
+  viewLock?: 'missing' | 'mine';
 }
 
 /**
@@ -232,6 +237,7 @@ export function MotherGroupResources({
   onClaimDemand,
   onReleaseDemand,
   onCompleteDemand,
+  viewLock,
 }: MotherGroupResourcesProps) {
   // 临时查看状态按「身份 + 小组」隔离：换身份立即清空，切组不串条件（2026-10-24）
   const list = useGroupList(viewerAccountId, group.group.id);
@@ -242,11 +248,11 @@ export function MotherGroupResources({
   /** 勾了「不挑性格」就完全不管性格：缺口判定 / 发布都按 nature = '' 算。 */
   const natureFilter = ignoreNatures ? '' : targetNature;
   // 旧值兼容：`help`（旧的「我能补谁」）与 `all`（旧「小组资源」）都落到「需求中心」
-  const effectiveView: ViewId = view === 'help' || view === 'all'
+  const effectiveView: ViewId = viewLock ?? (view === 'help' || view === 'all'
     ? 'mine'
     : view === 'mine' || view === 'seeking'
       ? view
-      : 'missing';
+      : 'missing');
   const [busyKey, setBusyKey] = useState('');
   const [taskError, setTaskError] = useState('');
   /** 批量选择（2026-10-26）：发需求 / 接单 / 认领 共用同一套选择态。 */
@@ -2477,23 +2483,29 @@ export function MotherGroupResources({
 
   return (
     <section
-      className="space-y-1.5 rounded-2xl bg-white p-2.5 shadow-sm"
+      className={
+        viewLock ? 'space-y-1.5' : 'space-y-1.5 rounded-2xl bg-white p-2.5 shadow-sm'
+      }
       data-testid="mother-resources"
       data-tour="group-demands"
     >
-      <SegmentedControl
-        label="小组资源视图"
-        value={effectiveView}
-        options={VIEWS.map((item) => ({ value: item.id, label: item.label }))}
-        onValueChange={(next) => setList({ view: next as ViewId })}
-        optionTestId={(value) => `mother-view-${value}`}
-      />
+      {viewLock ? null : (
+        <SegmentedControl
+          label="小组资源视图"
+          value={effectiveView}
+          options={VIEWS.map((item) => ({ value: item.id, label: item.label }))}
+          onValueChange={(next) => setList({ view: next as ViewId })}
+          optionTestId={(value) => `mother-view-${value}`}
+        />
+      )}
 
-      <p className="text-[10px] text-slate-400" data-testid="mother-data-freshness">
-        数据完整度 {groupFresh.fresh}/{groupFresh.total}
-        {groupFresh.stale > 0 ? ` · ${groupFresh.stale} 人超过 7 天未更新` : ''}
-        {snapshots.length === 0 ? ' · 本机还没导入数据' : ''}
-      </p>
+      {viewLock ? null : (
+        <p className="text-[10px] text-slate-400" data-testid="mother-data-freshness">
+          数据完整度 {groupFresh.fresh}/{groupFresh.total}
+          {groupFresh.stale > 0 ? ` · ${groupFresh.stale} 人超过 7 天未更新` : ''}
+          {snapshots.length === 0 ? ' · 本机还没导入数据' : ''}
+        </p>
+      )}
 
       {completionThanks ? (
         <div
@@ -2777,16 +2789,19 @@ export function MotherGroupResources({
             </p>
           ) : (
             <>
-              {demandCenter.mineOpen.length > 0
-                ? demandSection(
-                    'mine-open',
-                    '我发布的',
-                    demandCenter.mineOpen.length,
-                    renderDemandGrid(demandCenter.mineOpen, () => (
-                      <span className="text-slate-400">待承接</span>
-                    )),
-                  )
-                : null}
+              {/* 内嵌到收集计划页时只保留「我接的 / 我能接的」：三个低频分组删掉（2026-11-08） */}
+              {viewLock
+                ? null
+                : demandCenter.mineOpen.length > 0
+                  ? demandSection(
+                      'mine-open',
+                      '我发布的',
+                      demandCenter.mineOpen.length,
+                      renderDemandGrid(demandCenter.mineOpen, () => (
+                        <span className="text-slate-400">待承接</span>
+                      )),
+                    )
+                  : null}
               {demandCenter.mineClaimed.length > 0
                 ? demandSection(
                     'mine-claimed',
@@ -2822,7 +2837,7 @@ export function MotherGroupResources({
                     </>,
                   )
                 : null}
-              {demandCenter.others.length > 0
+              {!viewLock && demandCenter.others.length > 0
                 ? demandSection(
                     'others-claimed',
                     '其他人接的',
@@ -2847,7 +2862,7 @@ export function MotherGroupResources({
                     </div>,
                   )
                 : null}
-              {demandCenter.unclaimed.length > 0
+              {!viewLock && demandCenter.unclaimed.length > 0
                 ? demandSection(
                     'unclaimed',
                     '发布了没人接的',

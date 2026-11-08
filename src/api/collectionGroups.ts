@@ -53,7 +53,18 @@ import {
   trackDemandPublish,
   trackDemandWithdraw,
   trackGroupJoin,
+  trackOfferMark,
+  trackPlanCreate,
+  trackPlanImport,
+  trackPlanStart,
 } from './analytics';
+import {
+  PLAN_STATUSES,
+  type CollectionPlan,
+  type PlanOffer,
+  type PlanProgressStep,
+  type PlanStatus,
+} from '../shared/collectionPlans';
 import { MotherGroupsApiError } from './motherGroups';
 import { authFetch } from './session';
 
@@ -570,6 +581,10 @@ function parseDemand(value: unknown): CollectionDemand {
     status: status as CollectionDemandStatus,
     claimerAccountId:
       claimer === null || claimer === undefined ? null : asString(claimer, 'claimerAccountId'),
+    placedAt:
+      typeof record.placedAt === 'number' && Number.isFinite(record.placedAt)
+        ? record.placedAt
+        : null,
     version: asNumber(record.version, 'version'),
     createdAt: asNumber(record.createdAt, 'createdAt'),
     updatedAt: asNumber(record.updatedAt, 'updatedAt'),
@@ -779,4 +794,312 @@ export async function removeCollectionGroupMember(
 
 export async function dissolveCollectionGroup(groupId: string, signal?: AbortSignal): Promise<void> {
   await request(`/api/collection-groups/${encodeURIComponent(groupId)}`, jsonInit('DELETE', undefined, signal));
+}
+
+/* ---------- 收集计划（2026-11-08） ---------- */
+
+const asPlanStatus = (value: unknown): PlanStatus => {
+  if (typeof value !== 'string' || !(PLAN_STATUSES as readonly string[]).includes(value)) {
+    bad('plan.status 不受支持');
+  }
+  return value as PlanStatus;
+};
+
+const asProgressStep = (value: unknown): PlanProgressStep => {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 5) {
+    bad('plan.progressStep 不受支持');
+  }
+  return value as PlanProgressStep;
+};
+
+function parsePlan(value: unknown): CollectionPlan {
+  const record = asRecord(value, 'plan');
+  return {
+    id: asString(record.id, 'plan.id'),
+    groupId: asString(record.groupId, 'plan.groupId'),
+    memberAccountId: asString(record.memberAccountId, 'plan.memberAccountId'),
+    eggGameId: asNumber(record.eggGameId, 'plan.eggGameId'),
+    note: typeof record.note === 'string' ? record.note : bad('plan.note 必须是字符串'),
+    status: asPlanStatus(record.status),
+    version: asNumber(record.version, 'plan.version'),
+    createdAt: asNumber(record.createdAt, 'plan.createdAt'),
+    updatedAt: asNumber(record.updatedAt, 'plan.updatedAt'),
+  };
+}
+
+export interface CollectionPlanDemandView {
+  nature: string;
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
+  status: 'open' | 'claimed';
+  claimerAccountId: string | null;
+  placedAt: number | null;
+}
+
+export interface PlanOfferView {
+  offerAccountId: string;
+  offerDisplayName: string;
+  note: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CollectionPlanView extends CollectionPlan {
+  memberDisplayName: string;
+  /** 0 还没发需求 / 1 待接单 / 2 已认领 / 4 待我确认 / 5 已完成。 */
+  progressStep: PlanProgressStep;
+  needsConfirm: boolean;
+  demands: CollectionPlanDemandView[];
+  offers: PlanOfferView[];
+}
+
+export interface CollectionPlansResponse {
+  plans: CollectionPlanView[];
+  members: { accountId: string; displayName: string }[];
+  /** 「你能补的」：只给蛋 gameId，展示层再映射图鉴。 */
+  matchableEggIds: number[];
+  myActiveCount: number;
+  maxActivePlans: number;
+}
+
+function parsePlanDemand(value: unknown): CollectionPlanDemandView {
+  const record = asRecord(value, 'plan.demand');
+  const status = record.status;
+  if (status !== 'open' && status !== 'claimed') bad('plan.demand.status 不受支持');
+  const gender = record.gender;
+  const body = record.body;
+  const voice = record.voice;
+  if (!isDemandGender(gender)) bad('plan.demand.gender 不受支持');
+  if (!isDemandBody(body)) bad('plan.demand.body 不受支持');
+  if (!isDemandVoice(voice)) bad('plan.demand.voice 不受支持');
+  const claimer = record.claimerAccountId;
+  return {
+    nature: typeof record.nature === 'string' ? record.nature : bad('plan.demand.nature 必须是字符串'),
+    gender: gender as DemandGender,
+    body: body as DemandBody,
+    voice: voice as DemandVoice,
+    status: status as 'open' | 'claimed',
+    claimerAccountId: claimer == null ? null : asString(claimer, 'plan.demand.claimerAccountId'),
+    placedAt:
+      typeof record.placedAt === 'number' && Number.isFinite(record.placedAt)
+        ? record.placedAt
+        : null,
+  };
+}
+
+function parsePlanView(value: unknown): CollectionPlanView {
+  const record = asRecord(value, 'plan');
+  return {
+    ...parsePlan(record),
+    memberDisplayName: asString(record.memberDisplayName, 'plan.memberDisplayName'),
+    progressStep: asProgressStep(record.progressStep),
+    needsConfirm: record.needsConfirm === true,
+    demands: asArray(record.demands ?? [], 'plan.demands').map(parsePlanDemand),
+    offers: asArray(record.offers ?? [], 'plan.offers').map((item) => {
+      const offer = asRecord(item, 'plan.offer');
+      return {
+        offerAccountId: asString(offer.offerAccountId, 'plan.offer.offerAccountId'),
+        offerDisplayName: asString(offer.offerDisplayName, 'plan.offer.offerDisplayName'),
+        note: typeof offer.note === 'string' ? offer.note : bad('plan.offer.note 必须是字符串'),
+        createdAt: asNumber(offer.createdAt, 'plan.offer.createdAt'),
+        updatedAt: asNumber(offer.updatedAt, 'plan.offer.updatedAt'),
+      };
+    }),
+  };
+}
+
+function parsePlanOffer(value: unknown): PlanOffer {
+  const record = asRecord(value, 'offer');
+  if (record.status !== 'pending') bad('offer.status 不受支持');
+  return {
+    id: asString(record.id, 'offer.id'),
+    groupId: asString(record.groupId, 'offer.groupId'),
+    planId: asString(record.planId, 'offer.planId'),
+    offerAccountId: asString(record.offerAccountId, 'offer.offerAccountId'),
+    note: typeof record.note === 'string' ? record.note : bad('offer.note 必须是字符串'),
+    status: 'pending',
+    createdAt: asNumber(record.createdAt, 'offer.createdAt'),
+    updatedAt: asNumber(record.updatedAt, 'offer.updatedAt'),
+  };
+}
+
+/** 按组读计划列表：含自己的计划（展示层用 `memberAccountId === 我` 标「我发布的」）。 */
+export async function getCollectionPlans(
+  groupId: string,
+  signal?: AbortSignal,
+): Promise<CollectionPlansResponse> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/plans`,
+      jsonInit('GET', undefined, signal),
+    ),
+    '响应',
+  );
+  return {
+    plans: asArray(data.plans, 'plans').map(parsePlanView),
+    members: asArray(data.members ?? [], 'members').map((item) => {
+      const member = asRecord(item, 'member');
+      return {
+        accountId: asString(member.accountId, 'member.accountId'),
+        displayName: asString(member.displayName, 'member.displayName'),
+      };
+    }),
+    matchableEggIds: asArray(data.matchableEggIds ?? [], 'matchableEggIds').map((id, index) =>
+      asNumber(id, `matchableEggIds[${index}]`),
+    ),
+    myActiveCount: asNumber(data.myActiveCount, 'myActiveCount'),
+    maxActivePlans: asNumber(data.maxActivePlans, 'maxActivePlans'),
+  };
+}
+
+export interface CreatePlansResult {
+  plans: CollectionPlan[];
+  /** 已存在（任意状态）而跳过的条数。 */
+  skipped: number;
+  /** 其中已完成的条数。 */
+  doneSkipped: number;
+  /** 想直接开始但满 8 条、实际落成「想收」的条数。 */
+  overflow: number;
+  notice: string | null;
+}
+
+/**
+ * 创建 / 批量导入计划。
+ *
+ * - 添加想收、批量导入缺口：`start` 不传，全部落「想收」；
+ * - `bulk` 只影响埋点（导入 vs 单次添加），不影响落库口径。
+ */
+export async function createCollectionPlans(
+  groupId: string,
+  input: { eggGameIds: number[]; note?: string; start?: boolean; bulk?: boolean },
+  signal?: AbortSignal,
+): Promise<CreatePlansResult> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/plans`,
+      jsonInit('POST', input, signal),
+    ),
+    '响应',
+  );
+  const plans = asArray(data.plans ?? [], 'plans').map(parsePlan);
+  if (input.bulk) trackPlanImport(plans.length);
+  else trackPlanCreate(plans.length);
+  return {
+    plans,
+    skipped: asNumber(data.skipped, 'skipped'),
+    doneSkipped: asNumber(data.doneSkipped, 'doneSkipped'),
+    overflow: asNumber(data.overflow, 'overflow'),
+    notice:
+      typeof data.notice === 'string' && data.notice.length > 0 ? data.notice : null,
+  };
+}
+
+/** 开始一条计划；满 8 条时 `overflow = true`、计划仍是「想收」，不抛错。 */
+export async function startCollectionPlan(
+  groupId: string,
+  planId: string,
+  signal?: AbortSignal,
+): Promise<{ plan: CollectionPlan; overflow: boolean; notice: string | null }> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}/start`,
+      jsonInit('POST', undefined, signal),
+    ),
+    '响应',
+  );
+  const plan = parsePlan(data.plan);
+  if (!data.overflow && plan.status === 'active') trackPlanStart();
+  return {
+    plan,
+    overflow: data.overflow === true,
+    notice:
+      typeof data.notice === 'string' && data.notice.length > 0 ? data.notice : null,
+  };
+}
+
+/** 完成：想收也能直接完成；已完成重复调用保持幂等。 */
+export async function completeCollectionPlan(
+  groupId: string,
+  planId: string,
+  signal?: AbortSignal,
+): Promise<CollectionPlan> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}/complete`,
+      jsonInit('POST', undefined, signal),
+    ),
+    '响应',
+  );
+  return parsePlan(data.plan);
+}
+
+/** 删除计划：物理删除，服务端连带清掉「我能提供」标记。 */
+export async function deleteCollectionPlan(
+  groupId: string,
+  planId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await request(
+    `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}`,
+    jsonInit('DELETE', undefined, signal),
+  );
+}
+
+/** 标记 / 改备注「我能提供」（同一个入口，upsert）。 */
+export async function markPlanOffer(
+  groupId: string,
+  planId: string,
+  note = '',
+  signal?: AbortSignal,
+): Promise<PlanOffer> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}/offers/me`,
+      jsonInit('PUT', { note }, signal),
+    ),
+    '响应',
+  );
+  const offer = parsePlanOffer(data.offer);
+  trackOfferMark();
+  return offer;
+}
+
+/** 撤回「我能提供」。 */
+export async function withdrawPlanOffer(
+  groupId: string,
+  planId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await request(
+    `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}/offers/me`,
+    jsonInit('DELETE', undefined, signal),
+  );
+}
+
+export interface DemandPlacementInput {
+  demanderAccountId: string;
+  eggGameId: number;
+  nature: string;
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
+  /** 上窝用的游戏账号标识（uid:<gameId>）；只落库，别人的视图不展示。 */
+  accountKey?: string | null;
+}
+
+/** 认领人标记「已上窝」：发布人随后看到「已上窝 → 待我确认」。 */
+export async function markCollectionDemandPlaced(
+  groupId: string,
+  input: DemandPlacementInput,
+  signal?: AbortSignal,
+): Promise<CollectionDemand> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${input.eggGameId}/placement`,
+      jsonInit('POST', input, signal),
+    ),
+    '响应',
+  );
+  return parseDemand(data.demand);
 }

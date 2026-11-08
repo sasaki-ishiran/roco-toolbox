@@ -42,6 +42,11 @@ export const STORE_STATUS: Record<MotherStoreErrorCode, number> = {
   DEMAND_ALREADY_DONE: 409,
   DEMAND_NOT_CLAIMED: 409,
   DEMAND_NOT_YOURS: 403,
+  PLAN_NOT_FOUND: 404,
+  PLAN_NOT_YOURS: 403,
+  PLAN_ALREADY_DONE: 409,
+  PLAN_OFFER_SELF: 409,
+  PLAN_OFFER_NOT_FOUND: 404,
 };
 
 export const failCode = (

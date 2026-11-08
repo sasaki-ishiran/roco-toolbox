@@ -54,6 +54,21 @@ import {
   type StudSlotCoverage,
 } from '../../src/shared/collectionGroups';
 import { MotherStoreError, isMember, publishMemberResource } from './motherGroupsStore';
+import {
+  MAX_ACTIVE_PLANS,
+  PLAN_OVERFLOW_NOTICE,
+  countActivePlans,
+  matchablePlanEggIds,
+  planCreateDecision,
+  planNeedsConfirm,
+  planProgressStep,
+  planStartOutcome,
+  shouldAutoCompletePlan,
+  type CollectionPlan,
+  type PlanOffer,
+  type PlanProgressStep,
+  type PlanStatus,
+} from '../../src/shared/collectionPlans';
 
 interface GroupRow {
   id: string;
@@ -1538,6 +1553,10 @@ interface DemandRow {
   require_green_nest?: number | null;
   status: string;
   claimer_account_id: string | null;
+  /** 认领人标记「已上窝」的时间（2026-11-08）；NULL = 还没上窝。 */
+  placed_at?: number | null;
+  /** 上窝使用的游戏账号（uid:<gameId>），只在服务端留存，别人的视图不返回。 */
+  placed_by_account_key?: string | null;
   version: number;
   created_at: number;
   updated_at: number;
@@ -1560,6 +1579,7 @@ const toDemand = (row: DemandRow): CollectionDemand => ({
   voice: normalizeDemandVoice(row.voice),
   status: (row.status === 'claimed' || row.status === 'done' ? row.status : 'open') as CollectionDemandStatus,
   claimerAccountId: row.claimer_account_id,
+  placedAt: row.placed_at ?? null,
   version: row.version,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -1567,7 +1587,8 @@ const toDemand = (row: DemandRow): CollectionDemand => ({
 });
 
 const DEMAND_COLUMNS = `group_id, demander_account_id, egg_game_id, nature,
-  gender, body, voice, require_green_nest, status, claimer_account_id, version, created_at, updated_at`;
+  gender, body, voice, require_green_nest, status, claimer_account_id, placed_at,
+  placed_by_account_key, version, created_at, updated_at`;
 
 interface CompletionRow {
   group_id: string;
@@ -2232,4 +2253,628 @@ export async function completeCollectionDemand(
     createdAt: existing.created_at,
     updatedAt: now,
   };
+}
+
+/* ---------- 收集计划（2026-11-08） ---------- */
+
+interface PlanRow {
+  id: string;
+  group_id: string;
+  member_account_id: string;
+  egg_game_id: number;
+  note: string;
+  status: string;
+  version: number;
+  created_at: number;
+  updated_at: number;
+}
+
+interface OfferRow {
+  id: string;
+  group_id: string;
+  plan_id: string;
+  offer_account_id: string;
+  note: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+}
+
+const PLAN_COLUMNS = `id, group_id, member_account_id, egg_game_id, note, status,
+  version, created_at, updated_at`;
+const OFFER_COLUMNS = `id, group_id, plan_id, offer_account_id, note, status,
+  created_at, updated_at`;
+
+export const PLAN_NOTE_MAX = 200;
+
+const normalizePlanStatus = (value: unknown): PlanStatus =>
+  value === 'active' || value === 'done' ? value : 'backlog';
+
+const toPlan = (row: PlanRow): CollectionPlan => ({
+  id: row.id,
+  groupId: row.group_id,
+  memberAccountId: row.member_account_id,
+  eggGameId: row.egg_game_id,
+  note: row.note ?? '',
+  status: normalizePlanStatus(row.status),
+  version: row.version,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const toOffer = (row: OfferRow): PlanOffer => ({
+  id: row.id,
+  groupId: row.group_id,
+  planId: row.plan_id,
+  offerAccountId: row.offer_account_id,
+  note: row.note ?? '',
+  status: 'pending',
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+/** 计划卡里展示的条件：只取这颗蛋仍在下发列表里的需求（open / claimed）。 */
+export interface PlanDemandView {
+  nature: string;
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
+  status: 'open' | 'claimed';
+  claimerAccountId: string | null;
+  placedAt: number | null;
+}
+
+export interface PlanOfferView {
+  offerAccountId: string;
+  offerDisplayName: string;
+  note: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PlanView extends CollectionPlan {
+  memberDisplayName: string;
+  progressStep: PlanProgressStep;
+  needsConfirm: boolean;
+  demands: PlanDemandView[];
+  offers: PlanOfferView[];
+}
+
+export interface CollectionPlansView {
+  plans: PlanView[];
+  members: { accountId: string; displayName: string }[];
+  /** 「你能补的」：别人进行中、而我发布过的蛋，按蛋去重。 */
+  matchableEggIds: number[];
+  /** 当前身份进行中的计划条数（展示「7/8」与额度提示）。 */
+  myActiveCount: number;
+  maxActivePlans: number;
+}
+
+/** 按组读计划列表：所有人（含自己）+ 需求条件 + 提供标记 + 「你能补的」。 */
+export async function readCollectionPlans(
+  db: D1Database,
+  groupId: string,
+  viewerAccountId: string,
+): Promise<CollectionPlansView> {
+  const [members, planRows, offerRows, demands, completions, myAccounts] = await Promise.all([
+    db
+      .prepare(
+        `SELECT account_id, display_name FROM mother_group_members WHERE group_id = ?`,
+      )
+      .bind(groupId)
+      .all<{ account_id: string; display_name: string }>(),
+    db
+      .prepare(`SELECT ${PLAN_COLUMNS} FROM collection_plans WHERE group_id = ?`)
+      .bind(groupId)
+      .all<PlanRow>(),
+    db
+      .prepare(`SELECT ${OFFER_COLUMNS} FROM plan_offers WHERE group_id = ?`)
+      .bind(groupId)
+      .all<OfferRow>(),
+    listCollectionDemands(db, groupId),
+    db
+      .prepare(
+        `SELECT demander_account_id, egg_game_id FROM collection_group_demand_completions
+          WHERE group_id = ?`,
+      )
+      .bind(groupId)
+      .all<{ demander_account_id: string; egg_game_id: number }>(),
+    db
+      .prepare(
+        `SELECT egg_game_ids FROM mother_group_accounts
+          WHERE group_id = ? AND member_account_id = ?`,
+      )
+      .bind(groupId, viewerAccountId)
+      .all<{ egg_game_ids: string }>(),
+  ]);
+
+  const memberList = (members.results ?? []).map((row) => ({
+    accountId: row.account_id,
+    displayName: row.display_name,
+  }));
+  const nameOf = new Map(memberList.map((member) => [member.accountId, member.displayName]));
+  const plans = (planRows.results ?? []).map(toPlan);
+  const offers = (offerRows.results ?? []).map(toOffer);
+  const completionRows = completions.results ?? [];
+  // 状态徽标流只认未结单的需求（open / claimed），归档行按「已完成」由 completions 表达
+  const planDemandLikes = demands.flatMap((row) =>
+    row.status === 'open' || row.status === 'claimed'
+      ? [
+          {
+            eggGameId: row.eggGameId,
+            demanderAccountId: row.demanderAccountId,
+            status: row.status,
+            placedAt: row.placedAt ?? null,
+          },
+        ]
+      : [],
+  );
+  const completionLikes = completionRows.map((row) => ({
+    eggGameId: row.egg_game_id,
+    demanderAccountId: row.demander_account_id,
+  }));
+
+  const offersByPlan = new Map<string, PlanOfferView[]>();
+  for (const offer of offers) {
+    const list = offersByPlan.get(offer.planId) ?? [];
+    list.push({
+      offerAccountId: offer.offerAccountId,
+      offerDisplayName: nameOf.get(offer.offerAccountId) ?? '某成员',
+      note: offer.note,
+      createdAt: offer.createdAt,
+      updatedAt: offer.updatedAt,
+    });
+    offersByPlan.set(offer.planId, list);
+  }
+
+  const views: PlanView[] = plans.map((plan) => {
+    const mine = demands.filter(
+      (row) => row.demanderAccountId === plan.memberAccountId && row.eggGameId === plan.eggGameId,
+    );
+    const progressStep = planProgressStep({
+      plan,
+      demands: planDemandLikes,
+      completions: completionLikes,
+    });
+    return {
+      ...plan,
+      memberDisplayName: nameOf.get(plan.memberAccountId) ?? '某成员',
+      progressStep,
+      needsConfirm: planNeedsConfirm(progressStep),
+      demands: mine
+        .filter((row) => row.status === 'open' || row.status === 'claimed')
+        .map((row) => ({
+          nature: row.nature,
+          gender: row.gender,
+          body: row.body,
+          voice: row.voice,
+          status: row.status === 'claimed' ? 'claimed' : 'open',
+          claimerAccountId: row.claimerAccountId,
+          placedAt: row.placedAt ?? null,
+        })),
+      offers: (offersByPlan.get(plan.id) ?? []).sort((a, b) => a.createdAt - b.createdAt),
+    };
+  });
+
+  const myEggGameIds = (myAccounts.results ?? []).flatMap((row) => parseStoredIds(row.egg_game_ids));
+  const myPlans = plans.filter((plan) => plan.memberAccountId === viewerAccountId);
+
+  return {
+    plans: views,
+    members: memberList,
+    matchableEggIds: matchablePlanEggIds({
+      myAccountId: viewerAccountId,
+      myEggGameIds,
+      plans,
+    }),
+    myActiveCount: countActivePlans(myPlans),
+    maxActivePlans: MAX_ACTIVE_PLANS,
+  };
+}
+
+export interface CreatePlansResult {
+  plans: CollectionPlan[];
+  skipped: number;
+  doneSkipped: number;
+  /** 想直接开始但额度已满、实际落成「想收」的条数。 */
+  overflow: number;
+  notice: string | null;
+}
+
+async function findPlanRow(
+  db: D1Database,
+  groupId: string,
+  planId: string,
+): Promise<PlanRow | null> {
+  return db
+    .prepare(`SELECT ${PLAN_COLUMNS} FROM collection_plans WHERE group_id = ? AND id = ?`)
+    .bind(groupId, planId)
+    .first<PlanRow>();
+}
+
+async function activePlanCount(
+  db: D1Database,
+  groupId: string,
+  accountId: string,
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS total FROM collection_plans
+        WHERE group_id = ? AND member_account_id = ? AND status = 'active'`,
+    )
+    .bind(groupId, accountId)
+    .first<{ total: number }>();
+  return row?.total ?? 0;
+}
+
+/** 超出 8 条时把新多出来的进行中退回「想收」（保留最早的 8 条，避免并发插入破上限）。 */
+async function capActivePlans(
+  db: D1Database,
+  groupId: string,
+  accountId: string,
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE collection_plans SET status = 'backlog'
+        WHERE id IN (
+          SELECT id FROM collection_plans
+           WHERE group_id = ? AND member_account_id = ? AND status = 'active'
+           ORDER BY created_at ASC, id ASC
+           LIMIT -1 OFFSET ?
+        )`,
+    )
+    .bind(groupId, accountId, MAX_ACTIVE_PLANS)
+    .run();
+}
+
+/**
+ * 创建 / 批量导入计划：同一个蛋只建一条，已存在（含已完成）跳过。
+ *
+ * 状态判定全部来自 `planCreateDecision`，这里只负责落库与并发兜底。
+ */
+export async function createCollectionPlans(
+  db: D1Database,
+  input: {
+    groupId: string;
+    accountId: string;
+    eggGameIds: number[];
+    note?: string;
+    /** 是否顺带开始；批量导入缺口传 false。 */
+    start?: boolean;
+  },
+): Promise<CreatePlansResult> {
+  const { groupId, accountId } = input;
+  const existingRows = await db
+    .prepare(
+      `SELECT egg_game_id, status FROM collection_plans
+        WHERE group_id = ? AND member_account_id = ?`,
+    )
+    .bind(groupId, accountId)
+    .all<{ egg_game_id: number; status: string }>();
+  const existing = (existingRows.results ?? []).map((row) => ({
+    eggGameId: row.egg_game_id,
+    status: normalizePlanStatus(row.status),
+  }));
+  const decision = planCreateDecision({
+    eggGameIds: input.eggGameIds,
+    existing,
+    start: input.start === true,
+    activeCount: countActivePlans(existing),
+  });
+
+  const note = (input.note ?? '').slice(0, PLAN_NOTE_MAX);
+  const now = Date.now();
+  if (decision.create.length > 0) {
+    await db.batch(
+      decision.create.map((item) =>
+        db
+          .prepare(
+            `INSERT INTO collection_plans
+               (id, group_id, member_account_id, egg_game_id, note, status, version,
+                created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+             ON CONFLICT (group_id, member_account_id, egg_game_id) DO NOTHING`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            groupId,
+            accountId,
+            item.eggGameId,
+            note,
+            item.status,
+            now,
+            now,
+          ),
+      ),
+    );
+  }
+  if (decision.create.some((item) => item.status === 'active')) {
+    await capActivePlans(db, groupId, accountId);
+  }
+
+  const eggIds = decision.create.map((item) => item.eggGameId);
+  const savedRows =
+    eggIds.length === 0
+      ? []
+      : (
+          await db
+            .prepare(
+              `SELECT ${PLAN_COLUMNS} FROM collection_plans
+                WHERE group_id = ? AND member_account_id = ?
+                  AND egg_game_id IN (${eggIds.map(() => '?').join(', ')})`,
+            )
+            .bind(groupId, accountId, ...eggIds)
+            .all<PlanRow>()
+        ).results ?? [];
+  const saved = savedRows.map(toPlan);
+  const byEgg = new Map(saved.map((plan) => [plan.eggGameId, plan]));
+  // 决策阶段因额度不足落想收的 + 并发兜底被退回想收的，都是「满 8 条」的提示来源
+  const cappedOverflow = decision.create.filter(
+    (item) => item.status === 'active' && byEgg.get(item.eggGameId)?.status === 'backlog',
+  ).length;
+  const overflow = decision.overflow + cappedOverflow;
+
+  return {
+    plans: saved,
+    skipped: decision.skipped,
+    doneSkipped: decision.doneSkipped,
+    overflow,
+    notice: overflow > 0 ? PLAN_OVERFLOW_NOTICE : null,
+  };
+}
+
+export interface PlanActionResult {
+  plan: CollectionPlan;
+  /** 想开始但额度已满：计划仍是「想收」，附一句提示，不报错。 */
+  overflow: boolean;
+  notice: string | null;
+}
+
+async function requireOwnPlan(
+  db: D1Database,
+  groupId: string,
+  accountId: string,
+  planId: string,
+): Promise<PlanRow> {
+  const row = await findPlanRow(db, groupId, planId);
+  if (!row) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
+  if (row.member_account_id !== accountId) {
+    throw new MotherStoreError('PLAN_NOT_YOURS', '只有计划的主人可以操作');
+  }
+  return row;
+}
+
+/** 开始：想收 → 进行中；已满 8 条时留在想收并提示，不报错。 */
+export async function startCollectionPlan(
+  db: D1Database,
+  input: { groupId: string; accountId: string; planId: string },
+): Promise<PlanActionResult> {
+  const { groupId, accountId, planId } = input;
+  const row = await requireOwnPlan(db, groupId, accountId, planId);
+  const outcome = planStartOutcome(normalizePlanStatus(row.status), await activePlanCount(db, groupId, accountId));
+  if (outcome === 'done') {
+    throw new MotherStoreError('PLAN_ALREADY_DONE', '已完成的计划不能重新开始');
+  }
+  if (outcome === 'overflow') {
+    return { plan: toPlan(row), overflow: true, notice: PLAN_OVERFLOW_NOTICE };
+  }
+  if (outcome === 'already-active') {
+    return { plan: toPlan(row), overflow: false, notice: null };
+  }
+  const now = Date.now();
+  const updated = await db
+    .prepare(
+      `UPDATE collection_plans
+          SET status = 'active', version = version + 1, updated_at = ?
+        WHERE id = ? AND group_id = ? AND member_account_id = ? AND status = 'backlog'
+          AND (SELECT COUNT(*) FROM collection_plans
+                WHERE group_id = ? AND member_account_id = ? AND status = 'active') < ?`,
+    )
+    .bind(now, planId, groupId, accountId, groupId, accountId, MAX_ACTIVE_PLANS)
+    .run();
+  if ((updated.meta.changes ?? 0) === 0) {
+    // 0 行不是失败：可能刚被另一台设备开始（幂等），也可能额度刚好被别人占满
+    const latest = await findPlanRow(db, groupId, planId);
+    if (!latest) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
+    if (normalizePlanStatus(latest.status) === 'active') {
+      return { plan: toPlan(latest), overflow: false, notice: null };
+    }
+    return { plan: toPlan(latest), overflow: true, notice: PLAN_OVERFLOW_NOTICE };
+  }
+  const saved = await findPlanRow(db, groupId, planId);
+  if (!saved) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
+  return { plan: toPlan(saved), overflow: false, notice: null };
+}
+
+/** 完成：想收也能直接完成（用户手里已经有这颗蛋）；已完成幂等。 */
+export async function completeCollectionPlan(
+  db: D1Database,
+  input: { groupId: string; accountId: string; planId: string },
+): Promise<CollectionPlan> {
+  const { groupId, accountId, planId } = input;
+  const row = await requireOwnPlan(db, groupId, accountId, planId);
+  if (normalizePlanStatus(row.status) === 'done') return toPlan(row);
+  const now = Date.now();
+  const updated = await db
+    .prepare(
+      `UPDATE collection_plans
+          SET status = 'done', version = version + 1, updated_at = ?
+        WHERE id = ? AND group_id = ? AND member_account_id = ? AND status <> 'done'`,
+    )
+    .bind(now, planId, groupId, accountId)
+    .run();
+  if ((updated.meta.changes ?? 0) === 0) {
+    const latest = await findPlanRow(db, groupId, planId);
+    if (!latest) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
+    return toPlan(latest);
+  }
+  const saved = await findPlanRow(db, groupId, planId);
+  if (!saved) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
+  return toPlan(saved);
+}
+
+/** 删除：物理删除，连带清掉 plan_offers（外键 ON DELETE CASCADE）。 */
+export async function deleteCollectionPlan(
+  db: D1Database,
+  input: { groupId: string; accountId: string; planId: string },
+): Promise<void> {
+  const { groupId, accountId, planId } = input;
+  await requireOwnPlan(db, groupId, accountId, planId);
+  const result = await db
+    .prepare(`DELETE FROM collection_plans WHERE id = ? AND group_id = ? AND member_account_id = ?`)
+    .bind(planId, groupId, accountId)
+    .run();
+  if ((result.meta.changes ?? 0) === 0) {
+    throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
+  }
+}
+
+/** 「我能提供」：标记或改备注（同一个入口，upsert）。 */
+export async function markPlanOffer(
+  db: D1Database,
+  input: { groupId: string; accountId: string; planId: string; note?: string },
+): Promise<PlanOffer> {
+  const { groupId, accountId, planId } = input;
+  const plan = await findPlanRow(db, groupId, planId);
+  if (!plan) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
+  if (plan.member_account_id === accountId) {
+    throw new MotherStoreError('PLAN_OFFER_SELF', '不需要给自己的计划标「我能提供」');
+  }
+  if (normalizePlanStatus(plan.status) === 'done') {
+    throw new MotherStoreError('PLAN_ALREADY_DONE', '这条计划已经完成了');
+  }
+  const note = (input.note ?? '').slice(0, PLAN_NOTE_MAX);
+  const now = Date.now();
+  await db
+    .prepare(
+      `INSERT INTO plan_offers
+         (id, group_id, plan_id, offer_account_id, note, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
+       ON CONFLICT (plan_id, offer_account_id)
+       DO UPDATE SET note = excluded.note, updated_at = excluded.updated_at`,
+    )
+    .bind(crypto.randomUUID(), groupId, planId, accountId, note, now, now)
+    .run();
+  const saved = await db
+    .prepare(`SELECT ${OFFER_COLUMNS} FROM plan_offers WHERE plan_id = ? AND offer_account_id = ?`)
+    .bind(planId, accountId)
+    .first<OfferRow>();
+  if (!saved) throw new MotherStoreError('PLAN_OFFER_NOT_FOUND', '标记没有保存成功，请重试');
+  return toOffer(saved);
+}
+
+/** 撤回「我能提供」。 */
+export async function withdrawPlanOffer(
+  db: D1Database,
+  input: { groupId: string; accountId: string; planId: string },
+): Promise<void> {
+  const { groupId, accountId, planId } = input;
+  const result = await db
+    .prepare(
+      `DELETE FROM plan_offers WHERE group_id = ? AND plan_id = ? AND offer_account_id = ?`,
+    )
+    .bind(groupId, planId, accountId)
+    .run();
+  if ((result.meta.changes ?? 0) === 0) {
+    throw new MotherStoreError('PLAN_OFFER_NOT_FOUND', '还没有标记过「我能提供」');
+  }
+}
+
+/**
+ * 需求结单后的自动完成：这颗蛋关联的需求「全部结单」才把计划置为已完成。
+ *
+ * 判定只用 `shouldAutoCompletePlan`；中途撤回会让归档为 0，因此不会触发。
+ */
+export async function autoCompletePlanAfterDemand(
+  db: D1Database,
+  groupId: string,
+  demanderAccountId: string,
+  eggGameId: number,
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT ${PLAN_COLUMNS} FROM collection_plans
+        WHERE group_id = ? AND member_account_id = ? AND egg_game_id = ?`,
+    )
+    .bind(groupId, demanderAccountId, eggGameId)
+    .first<PlanRow>();
+  if (!row || normalizePlanStatus(row.status) !== 'active') return false;
+
+  const [demands, completions] = await Promise.all([
+    listCollectionDemands(db, groupId),
+    db
+      .prepare(
+        `SELECT demander_account_id, egg_game_id FROM collection_group_demand_completions
+          WHERE group_id = ?`,
+      )
+      .bind(groupId)
+      .all<{ demander_account_id: string; egg_game_id: number }>(),
+  ]);
+  const shouldComplete = shouldAutoCompletePlan({
+    plan: toPlan(row),
+    demands: demands
+      .filter((demand) => demand.status === 'open' || demand.status === 'claimed')
+      .map((demand) => ({
+        eggGameId: demand.eggGameId,
+        demanderAccountId: demand.demanderAccountId,
+        status: demand.status as 'open' | 'claimed',
+        placedAt: demand.placedAt ?? null,
+      })),
+    completions: (completions.results ?? []).map((completion) => ({
+      eggGameId: completion.egg_game_id,
+      demanderAccountId: completion.demander_account_id,
+    })),
+  });
+  if (!shouldComplete) return false;
+  await db
+    .prepare(
+      `UPDATE collection_plans SET status = 'done', version = version + 1, updated_at = ?
+        WHERE id = ? AND status = 'active'`,
+    )
+    .bind(Date.now(), row.id)
+    .run();
+  return true;
+}
+
+/** 认领人标记「已上窝」：只有接单的人可以标记，记录使用的游戏账号（不对外展示）。 */
+export async function markDemandPlaced(
+  db: D1Database,
+  input: DemandActionInput & { accountKey?: string | null },
+): Promise<CollectionDemand> {
+  const { groupId, accountId } = input;
+  const criteria = actionCriteria(input);
+  const existing = await findDemand(db, groupId, criteria);
+  if (!existing) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  if (existing.status !== 'claimed' || existing.claimer_account_id !== accountId) {
+    throw new MotherStoreError('DEMAND_NOT_YOURS', '只有接单的人可以标记已上窝');
+  }
+  const now = Date.now();
+  const result = await db
+    .prepare(
+      `UPDATE collection_group_demands
+          SET placed_at = ?, placed_by_account_key = ?, version = version + 1, updated_at = ?
+        WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND nature = ?
+          AND gender = ? AND body = ? AND voice = ?
+          AND status = 'claimed' AND claimer_account_id = ?`,
+    )
+    .bind(
+      now,
+      input.accountKey ?? null,
+      now,
+      groupId,
+      input.demanderAccountId,
+      input.eggGameId,
+      input.nature,
+      input.gender,
+      input.body,
+      input.voice,
+      accountId,
+    )
+    .run();
+  if ((result.meta.changes ?? 0) === 0) {
+    throw new MotherStoreError('DEMAND_TAKEN', '需求状态已更新，刷新后再看');
+  }
+  const saved = await findDemand(db, groupId, criteria);
+  if (!saved) throw new MotherStoreError('DEMAND_NOT_FOUND', '这条需求已经不在了');
+  return toDemand(saved);
 }

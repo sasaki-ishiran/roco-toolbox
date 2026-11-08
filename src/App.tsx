@@ -37,6 +37,7 @@ import { getImportOutcome, useImportOutcome } from './ui/importOutcomeStore';
 import { useSnapshots } from './ui/useSnapshots';
 import { useDraftLeaveGuard } from './ui/useDraftLeaveGuard';
 import { SnapshotRefreshNotice } from './ui/SnapshotRefreshNotice';
+import { usePlanBadge } from './ui/plan/usePlanBadge';
 
 /**
  * 旧键 `roco.swapView`：原「换什么」页的视图记忆（该页 2026-10-30 已删）。
@@ -79,6 +80,8 @@ export default function App() {
   /** 手动刷新按钮的忙碌态（真正刷新会让页面重载，这里只防连点） */
   const [refreshing, setRefreshing] = useState(false);
   const { snapshots, loaded, refreshError, refreshedAt } = useSnapshots();
+  // 「小组」页签红点：待我确认 + 新提供（本机已读水位）
+  usePlanBadge();
   // 壳（APK）把分享内容注入**当前页面**，而消费分享的监听挂在「导入数据」页里（只挂载当前页）：
   // 应用开着且停在别的页签时，分享会被静默搁置（看起来像「分享过来什么都没发生」）。
   // 所以一收到分享事件就切到导入页；导入完成后**不再自动跳看板**（2026-10-25 用户要求）：

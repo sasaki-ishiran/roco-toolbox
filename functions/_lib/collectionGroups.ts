@@ -39,7 +39,10 @@ import {
   transferCollectionTask,
   updateCollectionTarget,
   withdrawCollectionDemand,
+  autoCompletePlanAfterDemand,
+  markDemandPlaced,
 } from './collectionGroupsStore';
+import { handleCollectionPlans } from './collectionPlans';
 import {
   MotherStoreError,
   dissolveGroup,
@@ -179,6 +182,22 @@ export async function handleCollectionGroups(
       method === 'POST'
     ) {
       return await handleDemandAction(request, env, origin, accountId, groupId, rest[2], rest[3]);
+    }
+    // 认领人标记「已上窝」（2026-11-08）：记 placed_at，发布人随后看到「待我确认」
+    if (rest.length === 4 && rest[1] === 'demands' && rest[3] === 'placement' && method === 'POST') {
+      return await handleDemandPlacement(request, env, origin, accountId, groupId, rest[2]);
+    }
+    // 收集计划（2026-11-08）：创建 / 批量导入、开始、完成、删除、提供标记
+    if (rest.length >= 2 && rest[1] === 'plans') {
+      return await handleCollectionPlans(
+        request,
+        env,
+        origin,
+        accountId,
+        groupId,
+        rest.slice(2),
+        method,
+      );
     }
     return failCode(origin, 404, 'GROUP_NOT_FOUND', '没有这个接口');
   } catch (error) {
@@ -650,6 +669,67 @@ async function handleDemandAction(
   const demand = await completeCollectionDemand(env.DB, {
     ...base,
     isOwner: memberRow.ownerAccountId === accountId,
+  });
+  // 这颗蛋关联的需求「全部结单」时计划自动完成（撤回不算；判定在 shared 纯逻辑里）
+  await autoCompletePlanAfterDemand(env.DB, groupId, demanderAccountId, eggGameId);
+  return okJson(origin, { demand });
+}
+
+/**
+ * 认领人标记「已上窝」：把 placed_at 同步到服务端，发布人由此看到「待我确认」。
+ *
+ * 家园快照提示是纯前端行为，这里不参与判定；`accountKey` 只落库，别人的视图不返回。
+ */
+async function handleDemandPlacement(
+  request: Request,
+  env: Env,
+  origin: string | null,
+  accountId: string,
+  groupId: string,
+  rawEggGameId: string | undefined,
+): Promise<Response> {
+  const writeLimited = await limited(env, origin, `cg-write:${accountId}`, WRITE_LIMIT);
+  if (writeLimited) return writeLimited;
+  const denied = await requireMember(env, origin, accountId, groupId);
+  if (denied) return denied;
+  const body = (await readJsonBody(request)) as Record<string, unknown>;
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new MotherInputError('INVALID_INPUT', '请求体必须是对象');
+  }
+  const demanderAccountId = parseDemanderAccountId(body);
+  const eggGameId = parseDemandEggGameId(rawEggGameId);
+  const nature = typeof body.nature === 'string' ? body.nature.trim() : body.nature ?? '';
+  if (typeof nature !== 'string' || nature.length > 8) {
+    throw new MotherInputError('INVALID_INPUT', 'nature 无效');
+  }
+  const gender = body.gender;
+  const demandBody = body.body;
+  const voice = body.voice;
+  if (gender == null || demandBody == null || voice == null) {
+    throw new MotherInputError('INVALID_INPUT', '缺少性别 / 体型 / 声音参数');
+  }
+  if (!isDemandGender(gender)) throw new MotherInputError('INVALID_INPUT', '性别无效');
+  if (!isDemandBody(demandBody)) throw new MotherInputError('INVALID_INPUT', '体型无效');
+  if (!isDemandVoice(voice)) throw new MotherInputError('INVALID_INPUT', '声音无效');
+  // 上窝用的游戏账号标识（uid:<gameId>）：可选，只落库不对外展示
+  const rawKey = body.accountKey;
+  let accountKey: string | null = null;
+  if (rawKey !== undefined && rawKey !== null) {
+    if (typeof rawKey !== 'string' || !/^uid:\d{1,20}$/.test(rawKey)) {
+      throw new MotherInputError('INVALID_INPUT', 'accountKey 无效');
+    }
+    accountKey = rawKey;
+  }
+  const demand = await markDemandPlaced(env.DB, {
+    groupId,
+    accountId,
+    demanderAccountId,
+    eggGameId,
+    nature,
+    gender,
+    body: demandBody,
+    voice,
+    accountKey,
   });
   return okJson(origin, { demand });
 }

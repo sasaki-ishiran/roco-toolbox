@@ -66,7 +66,17 @@ export type MotherStoreErrorCode =
   /** 需求承接：还没人接单，不能确认完成。 */
   | 'DEMAND_NOT_CLAIMED'
   /** 需求承接：只有需求方 / 组长 / 承接人能操作。 */
-  | 'DEMAND_NOT_YOURS';
+  | 'DEMAND_NOT_YOURS'
+  /** 收集计划：计划不存在 / 已删除。 */
+  | 'PLAN_NOT_FOUND'
+  /** 收集计划：只有计划的主人可以开始 / 完成 / 删除。 */
+  | 'PLAN_NOT_YOURS'
+  /** 收集计划：已完成不可回退。 */
+  | 'PLAN_ALREADY_DONE'
+  /** 收集计划：不能给自己的计划标「我能提供」。 */
+  | 'PLAN_OFFER_SELF'
+  /** 收集计划：还没有标记过「我能提供」。 */
+  | 'PLAN_OFFER_NOT_FOUND';
 
 export class MotherStoreError extends Error {
   readonly code: MotherStoreErrorCode;

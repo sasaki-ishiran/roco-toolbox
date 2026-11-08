@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { markCollectionDemandPlaced } from '../api/collectionGroups';
+import { MotherGroupsApiError } from '../api/motherGroups';
 import { eggGroupNames, species } from '../data/catalog';
 import { boxLabel } from '../domain/coverageDetail';
 import {
@@ -166,6 +168,7 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
     readPlacementChoices(accountId),
   );
   const [marks, setMarks] = useState<PlacementMarks>(() => readPlacementMarks(accountId));
+  const [placeNotice, setPlaceNotice] = useState('');
   const [openOptions, setOpenOptions] = useState<string[]>([]);
   /** 不挑性格的单按「推荐性格」配对时要认用户的按蛋覆盖（2026-11-03）。 */
   const natureOverrides = useNatureOverrides();
@@ -317,10 +320,38 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
     if (accountId) writeCollapsedAccounts(accountId, next);
   };
 
+  /**
+   * 勾「已上窝」：先记本机，同时把状态同步到服务端——
+   * 只有服务端也有 placedAt，发布方才能走到第 4 步「待我确认」。
+   * 旧服务端没有这个接口（404）时退回本机勾选，历史结单 / 归档不受影响。
+   */
   const toggleMark = (placement: DemandPlacement) => {
     if (!accountId) return;
     const rowKey = rowKeyOf(placement);
-    setMarks(togglePlacementMark(accountId, rowKey, !marks[rowKey]));
+    const next = !marks[rowKey];
+    setMarks(togglePlacementMark(accountId, rowKey, next));
+    if (!next) return;
+    const demand = placement.demand;
+    setPlaceNotice('');
+    void markCollectionDemandPlaced(demand.groupId, {
+      demanderAccountId: demand.demanderAccountId,
+      eggGameId: demand.eggGameId,
+      nature: demand.nature,
+      gender: demand.gender,
+      body: demand.body,
+      voice: demand.voice,
+      accountKey: placement.accountKey ?? null,
+    }).catch((failure: unknown) => {
+      if (failure instanceof MotherGroupsApiError && failure.status === 404) {
+        setPlaceNotice('当前服务端还不支持「已上窝」，已先记在本机');
+        return;
+      }
+      setPlaceNotice(
+        failure instanceof Error && failure.message
+          ? failure.message
+          : '「已上窝」同步失败，请稍后重试',
+      );
+    });
   };
 
   const renderRow = (placement: DemandPlacement) => {
@@ -589,6 +620,11 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
       ) : (
         <>
           {error ? renderError() : null}
+          {placeNotice ? (
+            <p className={`${HINT} rounded-xl bg-amber-50 p-2 text-amber-800`} data-testid="home-demand-place-notice">
+              {placeNotice}
+            </p>
+          ) : null}
           {withPlacements.length === 0 ? (
             <p className={`${HINT} rounded-xl bg-slate-50 p-3`} data-testid="home-demand-nothing-placeable">
               已接的单在本机都排不上配对，原因见下方。
