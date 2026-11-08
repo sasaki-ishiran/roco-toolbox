@@ -57,8 +57,11 @@ export function buildNearbyOverlayPayload(source: NearbyOverlaySource): NearbyOv
   const { capturing, hasKey, snapshot } = source;
   const pets = snapshot?.pets ?? [];
   const self = snapshot?.self ?? null;
+  // 坏的自身坐标（NaN/Infinity）经 JSON 会变成 null，壳算出的中心会是 NaN；
+  // 与 PC 端 overlay.js 同一口径：非有限数就当没有自身坐标。
+  const hasSelf = self != null && Number.isFinite(self.x) && Number.isFinite(self.y);
   // 有自身坐标就以它为中心；没有就用附近精灵的几何中位数（并标记估算）
-  const radar = buildRadar(pets, self ? { origin: self, trustOrigin: true } : {});
+  const radar = buildRadar(pets, hasSelf ? { origin: self, trustOrigin: true } : {});
   const pointByKey = new Map(radar.points.map((point) => [point.key, point]));
 
   const items = pets.map<DesktopOverlayPet>((item) => {
@@ -90,7 +93,7 @@ export function buildNearbyOverlayPayload(source: NearbyOverlaySource): NearbyOv
     total: pets.length,
     rareTotal: pets.filter((item) => item.rare).length,
     alertTotal: pets.filter((item) => item.alertReason != null).length,
-    selfEstimated: self == null,
+    selfEstimated: !hasSelf,
     updatedAt: source.now ?? snapshot?.updatedAt ?? Date.now(),
   };
 }

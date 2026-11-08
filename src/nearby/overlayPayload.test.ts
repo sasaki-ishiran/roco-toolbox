@@ -210,4 +210,18 @@ describe('自身坐标缺失时的估算中心', () => {
     expect(payload.selfEstimated).toBe(true);
     expect(payload.pets).toHaveLength(2);
   });
+
+  test('自身坐标不是有限数：退回精灵几何中位数，并标估算', () => {
+    const payload = build(
+      [
+        pet({ key: 'a', pos: { x: 0, y: 0, z: 0 } }),
+        pet({ key: 'b', pos: { x: 1000, y: 0, z: 0 } }),
+      ],
+      { self: { x: Number.NaN, y: 0 } },
+    );
+    // NaN 经 JSON 会变成 null，壳算出的中心会是 NaN；必须退回有人区域
+    expect(payload.self).toEqual({ x: 500, y: 0 });
+    expect(payload.selfEstimated).toBe(true);
+    expect(payload.pets.every((item) => Number.isFinite(item.x as number))).toBe(true);
+  });
 });
