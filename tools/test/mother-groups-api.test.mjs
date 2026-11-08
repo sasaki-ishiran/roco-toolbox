@@ -666,14 +666,29 @@ test('读取限流按账号计，同 IP 的另一身份不受影响', { timeout:
   const second = await register('读取限流乙', uniqueIp());
   const sharedIp = uniqueIp();
 
+  // 限流是「固定窗口」：windowStart = now - now % HOUR，整点整桶清零（见 functions/_lib/util.ts）。
+  // 这段循环要跑约 30s，正好跨过整点时服务端会从 1 重新计数——所以本地也按窗口计次，
+  // 断言「同一窗口内累计超过上限必须 429」，而不是「连续 1805 次一定落在同一个窗口里」。
+  const HOUR_MS = 3_600_000;
+  const windowOf = (at) => at - (at % HOUR_MS);
+  let windowStart = windowOf(Date.now());
+  let readsInWindow = 0;
   let blocked = null;
-  for (let index = 0; index < READ_LIMIT_PER_HOUR + 5; index += 1) {
+  for (let attempt = 0; attempt < READ_LIMIT_PER_HOUR * 2 + 10; attempt += 1) {
     const result = await call(first.token, 'GET', '/api/mother-groups', undefined, { ip: sharedIp });
     if (result.status === 429) {
       blocked = result;
       break;
     }
     assert.equal(result.status, 200);
+    const windowNow = windowOf(Date.now());
+    if (windowNow !== windowStart) {
+      console.log(`[读取限流] 跨过整点，窗口重新计数（已读 ${readsInWindow} 次）`);
+      windowStart = windowNow;
+      readsInWindow = 0;
+    }
+    readsInWindow += 1;
+    assert.ok(readsInWindow <= READ_LIMIT_PER_HOUR, `同一窗口内第 ${readsInWindow} 次读取仍返回 200`);
   }
   assert.ok(blocked, '超过读取上限后应出现 429');
   assert.equal(blocked.body.code, 'RATE_LIMITED');

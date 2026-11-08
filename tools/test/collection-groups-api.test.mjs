@@ -960,7 +960,7 @@ test('计划：需求全部结单才自动完成，中途撤回不算', async ()
   assert.equal(listed.body.plans.find((item) => item.id === withdrawnPlan.id).status, 'active');
 });
 
-test('计划：认领人标记已上窝后，发布人看到「待我确认」且不泄露游戏账号', async () => {
+test('计划：认领人标记已上窝后，发布人看到「待我确认」(4)、组员看到「已上窝」(3)，且不泄露游戏账号', async () => {
   const created = await planGroup('计划上窝组');
   const base = `/api/collection-groups/${created.id}`;
   const plan = (await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [801], start: true }))
@@ -1006,12 +1006,20 @@ test('计划：认领人标记已上窝后，发布人看到「待我确认」�
   assert.ok(placed.body.demand.placedAt > 0);
   assert.equal('placedByAccountKey' in placed.body.demand, false);
 
-  const listed = await call(C.token, 'GET', `${base}/plans`);
-  const view = listed.body.plans.find((item) => item.id === plan.id);
-  assert.equal(view.progressStep, 4);
-  assert.equal(view.needsConfirm, true);
-  assert.ok(view.demands[0].placedAt > 0);
-  assert.equal(JSON.stringify(listed.body).includes('uid:9001'), false);
+  // 发布人视角：有人上窝 → 第 4 步「待我确认」
+  const publisherList = await call(A.token, 'GET', `${base}/plans`);
+  const publisherView = publisherList.body.plans.find((item) => item.id === plan.id);
+  assert.equal(publisherView.progressStep, 4);
+  assert.equal(publisherView.needsConfirm, true);
+  assert.ok(publisherView.demands[0].placedAt > 0);
+
+  // 组员视角：只看到第 3 步「已上窝」，不会被推到「待我确认」
+  const memberList = await call(C.token, 'GET', `${base}/plans`);
+  const memberView = memberList.body.plans.find((item) => item.id === plan.id);
+  assert.equal(memberView.progressStep, 3);
+  assert.equal(memberView.needsConfirm, false);
+  assert.ok(memberView.demands[0].placedAt > 0);
+  assert.equal(JSON.stringify(memberList.body).includes('uid:9001'), false);
 });
 
 test('回归：计划的增删改与退出小组都不影响历史结单数据与旧接口结构', async () => {
