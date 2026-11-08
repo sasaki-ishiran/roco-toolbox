@@ -21,6 +21,28 @@ export interface NearbySnapshot {
   updatedAt: number;
 }
 
+/** 快照多久没更新就按「等待数据」处理；同一次采集里 live 解码约每秒刷新一次。 */
+export const NEARBY_SNAPSHOT_TTL_MS = 3 * 60_000;
+
+/**
+ * 附近快照的新鲜度门限（2026-11-08，O-9）。
+ *
+ * 快照是模块级、跨页共享的，「停止采集后保留最后一帧」是有意的；但换一局采集后
+ * 旧 session 的精灵/场景不能继续显示，也不能再推给悬浮窗。当前采集会话还没读到
+ * （state 未就绪）时不清屏，避免刚进页面闪一下。
+ */
+export function freshNearbySnapshot(
+  snapshot: NearbySnapshot | null,
+  session: string | null | undefined,
+  now = Date.now(),
+  ttlMs = NEARBY_SNAPSHOT_TTL_MS,
+): NearbySnapshot | null {
+  if (!snapshot) return null;
+  if (session != null && snapshot.session !== session) return null;
+  if (now - snapshot.updatedAt > ttlMs) return null;
+  return snapshot;
+}
+
 const store = createModuleStore<NearbySnapshot | null>(null);
 
 export function writeNearbySnapshot(snapshot: NearbySnapshot): void {

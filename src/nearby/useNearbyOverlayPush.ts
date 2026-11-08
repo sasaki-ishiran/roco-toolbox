@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CollectorState } from '../collector/nativeCollector';
 import { readCollectorState } from '../collector/nativeCollector';
-import { useNearbySnapshot } from '../collector/nearbyStore';
+import { freshNearbySnapshot, useNearbySnapshot } from '../collector/nearbyStore';
 import { registerLiveTick } from '../collector/useCaptureProgress';
 import { hasNearbyOverlayShell, pushNearbyOverlayToShell } from './overlayBridge';
 import { buildNearbyOverlayPayload } from './overlayPayload';
@@ -25,9 +25,10 @@ const STATE_POLL_MS = 1000;
  */
 export function useNearbyOverlayPush(): void {
   const supported = hasNearbyOverlayShell();
-  const snapshot = useNearbySnapshot();
-  const panels = useNearbyOverlayPanels();
   const [state, setState] = useState<CollectorState | null>(null);
+  // 换局后旧会话的附近数据不再推给壳（O-9），停止采集仍保留同一 session 的最后一帧
+  const snapshot = freshNearbySnapshot(useNearbySnapshot(), state?.fileId);
+  const panels = useNearbyOverlayPanels();
 
   // 轮询采集状态：可见时定时读；不可见时挂在壳的心跳上（定时器会被 WebView 节流）
   useEffect(() => {

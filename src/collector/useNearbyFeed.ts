@@ -3,7 +3,7 @@ import type { CollectorState } from './nativeCollector';
 import { readCollectorState } from './nativeCollector';
 import { observeCollectorState, isNearbyOwnedSession } from './captureOriginStore';
 import type { CaptureProgress } from './captureProgress';
-import { useNearbySnapshot, type NearbySnapshot } from './nearbyStore';
+import { freshNearbySnapshot, useNearbySnapshot, type NearbySnapshot } from './nearbyStore';
 import { useCaptureProgress } from './useCaptureProgress';
 
 /**
@@ -75,7 +75,7 @@ export function useNearbyFeed(): NearbyFeed {
     };
   }, []);
 
-  const snapshot = useNearbySnapshot();
+  const snapshot = freshNearbySnapshot(useNearbySnapshot(), state?.fileId);
   const windowBytes = isNearbyOwnedSession(state?.fileId) ? NEARBY_WINDOW_BYTES : 0;
   const progress = useCaptureProgress(state, { live: true, persist: false, refreshKey, windowBytes });
   return {
