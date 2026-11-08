@@ -8,7 +8,7 @@
  * 路由（全部要求是组员）：
  *   GET    /plans                      按组读计划列表（含自己的，前端标「我发布的」）
  *   POST   /plans                      创建 / 批量导入（{ eggGameIds, note?, start? }）
- *   POST   /plans/{planId}/start       开始（满 8 条时留在想收并返回 notice，不报错）
+ *   POST   /plans/{planId}/start       开始（不设数量上限，想收 → 进行中）
  *   POST   /plans/{planId}/complete    完成（想收也能直接完成）
  *   DELETE /plans/{planId}             删除（连带 plan_offers）
  *   PUT    /plans/{planId}/offers/me   标记 / 改备注「我能提供」
@@ -142,7 +142,7 @@ export async function handleCollectionPlans(
   if (rest.length === 2 && rest[1] === 'start' && method === 'POST') {
     const writeLimited = await limited(env, origin, `cg-write:${accountId}`, WRITE_LIMIT);
     if (writeLimited) return writeLimited;
-    return okJson(origin, { ...(await startCollectionPlan(env.DB, { groupId, accountId, planId })) });
+    return okJson(origin, { plan: await startCollectionPlan(env.DB, { groupId, accountId, planId }) });
   }
 
   if (rest.length === 2 && rest[1] === 'complete' && method === 'POST') {

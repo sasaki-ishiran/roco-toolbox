@@ -608,6 +608,45 @@ test('已完成需求不能撤回；组长移除组员会释放承接、取消�
   assert.equal(listedAgain.body.completedCounts[B.accountId], 2);
 });
 
+test('需求：同条件重复发布可以把「要求绿窝」升级为 1', async () => {
+  const created = await createGroup(A, {
+    name: '绿窝升级组',
+    displayName: 'A',
+    groupType: 'mother',
+    target: {
+      kind: 'mother',
+      mode: 'perfect',
+      bodies: ['大块头'],
+      voices: ['+100'],
+      catalogVersion: 'test-v1',
+    },
+  });
+  const base = `/api/collection-groups/${created.id}`;
+  const criteria = { gender: '母', body: '大块头', voice: '+100' };
+
+  const first = await call(A.token, 'POST', `${base}/demands`, {
+    eggGameId: 3470,
+    natures: ['固执'],
+    ...criteria,
+  });
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  // 不要求绿窝时服务端省略这一列（DTO 只在 true 时带字段）
+  assert.equal(first.body.demands[0].requireGreenNest, undefined);
+
+  const again = await call(A.token, 'POST', `${base}/demands`, {
+    eggGameId: 3470,
+    natures: ['固执'],
+    ...criteria,
+    requireGreenNest: true,
+  });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(again.body.demands[0].requireGreenNest, true);
+
+  const listed = await call(A.token, 'GET', `${base}/demands`);
+  const row = listed.body.demands.find((item) => item.eggGameId === 3470);
+  assert.equal(row?.requireGreenNest, true);
+});
+
 test('收集组接口：产线随母本摘要发布并可读回（发布预览不再反复提示变化）', async () => {
   const created = await createGroup(A, {
     name: '产线往返组',
@@ -723,11 +762,10 @@ test('计划：创建/批量导入去重、已有跳过，按组列表含自己�
   assert.equal(listed.body.plans[0].memberDisplayName, 'A');
   assert.equal(listed.body.plans[0].progressStep, 0);
   assert.equal(listed.body.myActiveCount, 0);
-  assert.equal(listed.body.maxActivePlans, 8);
   assert.deepEqual(listed.body.matchableEggIds, []);
 });
 
-test('计划：进行中硬上限 8 条，超出部分自动落想收并给提示', async () => {
+test('计划：进行中不设数量上限，start 直接全部落进行中', async () => {
   const created = await planGroup('计划额度组');
   const base = `/api/collection-groups/${created.id}`;
 
@@ -737,21 +775,18 @@ test('计划：进行中硬上限 8 条，超出部分自动落想收并给提�
   });
   assert.equal(bulk.status, 200, JSON.stringify(bulk.body));
   const active = bulk.body.plans.filter((plan) => plan.status === 'active');
-  const backlog = bulk.body.plans.filter((plan) => plan.status === 'backlog');
-  assert.equal(active.length, 8);
-  assert.equal(backlog.length, 2);
-  assert.equal(bulk.body.overflow, 2);
-  assert.equal(bulk.body.notice, '进行中已满 8 条，已放进想收');
+  assert.equal(active.length, 10);
+  assert.equal(bulk.body.overflow, undefined);
+  assert.equal(bulk.body.notice, undefined);
 
   const listed = await call(A.token, 'GET', `${base}/plans`);
-  assert.equal(listed.body.myActiveCount, 8);
+  assert.equal(listed.body.myActiveCount, 10);
 
-  // 满了之后再「开始」一条：不报错，仍是 backlog，并返回提示
+  // 超过 8 条之后继续「开始」：照常落进行中，没有提示
   const extra = await call(A.token, 'POST', `${base}/plans`, { eggGameIds: [211], start: true });
   assert.equal(extra.status, 200, JSON.stringify(extra.body));
-  assert.equal(extra.body.plans[0].status, 'backlog');
-  assert.equal(extra.body.overflow, 1);
-  assert.equal(extra.body.notice, '进行中已满 8 条，已放进想收');
+  assert.equal(extra.body.plans[0].status, 'active');
+  assert.equal(extra.body.overflow, undefined);
 });
 
 test('计划：非组员不能看、不能建、不能标记', async () => {
@@ -786,7 +821,6 @@ test('计划：开始/完成/删除，想收可直接完成，删除连带清掉
   const started = await call(A.token, 'POST', `${base}/plans/${createdPlan.id}/start`);
   assert.equal(started.status, 200, JSON.stringify(started.body));
   assert.equal(started.body.plan.status, 'active');
-  assert.equal(started.body.overflow, false);
 
   const done = await call(A.token, 'POST', `${base}/plans/${createdPlan.id}/complete`);
   assert.equal(done.status, 200, JSON.stringify(done.body));

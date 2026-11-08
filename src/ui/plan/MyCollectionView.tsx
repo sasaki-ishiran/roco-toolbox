@@ -32,7 +32,7 @@ export interface MyCollectionViewProps {
 
 /**
  * 我的收集：只回答「我的计划推进到哪了」。
- * - 进行中上限 8 条，按「待我确认 > 待接单 > 已认领/已上窝 > 无进展 > 想收」排；
+ * - 进行中不设数量上限（2026-11-09 用户决策），按「待我确认 > 待接单 > 已认领/已上窝 > 无进展」排；
  * - 想收默认折叠；没有需求时卡面条件行用「口径默认值 + 这颗蛋的目标性格」，不留空白；
  * - 添加想收走选蛋弹层（多选落想收）；全部缺口是独立入口，只做盘货 + 发需求。
  */
@@ -58,8 +58,7 @@ export function MyCollectionView({
     [data, viewerAccountId],
   );
   const active = useMemo(
-    () =>
-      sortPlansForMe(mine.filter((plan) => plan.status === 'active')).slice(0, 8),
+    () => sortPlansForMe(mine.filter((plan) => plan.status === 'active')),
     [mine],
   );
   const backlog = useMemo(
@@ -98,7 +97,7 @@ export function MyCollectionView({
         natures={wishOnly ? conditions.natures : demandNatures(plan)}
         reason={
           wishOnly
-            ? formatPlanConditions(conditions)
+            ? formatPlanConditions(conditions, { missingNatures: conditions.natures })
             : planReason(plan, viewerAccountId, memberName, now).text
         }
         pills={planPills(plan, viewerAccountId, now)}

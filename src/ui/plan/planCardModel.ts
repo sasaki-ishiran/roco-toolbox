@@ -159,10 +159,15 @@ export function planConditions(
 }
 
 /** 条件行文字：公母 · 体型 · 声音；空值统一显示「不限」，永远不空。 */
-export function formatPlanConditions(conditions: PlanConditionDefaults): string {
+export function formatPlanConditions(
+  conditions: PlanConditionDefaults,
+  options: { missingNatures?: readonly string[] } = {},
+): string {
   const gender =
     conditions.gender === '母' ? '♀' : conditions.gender === '公' ? '♂' : '不限';
-  return [gender, conditions.body || '不限', conditions.voice || '不限'].join(' · ');
+  const base = [gender, conditions.body || '不限', conditions.voice || '不限'].join(' · ');
+  const missing = [...new Set((options.missingNatures ?? []).filter((name) => name.trim()))];
+  return missing.length > 0 ? `${base} · 缺 ${missing.join('/')}` : base;
 }
 
 /** 推进超时阈值：先用 2 天，做成常量便于调（2026-11-08 用户口径）。 */

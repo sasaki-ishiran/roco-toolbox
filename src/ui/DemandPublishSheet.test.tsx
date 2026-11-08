@@ -18,6 +18,42 @@ const base = {
   onConfirm: () => {},
 };
 
+describe('发需求的「要求绿窝」开关', () => {
+  const publishBase = {
+    ...base,
+    mode: 'publish' as const,
+    items: [{ eggGameId: 3001, name: '喵喵', natures: ['固执'] }],
+  };
+
+  test('默认不要求绿窝，勾选后把 requireGreenNest 透传给父组件', () => {
+    const onConfirm = vi.fn();
+    render(<DemandPublishSheet {...publishBase} onConfirm={onConfirm} />);
+
+    fireEvent.click(screen.getByTestId('demand-publish-confirm'));
+    expect(onConfirm.mock.calls[0][1]).toMatchObject({ requireGreenNest: false });
+
+    fireEvent.click(
+      screen.getByTestId('demand-green-nest').querySelector('input') as HTMLInputElement,
+    );
+    fireEvent.click(screen.getByTestId('demand-publish-confirm'));
+    expect(onConfirm.mock.calls[1][1]).toMatchObject({ requireGreenNest: true });
+  });
+
+  test('一个性格都没选时不能勾绿窝发布', () => {
+    render(<DemandPublishSheet {...publishBase} onConfirm={() => {}} />);
+    // 取消默认勾选的性格 → 0 个性格
+    fireEvent.click(screen.getByTestId('demand-nature-3001-固执'));
+    fireEvent.click(
+      screen.getByTestId('demand-green-nest').querySelector('input') as HTMLInputElement,
+    );
+
+    expect(screen.getByTestId('demand-green-nest-needs-nature')).toBeTruthy();
+    expect(
+      (screen.getByTestId('demand-publish-confirm') as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+});
+
 describe('添加想收（wish 模式）', () => {
   test('只看缺口默认开，关掉能看全图鉴（含我已有的蛋）', () => {
     render(<DemandPublishSheet {...base} mode="wish" onAddWish={() => {}} />);

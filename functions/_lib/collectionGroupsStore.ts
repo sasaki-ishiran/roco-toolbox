@@ -55,8 +55,6 @@ import {
 } from '../../src/shared/collectionGroups';
 import { MotherStoreError, isMember, publishMemberResource } from './motherGroupsStore';
 import {
-  MAX_ACTIVE_PLANS,
-  PLAN_OVERFLOW_NOTICE,
   countActivePlans,
   matchablePlanEggIds,
   planCreateDecision,
@@ -1953,8 +1951,26 @@ export async function publishCollectionDemand(
       .run();
   }
 
+  // 同条件已存在的需求也能把 require_green_nest 升级：唯一键不含这一列，
+  // 只靠 ON CONFLICT DO NOTHING 永远改不到（2026-11-09 实测「绿窝发不出去」）。
+  // 只升级仍「待接单」的行：已被接单后再改交付条件等于偷换约定。
+  const upgraded =
+    requireGreenNest === 1
+      ? await db
+          .prepare(
+            `UPDATE collection_group_demands
+                SET require_green_nest = 1, updated_at = ?
+              WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ?
+                AND gender = ? AND body = ? AND voice = ?
+                AND nature IN (${natures.map(() => '?').join(', ')})
+                AND status = 'open' AND require_green_nest = 0`,
+          )
+          .bind(now, groupId, accountId, eggGameId, gender, body, voice, ...natures)
+          .run()
+      : null;
+
   // 一次取回这几条（原来是按性格各查一次，N 个性格 = N 条 SQL）
-  if (newRows > 0) {
+  if (newRows > 0 || (upgraded?.meta.changes ?? 0) > 0) {
     // 旧入口（全部缺口 / 需求中心）发需求也要落到计划上：先确保计划存在并处于进行中，
     // 否则「我的收集 / 组内广场」只读计划表，需求会凭空消失（2026-11-08 实测断链）。
     await ensureDemandPlan(db, groupId, accountId, eggGameId, now);
@@ -2437,11 +2453,10 @@ export interface PlanView extends CollectionPlan {
 export interface CollectionPlansView {
   plans: PlanView[];
   members: { accountId: string; displayName: string }[];
-  /** 「你能补的」：别人进行中、而我发布过的蛋，按蛋去重。 */
+  /** 「你能补的」：别人进行中、而我的产线能补的蛋，按蛋去重。 */
   matchableEggIds: number[];
-  /** 当前身份进行中的计划条数（展示「7/8」与额度提示）。 */
+  /** 当前身份进行中的计划条数（仅统计，不设上限）。 */
   myActiveCount: number;
-  maxActivePlans: number;
 }
 
 /** 按组读计划列表：所有人（含自己）+ 需求条件 + 提供标记 + 「你能补的」。 */
@@ -2477,11 +2492,11 @@ export async function readCollectionPlans(
       .all<{ demander_account_id: string; egg_game_id: number }>(),
     db
       .prepare(
-        `SELECT egg_game_ids FROM mother_group_accounts
+        `SELECT egg_game_ids, lines_json FROM mother_group_accounts
           WHERE group_id = ? AND member_account_id = ?`,
       )
       .bind(groupId, viewerAccountId)
-      .all<{ egg_game_ids: string }>(),
+      .all<{ egg_game_ids: string; lines_json: string | null }>(),
   ]);
 
   const memberList = (members.results ?? []).map((row) => ({
@@ -2553,7 +2568,13 @@ export async function readCollectionPlans(
     };
   });
 
-  const myEggGameIds = (myAccounts.results ?? []).flatMap((row) => parseStoredIds(row.egg_game_ids));
+  const myAccountRows = myAccounts.results ?? [];
+  const myEggGameIds = myAccountRows.flatMap((row) => parseStoredIds(row.egg_game_ids));
+  // 产线口径（2026-11-09）：只要有一个账号带产线就按产线判定；
+  // 全部是旧摘要（lines_json 为 NULL）时才退回「有任意母本」。
+  const myLineRows = myAccountRows.map((row) => parseStoredLines(row.lines_json));
+  const myLines =
+    myLineRows.every((row) => row === undefined) ? undefined : myLineRows.flatMap((row) => row ?? []);
   const myPlans = plans.filter((plan) => plan.memberAccountId === viewerAccountId);
 
   return {
@@ -2562,10 +2583,10 @@ export async function readCollectionPlans(
     matchableEggIds: matchablePlanEggIds({
       myAccountId: viewerAccountId,
       myEggGameIds,
-      plans,
+      ...(myLines === undefined ? {} : { myLines }),
+      plans: views,
     }),
     myActiveCount: countActivePlans(myPlans),
-    maxActivePlans: MAX_ACTIVE_PLANS,
   };
 }
 
@@ -2573,9 +2594,6 @@ export interface CreatePlansResult {
   plans: CollectionPlan[];
   skipped: number;
   doneSkipped: number;
-  /** 想直接开始但额度已满、实际落成「想收」的条数。 */
-  overflow: number;
-  notice: string | null;
 }
 
 async function findPlanRow(
@@ -2589,45 +2607,10 @@ async function findPlanRow(
     .first<PlanRow>();
 }
 
-async function activePlanCount(
-  db: D1Database,
-  groupId: string,
-  accountId: string,
-): Promise<number> {
-  const row = await db
-    .prepare(
-      `SELECT COUNT(*) AS total FROM collection_plans
-        WHERE group_id = ? AND member_account_id = ? AND status = 'active'`,
-    )
-    .bind(groupId, accountId)
-    .first<{ total: number }>();
-  return row?.total ?? 0;
-}
-
-/** 超出 8 条时把新多出来的进行中退回「想收」（保留最早的 8 条，避免并发插入破上限）。 */
-async function capActivePlans(
-  db: D1Database,
-  groupId: string,
-  accountId: string,
-): Promise<void> {
-  await db
-    .prepare(
-      `UPDATE collection_plans SET status = 'backlog'
-        WHERE id IN (
-          SELECT id FROM collection_plans
-           WHERE group_id = ? AND member_account_id = ? AND status = 'active'
-           ORDER BY created_at ASC, id ASC
-           LIMIT -1 OFFSET ?
-        )`,
-    )
-    .bind(groupId, accountId, MAX_ACTIVE_PLANS)
-    .run();
-}
-
 /**
  * 创建 / 批量导入计划：同一个蛋只建一条，已存在（含已完成）跳过。
  *
- * 状态判定全部来自 `planCreateDecision`，这里只负责落库与并发兜底。
+ * 状态判定全部来自 `planCreateDecision`；2026-11-09 用户决策后「进行中」不设数量上限。
  */
 export async function createCollectionPlans(
   db: D1Database,
@@ -2656,7 +2639,6 @@ export async function createCollectionPlans(
     eggGameIds: input.eggGameIds,
     existing,
     start: input.start === true,
-    activeCount: countActivePlans(existing),
   });
 
   const note = (input.note ?? '').slice(0, PLAN_NOTE_MAX);
@@ -2685,9 +2667,6 @@ export async function createCollectionPlans(
       ),
     );
   }
-  if (decision.create.some((item) => item.status === 'active')) {
-    await capActivePlans(db, groupId, accountId);
-  }
 
   const eggIds = decision.create.map((item) => item.eggGameId);
   const savedRows =
@@ -2704,27 +2683,44 @@ export async function createCollectionPlans(
             .all<PlanRow>()
         ).results ?? [];
   const saved = savedRows.map(toPlan);
-  const byEgg = new Map(saved.map((plan) => [plan.eggGameId, plan]));
-  // 决策阶段因额度不足落想收的 + 并发兜底被退回想收的，都是「满 8 条」的提示来源
-  const cappedOverflow = decision.create.filter(
-    (item) => item.status === 'active' && byEgg.get(item.eggGameId)?.status === 'backlog',
-  ).length;
-  const overflow = decision.overflow + cappedOverflow;
 
   return {
     plans: saved,
     skipped: decision.skipped,
     doneSkipped: decision.doneSkipped,
-    overflow,
-    notice: overflow > 0 ? PLAN_OVERFLOW_NOTICE : null,
   };
 }
 
-export interface PlanActionResult {
-  plan: CollectionPlan;
-  /** 想开始但额度已满：计划仍是「想收」，附一句提示，不报错。 */
-  overflow: boolean;
-  notice: string | null;
+/** 开始：想收 → 进行中；进行中幂等，已完成不允许回退。 */
+export async function startCollectionPlan(
+  db: D1Database,
+  input: { groupId: string; accountId: string; planId: string },
+): Promise<CollectionPlan> {
+  const { groupId, accountId, planId } = input;
+  const row = await requireOwnPlan(db, groupId, accountId, planId);
+  const outcome = planStartOutcome(normalizePlanStatus(row.status));
+  if (outcome === 'done') {
+    throw new MotherStoreError('PLAN_ALREADY_DONE', '已完成的计划不能重新开始');
+  }
+  if (outcome === 'already-active') return toPlan(row);
+  const now = Date.now();
+  const updated = await db
+    .prepare(
+      `UPDATE collection_plans
+          SET status = 'active', version = version + 1, updated_at = ?
+        WHERE id = ? AND group_id = ? AND member_account_id = ? AND status = 'backlog'`,
+    )
+    .bind(now, planId, groupId, accountId)
+    .run();
+  if ((updated.meta.changes ?? 0) === 0) {
+    // 0 行不是失败：可能刚被另一台设备开始（幂等），返回最新状态即可。
+    const latest = await findPlanRow(db, groupId, planId);
+    if (!latest) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
+    return toPlan(latest);
+  }
+  const saved = await findPlanRow(db, groupId, planId);
+  if (!saved) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
+  return toPlan(saved);
 }
 
 async function requireOwnPlan(
@@ -2739,48 +2735,6 @@ async function requireOwnPlan(
     throw new MotherStoreError('PLAN_NOT_YOURS', '只有计划的主人可以操作');
   }
   return row;
-}
-
-/** 开始：想收 → 进行中；已满 8 条时留在想收并提示，不报错。 */
-export async function startCollectionPlan(
-  db: D1Database,
-  input: { groupId: string; accountId: string; planId: string },
-): Promise<PlanActionResult> {
-  const { groupId, accountId, planId } = input;
-  const row = await requireOwnPlan(db, groupId, accountId, planId);
-  const outcome = planStartOutcome(normalizePlanStatus(row.status), await activePlanCount(db, groupId, accountId));
-  if (outcome === 'done') {
-    throw new MotherStoreError('PLAN_ALREADY_DONE', '已完成的计划不能重新开始');
-  }
-  if (outcome === 'overflow') {
-    return { plan: toPlan(row), overflow: true, notice: PLAN_OVERFLOW_NOTICE };
-  }
-  if (outcome === 'already-active') {
-    return { plan: toPlan(row), overflow: false, notice: null };
-  }
-  const now = Date.now();
-  const updated = await db
-    .prepare(
-      `UPDATE collection_plans
-          SET status = 'active', version = version + 1, updated_at = ?
-        WHERE id = ? AND group_id = ? AND member_account_id = ? AND status = 'backlog'
-          AND (SELECT COUNT(*) FROM collection_plans
-                WHERE group_id = ? AND member_account_id = ? AND status = 'active') < ?`,
-    )
-    .bind(now, planId, groupId, accountId, groupId, accountId, MAX_ACTIVE_PLANS)
-    .run();
-  if ((updated.meta.changes ?? 0) === 0) {
-    // 0 行不是失败：可能刚被另一台设备开始（幂等），也可能额度刚好被别人占满
-    const latest = await findPlanRow(db, groupId, planId);
-    if (!latest) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
-    if (normalizePlanStatus(latest.status) === 'active') {
-      return { plan: toPlan(latest), overflow: false, notice: null };
-    }
-    return { plan: toPlan(latest), overflow: true, notice: PLAN_OVERFLOW_NOTICE };
-  }
-  const saved = await findPlanRow(db, groupId, planId);
-  if (!saved) throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
-  return { plan: toPlan(saved), overflow: false, notice: null };
 }
 
 /** 完成：想收也能直接完成（用户手里已经有这颗蛋）；已完成幂等。 */

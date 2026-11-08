@@ -101,7 +101,7 @@ export function GroupSquareView({
   );
 
   const cageReason = (plan: CollectionPlanView): string => {
-    if (matchable.has(plan.eggGameId)) return '我号里有这颗蛋';
+    if (matchable.has(plan.eggGameId)) return '我的产线能补';
     return hasStrictConditions(plan) ? '条件可能不符' : '图鉴里有、需要现孵';
   };
 

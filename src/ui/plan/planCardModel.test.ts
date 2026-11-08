@@ -250,6 +250,13 @@ describe('卡面条件行（想收不许空白）', () => {
     expect(conditions.natures).toEqual(['固执', '保守']);
   });
 
+  test('想收卡把缺口性格写进条件行（不能只有奖牌没有「缺什么」）', () => {
+    const conditions = planConditions(plan({ status: 'backlog', demands: [] }), { species });
+    expect(
+      formatPlanConditions(conditions, { missingNatures: conditions.natures }),
+    ).toBe('♀ · 大块头 · +100 · 缺 固执/保守');
+  });
+
   test('没有推荐性格也不空白：条件行仍有口径默认值', () => {
     const conditions = planConditions(plan({ status: 'backlog', eggGameId: 9999, demands: [] }), {
       species,

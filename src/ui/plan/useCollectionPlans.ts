@@ -25,7 +25,7 @@ export interface CollectionPlansActions {
     start?: boolean;
     bulk?: boolean;
   }) => Promise<CreatePlansResult>;
-  start: (plan: CollectionPlanView) => Promise<{ overflow: boolean; notice: string | null }>;
+  start: (plan: CollectionPlanView) => Promise<void>;
   complete: (plan: CollectionPlanView) => Promise<void>;
   remove: (plan: CollectionPlanView) => Promise<void>;
   offer: (plan: CollectionPlanView, note: string) => Promise<void>;
@@ -114,8 +114,7 @@ export function useCollectionPlans(groupId: string | null): CollectionPlansState
     create: (input) => run(() => createCollectionPlans(groupId as string, input)),
     start: (plan) =>
       run(async () => {
-        const result = await startCollectionPlan(groupId as string, plan.id);
-        return { overflow: result.overflow, notice: result.notice };
+        await startCollectionPlan(groupId as string, plan.id);
       }),
     complete: (plan) =>
       run(async () => {

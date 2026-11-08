@@ -257,7 +257,6 @@ export async function mockMotherGroups(page: Page, options: MockOptions = {}): P
     // mock 里简单按「我有这颗蛋」的种子给：3001 是 A 资源里没有、B 在收的蛋
     matchableEggIds: options.plans?.length ? [3001] : [],
     myActiveCount: plans.filter((plan) => plan.status === 'active').length,
-    maxActivePlans: 8,
   });
 
   await page.route('**/api/collection-groups**', async (route) => {
@@ -302,8 +301,6 @@ export async function mockMotherGroups(page: Page, options: MockOptions = {}): P
         plans: created,
         skipped: body.eggGameIds.length - created.length,
         doneSkipped: 0,
-        overflow: 0,
-        notice: null,
       });
     }
     const planMatch = path.match(
@@ -319,7 +316,7 @@ export async function mockMotherGroups(page: Page, options: MockOptions = {}): P
         plan.status = 'active';
         plan.version += 1;
         plan.updatedAt = Date.now();
-        return fulfill(route, { ok: true, plan, overflow: false, notice: null });
+        return fulfill(route, { ok: true, plan });
       }
       if (method === 'POST' && action === 'complete') {
         plan.status = 'done';

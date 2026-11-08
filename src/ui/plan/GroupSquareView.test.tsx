@@ -37,7 +37,6 @@ const data = (plans: CollectionPlanView[]): CollectionPlansResponse => ({
   ],
   matchableEggIds: [3008],
   myActiveCount: 0,
-  maxActivePlans: 8,
 });
 
 const backlogMine = plan({ id: 'wish-mine', eggGameId: 3006, createdAt: 1_000 });

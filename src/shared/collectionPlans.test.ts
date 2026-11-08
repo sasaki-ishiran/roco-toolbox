@@ -1,10 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   DEFAULT_PLAN_STATUS,
-  MAX_ACTIVE_PLANS,
-  PLAN_OVERFLOW_NOTICE,
   PLAN_STATUS_LABELS,
-  canActivatePlan,
   canApplyPlanEvent,
   canDeletePlan,
   countActivePlans,
@@ -293,12 +290,81 @@ describe('「你能补的」匹配口径', () => {
   });
 });
 
-describe('进行中计划上限', () => {
-  test('上限 8 条', () => {
-    expect(MAX_ACTIVE_PLANS).toBe(8);
+describe('「你能补的」按产线判定（2026-11-09 用户口径）', () => {
+  const otherPlan = (
+    eggGameId: number,
+    demands?: Array<{ nature: string; body: string; voice: string }>,
+  ) => ({ ...plan({ eggGameId, memberAccountId: 'other' }), ...(demands ? { demands } : {}) });
+
+  test('有产线但目标性格产不出 → 不算能补', () => {
+    expect(
+      matchablePlanEggIds({
+        myAccountId: 'me',
+        myEggGameIds: [101],
+        myLines: [{ eggGameId: 101, grade: '大婉', natures: ['固执'] }],
+        plans: [otherPlan(101, [{ nature: '胆小', body: '', voice: '' }])],
+      }),
+    ).toEqual([]);
   });
 
-  test('只数进行中：想收 / 已完成不占额度', () => {
+  test('体型 / 声音 / 性格都能产 → 算能补（产线优先于蛋 id）', () => {
+    expect(
+      matchablePlanEggIds({
+        myAccountId: 'me',
+        // 故意不给 myEggGameIds：产线在时只看产线
+        myEggGameIds: [],
+        myLines: [{ eggGameId: 101, grade: '大婉', natures: ['固执'] }],
+        plans: [otherPlan(101, [{ nature: '固执', body: '大块头', voice: '+100' }])],
+      }),
+    ).toEqual([101]);
+  });
+
+  test('体型对不上 → 不算能补', () => {
+    expect(
+      matchablePlanEggIds({
+        myAccountId: 'me',
+        myEggGameIds: [101],
+        myLines: [{ eggGameId: 101, grade: '小婉', natures: ['固执'] }],
+        plans: [otherPlan(101, [{ nature: '固执', body: '大块头', voice: '' }])],
+      }),
+    ).toEqual([]);
+  });
+
+  test('还没发需求：只要这条产线能产这颗蛋就算能补', () => {
+    expect(
+      matchablePlanEggIds({
+        myAccountId: 'me',
+        myEggGameIds: [],
+        myLines: [{ eggGameId: 101, grade: '小粗', natures: ['固执'] }],
+        plans: [otherPlan(101, [])],
+      }),
+    ).toEqual([101]);
+  });
+
+  test('已发布但没有产线（空数组）→ 一律不算能补', () => {
+    expect(
+      matchablePlanEggIds({
+        myAccountId: 'me',
+        myEggGameIds: [101],
+        myLines: [],
+        plans: [otherPlan(101, [])],
+      }),
+    ).toEqual([]);
+  });
+
+  test('旧摘要没带产线（undefined）→ 退回「我号里有任意母本」', () => {
+    expect(
+      matchablePlanEggIds({
+        myAccountId: 'me',
+        myEggGameIds: [101],
+        plans: [otherPlan(101, [{ nature: '胆小', body: '大块头', voice: '+100' }])],
+      }),
+    ).toEqual([101]);
+  });
+});
+
+describe('进行中计划计数（不设数量上限）', () => {
+  test('只数进行中：想收 / 已完成不计数', () => {
     const plans = [
       plan({ id: 'p1', status: 'active' }),
       plan({ id: 'p2', status: 'backlog' }),
@@ -307,20 +373,9 @@ describe('进行中计划上限', () => {
     expect(countActivePlans(plans)).toBe(1);
   });
 
-  test('边界：7 条可再开始一条，8 条不能再开始', () => {
-    expect(canActivatePlan(7)).toBe(true);
-    expect(canActivatePlan(8)).toBe(false);
-    expect(canActivatePlan(0)).toBe(true);
-  });
-
-  test('想收不受 8 条限制：8 条进行中时仍可新增想收', () => {
-    const active = Array.from({ length: 8 }, (_, index) =>
-      plan({ id: `p${index}`, status: 'active' }),
-    );
-    const withBacklog = [...active, plan({ id: 'p8', status: 'backlog' })];
-    // 新增想收不改变「进行中」计数，仍然卡在 8 条上限上
-    expect(countActivePlans(withBacklog)).toBe(8);
-    expect(canActivatePlan(countActivePlans(withBacklog))).toBe(false);
+  test('超过 8 条也继续计数，不做截断', () => {
+    const plans = Array.from({ length: 12 }, (_, index) => plan({ id: `p${index}`, status: 'active' }));
+    expect(countActivePlans(plans)).toBe(12);
   });
 });
 
@@ -330,13 +385,11 @@ describe('创建 / 批量导入的落库决策', () => {
       eggGameIds: [101, 102, 101],
       existing: [],
       start: false,
-      activeCount: 0,
     });
     expect(decision.create).toEqual([
       { eggGameId: 101, status: 'backlog' },
       { eggGameId: 102, status: 'backlog' },
     ]);
-    expect(decision.overflow).toBe(0);
     expect(decision.skipped).toBe(0);
   });
 
@@ -348,53 +401,33 @@ describe('创建 / 批量导入的落库决策', () => {
         { eggGameId: 102, status: 'active' },
       ],
       start: false,
-      activeCount: 1,
     });
     expect(decision.create).toEqual([{ eggGameId: 103, status: 'backlog' }]);
     expect(decision.skipped).toBe(2);
     expect(decision.doneSkipped).toBe(1);
   });
 
-  test('满 8 条时超出的部分自动落想收，并给出提示条数', () => {
-    const active = Array.from({ length: 7 }, (_, index) =>
+  test('start = true 时全部落进行中，已有多少条进行中都不影响', () => {
+    const active = Array.from({ length: 8 }, (_, index) =>
       plan({ id: `p${index}`, eggGameId: 200 + index, status: 'active' }),
     );
     const decision = planCreateDecision({
       eggGameIds: [101, 102, 103],
       existing: active,
       start: true,
-      activeCount: 7,
     });
-    // 只剩 1 个额度：第一条进行中，其余落想收
     expect(decision.create).toEqual([
       { eggGameId: 101, status: 'active' },
-      { eggGameId: 102, status: 'backlog' },
-      { eggGameId: 103, status: 'backlog' },
+      { eggGameId: 102, status: 'active' },
+      { eggGameId: 103, status: 'active' },
     ]);
-    expect(decision.overflow).toBe(2);
-    expect(PLAN_OVERFLOW_NOTICE).toBe('进行中已满 8 条，已放进想收');
-  });
-
-  test('8 条已满时全部落想收，不报错', () => {
-    const decision = planCreateDecision({
-      eggGameIds: [101],
-      existing: [],
-      start: true,
-      activeCount: 8,
-    });
-    expect(decision.create).toEqual([{ eggGameId: 101, status: 'backlog' }]);
-    expect(decision.overflow).toBe(1);
   });
 });
 
 describe('点「开始」的结果', () => {
-  test('想收且未满 → 进行中；已满 → 留在想收', () => {
-    expect(planStartOutcome('backlog', 7)).toBe('activate');
-    expect(planStartOutcome('backlog', 8)).toBe('overflow');
-  });
-
-  test('进行中幂等；已完成不允许回退', () => {
-    expect(planStartOutcome('active', 8)).toBe('already-active');
-    expect(planStartOutcome('done', 0)).toBe('done');
+  test('想收 → 进行中；进行中幂等；已完成不允许回退', () => {
+    expect(planStartOutcome('backlog')).toBe('activate');
+    expect(planStartOutcome('active')).toBe('already-active');
+    expect(planStartOutcome('done')).toBe('done');
   });
 });

@@ -15,6 +15,7 @@ import {
 import { ModalSurface } from './primitives/ModalSurface';
 import { PetAvatar } from './PetAvatar';
 import { SearchField } from './primitives/SearchField';
+import { GREEN_NEST_ICON } from '../domain/petIcons';
 
 /** 八大性格放前面，其余收进「更多性格」（2026-10-26 用户口径）。 */
 const PRIMARY_NATURES = targetNaturePool.map((nature) => nature.name);
@@ -114,6 +115,7 @@ export function DemandPublishSheet({
   const [gender, setGender] = useState<DemandGender>(defaultCriteria?.gender ?? DEFAULT_DEMAND_GENDER);
   const [body, setBody] = useState<DemandBody>(defaultCriteria?.body || DEFAULT_DEMAND_BODY);
   const [voice, setVoice] = useState<DemandVoice>(defaultCriteria?.voice || DEFAULT_DEMAND_VOICE);
+  const [requireGreenNest, setRequireGreenNest] = useState(defaultCriteria?.requireGreenNest === true);
   /** wish 模式：已选的蛋、搜索词、「只看缺口」（默认开）。 */
   const [pickedEggs, setPickedEggs] = useState<number[]>([]);
   const [query, setQuery] = useState('');
@@ -128,7 +130,16 @@ export function DemandPublishSheet({
     setGender(defaultCriteria?.gender ?? DEFAULT_DEMAND_GENDER);
     setBody(defaultCriteria?.body || DEFAULT_DEMAND_BODY);
     setVoice(defaultCriteria?.voice || DEFAULT_DEMAND_VOICE);
-  }, [open, wish, items, defaultCriteria?.gender, defaultCriteria?.body, defaultCriteria?.voice]);
+    setRequireGreenNest(defaultCriteria?.requireGreenNest === true);
+  }, [
+    open,
+    wish,
+    items,
+    defaultCriteria?.gender,
+    defaultCriteria?.body,
+    defaultCriteria?.voice,
+    defaultCriteria?.requireGreenNest,
+  ]);
 
   // 添加想收：只跟「打开 / 模式」走，不跟父组件传进来的 items 走。
   // 否则父组件刷新一次（items 是新数组）就会把已经勾好的蛋全部清空。
@@ -177,6 +188,12 @@ export function DemandPublishSheet({
     (sum, item) => sum + Math.max(1, (draft[item.eggGameId] ?? item.natures).length),
     0,
   );
+  /** 绿窝靠自带目标性格的母本 100% 遗传，一个性格都没选时不能发。 */
+  const pickedNatureCount = items.reduce(
+    (sum, item) => sum + (draft[item.eggGameId] ?? item.natures).length,
+    0,
+  );
+  const greenNestNeedsNature = requireGreenNest && pickedNatureCount === 0;
 
   const optionRow = <T extends string>(
     label: string,
@@ -239,14 +256,14 @@ export function DemandPublishSheet({
           ) : (
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || greenNestNeedsNature}
               onClick={() =>
                 onConfirm(
                   items.map((item) => ({
                     eggGameId: item.eggGameId,
                     natures: draft[item.eggGameId] ?? item.natures,
                   })),
-                  { gender, body, voice },
+                  { gender, body, voice, requireGreenNest },
                 )
               }
               data-testid="demand-publish-confirm"
@@ -346,7 +363,28 @@ export function DemandPublishSheet({
           {optionRow('性别', DEMAND_GENDERS, gender, GENDER_LABELS, setGender, 'demand-gender')}
           {optionRow('体型', PICKABLE_BODIES, body, BODY_LABELS, setBody, 'demand-body')}
           {optionRow('声音', PICKABLE_VOICES, voice, VOICE_LABELS, setVoice, 'demand-voice')}
+          <label
+            className="flex min-h-[26px] items-center gap-1.5 text-[11px] text-slate-500"
+            data-testid="demand-green-nest"
+          >
+            <input
+              type="checkbox"
+              checked={requireGreenNest}
+              onChange={(event) => setRequireGreenNest(event.target.checked)}
+              className="h-3.5 w-3.5 shrink-0 accent-emerald-600"
+            />
+            是否要求绿窝
+            <img src={GREEN_NEST_ICON} alt="" className="h-[15px] w-auto" />
+          </label>
         </div>
+        {greenNestNeedsNature ? (
+          <p
+            className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] leading-snug text-amber-800"
+            data-testid="demand-green-nest-needs-nature"
+          >
+            要求绿窝需要先选一个性格：学院小窝靠那只自带目标性格 100% 遗传，不挑性格发不了绿窝。
+          </p>
+        ) : null}
         {warning ? (
           <p className="rounded-lg bg-amber-50 px-2 py-1 text-[11px] leading-snug text-amber-800" data-testid="demand-publish-warning">
             {warning}

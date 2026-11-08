@@ -231,8 +231,7 @@ export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
     try {
       switch (kind) {
         case 'start': {
-          const result = await plans.actions.start(plan);
-          if (result.notice) setLocalNotice(result.notice);
+          await plans.actions.start(plan);
           return;
         }
         case 'publish':
@@ -273,7 +272,7 @@ export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
   };
 
   /**
-   * 添加想收：多选一次落库，全部是 `backlog`（不占 8 条进行中额度）。
+   * 添加想收：多选一次落库，全部是 `backlog`。
    * 幂等交给服务端 `planCreateDecision`：同蛋已有计划（任意状态）只跳过、不重复建行。
    */
   const addWish = async (eggGameIds: number[]) => {

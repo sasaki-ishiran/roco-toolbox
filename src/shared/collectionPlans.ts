@@ -11,6 +11,8 @@
  * 表定义见 `functions/schema.sql` 的 `>>> collection-plans (2026-11-08)` 区块。
  */
 
+import type { SharedProductionLine } from './motherGroups';
+
 export const PLAN_STATUSES = ['backlog', 'active', 'done'] as const;
 export type PlanStatus = (typeof PLAN_STATUSES)[number];
 
@@ -22,9 +24,6 @@ export const PLAN_STATUS_LABELS: Record<PlanStatus, string> = {
 
 /** 新建 / 批量导入一律落「想收」。 */
 export const DEFAULT_PLAN_STATUS: PlanStatus = 'backlog';
-
-/** 一位成员在同一组最多同时进行 8 条计划；「想收」不占额度。 */
-export const MAX_ACTIVE_PLANS = 8;
 
 export interface CollectionPlan {
   id: string;
@@ -173,29 +172,83 @@ export function planNeedsConfirm(step: PlanProgressStep): boolean {
 
 /* ---------- 「你能补的」匹配 ---------- */
 
+/** 一条计划当前还没结单的需求条件（来自需求行）。 */
+export interface PlanMatchTarget {
+  nature: string;
+  body: string;
+  voice: string;
+}
+
+/** 档位 → 体型；与 `src/domain/petFilters.ts` 的 GRADE_BODY 同口径。 */
+const GRADE_BODY: Record<SharedProductionLine['grade'], string> = {
+  大婉: '大块头',
+  小婉: '小体型',
+  大粗: '大块头',
+  小粗: '小体型',
+};
+
+/** 声音标签 → 可接受的档位；与 `src/domain/productionLines.ts` 的 VOICE_GRADES 同口径。 */
+const VOICE_GRADES: Record<string, readonly SharedProductionLine['grade'][]> = {
+  '+100': ['大婉', '小婉'],
+  婉转声: ['大婉', '小婉'],
+  '-100': ['大粗', '小粗'],
+  粗嗓门: ['大粗', '小粗'],
+};
+
+/** 一条产线能否产出目标体型 / 声音 / 性格。 */
+function lineSuppliesTarget(line: SharedProductionLine, target: PlanMatchTarget): boolean {
+  if (target.body && GRADE_BODY[line.grade] !== target.body) return false;
+  if (target.nature && !line.natures.includes(target.nature)) return false;
+  if (!target.voice) return true;
+  return (VOICE_GRADES[target.voice] ?? []).includes(line.grade);
+}
+
 /**
- * 组内广场置顶「你能补的」：我的已发布资源包含这颗蛋 × 别人进行中的计划，按蛋去重。
+ * 组内广场置顶「你能补的」：我的产线能满足别人进行中的计划，按蛋去重。
  *
- * 不区分性格 / 性别 / 体型 / 声音——那是发需求时的事，这里只回答「这颗蛋你有」。
+ * 2026-11-09 用户口径（回到 2026-10-28 的产线口径）：目标体型 / 声音 / 性格能产才算能补；
+ * 只有旧摘要没带产线（`myLines === undefined`）时才退回「我号里有任意母本」。
+ * `myLines` 为 `[]` 表示已发布但确实没有产线，此时一律不算能补。
  */
 export function matchablePlanEggIds(input: {
   myAccountId: string;
-  /** 我发布过的共享账号里出现过的蛋（可重复）。 */
+  /** 我发布过的共享账号里出现过的蛋（只在旧数据兜底时使用）。 */
   myEggGameIds: readonly number[];
-  plans: readonly Pick<CollectionPlan, 'eggGameId' | 'memberAccountId' | 'status'>[];
+  /** 我在组内发布过的产线（多账号合并）；`undefined` = 旧摘要没带产线。 */
+  myLines?: readonly SharedProductionLine[];
+  plans: readonly (Pick<CollectionPlan, 'eggGameId' | 'memberAccountId' | 'status'> & {
+    /** 这条计划还没结单的需求条件；为空表示还没发需求，只要是这颗蛋就行。 */
+    demands?: readonly PlanMatchTarget[];
+  })[];
 }): number[] {
-  const mine = new Set(input.myEggGameIds);
+  const lineAware = input.myLines !== undefined;
+  const linesByEgg = new Map<number, SharedProductionLine[]>();
+  for (const line of input.myLines ?? []) {
+    const list = linesByEgg.get(line.eggGameId) ?? [];
+    list.push(line);
+    linesByEgg.set(line.eggGameId, list);
+  }
+  const ownedEggs = new Set(input.myEggGameIds);
   const matched = new Set<number>();
   for (const plan of input.plans) {
     if (plan.status !== 'active') continue;
     if (plan.memberAccountId === input.myAccountId) continue;
-    if (!mine.has(plan.eggGameId)) continue;
-    matched.add(plan.eggGameId);
+    if (!lineAware) {
+      if (ownedEggs.has(plan.eggGameId)) matched.add(plan.eggGameId);
+      continue;
+    }
+    const lines = linesByEgg.get(plan.eggGameId) ?? [];
+    if (lines.length === 0) continue;
+    const targets = plan.demands ?? [];
+    const supply =
+      targets.length === 0 ||
+      targets.some((target) => lines.some((line) => lineSuppliesTarget(line, target)));
+    if (supply) matched.add(plan.eggGameId);
   }
   return [...matched].sort((a, b) => a - b);
 }
 
-/* ---------- 进行中上限 ---------- */
+/* ---------- 进行中计数 ---------- */
 
 export function countActivePlans(
   plans: readonly Pick<CollectionPlan, 'status'>[],
@@ -203,16 +256,7 @@ export function countActivePlans(
   return plans.filter((plan) => plan.status === 'active').length;
 }
 
-/** 当前已有 `activeCount` 条进行中时，还能不能再开始一条。 */
-export function canActivatePlan(activeCount: number): boolean {
-  const count = Number.isFinite(activeCount) ? Math.max(0, Math.floor(activeCount)) : 0;
-  return count < MAX_ACTIVE_PLANS;
-}
-
 /* ---------- 创建 / 批量导入 ---------- */
-
-/** 满 8 条时给用户的那一句提示（不报错，只说明落到了「想收」）。 */
-export const PLAN_OVERFLOW_NOTICE = '进行中已满 8 条，已放进想收';
 
 export interface PlanCreateDecision {
   /** 真正要新建的行：同一个蛋只出现一次。 */
@@ -221,8 +265,6 @@ export interface PlanCreateDecision {
   skipped: number;
   /** 跳过里属于「已完成」的条数，用于「已完成的 N 颗已跳过」。 */
   doneSkipped: number;
-  /** 想直接开始、但进行中已满 8 条而落到「想收」的条数。 */
-  overflow: number;
 }
 
 /**
@@ -230,25 +272,20 @@ export interface PlanCreateDecision {
  *
  * - 已有计划（想收 / 进行中 / 已完成）一律跳过，不重复建、不覆盖别人的进度；
  * - `start = false`（添加想收、批量导入缺口）全部落「想收」；
- * - `start = true` 时按剩余额度把前几条置为「进行中」，多出来的落「想收」并计入 `overflow`。
+ * - `start = true` 全部落「进行中」（2026-11-09 用户决策：进行中不设数量上限）。
  */
 export function planCreateDecision(input: {
   eggGameIds: readonly number[];
   existing: readonly Pick<CollectionPlan, 'eggGameId' | 'status'>[];
   start: boolean;
-  activeCount: number;
 }): PlanCreateDecision {
   const existing = new Map<number, PlanStatus>();
   for (const plan of input.existing) existing.set(plan.eggGameId, plan.status);
 
-  let available = canActivatePlan(input.activeCount)
-    ? MAX_ACTIVE_PLANS - Math.max(0, Math.floor(input.activeCount))
-    : 0;
   const create: PlanCreateDecision['create'] = [];
   const seen = new Set<number>();
   let skipped = 0;
   let doneSkipped = 0;
-  let overflow = 0;
 
   for (const eggGameId of input.eggGameIds) {
     if (seen.has(eggGameId)) continue;
@@ -259,27 +296,20 @@ export function planCreateDecision(input: {
       if (status === 'done') doneSkipped += 1;
       continue;
     }
-    if (input.start && available > 0) {
-      create.push({ eggGameId, status: 'active' });
-      available -= 1;
-    } else {
-      create.push({ eggGameId, status: 'backlog' });
-      if (input.start) overflow += 1;
-    }
+    create.push({ eggGameId, status: input.start ? 'active' : 'backlog' });
   }
-  return { create, skipped, doneSkipped, overflow };
+  return { create, skipped, doneSkipped };
 }
 
 /* ---------- 点「开始」的结果 ---------- */
 
-export type PlanStartOutcome = 'activate' | 'already-active' | 'overflow' | 'done';
+export type PlanStartOutcome = 'activate' | 'already-active' | 'done';
 
 /**
- * 「开始」按钮的结果：想收且还有额度 → 进行中；额度用满 → 留在想收并提示；
- * 已经进行中 → 幂等；已完成 → 不允许回退。
+ * 「开始」按钮的结果：想收 → 进行中（不设数量上限）；已经进行中 → 幂等；已完成 → 不允许回退。
  */
-export function planStartOutcome(status: PlanStatus, activeCount: number): PlanStartOutcome {
+export function planStartOutcome(status: PlanStatus): PlanStartOutcome {
   if (status === 'done') return 'done';
   if (status === 'active') return 'already-active';
-  return canActivatePlan(activeCount) ? 'activate' : 'overflow';
+  return 'activate';
 }

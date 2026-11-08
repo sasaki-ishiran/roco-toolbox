@@ -859,8 +859,8 @@ export interface CollectionPlansResponse {
   members: { accountId: string; displayName: string }[];
   /** 「你能补的」：只给蛋 gameId，展示层再映射图鉴。 */
   matchableEggIds: number[];
+  /** 当前身份进行中的计划条数（仅统计，不设上限）。 */
   myActiveCount: number;
-  maxActivePlans: number;
 }
 
 function parsePlanDemand(value: unknown): CollectionPlanDemandView {
@@ -949,7 +949,6 @@ export async function getCollectionPlans(
       asNumber(id, `matchableEggIds[${index}]`),
     ),
     myActiveCount: asNumber(data.myActiveCount, 'myActiveCount'),
-    maxActivePlans: asNumber(data.maxActivePlans, 'maxActivePlans'),
   };
 }
 
@@ -959,9 +958,6 @@ export interface CreatePlansResult {
   skipped: number;
   /** 其中已完成的条数。 */
   doneSkipped: number;
-  /** 想直接开始但满 8 条、实际落成「想收」的条数。 */
-  overflow: number;
-  notice: string | null;
 }
 
 /**
@@ -989,18 +985,15 @@ export async function createCollectionPlans(
     plans,
     skipped: asNumber(data.skipped, 'skipped'),
     doneSkipped: asNumber(data.doneSkipped, 'doneSkipped'),
-    overflow: asNumber(data.overflow, 'overflow'),
-    notice:
-      typeof data.notice === 'string' && data.notice.length > 0 ? data.notice : null,
   };
 }
 
-/** 开始一条计划；满 8 条时 `overflow = true`、计划仍是「想收」，不抛错。 */
+/** 开始一条计划：想收 → 进行中，进行中幂等。 */
 export async function startCollectionPlan(
   groupId: string,
   planId: string,
   signal?: AbortSignal,
-): Promise<{ plan: CollectionPlan; overflow: boolean; notice: string | null }> {
+): Promise<CollectionPlan> {
   const data = asRecord(
     await request(
       `/api/collection-groups/${encodeURIComponent(groupId)}/plans/${encodeURIComponent(planId)}/start`,
@@ -1009,13 +1002,8 @@ export async function startCollectionPlan(
     '响应',
   );
   const plan = parsePlan(data.plan);
-  if (!data.overflow && plan.status === 'active') trackPlanStart();
-  return {
-    plan,
-    overflow: data.overflow === true,
-    notice:
-      typeof data.notice === 'string' && data.notice.length > 0 ? data.notice : null,
-  };
+  if (plan.status === 'active') trackPlanStart();
+  return plan;
 }
 
 /** 完成：想收也能直接完成；已完成重复调用保持幂等。 */
