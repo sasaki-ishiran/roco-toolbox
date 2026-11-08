@@ -1955,6 +1955,9 @@ export async function publishCollectionDemand(
 
   // 一次取回这几条（原来是按性格各查一次，N 个性格 = N 条 SQL）
   if (newRows > 0) {
+    // 旧入口（全部缺口 / 需求中心）发需求也要落到计划上：先确保计划存在并处于进行中，
+    // 否则「我的收集 / 组内广场」只读计划表，需求会凭空消失（2026-11-08 实测断链）。
+    await ensureDemandPlan(db, groupId, accountId, eggGameId, now);
     await touchPlanUpdatedAt(db, groupId, accountId, eggGameId, now);
   }
   const savedRows = await db
@@ -1991,6 +1994,75 @@ async function touchPlanUpdatedAt(
         WHERE group_id = ? AND member_account_id = ? AND egg_game_id = ? AND status = 'active'`,
     )
     .bind(at, groupId, demanderAccountId, eggGameId)
+    .run();
+}
+
+/**
+ * 发需求即落到计划：同一颗蛋已有计划就并进去（想收 / 已完成都回到进行中），没有就新建。
+ *
+ * 兼容说明（2026-11-08）：已完成的计划被重新发需求时只把计划状态改回进行中，
+ * 归档表 `collection_group_demand_completions` 的历史结单行完全不同步、不删除。
+ */
+async function ensureDemandPlan(
+  db: D1Database,
+  groupId: string,
+  demanderAccountId: string,
+  eggGameId: number,
+  at: number,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO collection_plans
+         (id, group_id, member_account_id, egg_game_id, note, status, version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, '', 'active', 0, ?, ?)
+       ON CONFLICT (group_id, member_account_id, egg_game_id) DO UPDATE SET
+         status = 'active',
+         version = collection_plans.version + 1,
+         updated_at = excluded.updated_at
+       WHERE collection_plans.status <> 'active'`,
+    )
+    .bind(crypto.randomUUID(), groupId, demanderAccountId, eggGameId, at, at)
+    .run();
+}
+
+/**
+ * 历史兼容：旧入口发出的需求没有对应计划时，按需求补一条进行中计划。
+ *
+ * 读列表前执行一次，幂等（NOT EXISTS + UNIQUE 兜底），让「我的收集 / 组内广场」都能看到旧数据。
+ */
+async function adoptOrphanDemandPlans(db: D1Database, groupId: string): Promise<void> {
+  // 先读后写：绝大多数请求没有孤儿需求，避免每次轮询都开一次写事务。
+  const orphans = await db
+    .prepare(
+      `SELECT COUNT(*) AS n
+         FROM collection_group_demands d
+        WHERE d.group_id = ? AND d.status <> 'done'
+          AND NOT EXISTS (
+            SELECT 1 FROM collection_plans p
+             WHERE p.group_id = d.group_id
+               AND p.member_account_id = d.demander_account_id
+               AND p.egg_game_id = d.egg_game_id)`,
+    )
+    .bind(groupId)
+    .first<{ n: number }>();
+  if ((orphans?.n ?? 0) === 0) return;
+
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO collection_plans
+         (id, group_id, member_account_id, egg_game_id, note, status, version, created_at, updated_at)
+       SELECT lower(hex(randomblob(16))), d.group_id, d.demander_account_id, d.egg_game_id,
+              '', 'active', 0, MIN(d.created_at), MAX(d.updated_at)
+         FROM collection_group_demands d
+        WHERE d.group_id = ? AND d.status <> 'done'
+          AND NOT EXISTS (
+            SELECT 1 FROM collection_plans p
+             WHERE p.group_id = d.group_id
+               AND p.member_account_id = d.demander_account_id
+               AND p.egg_game_id = d.egg_game_id)
+        GROUP BY d.group_id, d.demander_account_id, d.egg_game_id`,
+    )
+    .bind(groupId)
     .run();
 }
 
@@ -2378,6 +2450,8 @@ export async function readCollectionPlans(
   groupId: string,
   viewerAccountId: string,
 ): Promise<CollectionPlansView> {
+  // 旧数据兜底：需求存在但计划缺失时先补计划，两个页面才都能看到（2026-11-08）。
+  await adoptOrphanDemandPlans(db, groupId);
   const [members, planRows, offerRows, demands, completions, myAccounts] = await Promise.all([
     db
       .prepare(
@@ -2750,12 +2824,20 @@ export async function deleteCollectionPlan(
   input: { groupId: string; accountId: string; planId: string },
 ): Promise<void> {
   const { groupId, accountId, planId } = input;
-  await requireOwnPlan(db, groupId, accountId, planId);
-  const result = await db
-    .prepare(`DELETE FROM collection_plans WHERE id = ? AND group_id = ? AND member_account_id = ?`)
-    .bind(planId, groupId, accountId)
-    .run();
-  if ((result.meta.changes ?? 0) === 0) {
+  const row = await requireOwnPlan(db, groupId, accountId, planId);
+  // 删计划 = 放弃这颗蛋：连同没结单的需求一起撤回，否则读列表会把孤儿需求又补回计划。
+  const results = await db.batch([
+    db
+      .prepare(`DELETE FROM collection_plans WHERE id = ? AND group_id = ? AND member_account_id = ?`)
+      .bind(planId, groupId, accountId),
+    db
+      .prepare(
+        `DELETE FROM collection_group_demands
+          WHERE group_id = ? AND demander_account_id = ? AND egg_game_id = ? AND status <> 'done'`,
+      )
+      .bind(groupId, accountId, row.egg_game_id),
+  ]);
+  if ((results[0]?.meta.changes ?? 0) === 0) {
     throw new MotherStoreError('PLAN_NOT_FOUND', '这条计划已经不在了');
   }
 }
