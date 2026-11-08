@@ -269,6 +269,10 @@ test('截图：我的收集 / 组内广场 / 红点入口 375 与 390', async ({
     await expect(page.getByTestId('demand-publish')).toContainText('添加想收');
     await page.getByTestId('wish-only-gaps').click();
     await expect(page.getByTestId('wish-grid')).toBeVisible();
+    await page.getByTestId('wish-egg-3008').click();
+    await page.getByTestId('wish-egg-3010').click();
+    await page.getByTestId('wish-egg-3011').click();
+    await expect(page.getByTestId('demand-publish-confirm')).toContainText('添加 3 条想收');
     await page.screenshot({
       path: `docs/screenshots/收集计划-添加想收弹层-${width}.png`,
       fullPage: true,
