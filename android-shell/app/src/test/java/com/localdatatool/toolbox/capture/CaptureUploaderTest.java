@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 
-/** 对真实 HTTP 对端验证与原版 1.2.9 相同的请求头、流式原包与轮询语义。 */
+/** 对真实 HTTP 对端验证与原版 1.3.1 相同的请求头、流式原包与轮询语义。 */
 public class CaptureUploaderTest {
     private static final String BASE = "https://danking.cn/capture-api";
     private static final String TOKEN = "android-test-token";
@@ -56,8 +56,8 @@ public class CaptureUploaderTest {
             assertEquals("application/octet-stream", upload.headers.get("Content-Type"));
             assertEquals("Bearer " + TOKEN, upload.headers.get("Authorization"));
             assertEquals("cn.danking.collector", upload.headers.get("X-Collector-App"));
-            assertEquals("1.2.9", upload.headers.get("X-Collector-Version"));
-            assertEquals("57", upload.headers.get("X-Collector-VersionCode"));
+            assertEquals("1.3.1", upload.headers.get("X-Collector-Version"));
+            assertEquals("65", upload.headers.get("X-Collector-VersionCode"));
             assertEquals(TOKEN, upload.headers.get("X-Collector-Release-Token"));
             assertNull(upload.headers.get("Content-Encoding"));
             assertEquals(Instant.ofEpochMilli(file.lastModified()).toString(), upload.headers.get("X-Capture-Time"));
