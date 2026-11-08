@@ -52,6 +52,9 @@ export default defineConfig({
       injectManifest: {
         // 应用外壳（含图鉴 json 与图标）全部缓存，断网也能打开
         globPatterns: ['**/*.{js,css,html,svg,json,png}'],
+        // 安卓更新清单与安装包不进网页缓存：清单由原生侧直接走系统 HTTP 拉取，
+        // 缓存住反而会让网页侧读到旧版本号；安装包在独立下载站，主站本来也没有。
+        globIgnores: ['android/**'],
       },
     }),
   ],
