@@ -125,6 +125,8 @@ test('添加想收：弹层多选落想收，条件行不空白，已有计划�
   // 只看缺口默认开；关掉能看全图鉴（含我已有的蛋）
   await expect(page.getByTestId('wish-only-gaps')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('wish-only-gaps').click();
+  // 关掉筛选后全图鉴可搜，包括我已经发过资源的蛋（火花）
+  await expect(page.getByTestId('wish-egg-3003')).toBeVisible();
 
   // 挑三颗当前没有计划的蛋（草头鸭 / 恶魔叮 / 恶魔狼）
   const pick = async (name: string, eggGameId: number) => {

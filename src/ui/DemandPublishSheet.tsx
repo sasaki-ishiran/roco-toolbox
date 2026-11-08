@@ -119,19 +119,25 @@ export function DemandPublishSheet({
   const [query, setQuery] = useState('');
   const [onlyGaps, setOnlyGaps] = useState(true);
 
-  // 每次打开按 items 的默认性格与当前目标口径重置草稿，避免带上一次的选择。
+  // 发需求：每次打开按 items 的默认性格与当前目标口径重置草稿，避免带上一次的选择。
   // 依赖按字段拆开：父组件每次渲染都会新建 defaultCriteria 对象，用对象当依赖会把草稿重置掉。
   useEffect(() => {
-    if (!open) return;
+    if (!open || wish) return;
     setExpanded(new Set());
     setDraft(Object.fromEntries(items.map((item) => [item.eggGameId, [...item.natures]])));
     setGender(defaultCriteria?.gender ?? DEFAULT_DEMAND_GENDER);
     setBody(defaultCriteria?.body || DEFAULT_DEMAND_BODY);
     setVoice(defaultCriteria?.voice || DEFAULT_DEMAND_VOICE);
+  }, [open, wish, items, defaultCriteria?.gender, defaultCriteria?.body, defaultCriteria?.voice]);
+
+  // 添加想收：只跟「打开 / 模式」走，不跟父组件传进来的 items 走。
+  // 否则父组件刷新一次（items 是新数组）就会把已经勾好的蛋全部清空。
+  useEffect(() => {
+    if (!open || !wish) return;
     setPickedEggs([]);
     setQuery('');
     setOnlyGaps(true);
-  }, [open, items, defaultCriteria?.gender, defaultCriteria?.body, defaultCriteria?.voice]);
+  }, [open, wish]);
 
   /** wish 模式可见的蛋：只看缺口 / 搜索（蛋名、形态名、图鉴号）。 */
   const wishPool = useMemo(() => {
