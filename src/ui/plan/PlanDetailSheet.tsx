@@ -147,7 +147,13 @@ export function PlanDetailSheet({
                     type="button"
                     onClick={() => {
                       setMenuOpen(false);
-                      onDelete(plan);
+                      if (
+                        window.confirm(
+                          '删除会同时撤回这颗蛋的需求和别人的认领，且不能恢复，确定删除吗？',
+                        )
+                      ) {
+                        onDelete(plan);
+                      }
                     }}
                     className="block w-full px-3 py-2 text-left text-xs text-rose-600"
                     data-testid="plan-detail-delete"
