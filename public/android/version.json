@@ -1,7 +1,7 @@
 {
   "versionName": "1.2.6",
   "versionCode": 17,
-  "apkUrl": "https://roco-toolbox.pages.dev/android/roco-toolbox-latest.apk",
+  "apkUrl": "https://roco-toolbox-downloads.pages.dev/android/roco-toolbox-latest.apk",
   "notes": "悬浮球可展开附近面板与战斗命中；支持应用内直接更新；采集上传身份修复。",
   "minSupportedVersionCode": 16
 }
