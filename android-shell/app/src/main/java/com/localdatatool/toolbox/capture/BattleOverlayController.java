@@ -106,7 +106,7 @@ public final class BattleOverlayController {
     /**
      * 网页推来最新状态。
      *
-     * @return {@code ok} 已显示 / 已隐藏；{@code need-permission} 需要用户授权
+     * @return {@code ok} 已显示 / 已隐藏；{@code need-permission} 需要用户重新授权
      */
     public String update(JSONObject payload) {
         lastPayload = payload;
@@ -120,7 +120,8 @@ public final class BattleOverlayController {
             return "ok";
         }
         render(payload);
-        return "ok";
+        // 权限在、窗口却没挂上（系统回收 / ROM 拒绝 addView）：不能对外说「已经显示」
+        return orb == null ? "need-permission" : "ok";
     }
 
     /** 用户从系统设置页回来：如果还在采集，把上次的状态重新画上去。 */
@@ -148,8 +149,12 @@ public final class BattleOverlayController {
     }
 
     private void render(JSONObject payload) {
+        // 字段非空不代表窗口还在：撤销悬浮窗权限、ROM 回收悬浮窗之后 View 已 detach，
+        // 此时必须整体重建，否则球会永久消失，网页还以为显示正常。
+        if (orb != null && !orb.isAttachedToWindow()) removeAll();
         if (orb == null) addOrb();
         if (orb == null) return;
+        if (card != null && !card.isAttachedToWindow()) removeCard();
         setHit(payload.optBoolean("hit", false));
         if (card != null && fieldsView1 != null && fieldsView2 != null) {
             JSONArray fields = payload.optJSONArray("fields");
