@@ -1,4 +1,14 @@
 import type { CollectionPlanDemandView, CollectionPlanView } from '../../api/collectionGroups';
+import { eggNatures, type NatureOverrides } from '../../domain/recommendedNatures';
+import type { SpeciesEntry } from '../../domain/types';
+import {
+  DEFAULT_DEMAND_BODY,
+  DEFAULT_DEMAND_GENDER,
+  DEFAULT_DEMAND_VOICE,
+  type DemandBody,
+  type DemandGender,
+  type DemandVoice,
+} from '../../shared/collectionGroups';
 
 /** 卡面五步：与需求闭环一致；想收不画点。 */
 export const PLAN_STEP_LABELS = ['待接单', '已认领', '已上窝', '待我确认', '已完成'] as const;
@@ -105,8 +115,54 @@ export function demandForCard(plan: CollectionPlanView): CollectionPlanDemandVie
 }
 
 /** 本次需求对应的性格（卡面只显示这些，其余进详情）。 */
-export function demandNatures(plan: CollectionPlanView): string[] {
+export function demandNatures(plan: Pick<CollectionPlanView, 'demands'>): string[] {
   return [...new Set(plan.demands.map((demand) => demand.nature).filter(Boolean))];
+}
+
+export interface PlanConditionDefaults {
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
+}
+
+export interface PlanConditions extends PlanConditionDefaults {
+  /** 这颗蛋要收的性格：有需求取需求行，没有需求取推荐性格。 */
+  natures: string[];
+}
+
+/**
+ * 卡面条件行（细化方案 §5）：有需求用需求行的条件与性格；
+ * 想收还没有需求时用口径默认值 + 这颗蛋的目标性格，**不允许为空**。
+ */
+export function planConditions(
+  plan: Pick<CollectionPlanView, 'eggGameId' | 'demands'>,
+  input: {
+    species: readonly SpeciesEntry[];
+    overrides?: NatureOverrides;
+    defaults?: Partial<PlanConditionDefaults>;
+  },
+): PlanConditions {
+  if (plan.demands.length > 0) {
+    return {
+      gender: plan.demands[0].gender,
+      body: plan.demands[0].body,
+      voice: plan.demands[0].voice,
+      natures: demandNatures(plan),
+    };
+  }
+  return {
+    gender: input.defaults?.gender ?? DEFAULT_DEMAND_GENDER,
+    body: input.defaults?.body ?? DEFAULT_DEMAND_BODY,
+    voice: input.defaults?.voice ?? DEFAULT_DEMAND_VOICE,
+    natures: eggNatures(input.species, plan.eggGameId, input.overrides),
+  };
+}
+
+/** 条件行文字：公母 · 体型 · 声音；空值统一显示「不限」，永远不空。 */
+export function formatPlanConditions(conditions: PlanConditionDefaults): string {
+  const gender =
+    conditions.gender === '母' ? '♀' : conditions.gender === '公' ? '♂' : '不限';
+  return [gender, conditions.body || '不限', conditions.voice || '不限'].join(' · ');
 }
 
 /** 推进超时阈值：先用 2 天，做成常量便于调（2026-11-08 用户口径）。 */

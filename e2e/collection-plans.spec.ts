@@ -59,10 +59,18 @@ test('我的收集：按待我确认优先排序，点卡进二级页，全部�
     cards.first().getByTestId('plan-card-natures').locator('[data-active="true"]'),
   ).toContainText('固执');
 
-  // 想收默认折叠，展开后能看到批量导入
+  // 想收默认折叠；批量导入降级进「添加想收」弹层，列表里不再有常驻按钮
   await expect(page.getByTestId('my-collection-bulk-import')).toHaveCount(0);
   await page.getByTestId('my-collection-wish').getByRole('button').first().click();
-  await expect(page.getByTestId('my-collection-bulk-import')).toBeVisible();
+  await expect(page.getByTestId('my-collection-wish')).toContainText('火神');
+
+  // 「添加想收」开的是选蛋弹层（不跳页面），快捷按钮按口径算全部缺口
+  await page.getByTestId('my-collection-add').click();
+  await expect(page.getByTestId('demand-publish')).toContainText('添加想收');
+  await expect(page.getByTestId('wish-only-gaps')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('wish-fill-gaps')).toContainText('按你的口径算的全部缺口');
+  await page.getByTestId('demand-publish-close').click();
+  await expect(page.getByTestId('demand-publish')).toHaveCount(0);
 
   // 旧需求中心只留一行入口：整屏进入，不再和两列卡同屏
   await expect(page.getByTestId('mother-resources')).toHaveCount(0);
@@ -107,6 +115,49 @@ test('组内广场：三个分区 + 一键接单 + 卡面撤回', async ({ page 
   // 点撤回回到「你能接的」
   await needsYou.getByTestId('plan-card-action').first().click();
   await expect(page.getByTestId('group-square-can-take')).toContainText('喵喵');
+});
+
+test('添加想收：弹层多选落想收，条件行不空白，已有计划幂等跳过', async ({ page }) => {
+  await setup(page);
+
+  await page.getByTestId('my-collection-add').click();
+  await expect(page.getByTestId('demand-publish')).toContainText('添加想收');
+  // 只看缺口默认开；关掉能看全图鉴（含我已有的蛋）
+  await expect(page.getByTestId('wish-only-gaps')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('wish-only-gaps').click();
+
+  // 挑三颗当前没有计划的蛋（草头鸭 / 恶魔叮 / 恶魔狼）
+  const pick = async (name: string, eggGameId: number) => {
+    await page.getByTestId('wish-search').fill(name);
+    await page.getByTestId(`wish-egg-${eggGameId}`).click();
+  };
+  await pick('草头鸭', 3008);
+  await pick('恶魔叮', 3010);
+  await pick('恶魔狼', 3011);
+  await expect(page.getByTestId('demand-publish-confirm')).toContainText('添加 3 条想收');
+  await page.getByTestId('demand-publish-confirm').click();
+
+  await expect(page.getByTestId('plan-hub-notice')).toContainText('已添加 3 条想收');
+  // 想收折叠区：种子里的火神 + 刚加的 3 条
+  await page.getByTestId('my-collection-wish').getByRole('button').first().click();
+  const wishCards = page.getByTestId('my-collection-wish').getByTestId('plan-card');
+  await expect(wishCards).toHaveCount(4);
+  // 想收没有需求时条件行用口径默认值，不空白
+  await expect(
+    page.getByTestId('my-collection-wish').getByTestId('plan-card-progress').filter({
+      hasText: '♀ · 大块头 · +100',
+    }),
+  ).toHaveCount(4);
+
+  // 幂等：再选一颗已有计划的蛋，只跳过不重复建行
+  await page.getByTestId('my-collection-add').click();
+  await page.getByTestId('wish-only-gaps').click();
+  await page.getByTestId('wish-search').fill('喵喵');
+  await page.getByTestId('wish-egg-3001').click();
+  await expect(page.getByTestId('demand-publish-confirm')).toContainText('添加 1 条想收');
+  await page.getByTestId('demand-publish-confirm').click();
+  await expect(page.getByTestId('plan-hub-notice')).toContainText('已添加 0 条想收，跳过 1 条已有计划');
+  await expect(wishCards).toHaveCount(4);
 });
 
 test('截图：计划详情各状态 375 与 390', async ({ page }) => {
@@ -202,6 +253,25 @@ test('截图：我的收集 / 组内广场 / 红点入口 375 与 390', async ({
       path: `docs/screenshots/收集计划-我的收集-${width}.png`,
       fullPage: true,
     });
+    // 想收卡条件行：没有需求时用「口径默认值 + 目标性格」，不留空白
+    await page.getByTestId('my-collection-wish').getByRole('button').first().click();
+    await expect(
+      page.getByTestId('my-collection-wish').getByTestId('plan-card-progress').first(),
+    ).toContainText('♀ · 大块头 · +100');
+    await page.screenshot({
+      path: `docs/screenshots/收集计划-想收卡条件行-${width}.png`,
+      fullPage: true,
+    });
+    // 添加想收：选蛋弹层 + 降级后的「按你的口径算的全部缺口」快捷按钮
+    await page.getByTestId('my-collection-add').click();
+    await expect(page.getByTestId('demand-publish')).toContainText('添加想收');
+    await page.getByTestId('wish-only-gaps').click();
+    await expect(page.getByTestId('wish-grid')).toBeVisible();
+    await page.screenshot({
+      path: `docs/screenshots/收集计划-添加想收弹层-${width}.png`,
+      fullPage: true,
+    });
+    await page.getByTestId('demand-publish-close').click();
     // 已完成回看：默认收起，展开后能看到结单的计划
     await page.getByTestId('my-collection-done').getByRole('button').first().click();
     await expect(page.getByTestId('my-collection-done')).toContainText('水蓝蓝');

@@ -5,6 +5,8 @@ import {
   selectMotherSharingViews,
 } from '../../domain/motherSharing';
 import { eggNatures } from '../../domain/recommendedNatures';
+import { isBreedableGroup } from '../../domain/eggs';
+import { buildEggSearchIndex } from '../../domain/petFilters';
 import { demandKeyOf } from '../../shared/collectionGroups';
 import {
   markCollectionDemandPlaced,
@@ -55,6 +57,9 @@ export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
   const [publishPlan, setPublishPlan] = useState<CollectionPlanView | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
+  /** 添加想收的选蛋弹层（2026-11-08 定稿：手动多选，不跳页面）。 */
+  const [addOpen, setAddOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [localNotice, setLocalNotice] = useState<string | null>(null);
 
   const { species, catalogVersion, group, viewerAccountId } = resources;
@@ -99,6 +104,27 @@ export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
     const views = selectMotherSharingViews(rows, viewerAccountId, comparableIds);
     return (views.missingForMe ?? []).map((row) => row.eggGameId);
   }, [species, catalogVersion, group.members, resources.criteriaId, viewerAccountId]);
+
+  /**
+   * 选蛋弹层的全图鉴蛋列表（含我已有的蛋）：
+   * 只收可孵蛋组的蛋物种，搜索词复用图鉴的蛋搜索索引（形态名 + 图鉴号）。
+   */
+  const wishCatalog = useMemo(() => {
+    const index = buildEggSearchIndex(species);
+    return species
+      .filter(
+        (entry) =>
+          entry.eggGameId != null &&
+          entry.eggGameId === entry.gameId &&
+          (entry.eggGroups ?? []).some(isBreedableGroup),
+      )
+      .map((entry) => ({
+        eggGameId: entry.gameId,
+        name: entry.name,
+        keywords: index.get(`egg:${entry.gameId}`) ?? '',
+      }))
+      .sort((a, b) => a.eggGameId - b.eggGameId);
+  }, [species]);
 
   const speciesName = (eggGameId: number) =>
     species.find((entry) => entry.gameId === eggGameId)?.name ?? `#${eggGameId}`;
@@ -246,25 +272,35 @@ export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
     }
   };
 
-  const bulkImport = async () => {
-    if (gapEggIds.length === 0) return;
+  /**
+   * 添加想收：多选一次落库，全部是 `backlog`（不占 8 条进行中额度）。
+   * 幂等交给服务端 `planCreateDecision`：同蛋已有计划（任意状态）只跳过、不重复建行。
+   */
+  const addWish = async (eggGameIds: number[]) => {
+    if (eggGameIds.length === 0) return;
     setLocalNotice(null);
+    setAdding(true);
     try {
       let created = 0;
       let skipped = 0;
-      for (let index = 0; index < gapEggIds.length; index += BULK_CHUNK) {
+      for (let index = 0; index < eggGameIds.length; index += BULK_CHUNK) {
         const result = await plans.actions.create({
-          eggGameIds: gapEggIds.slice(index, index + BULK_CHUNK),
-          bulk: true,
+          eggGameIds: eggGameIds.slice(index, index + BULK_CHUNK),
+          start: false,
         });
         created += result.plans.length;
         skipped += result.skipped;
       }
+      setAddOpen(false);
       setLocalNotice(
-        skipped > 0 ? `导入 ${created} 条，跳过 ${skipped} 条已存在` : `导入 ${created} 条`,
+        skipped > 0
+          ? `已添加 ${created} 条想收，跳过 ${skipped} 条已有计划`
+          : `已添加 ${created} 条想收`,
       );
     } catch (failure) {
       setLocalNotice(messageOf(failure));
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -360,12 +396,14 @@ export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
                 loading={plans.loading}
                 error={plans.error ?? null}
                 species={species}
-                gapEggIds={gapEggIds}
+                natureOverrides={resources.natureOverrides}
                 alertSeenAt={alertSeenAt}
-                busy={plans.busy}
                 onOpenPlan={setDetailPlan}
                 onAction={(plan, kind) => void handleAction(plan, kind)}
-                onBulkImport={() => void bulkImport()}
+                onAddWish={() => {
+                  setLocalNotice(null);
+                  setAddOpen(true);
+                }}
                 onOpenGaps={() => setLegacyView('missing')}
               />
             </div>
@@ -449,6 +487,19 @@ export function GroupPlanHub({ className, ...resources }: GroupPlanHubProps) {
                 }
               })();
             }}
+          />
+
+          <DemandPublishSheet
+            mode="wish"
+            open={addOpen}
+            items={[]}
+            catalog={wishCatalog}
+            gapEggIds={gapEggIds}
+            busy={adding}
+            error={plans.error ?? ''}
+            onClose={() => setAddOpen(false)}
+            onConfirm={() => {}}
+            onAddWish={(eggGameIds) => void addWish(eggGameIds)}
           />
         </>
       )}

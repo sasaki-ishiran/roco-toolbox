@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import type { CollectionPlanView } from '../../api/collectionGroups';
+import type { SpeciesEntry } from '../../domain/types';
 import {
+  formatPlanConditions,
   planBarSegments,
+  planConditions,
   planPills,
   planProgressText,
   planReason,
@@ -228,5 +231,48 @@ describe('卡面理由', () => {
       demands: [demand({ status: 'claimed', claimerAccountId: 'B' })],
     });
     expect(planReason(claimed, 'me', nameOf, NOW)).toEqual({ text: '阿乙 已认领', tone: 'sky' });
+  });
+});
+
+describe('卡面条件行（想收不许空白）', () => {
+  const species = [
+    {
+      gameId: 3001,
+      eggGameId: 3001,
+      name: '喵喵',
+      eggRecommendedNatures: ['固执', '保守'],
+    },
+  ] as unknown as SpeciesEntry[];
+
+  test('想收没有需求：用口径默认值，性格用这颗蛋的目标性格', () => {
+    const conditions = planConditions(plan({ status: 'backlog', demands: [] }), { species });
+    expect(formatPlanConditions(conditions)).toBe('♀ · 大块头 · +100');
+    expect(conditions.natures).toEqual(['固执', '保守']);
+  });
+
+  test('没有推荐性格也不空白：条件行仍有口径默认值', () => {
+    const conditions = planConditions(plan({ status: 'backlog', eggGameId: 9999, demands: [] }), {
+      species,
+    });
+    expect(conditions.natures).toEqual([]);
+    expect(formatPlanConditions(conditions)).toBe('♀ · 大块头 · +100');
+  });
+
+  test('已有需求：条件行跟着需求走，性格取需求行', () => {
+    const conditions = planConditions(
+      plan({
+        demands: [
+          demand({ gender: '公', body: '小不点', voice: '粗嗓门', nature: '胆小' }),
+          demand({ nature: '开朗' }),
+        ],
+      }),
+      { species },
+    );
+    expect(formatPlanConditions(conditions)).toBe('♂ · 小不点 · 粗嗓门');
+    expect(conditions.natures).toEqual(['胆小', '开朗']);
+  });
+
+  test('空口径显示「不限」，不会渲染成空串', () => {
+    expect(formatPlanConditions({ gender: '', body: '', voice: '' })).toBe('不限 · 不限 · 不限');
   });
 });

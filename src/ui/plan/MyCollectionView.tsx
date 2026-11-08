@@ -1,8 +1,16 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { CollectionPlansResponse, CollectionPlanView } from '../../api/collectionGroups';
 import type { SpeciesEntry } from '../../domain/types';
+import type { NatureOverrides } from '../../domain/recommendedNatures';
 import { PlanCard, type PlanCardActionKind } from './PlanCard';
-import { demandNatures, planPills, planReason, sortPlansForMe } from './planCardModel';
+import {
+  demandNatures,
+  formatPlanConditions,
+  planConditions,
+  planPills,
+  planReason,
+  sortPlansForMe,
+} from './planCardModel';
 
 export interface MyCollectionViewProps {
   viewerAccountId: string;
@@ -10,22 +18,23 @@ export interface MyCollectionViewProps {
   loading: boolean;
   error: string | null;
   species: readonly SpeciesEntry[];
-  /** 全部缺口的蛋 id（覆盖引擎算好，批量导入用）。 */
-  gapEggIds: readonly number[];
+  /** 个人推荐性格覆盖：想收卡没有需求时，用它算缺口性格。 */
+  natureOverrides?: NatureOverrides;
   /** 上次离开小组页的时间：之后新增的「我能提供」算新提供。 */
   alertSeenAt: number;
-  busy: boolean;
   onOpenPlan: (plan: CollectionPlanView) => void;
   onAction: (plan: CollectionPlanView, kind: PlanCardActionKind) => void;
-  onBulkImport: () => void;
+  /** 主按钮「添加想收」：打开选蛋弹层（多选落想收）。 */
+  onAddWish: () => void;
+  /** 全部缺口：独立入口（盘货 + 发需求），不作为添加想收的落点。 */
   onOpenGaps: () => void;
 }
 
 /**
  * 我的收集：只回答「我的计划推进到哪了」。
  * - 进行中上限 8 条，按「待我确认 > 待接单 > 已认领/已上窝 > 无进展 > 想收」排；
- * - 想收默认折叠，批量导入全部缺口放在折叠区里；
- * - 全量缺口是次要入口，不在主列表里铺开。
+ * - 想收默认折叠；没有需求时卡面条件行用「口径默认值 + 这颗蛋的目标性格」，不留空白；
+ * - 添加想收走选蛋弹层（多选落想收）；全部缺口是独立入口，只做盘货 + 发需求。
  */
 export function MyCollectionView({
   viewerAccountId,
@@ -33,12 +42,11 @@ export function MyCollectionView({
   loading,
   error,
   species,
-  gapEggIds,
+  natureOverrides,
   alertSeenAt,
-  busy,
   onOpenPlan,
   onAction,
-  onBulkImport,
+  onAddWish,
   onOpenGaps,
 }: MyCollectionViewProps) {
   const [wishOpen, setWishOpen] = useState(false);
@@ -78,18 +86,27 @@ export function MyCollectionView({
     0,
   );
 
-  const renderCard = (plan: CollectionPlanView) => (
-    <PlanCard
-      key={plan.id}
-      plan={plan}
-      species={species}
-      natures={demandNatures(plan)}
-      reason={planReason(plan, viewerAccountId, memberName, now).text}
-      pills={planPills(plan, viewerAccountId, now)}
-      onOpen={onOpenPlan}
-      onAction={onAction}
-    />
-  );
+  const renderCard = (plan: CollectionPlanView) => {
+    const conditions = planConditions(plan, { species, overrides: natureOverrides });
+    // 想收且还没发需求：第二行换成条件行（口径默认值），性格列用这颗蛋的目标性格。
+    const wishOnly = plan.status === 'backlog' && plan.demands.length === 0;
+    return (
+      <PlanCard
+        key={plan.id}
+        plan={plan}
+        species={species}
+        natures={wishOnly ? conditions.natures : demandNatures(plan)}
+        reason={
+          wishOnly
+            ? formatPlanConditions(conditions)
+            : planReason(plan, viewerAccountId, memberName, now).text
+        }
+        pills={planPills(plan, viewerAccountId, now)}
+        onOpen={onOpenPlan}
+        onAction={onAction}
+      />
+    );
+  };
 
   if (loading && !data) {
     return (
@@ -110,7 +127,7 @@ export function MyCollectionView({
         </span>
         <button
           type="button"
-          onClick={onOpenGaps}
+          onClick={onAddWish}
           className="ml-auto rounded-lg border border-slate-200 px-2 py-1 text-[11px] text-slate-500"
           data-testid="my-collection-add"
         >
@@ -127,11 +144,11 @@ export function MyCollectionView({
           <p className="text-xs text-slate-400">还没有计划</p>
           <button
             type="button"
-            onClick={onOpenGaps}
+            onClick={onAddWish}
             className="mt-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"
             data-testid="my-collection-empty-add"
           >
-            从全部缺口挑一颗
+            添加想收
           </button>
         </div>
       ) : null}
@@ -153,17 +170,6 @@ export function MyCollectionView({
           <div className="mt-2 grid grid-cols-2 gap-2">
             {backlog.map(renderCard)}
           </div>
-          <button
-            type="button"
-            disabled={busy || gapEggIds.length === 0}
-            onClick={onBulkImport}
-            className="mt-2 w-full rounded-lg border border-emerald-200 py-1.5 text-[11px] font-semibold text-emerald-700 disabled:opacity-50"
-            data-testid="my-collection-bulk-import"
-          >
-            {gapEggIds.length > 0
-              ? `批量导入全部缺口（${gapEggIds.length}）`
-              : '没有可导入的缺口'}
-          </button>
         </FoldSection>
       ) : null}
 
@@ -187,7 +193,7 @@ export function MyCollectionView({
         className="self-start text-[11px] text-slate-400 underline underline-offset-2"
         data-testid="my-collection-all-gaps"
       >
-        全部缺口（次要入口）
+        全部缺口
       </button>
     </section>
   );
