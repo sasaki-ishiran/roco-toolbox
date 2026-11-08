@@ -123,6 +123,8 @@ export function DemandPublishSheet({
 
   // 发需求：每次打开按 items 的默认性格与当前目标口径重置草稿，避免带上一次的选择。
   // 依赖按字段拆开：父组件每次渲染都会新建 defaultCriteria 对象，用对象当依赖会把草稿重置掉。
+  // items 同理只取「蛋 id 串」当依赖：收集页 30s 轮询换新数组时，不能把用户刚改的性别/性格重置回默认。
+  const eggIdsKey = items.map((item) => item.eggGameId).join(',');
   useEffect(() => {
     if (!open || wish) return;
     setExpanded(new Set());
@@ -134,7 +136,7 @@ export function DemandPublishSheet({
   }, [
     open,
     wish,
-    items,
+    eggIdsKey,
     defaultCriteria?.gender,
     defaultCriteria?.body,
     defaultCriteria?.voice,

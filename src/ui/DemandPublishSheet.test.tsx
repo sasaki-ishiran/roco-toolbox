@@ -54,6 +54,32 @@ describe('发需求的「要求绿窝」开关', () => {
   });
 });
 
+describe('发需求的草稿不被父组件刷新重置', () => {
+  test('父组件轮询换新数组后，已选性别 / 已改性格仍保留', () => {
+    const items = [{ eggGameId: 3001, name: '喵喵', natures: ['固执'] }];
+    const { rerender } = render(
+      <DemandPublishSheet {...base} mode="publish" items={items} />,
+    );
+    fireEvent.click(screen.getByTestId('demand-gender-公'));
+    // 取消默认勾选的性格，模拟用户改口径
+    fireEvent.click(screen.getByTestId('demand-nature-3001-固执'));
+
+    // 父组件 30s 轮询刷新：内容相同但是新数组
+    rerender(
+      <DemandPublishSheet
+        {...base}
+        mode="publish"
+        items={items.map((item) => ({ ...item, natures: [...item.natures] }))}
+      />,
+    );
+
+    expect(screen.getByTestId('demand-gender-公').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('demand-nature-3001-固执').getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+  });
+});
+
 describe('添加想收（wish 模式）', () => {
   test('只看缺口默认开，关掉能看全图鉴（含我已有的蛋）', () => {
     render(<DemandPublishSheet {...base} mode="wish" onAddWish={() => {}} />);
