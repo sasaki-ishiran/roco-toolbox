@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 战斗采集悬浮球要浮在游戏等其它应用上方（2026-11-08） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- 应用内更新：下载完成后调起系统安装器（2026-11-08） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <queries><package android:name="com.tencent.nrc" /></queries>
 
     <!--

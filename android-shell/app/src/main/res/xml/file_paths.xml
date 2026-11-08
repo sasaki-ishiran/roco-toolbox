@@ -3,4 +3,6 @@
     <!-- 分享出去的备份文件缓存目录（MainActivity.ShareBridge 写入） -->
     <cache-path name="share" path="share/" />
     <files-path name="captures" path="captures/" />
+    <!-- 应用内更新下载好的安装包（UpdateController 写入） -->
+    <cache-path name="updates" path="updates/" />
 </paths>
