@@ -94,7 +94,7 @@ export function PlanDetailSheet({
   const stepIndex = planStepIndex(plan);
   const claimer = demand?.claimerAccountId ? memberName(demand.claimerAccountId) : '';
   const stepDetails: string[] = [
-    demand ? '已发布需求' : '还没发需求',
+    demand ? '已发布需求' : '先发需求',
     claimer ? `${claimer} 认领` : '还没人认领',
     demand?.placedAt ? `${claimer} 上窝 · ${formatTime(demand.placedAt)}` : '还没上窝',
     demand?.placedAt ? (mine ? '等你确认' : '等发布人确认') : '还没到这一步',

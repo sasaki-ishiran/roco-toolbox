@@ -24,10 +24,12 @@ export function shortFormLabel(form: string | null | undefined): string {
   return trimmed.replace(/(的样子|形态|分支)$/, '').slice(0, 4);
 }
 
-/** 卡面五步当前高亮下标；-1 = 五个点都不亮（还没发需求）。 */
+/** 卡面五步当前高亮下标；-1 = 五个点都不亮（想收、还没开始）。 */
 export function planStepIndex(plan: Pick<CollectionPlanView, 'progressStep' | 'status'>): number {
   if (plan.status === 'done') return 4;
   if (plan.progressStep >= 1) return Math.min(4, plan.progressStep - 1);
+  // 进行中但还没发需求：高亮第 1 步，让详情页能看出下一步是「先发需求」。
+  if (plan.status === 'active') return 0;
   return -1;
 }
 

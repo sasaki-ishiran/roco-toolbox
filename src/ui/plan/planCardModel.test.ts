@@ -9,6 +9,7 @@ import {
   planProgressText,
   planReason,
   planStaleDays,
+  planStepIndex,
   sortPlansForMe,
 } from './planCardModel';
 
@@ -47,6 +48,15 @@ const demand = (
 });
 
 const nameOf = (accountId: string) => (accountId === 'me' ? '我' : '阿乙');
+
+describe('详情页五步高亮', () => {
+  test('进行中但还没发需求：第 1 步高亮；想收不亮', () => {
+    expect(planStepIndex(plan({ progressStep: 0 }))).toBe(0);
+    expect(planStepIndex(plan({ status: 'backlog', progressStep: 0 }))).toBe(-1);
+    expect(planStepIndex(plan({ progressStep: 3 }))).toBe(2);
+    expect(planStepIndex(plan({ status: 'done', progressStep: 5 }))).toBe(4);
+  });
+});
 
 describe('我的收集排序', () => {
   test('待我确认 > 待接单 > 已认领/已上窝 > 无进展 > 想收 > 已完成', () => {

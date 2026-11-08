@@ -24,11 +24,11 @@ const plan = (over: Partial<CollectionPlanView> = {}): CollectionPlanView => ({
   ...over,
 });
 
-function renderSheet() {
+function renderSheet(over: Partial<CollectionPlanView> = {}) {
   const onDelete = vi.fn();
   render(
     <PlanDetailSheet
-      plan={plan()}
+      plan={plan(over)}
       species={species}
       members={[{ accountId: 'me', displayName: '我' }]}
       viewerAccountId="me"
@@ -44,9 +44,18 @@ function renderSheet() {
   return { onDelete };
 }
 
-describe('删除计划', () => {
+describe('计划详情', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  test('进行中但还没发需求：五步第 1 步高亮并提示「先发需求」', () => {
+    renderSheet({ status: 'active', progressStep: 0 });
+
+    const steps = screen.getByTestId('plan-detail-steps');
+    const first = steps.querySelector('li');
+    expect(first?.getAttribute('data-state')).toBe('current');
+    expect(first?.textContent).toContain('先发需求');
   });
 
   test('先出确认：取消不调接口，确认才删', () => {
