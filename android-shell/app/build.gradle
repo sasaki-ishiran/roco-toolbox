@@ -48,3 +48,62 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20250517'
 }
+
+// 编译期守卫（2026-11-10）：1.3.6 ~ 1.3.8 的问题都是「打完包、装到真机才发现」，
+// 这里把关键不变量提到 preBuild，任一条不满足直接 fail，不允许带着旧值出包。
+tasks.register('verifyShellInvariants') {
+    group = 'verification'
+    description = '校验版本清单、地图 240/120、面板 274、长按隐藏、采集桥来源跟随'
+    doLast {
+        def problems = []
+        def read = { File f -> f.getText('UTF-8') }
+        def need = { String label, String text, String needle ->
+            if (!text.contains(needle)) problems << "${label} 缺少「${needle}」"
+        }
+
+        // 1. 版本号必须与对外版本清单一致（改一处漏一处直接拦下）
+        // 用 toRealPath 解析 junction：从 D:\roco-build\shell-authoritative 构建时也能回到仓库根
+        def repoRoot = rootProject.projectDir.toPath().toRealPath().toFile().parentFile
+        def manifestFile = new File(repoRoot, 'public/android/version.json')
+        if (!manifestFile.exists()) {
+            problems << "找不到版本清单 ${manifestFile}"
+        } else {
+            def manifest = new groovy.json.JsonSlurper().parse(manifestFile, 'UTF-8')
+            if ((manifest.versionCode as int) != android.defaultConfig.versionCode) {
+                problems << "versionCode 与清单不一致：build.gradle=${android.defaultConfig.versionCode}，清单=${manifest.versionCode}"
+            }
+            if (manifest.versionName != android.defaultConfig.versionName) {
+                problems << "versionName 与清单不一致：build.gradle=${android.defaultConfig.versionName}，清单=${manifest.versionName}"
+            }
+        }
+
+        // 2. 地图：视野 240 米、点位半径 120 米、投影按 side_units、能画 mapPets
+        def mapHtml = read(file('src/main/assets/overlay-map.html'))
+        need('overlay-map.html', mapHtml, 'VIEW_METERS = 240')
+        need('overlay-map.html', mapHtml, 'DOT_RADIUS_METERS = 120')
+        need('overlay-map.html', mapHtml, '/ side')
+        need('overlay-map.html', mapHtml, 'mapPets')
+
+        // 3. 附近面板宽度
+        need('NearbyOverlayModel.java',
+            read(file('src/main/java/com/localdatatool/toolbox/capture/NearbyOverlayModel.java')),
+            'PANEL_WIDTH = 274')
+
+        // 4. 悬浮球长按隐藏
+        def battle = read(file('src/main/java/com/localdatatool/toolbox/capture/BattleOverlayController.java'))
+        need('BattleOverlayController.java', battle, 'LONG_PRESS_MS')
+        need('BattleOverlayController.java', battle, 'longPressHide')
+
+        // 5. 采集桥来源必须跟随当前站点，否则测试站读不到本机采集
+        need('CaptureBridgePolicy.java',
+            read(file('src/main/java/com/localdatatool/toolbox/capture/CaptureBridgePolicy.java')),
+            'siteOrigin')
+
+        if (!problems.isEmpty()) {
+            throw new GradleException('壳不变量校验失败：\n - ' + problems.join('\n - '))
+        }
+        println '壳不变量校验通过（版本清单 / 地图 240·120·side_units / 面板 274 / 长按隐藏 / 采集桥来源）'
+    }
+}
+
+tasks.named('preBuild') { dependsOn 'verifyShellInvariants' }
