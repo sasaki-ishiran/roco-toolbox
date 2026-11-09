@@ -1,10 +1,12 @@
 import type { NavigationIntent, ProfileSection } from './navigation';
+import { useRef, useState } from 'react';
 import { AccountPanel } from './AccountPanel';
 import { ImportOutcomeNotice } from './ImportOutcomeNotice';
 import { ImportPanel } from './ImportPanel';
 import { NativeCollectorPanel } from './NativeCollectorPanel';
 import { Button } from './primitives/Button';
 import { SegmentedControl } from './primitives/SegmentedControl';
+import { ServerAddressPanel, serverBridge } from './ServerAddressPanel';
 import { StateNotice } from './primitives/StateNotice';
 import { setSyncConflict, useSyncFeedback } from './syncNoticeStore';
 import { useSnapshots } from './useSnapshots';
@@ -23,6 +25,10 @@ const SECTIONS = [
   { value: 'sync', label: '私有同步' },
 ];
 
+/** 内测入口：2 秒内连点版本号 5 次 */
+const VERSION_TAPS = 5;
+const TAP_WINDOW_MS = 2000;
+
 /**
  * 「我的」（2026-10-24 重构任务 6）：身份、游戏数据、私有同步三块。
  *
@@ -39,6 +45,19 @@ export function Profile({
   const { conflict: autoConflict } = useSyncFeedback();
   // 入门卡只在「本机还没有任何导入数据」时出现：导入过一次就不再打扰（2026-11-01）
   const { snapshots, loaded } = useSnapshots();
+  // 「服务器地址」只在内测壳里存在：浏览器没有 RocoServer，连点也不会开
+  const [serverPanelOpen, setServerPanelOpen] = useState(false);
+  const versionTaps = useRef<number[]>([]);
+
+  const onVersionTap = () => {
+    if (!serverBridge()) return;
+    const now = Date.now();
+    versionTaps.current = [...versionTaps.current, now].filter((at) => now - at < TAP_WINDOW_MS);
+    if (versionTaps.current.length >= VERSION_TAPS) {
+      versionTaps.current = [];
+      setServerPanelOpen(true);
+    }
+  };
 
   return (
     <main className="mx-auto max-w-md space-y-3 p-4">
@@ -107,9 +126,17 @@ export function Profile({
       ) : null}
 
       {/* 构建时间（原顶栏版本标记）：排障时确认「拿到的是不是最新一版」 */}
-      <p className="pt-1 text-center text-[10px] text-slate-300" data-testid="app-version">
+      <p
+        className="pt-1 text-center text-[10px] text-slate-300"
+        data-testid="app-version"
+        onClick={onVersionTap}
+      >
         版本 {__APP_BUILD__}
       </p>
+
+      {serverPanelOpen ? (
+        <ServerAddressPanel onClose={() => setServerPanelOpen(false)} />
+      ) : null}
 
       {/* AccountPanel 常驻：数据分区只是隐藏，切回来恢复码与同步提示仍在 */}
       <div className={section === 'data' ? 'hidden' : 'space-y-3'} data-testid="profile-account-slot">
