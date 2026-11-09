@@ -9,6 +9,7 @@ afterEach(() => {
   resetImportOutcomeForTest();
   clearSyncFeedback();
   window.localStorage.clear();
+  delete window.RocoServer;
 });
 
 const renderProfile = (section: 'identity' | 'data' | 'sync' = 'data') =>
@@ -65,5 +66,28 @@ describe('Profile（我的）', () => {
     );
     fireEvent.click(screen.getByTestId('import-outcome-open-groups'));
     expect(onNavigate).toHaveBeenCalledWith({ type: 'open-groups' });
+  });
+
+  test('连点版本号 5 次才出现「服务器地址」，浏览器里永远不出现', () => {
+    renderProfile('identity');
+    const version = screen.getByTestId('app-version');
+
+    for (let tap = 0; tap < 5; tap += 1) fireEvent.click(version);
+    expect(screen.queryByTestId('server-address-panel')).toBeNull();
+
+    window.RocoServer = {
+      read: () =>
+        JSON.stringify({
+          current: 'https://roco-toolbox.pages.dev',
+          defaultUrl: 'https://roco-toolbox.pages.dev',
+        }),
+      apply: () => '{}',
+      reset: () => '{}',
+    };
+    for (let tap = 0; tap < 4; tap += 1) fireEvent.click(version);
+    expect(screen.queryByTestId('server-address-panel')).toBeNull();
+
+    fireEvent.click(version);
+    expect(screen.getByTestId('server-address-panel')).toBeTruthy();
   });
 });
