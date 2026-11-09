@@ -1,5 +1,7 @@
 package com.localdatatool.toolbox.update;
 
+import org.json.JSONObject;
+
 import java.io.File;
 import java.io.IOException;
 
@@ -65,6 +67,43 @@ public final class UpdateManager {
         this.source = source;
         this.downloader = downloader;
         this.permissionGate = permissionGate;
+    }
+
+    /**
+     * 多地址兜底：按顺序读，返回第一个能解析成清单的正文（拿不到 / 不是 JSON 都继续试下一个）。
+     *
+     * <p>主站对不存在的 {@code /android/version.json} 会回退成 SPA 首页（200 + HTML），
+     * 直接当清单会解析失败；下载站才是稳定放清单的地方，所以两个地址都要试。</p>
+     */
+    public static ManifestSource firstValid(ManifestSource... sources) {
+        return () -> {
+            Exception firstError = null;
+            for (ManifestSource source : sources) {
+                try {
+                    String json = source.read();
+                    if (UpdateManifest.parse(json) != null) return json;
+                } catch (Exception error) {
+                    if (firstError == null) firstError = error;
+                }
+            }
+            throw firstError != null ? firstError : new IOException("没有可用的版本清单");
+        };
+    }
+
+    /**
+     * 降级清单：把 {@code minSupportedVersionCode} 改成 0，表示「只提示更新、不做强制更新」。
+     *
+     * <p>用于主站旧路径 / 下载站这类可能被边缘缓存咬住的副本：它们拿到的版本号还能提醒用户，
+     * 但不能因为一份旧清单就把人卡在更新页。</p>
+     */
+    public static String asNoticeOnly(String json) {
+        try {
+            JSONObject object = new JSONObject(json);
+            object.put("minSupportedVersionCode", 0);
+            return object.toString();
+        } catch (Exception error) {
+            return json;
+        }
     }
 
     /** 同步执行（调用方自己放到后台线程）。 */

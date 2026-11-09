@@ -121,70 +121,71 @@ public class NearbyOverlayModelTest {
     }
 
     @Test public void panelHeightMatchesSpecTable() {
-        // 命中 + 附近，5 条
-        assertEquals(258, NearbyOverlayModel.panelHeight(true, true, true, 5, true, 0));
+        // 命中 + 附近，5 条（方案 2 两行：行高 34 + 间距 4，列表 186 高于地图 120）
+        assertEquals(286, NearbyOverlayModel.panelHeight(true, true, true, 5, true, 0));
         // 命中 + 附近，8 条截断
-        assertEquals(366, NearbyOverlayModel.panelHeight(true, true, true, 8, true, 4));
+        assertEquals(412, NearbyOverlayModel.panelHeight(true, true, true, 8, true, 4));
         // 仅命中
         assertEquals(64, NearbyOverlayModel.panelHeight(true, true, false, 0, false, 0));
-        // 命中区无数据 + 附近无精灵（实测 200）
+        // 命中区无数据 + 附近无精灵（实测 200 = 44 + 28 + 120 + 8）
         assertEquals(200, NearbyOverlayModel.panelHeight(true, false, true, 0, true, 0));
         // 仅附近，5 条
-        assertEquals(194, NearbyOverlayModel.panelHeight(false, false, true, 5, true, 0));
+        assertEquals(222, NearbyOverlayModel.panelHeight(false, false, true, 5, true, 0));
         // 仅附近，8 条截断
-        assertEquals(302, NearbyOverlayModel.panelHeight(false, false, true, 8, true, 4));
+        assertEquals(348, NearbyOverlayModel.panelHeight(false, false, true, 8, true, 4));
         // 只有列表（无地图）：短列表不压缩到 44 以下
-        assertEquals(64 + 28 + 62 + 8, NearbyOverlayModel.panelHeight(true, true, true, 2, false, 0));
+        assertEquals(64 + 28 + 72 + 8, NearbyOverlayModel.panelHeight(true, true, true, 2, false, 0));
         // 空列表 + 无地图
         assertEquals(64 + 28 + 44 + 8, NearbyOverlayModel.panelHeight(true, true, true, 0, false, 0));
     }
 
-    @Test public void panelAnchorsToAllFourCornersOn375() {
-        int width = 268;
-        int height = 258;
-        int orb = 48;
-        assertArrayEquals(new int[] { 8, 64 },
-            NearbyOverlayModel.panelPosition(8, 8, orb, 375, 812, width, height, 8));
-        assertArrayEquals(new int[] { 99, 64 },
-            NearbyOverlayModel.panelPosition(319, 8, orb, 375, 812, width, height, 8));
-        assertArrayEquals(new int[] { 8, 490 },
-            NearbyOverlayModel.panelPosition(8, 756, orb, 375, 812, width, height, 8));
-        assertArrayEquals(new int[] { 99, 490 },
-            NearbyOverlayModel.panelPosition(319, 756, orb, 375, 812, width, height, 8));
+    @Test public void twoRowTextKeepsFieldOrder() throws Exception {
+        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
+        JSONArray list = new JSONArray();
+        list.put(new JSONObject()
+            .put("key", "k1").put("name", "雪豆丁").put("level", 37)
+            .put("kinds", new JSONArray().put("high"))
+            .put("rare", true).put("alert", true)
+            .put("distanceM", 12.38).put("bearingArrow", "↗")
+            .put("heightPct", 12.38).put("weightPct", 0.29)
+            .put("voiceLabel", "婉转声").put("reason", "demand"));
+        json.put("pets", list);
+        json.put("total", 1);
+
+        NearbyOverlayModel.Pet pet = NearbyOverlayModel.parse(json).pets.get(0);
+        // 第一行：距离 · 箭头 · xx级；第二行：高 · 重 · 声音；只截断不四舍五入
+        assertEquals("12m ↗ 37级", NearbyOverlayModel.metaTextLine1(pet));
+        assertEquals("高：12.3% 重：0.2% 婉转声", NearbyOverlayModel.metaTextLine2(pet));
+        assertEquals(NearbyOverlayModel.RowTone.DEMAND, NearbyOverlayModel.toneOf(pet));
     }
 
-    @Test public void panelAnchorsToAllFourCornersOn390() {
-        int width = 268;
-        int height = 258;
-        int orb = 48;
-        assertArrayEquals(new int[] { 8, 64 },
-            NearbyOverlayModel.panelPosition(8, 8, orb, 390, 844, width, height, 8));
-        assertArrayEquals(new int[] { 114, 64 },
-            NearbyOverlayModel.panelPosition(334, 8, orb, 390, 844, width, height, 8));
-        assertArrayEquals(new int[] { 8, 522 },
-            NearbyOverlayModel.panelPosition(8, 788, orb, 390, 844, width, height, 8));
-        assertArrayEquals(new int[] { 114, 522 },
-            NearbyOverlayModel.panelPosition(334, 788, orb, 390, 844, width, height, 8));
+    @Test public void rowToneFollowsPriority() throws Exception {
+        assertEquals(NearbyOverlayModel.RowTone.COLORFUL, tone("colorful", "shiny", false, null));
+        assertEquals(NearbyOverlayModel.RowTone.SHINY, tone("shiny", "pollution", false, null));
+        assertEquals(NearbyOverlayModel.RowTone.POLLUTION, tone("pollution", null, true, null));
+        assertEquals(NearbyOverlayModel.RowTone.RARE, tone(null, null, true, null));
+        assertEquals(NearbyOverlayModel.RowTone.NORMAL, tone(null, null, false, null));
+        assertEquals(NearbyOverlayModel.RowTone.DEMAND, tone("colorful", null, true, "demand"));
     }
 
-    /** 球的真实尺寸由球自己决定（另一条线在改），锚点只用传进来的实际宽度，不写死 48。 */
-    @Test public void panelUsesTheOrbSizeItIsGiven() {
-        assertArrayEquals(new int[] { 99, 490 },
-            NearbyOverlayModel.panelPosition(315, 756, 52, 375, 812, 268, 258, 8));
-        assertArrayEquals(new int[] { 8, 68 },
-            NearbyOverlayModel.panelPosition(8, 8, 52, 375, 812, 268, 258, 8));
+    private static NearbyOverlayModel.RowTone tone(
+        String first, String second, boolean rare, String reason) throws Exception {
+        JSONArray kinds = new JSONArray();
+        if (first != null) kinds.put(first);
+        if (second != null) kinds.put(second);
+        JSONObject pet = new JSONObject().put("key", "k").put("kinds", kinds).put("rare", rare);
+        if (reason != null) pet.put("reason", reason);
+        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
+        json.put("pets", new JSONArray().put(pet));
+        json.put("total", 1);
+        return NearbyOverlayModel.toneOf(NearbyOverlayModel.parse(json).pets.get(0));
     }
 
-    @Test public void panelNeverLeavesTheEightPixelEdge() {
-        // 球在左上：面板挂在球下方，左边贴到 8
-        int[] corner = NearbyOverlayModel.panelPosition(0, 0, 48, 375, 812, 268, 366, 8);
-        assertEquals(8, corner[0]);
-        assertEquals(48 + 8, corner[1]);
-
-        // 球在右下：面板挂在球上方，右边贴到 8
-        int[] bottom = NearbyOverlayModel.panelPosition(367, 804, 48, 375, 812, 268, 366, 8);
-        assertEquals(375 - 268 - 8, bottom[0]);
-        assertEquals(804 - 8 - 366, bottom[1]);
+    @Test public void percentTextTruncatesInsteadOfRounding() {
+        assertEquals("12.3%", NearbyOverlayModel.pctText(12.38));
+        assertEquals("0.2%", NearbyOverlayModel.pctText(0.29));
+        assertEquals("100.0%", NearbyOverlayModel.pctText(100.0));
+        assertEquals("—", NearbyOverlayModel.pctText(null));
     }
 
     @Test public void emptyAndWaitingStatesUseSpecWording() throws Exception {
@@ -221,10 +222,6 @@ public class NearbyOverlayModelTest {
         assertEquals(new HashSet<>(Arrays.asList(10003, 10007)),
             NearbyOverlayModel.parseMapScenes(json));
         assertEquals(new HashSet<Integer>(), NearbyOverlayModel.parseMapScenes("not json"));
-    }
-
-    private static void assertArrayEquals(int[] expected, int[] actual) {
-        assertEquals(Arrays.toString(expected), Arrays.toString(actual));
     }
 }
 

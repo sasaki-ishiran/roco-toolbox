@@ -98,6 +98,38 @@ public class UpdateManagerTest {
         assertTrue(listener.message.contains("断网了"));
     }
 
+    /** 主站对缺失的 /android/version.json 会回退成网页（200 HTML），不能当成清单。 */
+    @Test public void htmlFallbackIsNotAManifestAndNextSourceWins() {
+        UpdateManager.ManifestSource source = UpdateManager.firstValid(
+            () -> "<!doctype html><html><body>index</body></html>",
+            () -> manifest(18, 18));
+        new UpdateManager(17, target, source, NO_DOWNLOAD, () -> true).check(listener);
+        assertEquals("available", listener.state);
+        assertTrue(listener.required);
+    }
+
+    @Test public void allSourcesBrokenStillAllowsThrough() {
+        UpdateManager.ManifestSource source = UpdateManager.firstValid(
+            () -> "<html></html>",
+            () -> { throw new IOException("网络不可用"); });
+        new UpdateManager(17, target, source, NO_DOWNLOAD, () -> true).check(listener);
+        assertEquals("check-failed", listener.state);
+    }
+
+    /** 旧路径 / 下载站拿到的清单只做提示：版本号照旧，但不能触发强制更新。 */
+    @Test public void noticeOnlyManifestNeverForcesUpdate() {
+        String downgraded = UpdateManager.asNoticeOnly(manifest(18, 18));
+        UpdateManager manager = new UpdateManager(17, target, () -> downgraded, NO_DOWNLOAD, () -> true);
+        manager.check(listener);
+        assertEquals("available", listener.state);
+        assertFalse(listener.required);
+        assertEquals(18, listener.manifest.versionCode);
+    }
+
+    @Test public void noticeOnlyKeepsBrokenJsonUntouched() {
+        assertEquals("<html></html>", UpdateManager.asNoticeOnly("<html></html>"));
+    }
+
     @Test public void downloadFailureIsReported() {
         UpdateManager manager = manager(manifest(17, 0),
             (url, file, progress) -> { throw new IOException("服务器 500"); }, true);

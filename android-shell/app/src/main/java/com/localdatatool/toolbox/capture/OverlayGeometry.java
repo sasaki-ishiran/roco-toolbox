@@ -3,8 +3,8 @@ package com.localdatatool.toolbox.capture;
 /**
  * 悬浮球的几何口径（2026-11-08）。
  *
- * <p>悬浮球本体、详情卡、以及后续的展开面板都从这里取「夹紧 / 初始位置 / 贴球避让 /
- * 球心朝向」的算法，避免各写一套。纯整数计算，不依赖 Android，单位统一为**屏幕像素 px**
+ * <p>悬浮球本体、详情卡、以及展开面板都从这里取「夹紧 / 初始位置 / 面板默认落点」的算法，
+ * 避免各写一套。纯整数计算，不依赖 Android，单位统一为**屏幕像素 px**
  * （调用方先把 dp 换算成 px）。</p>
  *
  * <p>屏幕尺寸的唯一来源是 {@link BattleOverlayController#screenSize()}：它按当前旋转取
@@ -46,40 +46,45 @@ public final class OverlayGeometry {
     }
 
     /**
-     * 详情卡 / 面板贴在球旁边：右侧 → 左侧 → 空间大的一侧；再不行就放球的上方 / 下方；
-     * 最后夹进屏幕。全程保证不压住球。
+     * 面板 / 详情卡的默认落点：球在哪一侧，就从另一侧展开。
      *
-     * @param gap 面板与球、面板与屏幕边之间的间距（px）
+     * <p>只做三条规则，不再逐级试位置：</p>
+     * <ol>
+     *   <li>横向：球心在左半屏就贴右边缘，在右半屏就贴左边缘；</li>
+     *   <li>纵向先对齐球，若横向仍与球重叠，再放到球上方或下方；</li>
+     *   <li>最后夹进屏幕（上下都放不下时贴向离球最远的垂直边）。</li>
+     * </ol>
+     *
+     * <p>球本身不动，面板默认不压住球；用户之后可以自己拖面板。</p>
+     *
+     * @param gap 面板与屏边 / 面板与球之间的间距（px）
      * @return {left, top}
      */
-    public static int[] besideBall(int width, int height,
-                                   int ballX, int ballY, int ballWidth, int ballHeight,
-                                   int screenWidth, int screenHeight, int gap) {
-        int ballRight = ballX + ballWidth;
-        int ballBottom = ballY + ballHeight;
-        int x;
-        if (ballRight + gap + width <= screenWidth - gap) {
-            x = ballRight + gap;
-        } else if (ballX - gap - width >= gap) {
-            x = ballX - gap - width;
-        } else {
-            // 左右都放不下：先贴向空间更大的一侧，下面再改成上下排布
-            x = ballX + ballWidth / 2 < screenWidth / 2 ? screenWidth - width - gap : gap;
-        }
-
-        int y = ballY + ballHeight / 2 - height / 2;
-        int[] first = clamp(x, y, width, height, screenWidth, screenHeight, gap);
-        x = first[0];
-        y = first[1];
+    public static int[] oppositeOfBall(int width, int height,
+                                       int ballX, int ballY, int ballWidth, int ballHeight,
+                                       int screenWidth, int screenHeight, int gap) {
+        int edge = Math.max(0, gap);
+        boolean ballOnRight = ballX + ballWidth / 2 >= screenWidth / 2;
+        int x = ballOnRight ? edge : screenWidth - width - edge;
+        int y = ballY;
+        int[] spot = clamp(x, y, width, height, screenWidth, screenHeight, edge);
+        x = spot[0];
+        y = spot[1];
 
         if (overlaps(x, y, width, height, ballX, ballY, ballWidth, ballHeight, gap)) {
             int above = ballY - gap - height;
-            int below = ballBottom + gap;
-            if (above >= gap) y = above;
-            else if (below + height <= screenHeight - gap) y = below;
+            int below = ballY + ballHeight + gap;
+            if (above >= edge) {
+                y = above;
+            } else if (below + height <= screenHeight - edge) {
+                y = below;
+            } else {
+                // 上下都放不下：贴向离球最远的那条横边，宁可溢出也不压球
+                y = ballY + ballHeight / 2 < screenHeight / 2 ? screenHeight - height - edge : edge;
+            }
         }
 
-        return clamp(x, y, width, height, screenWidth, screenHeight, gap);
+        return clamp(x, y, width, height, screenWidth, screenHeight, edge);
     }
 
     /** 两个矩形是否相交（含间距）。 */
@@ -87,17 +92,5 @@ public final class OverlayGeometry {
                                    int otherX, int otherY, int otherWidth, int otherHeight, int gap) {
         return x < otherX + otherWidth + gap && x + width > otherX - gap
             && y < otherY + otherHeight + gap && y + height > otherY - gap;
-    }
-
-    /**
-     * 球心在屏幕的哪个角，供展开面板决定朝哪个方向展开。
-     *
-     * @return 0 = 左上，1 = 右上，2 = 左下，3 = 右下
-     */
-    public static int cornerOf(int ballX, int ballY, int ballWidth, int ballHeight,
-                               int screenWidth, int screenHeight) {
-        boolean right = ballX + ballWidth / 2 >= screenWidth / 2;
-        boolean bottom = ballY + ballHeight / 2 >= screenHeight / 2;
-        return (bottom ? 2 : 0) + (right ? 1 : 0);
     }
 }

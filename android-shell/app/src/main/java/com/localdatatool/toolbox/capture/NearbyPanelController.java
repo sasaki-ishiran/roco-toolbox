@@ -2,6 +2,7 @@ package com.localdatatool.toolbox.capture;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -14,9 +15,13 @@ import android.os.Build;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
 import android.text.style.ReplacementSpan;
+import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -41,12 +46,12 @@ import java.util.Set;
  * 「附近」悬浮面板（2026-11-08）。
  *
  * <p>只负责面板本身：展开后的命中区、标题行、内嵌网页小地图、精灵列表与脚注。
- * 球的图标 / 不透明度 / 拖动 / 夹取 / 信息框避让仍由 {@link BattleOverlayController}
- * 负责，本类只通过 {@link #followOrb(int, int, int, int, int)} 拿球当前的屏幕坐标，
- * 按 {@link NearbyOverlayModel#panelPosition} 贴球展开，不另建一套坐标换算。</p>
+ * 球的图标 / 拖动 / 夹取仍由 {@link BattleOverlayController} 负责，本类通过
+ * {@link #setOrbRect(int, int, int, int, int)} 拿球当前的屏幕坐标，只在**首次展开**时
+ * 按「球在哪一侧就从另一侧展开」算一个不压住球的落点（{@link OverlayGeometry#oppositeOfBall}）。</p>
  *
- * <p>面板是纯展示窗口（{@code FLAG_NOT_TOUCHABLE}）：不抢焦点、不拦游戏操作、
- * 不会和球的拖动抢事件。展开 / 收起由球点击触发。</p>
+ * <p>面板可拖动（按住标题栏 / 空白区），松手把位置写进 SharedPreferences，下次展开沿用；
+ * 地图是 WebView，自己吃掉触摸，按在图上不会拖动面板。</p>
  */
 public final class NearbyPanelController {
 
@@ -54,33 +59,17 @@ public final class NearbyPanelController {
     private static final int TITLE_HEIGHT_DP = 14;
     private static final int MAP_RADIUS_DP = 8;
     private static final int ROW_RADIUS_DP = 6;
-    private static final int TAG_RADIUS_DP = 3;
-
-    /** 与网页 rareRules 的 kind 键一致（列表标签与地图点同源）。 */
-    private static final String[] KIND_PRIORITY =
-        { "pollution", "shiny", "colorful", "big", "small", "high", "low" };
-    private static final java.util.Map<String, String> KIND_LABEL = new java.util.HashMap<>();
-    private static final java.util.Map<String, String> KIND_COLOR = new java.util.HashMap<>();
-
-    static {
-        KIND_LABEL.put("pollution", "污染");
-        KIND_LABEL.put("shiny", "异色");
-        KIND_LABEL.put("colorful", "炫彩");
-        KIND_LABEL.put("big", "大块头");
-        KIND_LABEL.put("small", "小不点");
-        KIND_LABEL.put("high", "婉转声");
-        KIND_LABEL.put("low", "粗嗓门");
-        KIND_COLOR.put("pollution", "#7c3aed");
-        KIND_COLOR.put("shiny", "#f59e0b");
-        KIND_COLOR.put("colorful", "#ec4899");
-        KIND_COLOR.put("big", "#0ea5e9");
-        KIND_COLOR.put("small", "#0ea5e9");
-        KIND_COLOR.put("high", "#059669");
-        KIND_COLOR.put("low", "#059669");
-    }
+    /** 「可提醒」行左侧红条（1.3.6 起标签改底色，只有提醒保留一条 3dp 红条）。 */
+    private static final int ALERT_BAR_DP = 3;
+    /** 面板位置存档：拖过一次后，下次展开沿用。 */
+    private static final String PREFS = "nearby-panel";
+    private static final String KEY_PANEL_X = "x";
+    private static final String KEY_PANEL_Y = "y";
+    private static final int DRAG_SLOP_DP = 4;
 
     private final Activity activity;
     private final WindowManager windowManager;
+    private final SharedPreferences prefs;
     private final Set<Integer> mapScenes;
     private final String catalogJson;
 
@@ -108,10 +97,24 @@ public final class NearbyPanelController {
     private int lastOrbSize;
     private int lastScreenWidth;
     private int lastScreenHeight;
+    /** 本次展开是否已经定过落点；用户拖过之后不再按默认规则重算 */
+    private boolean positioned;
+    private float downRawX;
+    private float downRawY;
+    private int dragStartX;
+    private int dragStartY;
+    private boolean dragging;
 
-    public NearbyPanelController(Activity activity, WindowManager windowManager) {
+    public NearbyPanelController(Activity activity) {
         this.activity = activity;
-        this.windowManager = windowManager;
+        // 必须用 Application 的 WindowManager：Activity 的 WindowManager 带着 Activity
+        // 窗口令牌，窗口会被限制在 Activity 的显示区域里（竖屏宽度），横屏游戏里就表现为
+        // 「只能拖到左半屏」。球和面板统一走这一份。
+        this.windowManager = (WindowManager) activity.getApplicationContext()
+            .getSystemService(Context.WINDOW_SERVICE);
+        this.prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        this.lastScreenWidth = activity.getResources().getDisplayMetrics().widthPixels;
+        this.lastScreenHeight = activity.getResources().getDisplayMetrics().heightPixels;
         String catalog = readAsset("maps/maps.json");
         this.catalogJson = catalog;
         this.mapScenes = NearbyOverlayModel.parseMapScenes(catalog);
@@ -160,15 +163,26 @@ public final class NearbyPanelController {
         }
     }
 
-    /** 球拖动 / 屏幕旋转时实时跟随；球自己的坐标口径不在这里改。 */
-    public void followOrb(int orbX, int orbY, int orbSize, int screenWidth, int screenHeight) {
+    /**
+     * 记录球当前的位置与屏幕尺寸，供**首次展开**时算「从另一侧展开」的默认落点。
+     * 球拖动时只更新记录，不移动已经展开的面板。
+     */
+    public void setOrbRect(int orbX, int orbY, int orbSize, int screenWidth, int screenHeight) {
         hasOrbRect = true;
         lastOrbX = orbX;
         lastOrbY = orbY;
         lastOrbSize = orbSize;
         lastScreenWidth = screenWidth;
         lastScreenHeight = screenHeight;
-        place();
+    }
+
+    /** 屏幕旋转 / 尺寸变化：把面板夹回新的屏幕范围，不重算默认落点。 */
+    public void onScreenChanged(int screenWidth, int screenHeight) {
+        lastScreenWidth = screenWidth;
+        lastScreenHeight = screenHeight;
+        if (panel == null || panelParams == null) return;
+        clampPanel();
+        safeUpdate();
     }
 
     /** 权限回来 / 屏幕变化后把已展开的面板重新挂回去。 */
@@ -178,17 +192,99 @@ public final class NearbyPanelController {
         render();
     }
 
-    private void place() {
+    /**
+     * 面板落点：
+     * <ul>
+     *   <li>用户拖过（有存档）→ 沿用存档位置，只夹回屏幕内；</li>
+     *   <li>没拖过 → 按球当前所在侧，从另一侧展开，默认不压住球。</li>
+     * </ul>
+     */
+    private void placePanel() {
         if (panel == null || panelParams == null) return;
-        if (hasOrbRect) {
-            int edge = dp(NearbyOverlayModel.EDGE);
-            int[] position = NearbyOverlayModel.panelPosition(
-                lastOrbX, lastOrbY, lastOrbSize, lastScreenWidth, lastScreenHeight,
-                panelParams.width, panelParams.height, edge);
-            panelParams.x = position[0];
-            panelParams.y = position[1];
+        int edge = dp(NearbyOverlayModel.EDGE);
+        if (!positioned) {
+            int savedX = prefs.getInt(KEY_PANEL_X, Integer.MIN_VALUE);
+            int savedY = prefs.getInt(KEY_PANEL_Y, Integer.MIN_VALUE);
+            int[] spot;
+            if (savedX != Integer.MIN_VALUE && savedY != Integer.MIN_VALUE) {
+                spot = OverlayGeometry.clamp(savedX, savedY,
+                    panelParams.width, panelParams.height,
+                    lastScreenWidth, lastScreenHeight, edge);
+            } else if (hasOrbRect) {
+                spot = OverlayGeometry.oppositeOfBall(
+                    panelParams.width, panelParams.height,
+                    lastOrbX, lastOrbY, lastOrbSize, lastOrbSize,
+                    lastScreenWidth, lastScreenHeight, edge);
+            } else {
+                spot = OverlayGeometry.startPosition(
+                    panelParams.width, panelParams.height,
+                    lastScreenWidth, lastScreenHeight, edge, 0.3f);
+            }
+            panelParams.x = spot[0];
+            panelParams.y = spot[1];
+            positioned = true;
+        } else {
+            clampPanel();
         }
         safeUpdate();
+    }
+
+    /** 把面板夹进当前屏幕（四边留 {@code EDGE}）。 */
+    private void clampPanel() {
+        if (panelParams == null) return;
+        int[] spot = OverlayGeometry.clamp(
+            panelParams.x, panelParams.y, panelParams.width, panelParams.height,
+            lastScreenWidth, lastScreenHeight, dp(NearbyOverlayModel.EDGE));
+        panelParams.x = spot[0];
+        panelParams.y = spot[1];
+    }
+
+    /**
+     * 面板拖动：按住标题栏 / 空白区就能拖走，松手记住位置。
+     *
+     * <p>地图是 WebView，它自己吃掉触摸，所以按在图上不会拖动面板；
+     * 面板上的文字标签不消费事件，会把事件冒泡到这里。</p>
+     */
+    private boolean onPanelTouch(View view, MotionEvent event) {
+        if (panelParams == null) return false;
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                downRawX = event.getRawX();
+                downRawY = event.getRawY();
+                dragStartX = panelParams.x;
+                dragStartY = panelParams.y;
+                dragging = false;
+                return true;
+            case MotionEvent.ACTION_MOVE: {
+                float dx = event.getRawX() - downRawX;
+                float dy = event.getRawY() - downRawY;
+                if (!dragging && Math.hypot(dx, dy) < dp(DRAG_SLOP_DP)) return true;
+                dragging = true;
+                panelParams.x = dragStartX + Math.round(dx);
+                panelParams.y = dragStartY + Math.round(dy);
+                clampPanel();
+                safeUpdate();
+                return true;
+            }
+            case MotionEvent.ACTION_UP:
+                if (dragging) {
+                    panelParams.x = dragStartX + Math.round(event.getRawX() - downRawX);
+                    panelParams.y = dragStartY + Math.round(event.getRawY() - downRawY);
+                    clampPanel();
+                    safeUpdate();
+                    prefs.edit()
+                        .putInt(KEY_PANEL_X, panelParams.x)
+                        .putInt(KEY_PANEL_Y, panelParams.y)
+                        .apply();
+                }
+                dragging = false;
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                dragging = false;
+                return true;
+            default:
+                return false;
+        }
     }
 
     /**
@@ -206,6 +302,8 @@ public final class NearbyPanelController {
 
     private void collapse() {
         expanded = false;
+        positioned = false;
+        dragging = false;
         if (panel == null) return;
         try {
             windowManager.removeView(panel);
@@ -238,12 +336,14 @@ public final class NearbyPanelController {
             overlayType(),
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                 | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             PixelFormat.TRANSLUCENT);
         panelParams.gravity = Gravity.TOP | Gravity.START;
         panel = root;
+        // 面板要能拖动，所以不再加 FLAG_NOT_TOUCHABLE；焦点仍然不抢，
+        // 面板以外的触摸照旧交给游戏（FLAG_NOT_TOUCH_MODAL）。
+        root.setOnTouchListener(this::onPanelTouch);
 
         hitBox = buildHitBox(theme);
         titleRow = buildTitleRow(theme);
@@ -283,12 +383,9 @@ public final class NearbyPanelController {
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
-        TextView chevron = text("⌄", 13, theme.muted);
-        chevron.setGravity(Gravity.CENTER);
-        chevron.setPadding(dp(2), 0, dp(2), 0);
-        header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
-        header.addView(chevron, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // 右上角的小三角只是装饰，看起来像「点一下收起」，1.3.6 起删掉
+        header.addView(title, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         box.addView(header, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(16)));
 
@@ -464,7 +561,9 @@ public final class NearbyPanelController {
             int listHeight = NearbyOverlayModel.listHeight(rows);
             if (hasMap) {
                 setFrame(mapBox, 8, bodyTop, NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.MAP_SIZE);
-                setFrame(listBox, 136, bodyTop, 124, listHeight);
+                setFrame(listBox,
+                    8 + NearbyOverlayModel.MAP_SIZE + NearbyOverlayModel.LIST_GAP,
+                    bodyTop, NearbyOverlayModel.LIST_WIDTH, listHeight);
             } else {
                 setFrame(listBox, 8, bodyTop, NearbyOverlayModel.PANEL_WIDTH - 16, listHeight);
             }
@@ -483,9 +582,14 @@ public final class NearbyPanelController {
 
         panelParams.width = dp(NearbyOverlayModel.PANEL_WIDTH);
         panelParams.height = dp(panelHeight);
-        place();
+        placePanel();
     }
 
+    /**
+     * 列表：1.3.6 方案 2，**同顺序两行**——第一行「名称 · 距离 · 箭头 · xx级」，
+     * 第二行「高 · 重 · 声音」；底色按 {@link NearbyOverlayModel#toneOf} 取六种之一，
+     * 「可提醒」只在左侧留一条 3dp 红条。
+     */
     private void fillList(PanelTheme theme, NearbyOverlayModel model, int rows) {
         listBox.removeAllViews();
         if (rows == 0) {
@@ -494,48 +598,61 @@ public final class NearbyPanelController {
         }
         for (int index = 0; index < rows; index++) {
             NearbyOverlayModel.Pet pet = model.pets.get(index);
-            LinearLayout row = new LinearLayout(activity);
-            row.setOrientation(LinearLayout.VERTICAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(6), dp(2), dp(6), dp(2));
-            row.setBackground(rowBackground(theme, pet));
+            int tone = NearbyOverlayModel.toneOf(pet).ordinal();
+            FrameLayout row = new FrameLayout(activity);
+            row.setBackground(rowBackground(theme, tone));
 
-            LinearLayout line1 = new LinearLayout(activity);
-            line1.setOrientation(LinearLayout.HORIZONTAL);
-            line1.setGravity(Gravity.CENTER_VERTICAL);
-            TextView name = text(pet.name, 11, theme.text);
-            name.setTypeface(Typeface.DEFAULT_BOLD);
-            name.setSingleLine(true);
-            name.setEllipsize(TextUtils.TruncateAt.END);
-            TextView level = text("Lv" + pet.level, 8.5f, theme.muted);
-            level.setSingleLine(true);
-            line1.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            line1.addView(level, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout lines = new LinearLayout(activity);
+            lines.setOrientation(LinearLayout.VERTICAL);
+            lines.setPadding(dp(6), dp(4), dp(6), dp(5));
 
-            LinearLayout line2 = new LinearLayout(activity);
-            line2.setOrientation(LinearLayout.HORIZONTAL);
-            line2.setGravity(Gravity.CENTER_VERTICAL);
-            TextView meta = text(distanceText(pet), 9, theme.muted);
-            meta.setSingleLine(true);
-            meta.setEllipsize(TextUtils.TruncateAt.END);
-            line2.addView(meta, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            TextView tag = buildTag(theme, pet);
-            if (tag != null) line2.addView(tag);
+            TextView line1 = text("", 9, withAlpha(theme.rowText[tone], 0.82f));
+            line1.setSingleLine(true);
+            line1.setEllipsize(TextUtils.TruncateAt.END);
+            line1.setIncludeFontPadding(false);
+            line1.setText(rowHeadText(pet, theme.rowText[tone]));
 
-            LinearLayout.LayoutParams line1Params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            LinearLayout.LayoutParams line2Params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            line2Params.topMargin = dp(1);
-            row.addView(line1, line1Params);
-            row.addView(line2, line2Params);
+            TextView line2 = text(NearbyOverlayModel.metaTextLine2(pet), 9,
+                withAlpha(theme.rowText[tone], 0.72f));
+            line2.setSingleLine(true);
+            line2.setEllipsize(TextUtils.TruncateAt.END);
+            line2.setIncludeFontPadding(false);
+
+            lines.addView(line1, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            lines.addView(line2, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            row.addView(lines, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(NearbyOverlayModel.ROW_HEIGHT)));
+            if (pet.alert) {
+                View bar = new View(activity);
+                bar.setBackground(alertBarBackground());
+                FrameLayout.LayoutParams barParams = new FrameLayout.LayoutParams(
+                    dp(ALERT_BAR_DP), dp(NearbyOverlayModel.ROW_HEIGHT - 8),
+                    Gravity.START | Gravity.CENTER_VERTICAL);
+                row.addView(bar, barParams);
+            }
 
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(NearbyOverlayModel.ROW_HEIGHT));
             if (index > 0) rowParams.topMargin = dp(NearbyOverlayModel.ROW_GAP);
             listBox.addView(row, rowParams);
         }
+    }
+
+    /** 第一行：名称 11sp 粗体 + 其余 9sp（同一个 TextView 里用 span 拉开字号与颜色）。 */
+    private CharSequence rowHeadText(NearbyOverlayModel.Pet pet, int nameColor) {
+        SpannableStringBuilder builder = new SpannableStringBuilder(pet.name);
+        builder.setSpan(new RelativeSizeSpan(11f / 9f), 0, builder.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.setSpan(new StyleSpan(Typeface.BOLD), 0, builder.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.setSpan(new ForegroundColorSpan(nameColor), 0, builder.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        String meta = NearbyOverlayModel.metaTextLine1(pet);
+        if (!meta.isEmpty()) builder.append(' ').append(meta);
+        return builder;
     }
 
     private View emptyState(PanelTheme theme, boolean waitingLogin) {
@@ -558,35 +675,6 @@ public final class NearbyPanelController {
         box.setLayoutParams(new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         return box;
-    }
-
-    private TextView buildTag(PanelTheme theme, NearbyOverlayModel.Pet pet) {
-        String label;
-        String color;
-        if (pet.alert) {
-            label = "需求";
-            color = "#f43f5e";
-        } else if (!pet.kinds.isEmpty()) {
-            List<String> labels = new ArrayList<>();
-            for (String kind : pet.kinds) {
-                String text = KIND_LABEL.get(kind);
-                labels.add(text == null ? kind : text);
-            }
-            label = TextUtils.join("·", labels);
-            color = kindColor(pet.kinds);
-        } else {
-            return null;
-        }
-        TextView tag = text(label, 8, Color.parseColor(color));
-        tag.setSingleLine(true);
-        tag.setGravity(Gravity.CENTER);
-        tag.setPadding(dp(3), 0, dp(3), 0);
-        tag.setBackground(tagBackground(Color.parseColor(color)));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(11));
-        params.leftMargin = dp(3);
-        tag.setLayoutParams(params);
-        return tag;
     }
 
     private CharSequence buildChips(PanelTheme theme, JSONArray fields, int row, boolean hit) {
@@ -672,23 +760,6 @@ public final class NearbyPanelController {
         }
     }
 
-    private static String distanceText(NearbyOverlayModel.Pet pet) {
-        if (pet.distanceM == null) return "—";
-        String distance = Math.round(pet.distanceM) + "m";
-        if (pet.bearingLabel == null || pet.bearingLabel.isEmpty()) return distance;
-        return distance + " " + pet.bearingLabel;
-    }
-
-    private static String kindColor(List<String> kinds) {
-        for (String kind : KIND_PRIORITY) {
-            if (kinds.contains(kind)) {
-                String color = KIND_COLOR.get(kind);
-                if (color != null) return color;
-            }
-        }
-        return "#475569";
-    }
-
     private void safeUpdate() {
         if (panel == null || panelParams == null) return;
         try {
@@ -741,18 +812,20 @@ public final class NearbyPanelController {
         return drawable;
     }
 
-    private GradientDrawable rowBackground(PanelTheme theme, NearbyOverlayModel.Pet pet) {
+    /** 列表行背景：六种底色之一 + 1dp 淡描边（深浅各一套）。 */
+    private GradientDrawable rowBackground(PanelTheme theme, int tone) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setCornerRadius(dpF(ROW_RADIUS_DP));
-        drawable.setColor(pet.alert ? theme.alertBg : theme.row);
-        drawable.setStroke(dp(1), pet.alert ? theme.alertLine : pet.rare ? theme.rareLine : theme.line);
+        drawable.setColor(theme.rowBg[tone]);
+        drawable.setStroke(dp(1), theme.rowLine);
         return drawable;
     }
 
-    private GradientDrawable tagBackground(int color) {
+    /** 「可提醒」左侧红条。 */
+    private GradientDrawable alertBarBackground() {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setCornerRadius(dpF(TAG_RADIUS_DP));
-        drawable.setColor(withAlpha(color, 0.18f));
+        drawable.setCornerRadius(dpF(1.5f));
+        drawable.setColor(0xFFF43F5E);
         return drawable;
     }
 
@@ -814,10 +887,6 @@ public final class NearbyPanelController {
         final int line;
         final int text;
         final int muted;
-        final int row;
-        final int alertBg;
-        final int alertLine;
-        final int rareLine;
         final int hitBg;
         final int chipBg;
         final int chipText;
@@ -825,19 +894,19 @@ public final class NearbyPanelController {
         final int chipPrimaryText;
         final int chipHotBg;
         final int chipHotText;
+        /** 六种列表底色与对应文字色，下标同 {@link NearbyOverlayModel.RowTone#ordinal()} */
+        final int[] rowBg;
+        final int[] rowText;
+        final int rowLine;
 
-        private PanelTheme(int panelBg, int line, int text, int muted, int row,
-                           int alertBg, int alertLine, int rareLine, int hitBg,
+        private PanelTheme(int panelBg, int line, int text, int muted, int hitBg,
                            int chipBg, int chipText, int chipPrimaryBg,
-                           int chipPrimaryText, int chipHotBg, int chipHotText) {
+                           int chipPrimaryText, int chipHotBg, int chipHotText,
+                           int[] rowBg, int[] rowText, int rowLine) {
             this.panelBg = panelBg;
             this.line = line;
             this.text = text;
             this.muted = muted;
-            this.row = row;
-            this.alertBg = alertBg;
-            this.alertLine = alertLine;
-            this.rareLine = rareLine;
             this.hitBg = hitBg;
             this.chipBg = chipBg;
             this.chipText = chipText;
@@ -845,22 +914,30 @@ public final class NearbyPanelController {
             this.chipPrimaryText = chipPrimaryText;
             this.chipHotBg = chipHotBg;
             this.chipHotText = chipHotText;
+            this.rowBg = rowBg;
+            this.rowText = rowText;
+            this.rowLine = rowLine;
         }
 
         static PanelTheme dark() {
             return new PanelTheme(
-                0xF0111C33, 0xFF1E293B, 0xFFE2E8F0, 0xFF94A3B8, 0xFF111C33,
-                0xFF2A1220, 0xFFBE123C, 0xFFB45309, 0x800F172A,
+                0xFF111C33, 0xFF1E293B, 0xFFE2E8F0, 0xFF94A3B8, 0x800F172A,
                 0x2E94A3B8, 0xFFCBD5E1, 0xFFE2E8F0, 0xFF0F172A,
-                0x38F59E0B, 0xFFFBBF24);
+                0x38F59E0B, 0xFFFBBF24,
+                // 命中 / 炫彩 / 异色 / 污染 / 稀有 / 普通
+                new int[] { 0xFF052E1A, 0xFF3B0A22, 0xFF3B1A06, 0xFF2A1B4D, 0xFF3B2A08, 0xFF16233B },
+                new int[] { 0xFFA7F3D0, 0xFFF9A8D4, 0xFFFDBA74, 0xFFDDD6FE, 0xFFFDE68A, 0xFFE2E8F0 },
+                0x1FFFFFFF);
         }
 
         static PanelTheme light() {
             return new PanelTheme(
-                0xF5FFFFFF, 0xFFE2E8F0, 0xFF0F172A, 0xFF64748B, 0xFFF8FAFC,
-                0xFFFEF2F2, 0xFFFECDD3, 0xFFFCD34D, 0xFFF8FAFC,
+                0xFFFFFFFF, 0xFFE2E8F0, 0xFF0F172A, 0xFF64748B, 0xFFF8FAFC,
                 0xFFF1F5F9, 0xFF475569, 0xFF1E293B, 0xFFFFFFFF,
-                0xFFFEF3C7, 0xFFB45309);
+                0xFFFEF3C7, 0xFFB45309,
+                new int[] { 0xFFDCFCE7, 0xFFFCE7F3, 0xFFFFEDD5, 0xFFEDE9FE, 0xFFFEF3C7, 0xFFFFFFFF },
+                new int[] { 0xFF14532D, 0xFF831843, 0xFF7C2D12, 0xFF4C1D95, 0xFF78350F, 0xFF0F172A },
+                0x0F0F172A);
         }
     }
 

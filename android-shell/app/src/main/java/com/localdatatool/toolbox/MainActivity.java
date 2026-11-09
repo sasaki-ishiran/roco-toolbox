@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.database.Cursor;
 import android.net.Uri;
@@ -65,16 +66,26 @@ import com.localdatatool.toolbox.update.UpdateController;
  */
 public class MainActivity extends Activity {
 
-    private static final String SITE_URL = "https://roco-toolbox.pages.dev/";
+    /**
+     * 服务器地址：1.3 内测包默认测试站，连点版本号在测试站 / 正式站之间互切（2026-11-10）。
+     *
+     * <p>必须在 {@link #onCreate} 里创建：字段初始化器早于 {@code attachBaseContext}，
+     * 此时 {@code this} 的 base context 还是 null，{@code getSharedPreferences} 会直接 NPE，
+     * 表现为点图标立刻闪退（1.3.7 / versionCode 29 实测）。</p>
+     */
+    private ServerConfig serverConfig;
 
     /**
      * 允许留在 WebView 内导航的域名（含它的预览子域）。其余链接一律交给系统浏览器：
      * 页脚的 Wiki / CC BY-SA 外链是 {@code target="_blank"}，壳不接管就表现成「点了没反应」。
      *
-     * 顺带收窄了 JS 桥的暴露面：主框架永远只停在自家站点上，
-     * 别的来源就没机会拿到 {@code RocoShare} 这个注入接口。
+     * <p>来源跟着 {@link ServerConfig#baseUrl()} 走：切到测试站后，
+     * 站内导航与 JS 桥的允许来源都要是测试站，否则点内链会跳系统浏览器、
+     * 采集桥也会因为 origin 不匹配而整段失效。</p>
      */
-    private static final String SITE_HOST = "roco-toolbox.pages.dev";
+    private String siteHost() {
+        return ServerConfig.hostOf(serverConfig.baseUrl());
+    }
 
     /**
      * 网页从这个地址取分享进来的抓包。这个域名是假的、永远不会真的联网 ——
@@ -145,6 +156,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        serverConfig = new ServerConfig(this);
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             // 调试构建允许用电脑的 chrome://inspect 看页面，排查真机问题时用得上
             WebView.setWebContentsDebuggingEnabled(true);
@@ -155,8 +167,24 @@ public class MainActivity extends Activity {
             textPayload = null; textName = null; shareInjected = false;
             injectPendingShare();
         });
+        collector.setSiteOrigin(serverConfig.origin());
         battleOverlay = new BattleOverlayController(this);
         updater = new UpdateController(this);
+        // 检查结果推给网页：「我的」页更新入口据此把「检查」切成「更新」并显示新版本号
+        updater.setStatusListener((state, versionName, message) -> {
+            if (webView == null) return;
+            try {
+                JSONObject detail = new JSONObject()
+                    .put("state", state)
+                    .put("versionName", versionName == null ? "" : versionName)
+                    .put("message", message == null ? "" : message)
+                    .put("currentVersion", BuildConfig.VERSION_NAME);
+                webView.evaluateJavascript(
+                    "window.__rocoUpdateStatus&&window.__rocoUpdateStatus(" + detail + ")", null);
+            } catch (Exception ignored) {
+                // 页面收不到状态不影响原生检查 / 更新流程
+            }
+        });
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -165,6 +193,10 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new ShareBridge(), "RocoShare");
         // 网页「设置 / 关于」页的「检查更新」入口（网页侧调用 window.RocoUpdate.check()）
         webView.addJavascriptInterface(new UpdateBridge(), "RocoUpdate");
+        // 内测切服：读取 / 一键互切 / 恢复服务器地址（网页侧 window.RocoServer）
+        webView.addJavascriptInterface(new ServerBridge(), "RocoServer");
+        // 跨环境共享的本地偏好（网页侧 window.RocoPrefs）：切站后教程进度跟着人走
+        webView.addJavascriptInterface(new PrefsBridge(), "RocoPrefs");
         installCaptureWebMessageBridge();
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
@@ -294,7 +326,7 @@ public class MainActivity extends Activity {
         });
         setContentView(webView);
         handleShareIntent(getIntent());
-        webView.loadUrl(SITE_URL);
+        webView.loadUrl(serverConfig.baseUrl() + "/");
         liveTick.postDelayed(liveTickTask, 1500);
         // 首屏加载完再看有没有新版，避免更新弹窗和页面加载抢焦点
         liveTick.postDelayed(silentUpdateCheck, 3000);
@@ -304,8 +336,8 @@ public class MainActivity extends Activity {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
             || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
         WebViewCompat.addWebMessageListener(webView, "RocoCaptureBridge",
-            Collections.singleton("https://" + SITE_HOST), (view, message, sourceOrigin, isMainFrame, reply) -> {
-                if (!CaptureBridgePolicy.allows(sourceOrigin.toString(), isMainFrame)) return;
+            Collections.singleton(serverConfig.origin()), (view, message, sourceOrigin, isMainFrame, reply) -> {
+                if (!CaptureBridgePolicy.allows(sourceOrigin.toString(), isMainFrame, serverConfig.origin())) return;
                 String requestId = "";
                 try {
                     JSONObject request = new JSONObject(message.getData());
@@ -330,6 +362,9 @@ public class MainActivity extends Activity {
                     else if ("updateNearbyOverlay".equals(action)) result = battleOverlay.updateNearby(readJson(request, "nearby"));
                     else if ("requestOverlayPermission".equals(action)) result = battleOverlay.requestPermission();
                     else if ("canDrawOverlay".equals(action)) result = battleOverlay.canDraw() ? "true" : "false";
+                    // 悬浮球隐藏 / 显示（1.3.6）：长按隐藏，附近页按钮恢复
+                    else if ("setOrbHidden".equals(action)) result = battleOverlay.setOrbHidden(request.optBoolean("hidden", false));
+                    else if ("readOrbHidden".equals(action)) result = battleOverlay.readOrbHidden() ? "true" : "false";
                     else throw new IllegalArgumentException("未知的采集操作");
                     reply.postMessage(new JSONObject().put("requestId", requestId).put("result", result).toString());
                 } catch (Exception error) {
@@ -342,7 +377,7 @@ public class MainActivity extends Activity {
             ByteArrayOutputStream text = new ByteArrayOutputStream();
             byte[] buffer = new byte[4096]; int length;
             while ((length = input.read(buffer)) != -1) text.write(buffer, 0, length);
-            WebViewCompat.addDocumentStartJavaScript(webView, text.toString("UTF-8"), Collections.singleton("https://" + SITE_HOST));
+            WebViewCompat.addDocumentStartJavaScript(webView, text.toString("UTF-8"), Collections.singleton(serverConfig.origin()));
         } catch (Exception error) { showMessage("无法加载本机采集入口：" + CaptureVpnService.friendly(error)); }
     }
 
@@ -406,6 +441,8 @@ public class MainActivity extends Activity {
             // 先摘掉注入的 JS 接口，再断开页面、销毁。
             webView.removeJavascriptInterface("RocoShare");
             webView.removeJavascriptInterface("RocoUpdate");
+            webView.removeJavascriptInterface("RocoServer");
+            webView.removeJavascriptInterface("RocoPrefs");
             if (captureBridgeInstalled) WebViewCompat.removeWebMessageListener(webView, "RocoCaptureBridge");
             webView.loadUrl("about:blank");
             webView.removeAllViews();
@@ -439,7 +476,7 @@ public class MainActivity extends Activity {
         boolean internal =
             "https".equals(scheme)
                 && host != null
-                && (host.equals(SITE_HOST) || host.endsWith("." + SITE_HOST));
+                && (host.equals(siteHost()) || host.endsWith("." + siteHost()));
         if (internal || "about".equals(scheme)) return false;
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, uri));
@@ -599,9 +636,86 @@ public class MainActivity extends Activity {
             + "<body style=\"margin:0;padding:24px;font-family:sans-serif;line-height:1.8;color:#334155\">"
             + "<h1 style=\"font-size:18px\">洛克工具箱</h1>"
             + "<p>" + escapeHtml(message) + "</p>"
-            + "<p><a href=\"" + SITE_URL + "\">点这里重试</a></p>"
+            + "<p><a href=\"" + serverConfig.baseUrl() + "/\">点这里重试</a></p>"
             + "</body></html>";
-        webView.loadDataWithBaseURL(SITE_URL, html, "text/html", "utf-8", null);
+        webView.loadDataWithBaseURL(serverConfig.baseUrl() + "/", html, "text/html", "utf-8", null);
+    }
+
+    /**
+     * 切服桥（网页侧 window.RocoServer，2026-11-10 补回）。
+     *
+     * <p>1.3.6 从这棵壳代码构建，但当时没有这个桥：网页连点版本号时
+     * `serverBridge()` 拿不到 `window.RocoServer`，只能静默返回，
+     * 表现就是「连点 5 次完全没反应」。</p>
+     */
+    private final class ServerBridge {
+        @JavascriptInterface public String read() {
+            try {
+                return new JSONObject()
+                    .put("current", serverConfig.baseUrl())
+                    .put("defaultUrl", serverConfig.defaultUrl())
+                    .put("productionUrl", serverConfig.productionUrl())
+                    .toString();
+            } catch (Exception error) {
+                return "{\"current\":\"\",\"defaultUrl\":\""
+                    + ServerConfig.DEFAULT_BASE_URL + "\",\"productionUrl\":\""
+                    + ServerConfig.PRODUCTION_BASE_URL + "\"}";
+            }
+        }
+
+        @JavascriptInterface public String apply(String url) {
+            return applyServer(serverConfig.apply(url));
+        }
+
+        /** 一键互切（正式 ⇄ 测试）：自家地址直接写，不探活、不等网络。 */
+        @JavascriptInterface public String toggle() {
+            return applyServer(serverConfig.toggle());
+        }
+
+        @JavascriptInterface public String reset() {
+            return applyServer(serverConfig.reset());
+        }
+    }
+
+    /** 跨环境共享偏好（网页侧 window.RocoPrefs）：测试站 / 正式站共用一份教程进度。 */
+    private final class PrefsBridge {
+        private SharedPreferences prefs() {
+            return getSharedPreferences("roco_prefs", MODE_PRIVATE);
+        }
+
+        @JavascriptInterface public String get(String key) {
+            return prefs().getString(key, null);
+        }
+
+        @JavascriptInterface public void set(String key, String value) {
+            prefs().edit().putString(key, value).apply();
+        }
+
+        @JavascriptInterface public void remove(String key) {
+            prefs().edit().remove(key).apply();
+        }
+    }
+
+    private String applyServer(ServerConfig.Result result) {
+        if (result.ok && webView != null) webView.post(this::reloadWithServer);
+        return result.toJson();
+    }
+
+    /**
+     * 换站点：允许来源跟着换，只清 HTTP 缓存与历史记录。
+     * 不清 WebStorage / Cookie，切回原站点还是原来的登录态与教程进度。
+     */
+    private void reloadWithServer() {
+        if (webView == null) return;
+        if (captureBridgeInstalled) {
+            WebViewCompat.removeWebMessageListener(webView, "RocoCaptureBridge");
+            captureBridgeInstalled = false;
+        }
+        collector.setSiteOrigin(serverConfig.origin());
+        installCaptureWebMessageBridge();
+        webView.clearCache(true);
+        webView.clearHistory();
+        webView.loadUrl(serverConfig.baseUrl() + "/");
     }
 
     private static String escapeHtml(String value) {

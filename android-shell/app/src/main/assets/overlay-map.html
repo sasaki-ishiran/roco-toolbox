@@ -18,6 +18,13 @@
     position: absolute; border: 1px dashed rgba(255,255,255,.75); border-radius: 50%;
     box-shadow: 0 0 0 1px rgba(15,23,42,.35);
   }
+  .radar {
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 50%, #14293c 0%, #0d1a26 72%);
+  }
+  .ring.soft { border: 1px solid rgba(148,163,184,.22); box-shadow: none; }
+  .cross { position: absolute; left: 0; top: 50%; width: 100%; height: 1px; background: rgba(148,163,184,.14); }
+  .cross.v { left: 50%; top: 0; width: 1px; height: 100%; }
   .n {
     position: absolute; left: 50%; top: 2px; transform: translateX(-50%);
     font: 8px/12px -apple-system, 'Microsoft YaHei UI', sans-serif;
@@ -35,6 +42,7 @@
     margin: -8.5px 0 0 -8.5px; border: 1.5px solid #f43f5e; border-radius: 50%;
     box-sizing: border-box;
   }
+  .pt .alert-ring.demand { border-color: #22c55e; }
   .me {
     position: absolute; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px;
     border-radius: 50%; background: #0ea5e9; border: 2px solid #fff;
@@ -51,10 +59,10 @@
 <script>
 (function () {
   'use strict';
-  // 300m 视野铺满 120px；100 世界单位 = 1 米（单位换算来自 maps.json，不写死）
+  // 240m 视野铺满 120px（比 300m 放大 1.25 倍）；100 世界单位 = 1 米（单位换算来自 maps.json，不写死）
   var SIZE = 120;
-  var VIEW_METERS = 300;
-  var DOT_RADIUS_METERS = 150;
+  var VIEW_METERS = 240;
+  var DOT_RADIUS_METERS = 120;
   var KIND_PRIORITY = ['pollution', 'shiny', 'colorful', 'big', 'small', 'high', 'low'];
   var KIND_COLOR = {
     pollution: '#7c3aed', shiny: '#f59e0b', colorful: '#ec4899',
@@ -64,6 +72,23 @@
   var catalog = null;
   var state = null;
   var root = document.getElementById('map');
+  /** 底图加载失败的文件名：记下来退回雷达，避免整块留空（2026-11-09） */
+  var failedArt = {};
+  /** 上一次渲染是否用到了底图：底图失败时只重画一次，避免死循环 */
+  var usedArt = false;
+  // 卡顿量化（2026-11-10）：每 5s 报一次 update / 实际重绘次数，只看数据不优化
+  var perfUpdates = 0;
+  var perfRenders = 0;
+  var perfSince = Date.now();
+
+  function perfLog() {
+    var now = Date.now();
+    if (now - perfSince < 5000) return;
+    console.log('RocoPerf map 5s update=' + perfUpdates + ' render=' + perfRenders);
+    perfUpdates = 0;
+    perfRenders = 0;
+    perfSince = now;
+  }
 
   function colorOfKinds(kinds) {
     if (!kinds) return '#475569';
@@ -78,10 +103,58 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  /** 雷达底图：渐变 + 十字 + 同心圈（视野半径 120m，圈距 40m，跟着 240m 视野一起缩）。 */
+  function radarBackdrop(pxPerMeter) {
+    var html = '<div class="radar"></div><div class="cross"></div><div class="cross v"></div>';
+    var steps = [40, 80, 120];
+    for (var step = 0; step < steps.length; step++) {
+      var radius = steps[step] * pxPerMeter;
+      html += '<div class="ring soft" style="left:' + (SIZE / 2 - radius).toFixed(1) +
+        'px;top:' + (SIZE / 2 - radius).toFixed(1) + 'px;width:' + (radius * 2).toFixed(1) +
+        'px;height:' + (radius * 2).toFixed(1) + 'px"></div>';
+    }
+    return html;
+  }
+
+  /**
+   * 底图投影：世界坐标 → 图片像素。
+   *
+   * `side_units` 是底图覆盖的世界边长（世界单位，1 米 = 100 单位），
+   * 所以「世界单位差 ÷ side_units × 图片宽度」才是图片上的位置。
+   * 2026-11-09 修：以前除的是 declared_width（4096 图片像素），自身点被算到几十万像素外，
+   * 整张底图平移到视口外，表现就是「地图一片深色」。
+   * 自身点必须落回底图范围内，否则视为标定 / 投影异常，退回雷达（不留空白）。
+   */
+  function projectArt(map, selfX, selfY, pxPerUnit) {
+    var side = Number(map.side_units);
+    var originX = Number(map.origin_x);
+    var originY = Number(map.origin_y);
+    var declaredWidth = Number(map.declared_width) || 1;
+    var declaredHeight = Number(map.declared_height) || declaredWidth;
+    if (!isFinite(side) || side <= 0 || !isFinite(originX) || !isFinite(originY)) return null;
+    var width = side * pxPerUnit;
+    var height = width * (declaredHeight / declaredWidth);
+    if (!isFinite(width) || !isFinite(height) || width <= 0 || height <= 0) return null;
+    // y 轴与 maps.json 的 "y":"south" 一致：世界 y 越大越靠南，图片 y 向下也越大
+    var imageX = (selfX - originX) / side * width;
+    var imageY = (selfY - originY) / side * height;
+    if (!isFinite(imageX) || !isFinite(imageY)) return null;
+    var marginX = width * 0.02;
+    var marginY = height * 0.02;
+    if (imageX < -marginX || imageX > width + marginX
+      || imageY < -marginY || imageY > height + marginY) return null;
+    return {
+      width: width,
+      height: height,
+      left: SIZE / 2 - imageX,
+      top: SIZE / 2 - imageY
+    };
+  }
+
   function render() {
-    if (!catalog || !state || !state.scene || !state.self) { root.innerHTML = ''; return; }
-    var map = catalog.maps && catalog.maps[String(state.scene)];
-    if (!map) { root.innerHTML = ''; return; }
+    perfRenders++;
+    perfLog();
+    if (!catalog || !state || !state.self) { root.innerHTML = ''; return; }
     var unitsPerMeter = Number(catalog.coordinate_units_per_meter) || 100;
     var pxPerMeter = SIZE / VIEW_METERS;
     var pxPerUnit = pxPerMeter / unitsPerMeter;
@@ -89,19 +162,18 @@
     var selfY = Number(state.self.y);
     if (!isFinite(selfX) || !isFinite(selfY)) { root.innerHTML = ''; return; }
 
-    var imageWidth = Number(map.side_units) * pxPerUnit;
-    var declaredWidth = Number(map.declared_width) || Number(map.side_units) || 1;
-    var declaredHeight = Number(map.declared_height) || declaredWidth;
-    var imageHeight = imageWidth * (declaredHeight / declaredWidth);
-    // 自身所在的地图图片像素 → 平移到画布正中
-    var selfImageX = (selfX - Number(map.origin_x)) / declaredWidth * imageWidth;
-    var selfImageY = (selfY - Number(map.origin_y)) / declaredHeight * imageHeight;
-    var imageLeft = SIZE / 2 - selfImageX;
-    var imageTop = SIZE / 2 - selfImageY;
-
-    var html = '<img class="art" alt="" draggable="false" src="maps/' + escapeHtml(map.image) +
-      '" style="width:' + imageWidth.toFixed(1) + 'px;height:' + imageHeight.toFixed(1) +
-      'px;left:' + imageLeft.toFixed(1) + 'px;top:' + imageTop.toFixed(1) + 'px">';
+    var map = state.scene != null && catalog.maps ? catalog.maps[String(state.scene)] : null;
+    // 雷达底图先铺：底图缺失 / 加载失败 / 投影对不上时它就是兜底，保证不会整块空白
+    var html = radarBackdrop(pxPerMeter);
+    var art = map ? projectArt(map, selfX, selfY, pxPerUnit) : null;
+    usedArt = !!(art && !failedArt[map.image]);
+    if (usedArt) {
+      html += '<img class="art" alt="" draggable="false" src="maps/' + escapeHtml(map.image) +
+        '" onerror="window.RocoOverlayMap&&window.RocoOverlayMap.artFailed(\'' +
+        escapeHtml(map.image) + '\')" style="width:' + art.width.toFixed(1) +
+        'px;height:' + art.height.toFixed(1) +
+        'px;left:' + art.left.toFixed(1) + 'px;top:' + art.top.toFixed(1) + 'px">';
+    }
 
     var ringRadius = 120 * pxPerMeter;
     html += '<div class="ring" style="left:' + (SIZE / 2 - ringRadius).toFixed(1) +
@@ -109,7 +181,7 @@
       'px;height:' + (ringRadius * 2).toFixed(1) + 'px"></div>';
     html += '<div class="n">N</div>';
 
-    var pets = state.pets || [];
+    var pets = state.mapPets || state.pets || [];
     for (var index = 0; index < pets.length; index++) {
       var pet = pets[index];
       var petX = Number(pet.x);
@@ -125,7 +197,8 @@
       html += '<span class="pt ' + (pet.rare ? 'rare' : 'norm') +
         '" style="left:' + left.toFixed(1) + 'px;top:' + top.toFixed(1) +
         'px;background:' + colorOfKinds(pet.kinds) + '">' +
-        (pet.alert ? '<span class="alert-ring"></span>' : '') + '</span>';
+        (pet.reason === 'demand' ? '<span class="alert-ring demand"></span>'
+          : pet.alert ? '<span class="alert-ring"></span>' : '') + '</span>';
     }
 
     html += '<span class="me' + (state.estimated ? ' est' : '') +
@@ -140,11 +213,20 @@
       catch (error) { catalog = null; }
       render();
     },
-    /** 附近 payload 的地图子集：{scene, self, estimated, pets:[{x,y,rare,alert,kinds}]}。 */
+    /** 附近 payload 的地图子集：{scene, self, estimated, mapPets:[{x,y,rare,alert,reason,kinds}]}。
+     *  mapPets 含未命中目标的普通精灵；旧壳只给 pets 时仍能画。
+     *  scene 没有标定底图时画雷达模式（同一投影），不再整块留空。 */
     update: function (json) {
+      perfUpdates++;
       try { state = typeof json === 'string' ? JSON.parse(json) : json; }
       catch (error) { state = null; }
       render();
+    },
+    /** 底图加载失败（WebView 拦截 file 资源等）：记下来并退回雷达，不留空白。 */
+    artFailed: function (image) {
+      if (!image || failedArt[image]) return;
+      failedArt[image] = true;
+      if (usedArt) render();
     }
   };
 })();

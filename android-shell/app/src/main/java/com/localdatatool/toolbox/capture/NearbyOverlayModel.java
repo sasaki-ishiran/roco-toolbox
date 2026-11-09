@@ -18,8 +18,8 @@ public final class NearbyOverlayModel {
 
     /** 列表最多渲染 8 条，其余只报数。 */
     public static final int MAX_ROWS = 8;
-    /** 面板宽度（与屏宽无关，规格 1.1）。 */
-    public static final int PANEL_WIDTH = 268;
+    /** 面板宽度（1.3.6 方案 2 两行：地图 120 + 列表 132 + 两侧 8 + 间距 6 = 274）。 */
+    public static final int PANEL_WIDTH = 274;
     /** 球与屏边 / 面板与球 / 面板与屏边的间距。 */
     public static final int EDGE = 8;
     /** 命中区有数据时的高度。 */
@@ -32,9 +32,13 @@ public final class NearbyOverlayModel {
     public static final int BODY_TOP_GAP = 28;
     /** 小地图边长。 */
     public static final int MAP_SIZE = 120;
-    /** 列表行高与行间距。 */
-    public static final int ROW_HEIGHT = 30;
-    public static final int ROW_GAP = 2;
+    /** 地图与列表之间的横向间距。 */
+    public static final int LIST_GAP = 6;
+    /** 列表宽度：面板宽度扣掉两侧留白、地图与间距（274 - 8 - 120 - 6 - 8 = 132）。 */
+    public static final int LIST_WIDTH = PANEL_WIDTH - EDGE * 2 - MAP_SIZE - LIST_GAP;
+    /** 列表行高与行间距（两行：11sp 名称行 + 9sp 数值行）。 */
+    public static final int ROW_HEIGHT = 34;
+    public static final int ROW_GAP = 4;
     /** 列表没有内容时的占位高度。 */
     public static final int EMPTY_BODY_HEIGHT = 44;
     /** 底部「还有 N 只」文案行的高度。 */
@@ -201,26 +205,6 @@ public final class NearbyOverlayModel {
         return hitHeight + BODY_TOP_GAP + bodyHeight + footGap;
     }
 
-    /**
-     * 面板左上角坐标：从球所在那一侧的角朝屏幕内侧展开，四边留 {@code edge}。
-     *
-     * <p>球的取向口径复用 {@link OverlayGeometry#cornerOf}（悬浮球那条线正在收口的那套），
-     * 夹边界复用 {@link OverlayGeometry#clamp}，这里不再自建第二套坐标换算。
-     * 所有参数单位一致（调用方统一传 px）。</p>
-     *
-     * @return {left, top}
-     */
-    public static int[] panelPosition(int orbX, int orbY, int orbSize, int screenWidth, int screenHeight,
-                                      int panelWidth, int panelHeight, int edge) {
-        int corner = OverlayGeometry.cornerOf(orbX, orbY, orbSize, orbSize, screenWidth, screenHeight);
-        boolean right = corner == 1 || corner == 3;
-        boolean bottom = corner >= 2;
-        int left = right ? orbX + orbSize - panelWidth : orbX;
-        int top = bottom ? orbY - edge - panelHeight : orbY + orbSize + edge;
-        return OverlayGeometry.clamp(
-            left, top, panelWidth, panelHeight, screenWidth, screenHeight, edge);
-    }
-
     /** 读取与网页同一份标定表，只关心有哪些场景有地图。 */
     public static Set<Integer> parseMapScenes(String json) {
         Set<Integer> scenes = new HashSet<>();
@@ -253,6 +237,15 @@ public final class NearbyOverlayModel {
         public final String gender;
         public final Double distanceM;
         public final String bearingLabel;
+        /** 8 方位箭头（↗ / ← …）；距离太近时为空。 */
+        public final String bearingArrow;
+        /** 高 / 重百分位（0-100），壳端按一位小数截断显示。 */
+        public final Double heightPct;
+        public final Double weightPct;
+        /** 命中原因：demand / alert / rare / colorful / shiny / pollution；没有为 null。 */
+        public final String reason;
+        /** 声音档位文字（婉转声 / 粗嗓门）；没有声音牌子为 null。 */
+        public final String voiceLabel;
         public final Double x;
         public final Double y;
 
@@ -275,8 +268,74 @@ public final class NearbyOverlayModel {
             gender = item.optString("gender", "");
             distanceM = numberOrNull(item, "distanceM");
             bearingLabel = item.optString("bearingLabel", "");
+            bearingArrow = item.optString("bearingArrow", "");
+            heightPct = numberOrNull(item, "heightPct");
+            weightPct = numberOrNull(item, "weightPct");
+            String parsedReason = item.optString("reason", "");
+            reason = parsedReason.isEmpty() ? null : parsedReason;
+            String parsedVoice = item.optString("voiceLabel", "");
+            voiceLabel = parsedVoice.isEmpty() ? null : parsedVoice;
             x = numberOrNull(item, "x");
             y = numberOrNull(item, "y");
         }
+    }
+
+    /**
+     * 列表卡片底色档位（1.3.6 六种，优先级从高到低）：
+     * 命中需求 &gt; 炫彩 &gt; 异色 &gt; 污染 &gt; 稀有 &gt; 普通。
+     */
+    public enum RowTone { DEMAND, COLORFUL, SHINY, POLLUTION, RARE, NORMAL }
+
+    public static RowTone toneOf(Pet pet) {
+        if ("demand".equals(pet.reason)) return RowTone.DEMAND;
+        if (pet.kinds.contains("colorful")) return RowTone.COLORFUL;
+        if (pet.kinds.contains("shiny")) return RowTone.SHINY;
+        if (pet.kinds.contains("pollution")) return RowTone.POLLUTION;
+        if (pet.rare) return RowTone.RARE;
+        return RowTone.NORMAL;
+    }
+
+    /**
+     * 百分位文案：只截断不四舍五入（12.38 → 12.3，0.29 → 0.2），保留一位小数。
+     */
+    public static String pctText(Double value) {
+        if (value == null || !Double.isFinite(value)) return "—";
+        // 安卓没有 Math.trunc（Java 9），负数也要向零截断
+        double scaled = value * 10;
+        double truncated = (scaled < 0 ? Math.ceil(scaled) : Math.floor(scaled)) / 10.0d;
+        return String.format(java.util.Locale.US, "%.1f%%", truncated);
+    }
+
+    /** 距离文案：整数米，没有距离时给占位。 */
+    public static String distanceText(Pet pet) {
+        if (pet.distanceM == null) return "—";
+        return Math.round(pet.distanceM) + "m";
+    }
+
+    /**
+     * 两行列表的第一行（名称之后）：距离 · 方位箭头 · xx级。
+     */
+    public static String metaTextLine1(Pet pet) {
+        StringBuilder builder = new StringBuilder(distanceText(pet));
+        append(builder, pet.bearingArrow);
+        append(builder, pet.level > 0 ? pet.level + "级" : "");
+        return builder.toString();
+    }
+
+    /**
+     * 两行列表的第二行：高：xx.x% · 重：xx.x% · 声音。
+     */
+    public static String metaTextLine2(Pet pet) {
+        StringBuilder builder = new StringBuilder();
+        append(builder, pet.heightPct == null ? "" : "高：" + pctText(pet.heightPct));
+        append(builder, pet.weightPct == null ? "" : "重：" + pctText(pet.weightPct));
+        append(builder, pet.voiceLabel == null ? "" : pet.voiceLabel);
+        return builder.toString();
+    }
+
+    private static void append(StringBuilder builder, String part) {
+        if (part == null || part.isEmpty()) return;
+        if (builder.length() > 0) builder.append(' ');
+        builder.append(part);
     }
 }

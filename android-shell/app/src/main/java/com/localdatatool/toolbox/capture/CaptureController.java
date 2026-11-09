@@ -32,12 +32,26 @@ public final class CaptureController {
     private final Map<String, CaptureSnapshot> grants = new ConcurrentHashMap<>();
     private CaptureUploadManager uploads;
     private volatile boolean trusted;
+    /**
+     * 当前站点 origin（1.3 起可切测试站 / 正式站）。
+     * 写死正式站会让测试站页面永远 trusted=false，采集桥整段失效。
+     */
+    private volatile String siteOrigin = ORIGIN;
     private boolean permissionPending;
     private boolean awaitingLaunch;
     public CaptureController(Activity activity, ImportReady imported) { this.activity = activity; this.imported = imported; }
+    /** 切站后同步当前 origin；非 https 值忽略。 */
+    public void setSiteOrigin(String origin) {
+        if (origin != null && origin.startsWith("https://")) siteOrigin = origin;
+    }
     public void setPage(String url) {
         Uri uri = url == null ? Uri.EMPTY : Uri.parse(url);
-        trusted = "https".equals(uri.getScheme()) && "roco-toolbox.pages.dev".equals(uri.getHost()) && (uri.getPort() == -1 || uri.getPort() == 443);
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        if (!"https".equals(scheme) || host == null) { trusted = false; return; }
+        int port = uri.getPort();
+        String pageOrigin = "https://" + host + (port == -1 || port == 443 ? "" : ":" + port);
+        trusted = pageOrigin.equals(siteOrigin);
     }
     public void invalidatePage() { trusted = false; }
     public void destroy() {

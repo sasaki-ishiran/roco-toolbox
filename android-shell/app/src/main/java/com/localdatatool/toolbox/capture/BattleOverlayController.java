@@ -9,6 +9,8 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -57,11 +59,10 @@ public final class BattleOverlayController {
     private static final String PREFS = "battle-overlay";
     private static final String KEY_X = "x";
     private static final String KEY_Y = "y";
+    /** 长按隐藏后的状态存档：重开 App / 重新采集都保持隐藏，直到用户在附近页点「显示悬浮球」 */
+    private static final String KEY_HIDDEN = "hidden";
     private static final String CARD_TITLE = "战斗采集 · 赛季奇遇";
 
-    private static final int COLOR_FRAME_BG = 0xFFFFFFFF;
-    private static final int COLOR_FRAME_BORDER = 0xFF059669;
-    private static final int COLOR_FRAME_HIT_BORDER = 0xFFE11D48;
     private static final int COLOR_CARD_BG = 0xFFFFFFFF;
     private static final int COLOR_TITLE = 0xFF1E293B;
     private static final int COLOR_CHIP_BG = 0xFFF1F5F9;
@@ -70,15 +71,15 @@ public final class BattleOverlayController {
     private static final int COLOR_HOT_TEXT = 0xFFB45309;
     private static final int COLOR_PRIMARY_BG = 0xFF1E293B;
     private static final int COLOR_EMPTY_TEXT = 0xFF94A3B8;
+    /** 命中时图标本身的颜色（不额外加圈 / 红点 / 色块） */
+    private static final int COLOR_HIT_ICON = 0xFFE11D48;
 
     private static final int ORB_DP = 52;
-    /** 图标与边框之间的留白：太小图标方角会顶出圆角，太大图标会显得小。 */
-    private static final int ORB_PADDING_DP = 4;
-    private static final int ORB_RADIUS_DP = 12;
-    private static final int ORB_BORDER_DP = 2;
     private static final int CARD_DP = 216;
     private static final int EDGE_DP = 8;
     private static final int DRAG_SLOP_DP = 8;
+    /** 长按判定：按住 500ms 且位移不超过 slop 才算长按隐藏，超过按拖动处理 */
+    private static final long LONG_PRESS_MS = 500L;
 
     private final Activity activity;
     private final WindowManager windowManager;
@@ -101,6 +102,14 @@ public final class BattleOverlayController {
     private int startX;
     private int startY;
     private boolean dragged;
+    /** 本次按下是否已经触发长按隐藏（触发后抬手不再当点击） */
+    private boolean longPressed;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable longPressHide = () -> {
+        if (dragged || orb == null) return;
+        longPressed = true;
+        setOrbHidden(true);
+    };
     /** 点击球的回调；面板侧接管展开逻辑时设置，默认展开内置的命中卡。 */
     private TapListener tapListener;
 
@@ -115,16 +124,20 @@ public final class BattleOverlayController {
 
     public BattleOverlayController(Activity activity) {
         this.activity = activity;
-        this.windowManager = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
+        // 必须用 Application 的 WindowManager：Activity 的 WindowManager 带着 Activity 窗口令牌，
+        // 窗口会被限制在 Activity 自己的显示区域里（竖屏宽度），横屏游戏里就表现为「只能拖到左半屏」。
+        Context appContext = activity.getApplicationContext();
+        this.windowManager = (WindowManager) appContext.getSystemService(Context.WINDOW_SERVICE);
         this.prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        this.displayManager = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
-        this.nearbyPanel = new NearbyPanelController(activity, windowManager);
+        this.displayManager = (DisplayManager) appContext.getSystemService(Context.DISPLAY_SERVICE);
+        this.nearbyPanel = new NearbyPanelController(activity);
         // 附近面板接管点击：有附近数据就展开面板（命中区 + 地图 + 列表），
         // 没推过数据时仍是原来的命中卡，球的拖动 / 位置代码不动。
         setTapListener(() -> {
             if (nearbyPanel.hasNearbyData()) {
                 removeCard();
-                followPanel();
+                // 展开前把球当前坐标同步过去，面板按「球在哪侧就从另一侧展开」定默认落点
+                syncPanelAnchor();
                 nearbyPanel.toggle();
             } else {
                 toggleCard();
@@ -148,8 +161,11 @@ public final class BattleOverlayController {
             if (orbParams != null) {
                 clampToScreen(orbParams);
                 safeUpdate(orb, orbParams);
+                syncPanelAnchor();
             }
             placeCard();
+            Point screen = screenSize();
+            nearbyPanel.onScreenChanged(screen.x, screen.y);
         }
     };
 
@@ -198,7 +214,8 @@ public final class BattleOverlayController {
         }
         // 附近数据到了就以面板为准，旧命中卡不再叠在球旁边
         removeCard();
-        if (orb == null) addOrb();
+        if (orb == null && !readOrbHidden()) addOrb();
+        syncPanelAnchor();
         return "ok";
     }
 
@@ -206,7 +223,7 @@ public final class BattleOverlayController {
     public void onResume() {
         if (lastPayload != null) update(lastPayload);
         nearbyPanel.reapply();
-        if (nearbyPanel.nearbyVisible() && orb == null && canDraw()) addOrb();
+        if (nearbyPanel.nearbyVisible() && orb == null && !readOrbHidden() && canDraw()) addOrb();
     }
 
     /** 跳系统设置授予悬浮窗权限。 */
@@ -223,6 +240,7 @@ public final class BattleOverlayController {
     }
 
     public void destroy() {
+        main.removeCallbacks(longPressHide);
         if (displayManager != null) displayManager.unregisterDisplayListener(displayListener);
         removeAll();
         nearbyPanel.release();
@@ -230,9 +248,10 @@ public final class BattleOverlayController {
     }
 
     private void render(JSONObject payload) {
-        if (orb == null) addOrb();
+        if (orb == null && !readOrbHidden()) addOrb();
         if (orb == null) return;
         setHit(payload.optBoolean("hit", false));
+        syncPanelAnchor();
         if (card != null && fieldsView1 != null && fieldsView2 != null) {
             JSONArray fields = payload.optJSONArray("fields");
             fieldsView1.setText(buildFields(fields, 1));
@@ -248,14 +267,12 @@ public final class BattleOverlayController {
         int size = dp(ORB_DP);
         ImageView view = new ImageView(activity);
         view.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        // 项目图标 + 一圈边框；不再垫深色圆形底色（圆里套方图标会像铜钱）
-        view.setPadding(dp(ORB_PADDING_DP), dp(ORB_PADDING_DP), dp(ORB_PADDING_DP), dp(ORB_PADDING_DP));
+        // 1.3.6 起只放图标本体：不再加白底方框 / 边框 / 呼吸，命中只改图标颜色
         try {
             view.setImageDrawable(activity.getApplicationInfo().loadIcon(activity.getPackageManager()));
         } catch (Exception ignored) {
-            // 拿不到图标就只显示纯色边框
+            // 拿不到图标就留空球，不影响点击与拖动
         }
-        view.setBackground(orbFrame(false));
         orb = view;
 
         orbParams = new WindowManager.LayoutParams(
@@ -288,6 +305,8 @@ public final class BattleOverlayController {
                 startX = orbParams.x;
                 startY = orbParams.y;
                 dragged = false;
+                longPressed = false;
+                main.postDelayed(longPressHide, LONG_PRESS_MS);
                 return true;
             case MotionEvent.ACTION_MOVE: {
                 float dx = event.getRawX() - downRawX;
@@ -295,18 +314,23 @@ public final class BattleOverlayController {
                 // 手指抖动不算拖动，否则想点开详情会变成挪球
                 if (!dragged && Math.hypot(dx, dy) < dp(DRAG_SLOP_DP)) return true;
                 dragged = true;
+                main.removeCallbacks(longPressHide);
                 orbParams.x = startX + Math.round(dx);
                 orbParams.y = startY + Math.round(dy);
                 clampToScreen(orbParams);
                 safeUpdate(orb, orbParams);
+                syncPanelAnchor();
                 placeCard();
                 return true;
             }
             case MotionEvent.ACTION_UP: {
+                main.removeCallbacks(longPressHide);
+                if (longPressed) return true;
                 orbParams.x = startX + Math.round(event.getRawX() - downRawX);
                 orbParams.y = startY + Math.round(event.getRawY() - downRawY);
                 clampToScreen(orbParams);
                 safeUpdate(orb, orbParams);
+                syncPanelAnchor();
                 if (dragged) {
                     prefs.edit().putInt(KEY_X, orbParams.x).putInt(KEY_Y, orbParams.y).apply();
                     placeCard();
@@ -318,7 +342,9 @@ public final class BattleOverlayController {
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
+                main.removeCallbacks(longPressHide);
                 dragged = false;
+                longPressed = false;
                 return true;
             default:
                 return false;
@@ -405,20 +431,18 @@ public final class BattleOverlayController {
     }
 
     /**
-     * 卡片贴在球旁边，尽量不挡球、也不出屏。
+     * 详情卡（没有附近数据时的兜底）贴在球的另一侧，尽量不挡球、也不出屏。
      *
-     * 顺序：右侧 → 左侧 → 哪边空间大贴哪边；垂直方向以球为中心。
-     * 两边都挤不下时改为球的上方 / 下方，避免卡片盖住球。
+     * <p>只做一条规则：球在左半屏就贴右侧，在右半屏就贴左侧；横向仍重叠时改到球的上方 / 下方。
+     * 不再逐级试位置的「智能避让」（用户反馈效果差、还容易盖住球）。</p>
      */
     private void placeCard() {
-        // 展开面板跟着球走；这里只是把球当前的屏幕坐标转给面板，不动球的任何行为
-        followPanel();
         if (card == null || cardParams == null || orbParams == null) return;
         Point screen = screenSize();
         int gap = dp(EDGE_DP);
         int width = cardWidth();
         int height = cardHeight(width);
-        int[] position = OverlayGeometry.besideBall(
+        int[] position = OverlayGeometry.oppositeOfBall(
             width, height,
             orbParams.x, orbParams.y, orbParams.width, orbParams.height,
             screen.x, screen.y, gap);
@@ -453,19 +477,37 @@ public final class BattleOverlayController {
         return Math.max(card.getMeasuredHeight(), dp(60));
     }
 
-    /** 不透明圆角方框：白底 + 项目绿边框；命中时边框变红。 */
-    private GradientDrawable orbFrame(boolean hit) {
-        GradientDrawable frame = new GradientDrawable();
-        frame.setShape(GradientDrawable.RECTANGLE);
-        frame.setCornerRadius(dpF(ORB_RADIUS_DP));
-        frame.setColor(COLOR_FRAME_BG);
-        frame.setStroke(dp(hit ? ORB_BORDER_DP + 1 : ORB_BORDER_DP), hit ? COLOR_FRAME_HIT_BORDER : COLOR_FRAME_BORDER);
-        return frame;
+    /**
+     * 隐藏 / 显示悬浮球（1.3.6）：长按球 500ms 隐藏，附近页的「显示悬浮球」恢复。
+     * 隐藏只是摘掉窗口，采集照常跑；状态写进 SharedPreferences，重开 App 仍然隐藏。
+     */
+    public String setOrbHidden(boolean hidden) {
+        prefs.edit().putBoolean(KEY_HIDDEN, hidden).apply();
+        if (hidden) {
+            removeCard();
+            nearbyPanel.remove();
+            removeOrb();
+            return "ok";
+        }
+        if (orb == null && canDraw()) {
+            addOrb();
+            if (lastPayload != null) render(lastPayload);
+        }
+        return "ok";
+    }
+
+    /** 悬浮球当前是否被用户隐藏（网页用它决定按钮文案）。 */
+    public boolean readOrbHidden() {
+        return prefs.getBoolean(KEY_HIDDEN, false);
     }
 
     private void setHit(boolean next) {
-        // 完全不做透明度呼吸：半透明在小球尺寸下很费眼（用户反馈）
-        if (orb != null) orb.setBackground(orbFrame(next));
+        // 命中只改图标本身的颜色：不呼吸、不加圈、不加红点
+        if (orb instanceof ImageView) {
+            ((ImageView) orb).setColorFilter(next
+                ? new PorterDuffColorFilter(COLOR_HIT_ICON, PorterDuff.Mode.SRC_IN)
+                : null);
+        }
     }
 
     /** 详情字段：每个字段一个圆角小标签，和网页里的小标签保持一致；只取指定排。 */
@@ -499,11 +541,11 @@ public final class BattleOverlayController {
         return builder;
     }
 
-    /** 把球当前位置转给展开面板（面板只在展开时才有窗口，未展开时是空操作）。 */
-    private void followPanel() {
+    /** 把球当前屏幕坐标同步给面板（面板只在展开时用来算默认落点，之后不再跟着球走）。 */
+    private void syncPanelAnchor() {
         if (orbParams == null) return;
         Point screen = screenSize();
-        nearbyPanel.followOrb(orbParams.x, orbParams.y, orbParams.width, screen.x, screen.y);
+        nearbyPanel.setOrbRect(orbParams.x, orbParams.y, orbParams.width, screen.x, screen.y);
     }
 
     private void removeAll() {

@@ -2,19 +2,29 @@ package com.localdatatool.toolbox.update;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,20 +48,40 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 应用内更新（2026-11-08）：启动静默检查 + 手动检查，下载 APK 后调起系统安装器。
  *
- * <p>清单地址只在这里配置一次（{@link #MANIFEST_URL}），APK 地址由清单里的
+ * <p>清单地址只在这里配置一次（{@link #MANIFEST_URLS}），APK 地址由清单里的
  * {@code apkUrl} 决定（固定指向最新版），不把地址散落到别处。</p>
  *
  * <p>清单与安装包都不进 APK：清单放在站点静态目录，安装包放在清单指向的固定地址。</p>
  */
 public final class UpdateController {
 
-    /** 唯一配置点：远端版本清单地址（Cloudflare 静态资源）。 */
-    public static final String MANIFEST_URL = "https://roco-toolbox.pages.dev/android/version.json";
+    /**
+     * 唯一配置点：远端版本清单地址。
+     *
+     * <p>主站 {@code /android/version.json} 被 Cloudflare 边缘缓存咬住（7 天 TTL、账号无 zone
+     * 无法 purge），1.2.6 客户端读到的是旧副本，所以新版本改读带版本号的 {@code version-18.json}。
+     * 这个新路径拿到的清单是**可信**的，可以触发强制更新。</p>
+     */
+    public static final String MANIFEST_URL =
+        "https://roco-toolbox.pages.dev/android/version-18.json";
+
+    /** 兜底地址：都可能被边缘缓存咬住，只做「提示更新」，不做强更。 */
+    private static final String LEGACY_MANIFEST_URL =
+        "https://roco-toolbox.pages.dev/android/version.json";
+    private static final String DOWNLOADS_MANIFEST_URL =
+        "https://roco-toolbox-downloads.pages.dev/android/version.json";
 
     private static final String PREFS = "roco_update";
     private static final String KEY_SKIPPED = "skippedVersionCode";
     private static final String APK_NAME = "roco-toolbox-latest.apk";
     private static final String AUTHORITY = "com.localdatatool.toolbox.fileprovider";
+
+    /** 全屏强制更新页的底色与文字色 */
+    private static final int COLOR_PAGE = 0xFFF8FAFC;
+    private static final int COLOR_TITLE = 0xFF0F172A;
+    private static final int COLOR_TEXT = 0xFF334155;
+    private static final int COLOR_SUB = 0xFF64748B;
+    private static final int COLOR_ACCENT = 0xFF059669;
 
     private final Activity activity;
     private final SharedPreferences prefs;
@@ -67,13 +97,32 @@ public final class UpdateController {
     private AlertDialog progressDialog;
     private ProgressBar progressBar;
     private TextView progressText;
+    /** 低于最低可用版本时挂着的全屏更新页（不可取消） */
+    private Dialog forceDialog;
+    /** 检查结果回推给网页（「我的」页更新入口按它切「检查 / 更新」文案） */
+    private StatusListener statusListener;
+
+    /** 检查结果回调：state = latest / available / failed。 */
+    public interface StatusListener {
+        void onStatus(String state, String versionName, String message);
+    }
+
+    public void setStatusListener(StatusListener listener) {
+        this.statusListener = listener;
+    }
 
     public UpdateController(Activity activity) {
         this.activity = activity;
         this.prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         this.manager = new UpdateManager(
-            BuildConfig.VERSION_CODE, apkFile(), this::readManifest, this::downloadApk,
-            this::canInstallPackage);
+            BuildConfig.VERSION_CODE, apkFile(),
+            UpdateManager.firstValid(
+                // 新路径：可信清单，低于 minSupportedVersionCode 会进全屏强制更新页
+                () -> readManifest(MANIFEST_URL),
+                // 旧路径 / 下载站：只提示更新，避免一份旧缓存把人卡在更新页
+                () -> UpdateManager.asNoticeOnly(readManifest(LEGACY_MANIFEST_URL)),
+                () -> UpdateManager.asNoticeOnly(readManifest(DOWNLOADS_MANIFEST_URL))),
+            this::downloadApk, this::canInstallPackage);
     }
 
     /** 启动时静默检查；失败不打扰用户。 */
@@ -101,6 +150,8 @@ public final class UpdateController {
     public void destroy() {
         destroyed = true;
         dismissProgress();
+        if (forceDialog != null && forceDialog.isShowing()) forceDialog.dismiss();
+        forceDialog = null;
         worker.shutdownNow();
     }
 
@@ -108,17 +159,20 @@ public final class UpdateController {
         if (destroyed) return;
         worker.execute(() -> manager.check(new UpdateManager.Listener() {
             @Override public void onUpToDate() {
+                report("latest", BuildConfig.VERSION_NAME, null);
                 if (!silent) main.post(() -> dialog("已是最新版本",
                     "当前已是最新版本 v" + BuildConfig.VERSION_NAME + "。"));
             }
 
             @Override public void onAvailable(UpdateManifest manifest, boolean required) {
+                report("available", manifest.versionName, null);
                 int skipped = prefs.getInt(KEY_SKIPPED, -1);
                 if (silent && !required && skipped == manifest.versionCode) return;
                 main.post(() -> showAvailable(manifest, required));
             }
 
             @Override public void onCheckFailed(String message) {
+                report("failed", null, message);
                 if (silent) return;
                 main.post(() -> dialog("检查更新失败", message));
             }
@@ -131,20 +185,142 @@ public final class UpdateController {
         }));
     }
 
+    /** 把检查结果回推给网页（主线程回调，网页不在也不影响原生弹窗）。 */
+    private void report(String state, String versionName, String message) {
+        StatusListener listener = statusListener;
+        if (listener == null) return;
+        main.post(() -> listener.onStatus(state, versionName, message));
+    }
+
     private void showAvailable(UpdateManifest manifest, boolean required) {
         if (destroyed || activity.isFinishing()) return;
+        if (required) {
+            showForceUpdate(manifest);
+            return;
+        }
         String notes = manifest.notes.isEmpty() ? "修复了一些问题。" : manifest.notes;
-        String message = (required ? "这个版本已不被支持，请更新后再使用。\n\n" : "")
-            + notes + "\n\n当前版本 v" + BuildConfig.VERSION_NAME
+        String message = notes + "\n\n当前版本 v" + BuildConfig.VERSION_NAME
             + " → 新版本 v" + manifest.versionName;
         new AlertDialog.Builder(activity)
             .setTitle("新版 v" + manifest.versionName + " 可更新")
             .setMessage(message)
             .setPositiveButton("立即更新", (dialog, which) -> startDownload(manifest))
-            .setNegativeButton("稍后", (dialog, which) -> {
-                if (!required) prefs.edit().putInt(KEY_SKIPPED, manifest.versionCode).apply();
-            })
+            .setNegativeButton("稍后", (dialog, which) ->
+                prefs.edit().putInt(KEY_SKIPPED, manifest.versionCode).apply())
             .show();
+    }
+
+    /**
+     * 低于清单里的最低可用版本：全屏强制更新页，没有跳过入口。
+     *
+     * <p>只有拿到有效清单、且本地 versionCode 低于 {@code minSupportedVersionCode} 才会走到这里；
+     * 断网 / 清单拉取失败时 {@link UpdateManager} 只回调 {@code onCheckFailed}，不会锁人。</p>
+     */
+    private void showForceUpdate(UpdateManifest manifest) {
+        if (forceDialog != null && forceDialog.isShowing()) return;
+        int pad = dp(24);
+
+        LinearLayout box = new LinearLayout(activity);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.setPadding(pad, pad * 2, pad, pad);
+        box.setBackgroundColor(COLOR_PAGE);
+
+        TextView title = label("需要更新后才能继续使用", 22, COLOR_TITLE, true);
+        box.addView(title, matchWrap(0));
+
+        TextView versions = label(
+            "当前版本 v" + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n"
+                + "要求版本 v" + manifest.versionName + " (" + manifest.versionCode + ")",
+            15, COLOR_SUB, false);
+        box.addView(versions, matchWrap(dp(12)));
+
+        TextView notes = label(
+            manifest.notes.isEmpty() ? "这个版本已停止支持，请更新到最新版。" : manifest.notes,
+            14, COLOR_TEXT, false);
+        box.addView(notes, matchWrap(dp(20)));
+
+        TextView link = label(manifest.apkUrl, 12, COLOR_SUB, false);
+        link.setTextIsSelectable(true);
+        link.setPadding(dp(12), dp(10), dp(12), dp(10));
+        GradientDrawable linkBg = new GradientDrawable();
+        linkBg.setColor(0xFFF1F5F9);
+        linkBg.setCornerRadius(dp(8));
+        link.setBackground(linkBg);
+        box.addView(link, matchWrap(dp(20)));
+
+        TextView install = label("下载安装", 16, 0xFFFFFFFF, true);
+        install.setGravity(Gravity.CENTER);
+        install.setPadding(0, dp(14), 0, dp(14));
+        GradientDrawable installBg = new GradientDrawable();
+        installBg.setColor(COLOR_ACCENT);
+        installBg.setCornerRadius(dp(10));
+        install.setBackground(installBg);
+        install.setOnClickListener(view -> startDownload(manifest));
+        box.addView(install, matchWrap(dp(24)));
+
+        TextView copy = label("复制下载链接", 15, COLOR_TITLE, false);
+        copy.setGravity(Gravity.CENTER);
+        copy.setPadding(0, dp(12), 0, dp(12));
+        GradientDrawable copyBg = new GradientDrawable();
+        copyBg.setColor(0xFFFFFFFF);
+        copyBg.setCornerRadius(dp(10));
+        copyBg.setStroke(dp(1), 0xFFCBD5E1);
+        copy.setBackground(copyBg);
+        copy.setOnClickListener(view -> copyLink(manifest.apkUrl));
+        box.addView(copy, matchWrap(dp(12)));
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.addView(box);
+
+        forceDialog = new Dialog(activity, android.R.style.Theme_DeviceDefault_Light_NoActionBar);
+        forceDialog.setContentView(scroll);
+        // 不给跳过：返回键、点外部都不会关掉这一页
+        forceDialog.setCancelable(false);
+        forceDialog.setCanceledOnTouchOutside(false);
+        forceDialog.show();
+        Window window = forceDialog.getWindow();
+        if (window != null) {
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            window.setBackgroundDrawable(new ColorDrawable(COLOR_PAGE));
+        }
+    }
+
+    private TextView label(String value, int sizeSp, int color, boolean bold) {
+        TextView view = new TextView(activity);
+        view.setText(value);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp);
+        view.setTextColor(color);
+        if (bold) view.setTypeface(null, Typeface.BOLD);
+        view.setLineSpacing(0, 1.35f);
+        return view;
+    }
+
+    private static LinearLayout.LayoutParams matchWrap(int topMargin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = topMargin;
+        return params;
+    }
+
+    private void copyLink(String url) {
+        try {
+            ClipboardManager clipboard =
+                (ClipboardManager) activity.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard == null) {
+                toast("没有可用的剪贴板");
+                return;
+            }
+            clipboard.setPrimaryClip(ClipData.newPlainText("洛克工具箱下载链接", url));
+            toast("下载链接已复制");
+        } catch (Exception error) {
+            toast("复制失败：" + describe(error));
+        }
+    }
+
+    private int dp(int value) {
+        return Math.round(TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, value, activity.getResources().getDisplayMetrics()));
     }
 
     private void startDownload(UpdateManifest manifest) {
@@ -262,10 +438,10 @@ public final class UpdateController {
         }
     }
 
-    private String readManifest() throws Exception {
+    private String readManifest(String url) throws Exception {
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL(MANIFEST_URL).openConnection();
+            connection = (HttpURLConnection) new URL(url).openConnection();
             connection.setConnectTimeout(8000);
             connection.setReadTimeout(10000);
             connection.setRequestProperty("Cache-Control", "no-cache");
