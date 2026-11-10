@@ -90,29 +90,59 @@ export function isBattleTargetEmpty(target: BattleTarget): boolean {
   return target.natures.length === 0 && !target.gender && target.voices.length === 0 && target.bodies.length === 0;
 }
 
-/** 守卫个体是否命中目标（悬浮球变色、战斗卡上「命中」标签都用它）。 */
-export function battleTargetHit(target: BattleTarget, encounter: SeasonEncounter | null | undefined): boolean {
-  if (!encounter || isBattleTargetEmpty(target)) return false;
-  /** [设了该维度吗, 该维度命中吗]；维度内多选取或；性格必须已确认（30 占位不算数） */
-  const checks: Array<[boolean, boolean]> = [
-    [
-      target.natures.length > 0,
-      !!encounter.natureConfirmed && target.natures.includes(encounter.nature),
-    ],
-    [!!target.gender, encounter.gender === target.gender],
+/** 个体参与目标判定所需的字段（守卫与附近精灵共用一套维度口径）。 */
+export interface BattleTargetFacts {
+  /** 性格；null = 未知（守卫以「30 占位未确认」为未知，附近精灵以记录缺省为未知） */
+  nature: string | null;
+  gender: string | null;
+  voiceDb: number | null;
+  weightPct: number | null;
+}
+
+/** [设了该维度吗, 该维度命中吗]；维度内多选取或。 */
+function targetChecks(target: BattleTarget, facts: BattleTargetFacts): Array<[boolean, boolean]> {
+  return [
+    [target.natures.length > 0, facts.nature != null && target.natures.includes(facts.nature)],
+    [!!target.gender, facts.gender === target.gender],
     [
       target.voices.length > 0,
-      encounter.voiceDb != null && target.voices.some((voice) => matchesVoiceOption(encounter.voiceDb!, voice)),
+      facts.voiceDb != null && target.voices.some((voice) => matchesVoiceOption(facts.voiceDb!, voice)),
     ],
     [
       target.bodies.length > 0,
       target.bodies.some((body) =>
-        body === 'big' ? (encounter.weightPct ?? 0) >= 98 : (encounter.weightPct ?? 100) <= 2),
+        body === 'big' ? (facts.weightPct ?? 0) >= 98 : (facts.weightPct ?? 100) <= 2),
     ],
   ];
-  const selected = checks.filter(([picked]) => picked);
-  if (selected.length === 0) return false;
+}
+
+/** 维度之间的叠加：任意维度都没设 → null（由调用方决定语义）。 */
+function targetVerdict(target: BattleTarget, facts: BattleTargetFacts): boolean | null {
+  const selected = targetChecks(target, facts).filter(([picked]) => picked);
+  if (selected.length === 0) return null;
   return target.mode === 'all'
     ? selected.every(([, hit]) => hit)
     : selected.some(([, hit]) => hit);
+}
+
+/** 守卫个体是否命中目标（悬浮球变色、战斗卡上「命中」标签都用它）。 */
+export function battleTargetHit(target: BattleTarget, encounter: SeasonEncounter | null | undefined): boolean {
+  if (!encounter) return false;
+  return targetVerdict(target, {
+    nature: encounter.natureConfirmed ? encounter.nature : null,
+    gender: encounter.gender || null,
+    voiceDb: encounter.voiceDb ?? null,
+    weightPct: encounter.weightPct ?? null,
+  }) === true;
+}
+
+/**
+ * 附近精灵是否通过目标维度筛选（2026-11-09 悬浮窗列表）。
+ *
+ * 与 {@link battleTargetHit} 同一套维度口径（维度内多选取或，维度之间按 `mode` 叠加），
+ * 唯一区别：**一个维度都没设 = 全部通过**，而不是「没设目标 / 不命中」。
+ * 附近精灵的性格来自宠物记录回填，没有额外的确认帧，非空即视为已知。
+ */
+export function battleTargetAllows(target: BattleTarget, facts: BattleTargetFacts): boolean {
+  return targetVerdict(target, facts) !== false;
 }

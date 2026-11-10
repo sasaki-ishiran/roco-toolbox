@@ -18,12 +18,22 @@ const payload = (overrides: Partial<NearbyOverlayPayload> = {}): NearbyOverlayPa
   self: { x: 0, y: 0 },
   pets: [{
     key: 'a', name: '雪豆丁', level: 45, kinds: ['shiny'], rare: true, alert: true,
-    nature: '保守', gender: '母', distanceM: 8.8, bearingLabel: '西南', x: 100, y: -100,
+    nature: '保守', gender: '母', distanceM: 8.8, bearingLabel: '西南', bearingArrow: '↙',
+    heightPct: 12.3, weightPct: 8.1, voiceDb: 12,
+    x: 100, y: -100,
   }],
   total: 1,
+  matched: 1,
+  mapPets: [{
+    key: 'a', kinds: ['shiny'], rare: true, alert: true, reason: 'shiny', x: 100, y: -100, distanceM: 8.8,
+  }],
   rareTotal: 1,
   alertTotal: 1,
   selfEstimated: false,
+  selfSource: 'packet' as const,
+  selfAt: 1234,
+  selfHeading: 90,
+  perf: { readAvg: 4, readMax: 9, decodeAvg: 30, decodeMax: 70, bytes: 8192, gapAvg: 260, rounds: 40 },
   updatedAt: 1234,
   ...overrides,
 });

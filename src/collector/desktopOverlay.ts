@@ -11,11 +11,20 @@ export interface DesktopOverlayPet {
   kinds: string[];
   rare: boolean;
   alert: boolean;
+  /** 命中原因：demand / alert / rare / colorful / shiny / pollution */
+  reason?: string | null;
   nature: string | null;
   gender: string | null;
   /** 相对自身（或估算中心）的距离，米 */
   distanceM: number | null;
   bearingLabel: string | null;
+  /** 8 方位箭头（与 bearingLabel 同源，随自身朝向旋转）；没有有效方向时为 null */
+  bearingArrow?: string | null;
+  /** 声音分贝（-100~100）：小窗直接显示 `+99dB`，不再用「婉转声 / 粗嗓门」分类词 */
+  voiceDb?: number | null;
+  /** 身高 / 体重百分位（0-100）；图鉴缺区间时为 null */
+  heightPct?: number | null;
+  weightPct?: number | null;
   x: number | null;
   y: number | null;
 }
@@ -28,6 +37,10 @@ export interface DesktopOverlayPayload {
   self: { x: number; y: number } | null;
   pets: DesktopOverlayPet[];
   updatedAt: number;
+  /** 自身朝向（0 = 正北、顺时针，度）：小窗自身点按它旋转；null 时退回圆点 */
+  selfHeading?: number | null;
+  /** 地图点位（附近所有带坐标的精灵）；缺省时退回 pets */
+  mapPets?: Array<{ key: string; kinds: string[]; rare: boolean; alert: boolean; x: number; y: number }>;
 }
 
 export function isDesktopOverlaySupported(): boolean {
