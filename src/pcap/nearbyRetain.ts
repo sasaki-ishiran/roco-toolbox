@@ -31,16 +31,18 @@ export interface RetainClassify {
 const KEEP_KINDS = new Set(['colorful', 'shiny', 'pollution']);
 
 /**
- * 常驻列表的「高价值」口径（2026-11-06 用户反馈收紧）：
+ * 常驻列表的「高价值」口径（2026-11-06 用户反馈收紧，2026-11-09 补回稀有）：
  * - 可主动提醒（±100dB，或体重牌 + 声音牌）；
+ * - 稀有（与附近页「稀有」筛选同一口径，雷达上能看到就必须能在列表里看到）；
  * - 炫彩 / 异色 / 污染；
  * - 命中需求中心。
  *
- * 只有单一「大块头 / 小不点 / 婉转声 / 粗嗓门」牌子的精灵只在雷达/当前视野显示，
+ * 只有单一「大块头 / 小不点 / 婉转声 / 粗嗓门」牌子的普通精灵只在雷达/当前视野显示，
  * 不再进入常驻列表。
  */
 export function isHighValuePet(pet: LiveNearbyPet, demandHits: readonly DemandHit[]): boolean {
-  return Boolean(pet.alertReason)
+  return pet.rare
+    || Boolean(pet.alertReason)
     || demandHits.length > 0
     || pet.kinds.some((kind) => KEEP_KINDS.has(kind));
 }

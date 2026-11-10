@@ -64,9 +64,11 @@ describe('常驻列表清理', () => {
 });
 
 describe('高价值判定', () => {
-  test('可主动提醒、炫彩/异色/污染、需求命中都算高价值', () => {
+  test('可主动提醒、稀有、炫彩/异色/污染、需求命中都算高价值', () => {
     expect(isHighValuePet({ ...pet('a'), alertReason: '-100dB 粗嗓门' }, [])).toBe(true);
     expect(isHighValuePet(pet('b'), [])).toBe(false);
+    // 稀有：附近页「稀有」筛选看得到的，列表也必须有
+    expect(isHighValuePet({ ...pet('rare'), rare: true }, [])).toBe(true);
     const shiny = { ...pet('c'), kinds: ['shiny'], rare: true };
     expect(isHighValuePet(shiny, [])).toBe(true);
     const polluted = { ...pet('d'), kinds: ['pollution'], rare: true };
@@ -74,10 +76,10 @@ describe('高价值判定', () => {
     expect(isHighValuePet(pet('e'), [{ demand: {} } as DemandHit])).toBe(true);
   });
 
-  test('只有体重牌或单声音牌的精灵不算高价值', () => {
-    const big = { ...pet('big'), kinds: ['big'], rare: true };
+  test('只有体重牌或单声音牌的普通精灵不算高价值', () => {
+    const big = { ...pet('big'), kinds: ['big'], rare: false };
     expect(isHighValuePet(big, [])).toBe(false);
-    const voice = { ...pet('voice'), kinds: ['high'], rare: true };
+    const voice = { ...pet('voice'), kinds: ['high'], rare: false };
     expect(isHighValuePet(voice, [])).toBe(false);
   });
 });
