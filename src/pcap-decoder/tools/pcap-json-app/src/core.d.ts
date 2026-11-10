@@ -52,7 +52,7 @@ export interface ExtractedCapture {
   ownedPetDetails?: OwnedPetDetailRaw[];
   nearbyScene?: number | null;
   /** 自身世界坐标（上行 307）；拿不到为 null */
-  nearbySelf?: { x: number; y: number } | null;
+  nearbySelf?: { x: number; y: number; heading?: number | null } | null;
   /** 最近一次赛季奇遇战（4886/4890）守卫的个体数据 */
   seasonEncounter?: SeasonEncounterRaw | null;
   /** 本次实际扫描的 pcap 记录数（窗口化时只算窗口内） */
@@ -90,7 +90,7 @@ export interface CaptureDiagnostics {
   boxes: number; records: number; missingRecords: number; hasEggInventory: boolean;
   eggInventoryComplete: boolean; eggRecords: number; completionCandidate: boolean;
   truncated: boolean; flowErrors: number; stableWaitMs: number;
-  nearbyPets: number; nearbyScene: number | null; nearbySelf: { x: number; y: number } | null;
+  nearbyPets: number; nearbyScene: number | null; nearbySelf: { x: number; y: number; heading?: number | null } | null;
 }
 export function extractPcap(bytes: Uint8Array, options?: {
   allowTruncated?: boolean;
@@ -130,7 +130,16 @@ export interface WildEntityRaw {
   glassType: number; glassValue: number; pos: { x: number; y: number; z: number };
 }
 export function parseWildEntities(payload: Uint8Array): WildEntityRaw[];
-export function parseSceneInfo(payload: Uint8Array): { scene: number | null; sceneCfgId: number | null };
+/** 把一帧实体数据写进采集状态：330 全量覆盖，1043/1044 按 uniqueId 增量 upsert；墓碑不复活。 */
+export function applyWildEntityFrame(
+  capture: { wildPets: Map<string, WildEntityRaw>; capturedWild: Set<string> },
+  opcode: number,
+  payload: Uint8Array,
+): number;
+export function parseSceneInfo(payload: Uint8Array, opcode?: number): { scene: number | null; sceneCfgId: number | null };
+/** 上行移动帧的自身坐标：明文里「时间戳 + field 2 坐标」结构（2026-11-10 真机对账）。
+ *  heading 取同一帧的速度方向（0=正北、顺时针）；静止时为 null。 */
+export function parseUpstreamSelfPosition(plaintext: Uint8Array): { x: number; y: number; heading: number | null } | null;
 
 /** 宠物记录里的性格 / 性别 / 等级 / 身高体重；按 petId + level + 身高 + 体重 关联附近精灵。 */
 export interface OwnedPetDetailRaw {
@@ -138,6 +147,12 @@ export interface OwnedPetDetailRaw {
   natureId: number; genderId: number; bloodId: number; voiceDb: number;
 }
 export function parseOwnedPetDetails(payload: Uint8Array): OwnedPetDetailRaw[];
+
+/** 捕获成功（579 非空）后按 种族+等级+身高+体重 从附近实体里剔除，避免抓到的精灵继续留在地图/列表 */
+export function removeCapturedWildPets(
+  capture: { wildPets: Map<string, WildEntityRaw>; capturedWild: Set<string> },
+  details: OwnedPetDetailRaw[],
+): void;
 
 /** 把捕获记录 / 背包同步里的个体记录合并进奇遇卡（补真实 petId、声音、性格） */
 export function mergeEncounterDetail(encounter: SeasonEncounterRaw | null, detail: OwnedPetDetailRaw): SeasonEncounterRaw | null;
@@ -149,3 +164,8 @@ export interface BusinessFrame {
   flowIndex: number; opcode: number; packetIndex: number; frameIndex: number; payloadHex: string;
 }
 export function extractBusinessFrames(bytes: Uint8Array, options?: { allowTruncated?: boolean }): BusinessFrame[];
+/** 诊断用：逐条列出上行帧里解析出的自身坐标（需先跑过 extractBusinessFrames / extractPcap 以缓存 AES key）。 */
+export function extractUpstreamSelfFrames(bytes: Uint8Array): Array<{
+  flowIndex: number; frameIndex: number; packetIndex: number; opcode: number | null;
+  x: number; y: number; heading: number | null;
+}>;
