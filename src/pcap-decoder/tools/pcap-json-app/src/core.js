@@ -2136,7 +2136,12 @@ export function extractPcap(bytesLike, options = {}) {
   const windowBytes = Number(options.windowBytes) || 0;
   if (windowBytes > 0) {
     const sessionKey = typeof options.sessionKey === 'string' ? options.sessionKey : "";
-    const start = tailWindowStart(bytes, windowBytes);
+    // 2026-11-10 真机反馈：一轮采集刚起步时文件只有 1MB 出头，比 2MiB 窗口小，
+    // 以前这里判断 `start > 24` 不成立就直接退回全量解析，而「已应用帧」跳过只在
+    // 窗口化路径生效，于是每轮把整份文件重放一遍（decodeAvg 随文件变大 0.6s→1.5s）。
+    // 现在只要调用方给了窗口参数就一律走窗口化路径：start=24 表示整份文件，
+    // 第一轮建立基线，之后每轮只真正应用新增字节。
+    const start = Math.max(24, tailWindowStart(bytes, windowBytes));
     if (start > 24) {
       // 冷启动补扫：先扫文件头建立 key / 账号 / 场景基线，尾窗才能直接解密。
       // 每个会话只扫一次：第一轮没扫到 profile 也不每轮重扫（2MiB 扫一遍不便宜）。
@@ -2146,10 +2151,10 @@ export function extractPcap(bytesLike, options = {}) {
         const headEnd = headScanEnd(bytes, Math.min(headBytes, bytes.length - 1));
         if (headEnd > 24) extractFlowEvents(bytes.subarray(0, headEnd), { ...options, startRecordOffset: 24, windowed: true });
       }
-      const windowed = extractFlowEvents(bytes, { ...options, startRecordOffset: start, windowed: true });
-      // 冷启动或重连（窗口里既没握手帧、也没有可验证的 key）时退回全量解析，保证第一轮数据完整。
-      if (!windowed.needsFullParse) return windowed.result;
     }
+    const windowed = extractFlowEvents(bytes, { ...options, startRecordOffset: start, windowed: true });
+    // 冷启动或重连（窗口里既没握手帧、也没有可验证的 key）时退回全量解析，保证第一轮数据完整。
+    if (!windowed.needsFullParse) return windowed.result;
   }
   return extractFlowEvents(bytes, options).result;
 }
@@ -2165,6 +2170,8 @@ export function extractPcap(bytesLike, options = {}) {
 const nearbyBaseline = {
   key: "",
   pets: new Map(),
+  /** 已抓到的 uniqueId 墓碑：跨窗口 / 重开页面都保持剔除 */
+  capturedWild: new Set(),
   scene: null,
   self: null,
   encounter: null,
@@ -2172,8 +2179,8 @@ const nearbyBaseline = {
   /** 已识别到账号（窗口里通常没有 profile 帧，靠它继续落到同一个账号） */
   uid: "",
   profile: null,
-  /** 已经完整应用过的帧：大帧（场景全量 50KB+）每轮重扫是尾窗的耗时大头。 */
-  applied: new Set(),
+  /** 已经完整应用过的帧（key → 绝对偏移）：大帧（场景全量 50KB+）每轮重扫是尾窗的耗时大头。 */
+  applied: new Map(),
   /** 上一轮看到的文件长度：变小说明采集被重写，绝对偏移全部失效，基线作废。 */
   size: 0
 };
@@ -2186,13 +2193,14 @@ let liveStateImportedKey = "";
 function resetNearbyBaseline(key) {
   nearbyBaseline.key = key;
   nearbyBaseline.pets = new Map();
+  nearbyBaseline.capturedWild = new Set();
   nearbyBaseline.scene = null;
   nearbyBaseline.self = null;
   nearbyBaseline.encounter = null;
   nearbyBaseline.petDetails = new Map();
   nearbyBaseline.uid = "";
   nearbyBaseline.profile = null;
-  nearbyBaseline.applied = new Set();
+  nearbyBaseline.applied = new Map();
   nearbyBaseline.size = 0;
 }
 
@@ -2214,6 +2222,7 @@ export function exportLiveDecodeState() {
     keys: Array.from(recentKeys, ([cacheKey, value]) => [cacheKey, Array.from(value)]),
     baseline: {
       pets: Array.from(nearbyBaseline.pets, ([id, pet]) => [id, pet]),
+      capturedWild: Array.from(nearbyBaseline.capturedWild),
       scene: nearbyBaseline.scene,
       self: nearbyBaseline.self,
       encounter: nearbyBaseline.encounter,
@@ -2236,13 +2245,14 @@ export function importLiveDecodeState(state) {
     liveStateImportedKey = state.key;
     nearbyBaseline.key = state.key;
     nearbyBaseline.pets = new Map(Array.isArray(baseline.pets) ? baseline.pets : []);
+    nearbyBaseline.capturedWild = new Set(Array.isArray(baseline.capturedWild) ? baseline.capturedWild : []);
     nearbyBaseline.scene = baseline.scene ?? null;
     nearbyBaseline.self = baseline.self ?? null;
     nearbyBaseline.encounter = baseline.encounter ?? null;
     nearbyBaseline.petDetails = new Map(Array.isArray(baseline.petDetails) ? baseline.petDetails : []);
     nearbyBaseline.uid = typeof baseline.uid === 'string' ? baseline.uid : "";
     nearbyBaseline.profile = baseline.profile ?? null;
-    nearbyBaseline.applied = new Set();
+    nearbyBaseline.applied = new Map();
     nearbyBaseline.size = 0;
     // 已有 key 就不用再补扫文件头（裁剪过的文件也扫不到握手帧）
     if (keys.length) headScannedKey = state.key;
@@ -2260,11 +2270,19 @@ function extractFlowEvents(bytes, options = {}) {
   // 文件变小 = 采集被滚动裁剪：绝对偏移与包序号全部失效，但 key / 账号 / 附近基线仍然有效，
   // 不能整份作废，否则裁剪后的第一轮会丢掉已经识别到的账号与附近精灵。
   if (sessionKey && options.windowed && bytes.length < nearbyBaseline.size) {
-    nearbyBaseline.applied = new Set();
+    nearbyBaseline.applied = new Map();
     nearbyBaseline.size = 0;
   }
   // 只有实时巡检（带 sessionKey）参与基线：导入流程 / 性能脚本永远拿全量结果，不受影响。
   const baseline = sessionKey && options.windowed ? nearbyBaseline : null;
+  // 「已应用帧」按绝对偏移记录，尾窗滑走后旧条目永远不会再命中。
+  // 不裁剪的话它会随会话长度一直涨（每帧一条字符串），长时间巡检白占内存。
+  if (baseline && Number(options.startRecordOffset) > 24 && baseline.applied.size > 4096) {
+    const startOffset = Number(options.startRecordOffset);
+    for (const [key, offset] of baseline.applied) {
+      if (offset < startOffset) baseline.applied.delete(key);
+    }
+  }
   const parsed = readGameFlows(bytes, options);
   const flowReports = [];
   const events = [];
@@ -2301,6 +2319,7 @@ function extractFlowEvents(bytes, options = {}) {
       const created = createAccountCapture(profile || (baseline && baseline.uid === uid ? baseline.profile : null));
       if (baseline) {
         created.wildPets = new Map(baseline.pets);
+        created.capturedWild = new Set(baseline.capturedWild || []);
         created.wildScene = baseline.scene;
         created.wildSelf = baseline.self;
         created.seasonEncounter = baseline.encounter;
@@ -2330,7 +2349,7 @@ function extractFlowEvents(bytes, options = {}) {
         event.plaintext = null;
         return;
       }
-      baseline.applied.add(frameKey);
+      baseline.applied.set(frameKey, event.fileOffset);
     }
     applyPlaintextToAccount(event, account, options.retainRawProtocol !== false);
     // All business fields have been extracted; do not retain every decrypted frame.
@@ -2372,6 +2391,7 @@ function extractFlowEvents(bytes, options = {}) {
   if (sessionKey) {
     nearbyBaseline.key = sessionKey;
     nearbyBaseline.pets = new Map(capture.wildPets);
+    nearbyBaseline.capturedWild = new Set(capture.capturedWild);
     nearbyBaseline.scene = capture.wildScene;
     nearbyBaseline.self = capture.wildSelf;
     nearbyBaseline.encounter = capture.seasonEncounter;
