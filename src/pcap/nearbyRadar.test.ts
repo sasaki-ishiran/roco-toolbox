@@ -78,6 +78,16 @@ describe('buildRadar', () => {
     expect(data.unplaced.map((item) => item.key)).toEqual(['no-pos']);
   });
 
+  test('给了人物朝向时方位改成相对朝向（正上方 = 面朝方向）', () => {
+    const data = buildRadar([pet({ key: 'north', pos: { x: 0, y: -1000, z: 0 } })], {
+      origin: { x: 0, y: 0 },
+      heading: 90,
+    });
+    // 目标在世界正北；人物朝东 → 目标在人物左手边 = 西
+    expect(data.points[0].bearingLabel).toBe('西');
+    expect(data.points[0].bearingArrow).toBe('←');
+  });
+
   test('八方向标签与箭头（世界坐标 y 轴指向南，与地图同一套）', () => {
     const center = { x: 0, y: 0, z: 0 };
     const cases: Array<[number, number, string, string]> = [

@@ -66,6 +66,8 @@ export interface RadarPoint {
   nature: string | null;
   /** 性别（宠物记录回填）；未知为 null */
   gender: string | null;
+  /** 声音分贝（列表直接显示数值，不用「婉转声 / 粗嗓门」分类词）；未知为 null */
+  voiceDb: number | null;
   /** 相对估算中心的方向角（0 = 北，顺时针） */
   bearingDeg: number;
   bearingLabel: string;
@@ -78,6 +80,8 @@ export interface RadarPoint {
 
 export interface RadarData {
   origin: RadarVector | null;
+  /** 自身朝向（0 = 北、顺时针）；null = 没有朝向数据，方位是世界正北基准 */
+  heading: number | null;
   maxDistanceM: number;
   points: RadarPoint[];
   /** 没有坐标、无法上雷达的精灵 */
@@ -95,10 +99,12 @@ function hasPosition(pet: LiveNearbyPet): pet is LiveNearbyPet & { pos: { x: num
   );
 }
 
-function bearingOf(dx: number, dy: number): { deg: number; label: string; arrow: string } {
+function bearingOf(dx: number, dy: number, heading: number | null = null): { deg: number; label: string; arrow: string } {
   // 世界坐标 y 轴指向南（与 `public/maps/maps.json` 的 "y":"south" 一致）：
   // 北是 -dy，所以用 atan2(dx, -dy) 才能得到「0 = 北、顺时针」。
-  const deg = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+  const world = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+  // 有自身朝向时改成「相对朝向」：屏幕正上方 = 人物面朝方向（2026-11-10 用户要求）
+  const deg = heading == null ? world : (world - heading + 360) % 360;
   const index = Math.round(deg / 45) % 8;
   return { deg, label: BEARING_LABELS[index], arrow: BEARING_ARROWS[index] };
 }
@@ -118,6 +124,11 @@ export interface RadarOptions {
    * 否则玩家走动后中心会被精灵密度抢走、雷达看起来还是不动。
    */
   trustOrigin?: boolean;
+  /**
+   * 自身朝向（0 = 北、顺时针，度）：给了就输出「相对朝向」的方位；
+   * null / 不传时退回世界正北基准（2026-11-10）。
+   */
+  heading?: number | null;
 }
 
 /** 雷达默认覆盖半径（米）：与多多工具箱附近页的 120 m 视野一致。 */
@@ -145,11 +156,13 @@ function densestOrigin(
 }
 
 export function buildRadar(pets: readonly LiveNearbyPet[], options: RadarOptions = {}): RadarData {
+  const heading = options.heading ?? null;
   const placed = pets.filter(hasPosition);
   const unplaced = pets.filter((pet) => !hasPosition(pet));
   if (placed.length === 0) {
     return {
       origin: options.origin ?? null,
+      heading,
       maxDistanceM: options.radiusM ?? options.minRadiusM ?? 1,
       points: [],
       unplaced,
@@ -181,7 +194,7 @@ export function buildRadar(pets: readonly LiveNearbyPet[], options: RadarOptions
     const pet = placed[index];
     const dx = pet.pos.x - origin.x;
     const dy = pet.pos.y - origin.y;
-    const bearing = bearingOf(dx, dy);
+    const bearing = bearingOf(dx, dy, heading);
     return {
       key: pet.key,
       name: pet.name,
@@ -191,6 +204,7 @@ export function buildRadar(pets: readonly LiveNearbyPet[], options: RadarOptions
       kinds: pet.kinds,
       nature: pet.nature || null,
       gender: pet.gender || null,
+      voiceDb: pet.voiceDb ?? null,
       bearingDeg: bearing.deg,
       bearingLabel: bearing.label,
       bearingArrow: bearing.arrow,
@@ -200,5 +214,5 @@ export function buildRadar(pets: readonly LiveNearbyPet[], options: RadarOptions
       ny: dy === 0 ? 0 : dy / scale,
     };
   });
-  return { origin, maxDistanceM, points, unplaced, outsideRadius: placed.length - keep.length };
+  return { origin, heading, maxDistanceM, points, unplaced, outsideRadius: placed.length - keep.length };
 }

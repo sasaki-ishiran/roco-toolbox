@@ -19,9 +19,13 @@ function colorOf(kinds: readonly string[]): string {
 
 const KIND_LABEL: Record<string, string> = {
   colorful: '炫彩', shiny: '异色', pollution: '污染',
-  big: '大块头', small: '小不点', high: '婉转声', low: '粗嗓门',
+  big: '大块头', small: '小不点',
 };
-const kindText = (kinds: readonly string[]) => kinds.map((kind) => KIND_LABEL[kind] || kind).join('·');
+/** 声音不再输出「婉转声 / 粗嗓门」分类词，直接给分贝值（2026-11-10 用户要求） */
+const kindText = (kinds: readonly string[]) => kinds
+  .filter((kind) => kind !== 'high' && kind !== 'low')
+  .map((kind) => KIND_LABEL[kind] || kind)
+  .join('·');
 
 export interface NearbyRadarProps {
   radar: RadarData;
@@ -70,7 +74,8 @@ export function NearbyRadar({ radar, className }: NearbyRadarProps) {
       ))}
       <line x1={center} y1={center - radius} x2={center} y2={center + radius} stroke="#d1fae5" />
       <line x1={center - radius} y1={center} x2={center + radius} y2={center} stroke="#d1fae5" />
-      <text x={center} y={16} textAnchor="middle" fontSize="10" fill="#94a3b8">北 ↑</text>
+      {/* 有朝向时正上方是人物面朝方向，不能再标「北」（2026-11-10） */}
+      <text x={center} y={16} textAnchor="middle" fontSize="10" fill="#94a3b8">{radar.heading == null ? '北 ↑' : '朝向 ↑'}</text>
       {rings.map((ratio) => (
         <text
           key={`label-${ratio}`}
@@ -86,10 +91,11 @@ export function NearbyRadar({ radar, className }: NearbyRadarProps) {
         const cx = center + Math.max(-1, Math.min(1, point.nx)) * radius;
         const cy = center + Math.max(-1, Math.min(1, point.ny)) * radius;
         const detail = [
-          `${point.name} Lv${point.level}`,
+          `${point.name} ${point.level}级`,
           point.gender ? `${point.gender}` : '',
           point.nature ? `性格 ${point.nature}` : '',
           kindText(point.kinds),
+          point.voiceDb == null ? '' : `${point.voiceDb > 0 ? '+' : ''}${Math.round(point.voiceDb)}dB`,
           `${point.distanceM.toFixed(1)}m ${point.bearingLabel}`,
         ].filter(Boolean).join(' · ');
         return (
