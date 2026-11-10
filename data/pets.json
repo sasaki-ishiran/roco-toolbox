@@ -3,7 +3,7 @@
  "sourceModule": "Module:Pets/data/Catalog",
  "license": "CC BY-SA 4.0（游戏素材不适用）",
  "dataVersion": "s5-2026-10-31",
- "fetchedAt": "2026-11-05T12:10:27.350Z",
+ "fetchedAt": "2026-11-10T15:06:42.443Z",
  "petCountDeclared": 633,
  "petCountParsed": 662,
  "breedableCount": 605,
@@ -18571,7 +18571,7 @@
     "mini_max": 8680,
     "unit": "g"
    },
-   "evolution_id": "evolution_651cc8a0eeca",
+   "evolution_id": "evolution_58c64b2f25dd",
    "feature_skill_id": "skill_000086",
    "game_id": 3203,
    "gender_ratio": {
@@ -18658,7 +18658,7 @@
     "mini_max": 8680,
     "unit": "g"
    },
-   "evolution_id": "evolution_651cc8a0eeca",
+   "evolution_id": "evolution_58c64b2f25dd",
    "feature_skill_id": "skill_000086",
    "game_id": 3204,
    "gender_ratio": {
@@ -18744,7 +18744,7 @@
     "mini_max": 8680,
     "unit": "g"
    },
-   "evolution_id": "evolution_651cc8a0eeca",
+   "evolution_id": "evolution_58c64b2f25dd",
    "feature_skill_id": "skill_000086",
    "game_id": 3205,
    "gender_ratio": {

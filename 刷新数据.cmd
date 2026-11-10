@@ -11,7 +11,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [1/2] Refreshing data from the wiki ...
+echo [1/3] Refreshing data from the wiki ...
 cd /d "%ROOT%tools\data-pipeline"
 node refresh.mjs
 set "CODE=%ERRORLEVEL%"
@@ -24,7 +24,7 @@ if not "%CODE%"=="0" (
 )
 
 echo.
-echo [2/2] Rebuilding the catalog the app reads ^(src\data\catalog.gen.json^) ...
+echo [2/3] Rebuilding the catalog the app reads ^(src\data\catalog.gen.json^) ...
 cd /d "%ROOT%"
 call npm run trim:catalog
 set "CODE=%ERRORLEVEL%"
@@ -37,7 +37,21 @@ if not "%CODE%"=="0" (
   exit /b %CODE%
 )
 
-echo [OK] Wiki data refreshed and the app catalog rebuilt.
+echo.
+echo [3/3] Syncing the decoder catalog ^(generated\catalog.json^) ...
+cd /d "%ROOT%tools\data-pipeline"
+node sync-decoder-catalog.mjs
+set "CODE=%ERRORLEVEL%"
+echo.
+if not "%CODE%"=="0" (
+  echo [FAILED] Decoder catalog sync failed with exit code %CODE%.
+  echo The capture parser keeps naming new species "unidentified pet N" until this succeeds.
+  echo.
+  pause
+  exit /b %CODE%
+)
+
+echo [OK] Wiki data refreshed, app catalog rebuilt and decoder catalog synced.
 echo      Start the app with: npm run dev
 echo.
 pause

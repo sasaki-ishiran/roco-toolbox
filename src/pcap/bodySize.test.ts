@@ -91,13 +91,26 @@ describe('成体体型解析到母本共享', () => {
     expect(resource.accounts[0].eggGameIds).toContain(3090);
   });
 
-  test('采集器图鉴还没收录的物种（云梦豚）回落到我们自己的图鉴算体型', async () => {
+  test('解码器图鉴同步后，新赛季物种在采集阶段就能解出名字与体型', async () => {
     const payload = await decodePet(3784, 28000);
     const item = payload.collections.petBackpack.items[0];
-    // 抓包解析器自带图鉴没有 3784 → 它给不出体型，也没有百分位
-    expect(item.medalBody).toBe('');
-    expect(item.weightPercent).toBeNull();
-    const snapshot = parseBackup(payload, '2026-10-25T00:00:00.000Z');
+    expect(item.name).toBe('云梦豚');
+    expect(item.medalBody).toBe('大块头');
+    expect(item.weightPercent).toBeGreaterThan(97);
+  });
+
+  test('抓包条目缺奖牌 / 百分位时，导入阶段仍用我们自己的图鉴补算', () => {
+    const snapshot = parseBackup({
+      meta: { type: 'hatch-backup', playerName: '体型回归', gameId: 1001 },
+      collections: {
+        petBackpack: {
+          items: [{
+            id: 'fallback-regression', speciesPetId: 3784, name: '云梦豚',
+            weightGrams: 28000, weightPercent: null,
+          }],
+        },
+      },
+    }, '2026-11-10T00:00:00.000Z');
     expect(snapshot.pets[0].medalBody).toBe('大块头');
     expect(snapshot.pets[0].weightPercent).toBeGreaterThan(97);
   });
