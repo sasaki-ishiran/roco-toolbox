@@ -111,6 +111,7 @@ beforeEach(() => {
   vi.mocked(requestAutoImport).mockReset();
   demandCenter();
   delete window.RocoCapture;
+  delete window.rocoDesktop;
 });
 
 describe('附近页', () => {
@@ -357,5 +358,49 @@ describe('附近页', () => {
     });
     render(<Nearby onNavigate={vi.fn()} />);
     expect(screen.getByText('停止采集失败，请重试')).toBeTruthy();
+  });
+});
+
+/** 桌面小窗桥（window.rocoDesktop.updateNearbyOverlay）：返回推送 spy */
+const desktopWithOverlay = () => {
+  const updateNearbyOverlay = vi.fn((_text: string) => '');
+  window.rocoDesktop = {
+    platform: 'win32',
+    version: '1',
+    updateNearbyOverlay,
+    showOverlay: vi.fn(() => ''),
+    hideOverlay: vi.fn(() => ''),
+    getOverlayState: vi.fn(() => '{}'),
+  };
+  return updateNearbyOverlay;
+};
+
+describe('桌面悬浮小窗', () => {
+  test('推送与手机面板同一份口径：分贝、方位箭头、自身朝向、地图点位', async () => {
+    feed();
+    const update = desktopWithOverlay();
+    render(<Nearby onNavigate={vi.fn()} />);
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    const calls = update.mock.calls;
+    const payload = JSON.parse(String(calls[calls.length - 1]?.[0]));
+    const rare = payload.pets.find((pet: { key: string }) => pet.key === 'rare');
+    expect(rare.voiceDb).toBe(100);
+    expect(rare.level).toBe(37);
+    expect(rare.bearingArrow).toBeTruthy();
+    expect(payload.mapPets.length).toBe(3);
+    // 快照没有朝向数据时不伪造箭头：字段为 null，小窗退回圆点
+    expect(payload.selfHeading).toBeNull();
+  });
+
+  test('停止采集时收起小窗', async () => {
+    feed();
+    const update = desktopWithOverlay();
+    const hideOverlay = vi.fn(() => '');
+    window.rocoDesktop!.hideOverlay = hideOverlay;
+    const view = render(<Nearby onNavigate={vi.fn()} />);
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    feed(null, 'idle');
+    view.rerender(<Nearby onNavigate={vi.fn()} />);
+    await waitFor(() => expect(hideOverlay).toHaveBeenCalled());
   });
 });
