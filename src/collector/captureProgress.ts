@@ -8,7 +8,7 @@ export interface CaptureAnalysis {
   nearbyPets?: number;
   nearby?: LiveNearbyPet[];
   /** 自身世界坐标（上行 307）；解码器拿不到时为 null，雷达退回估算中心 */
-  nearbySelf?: { x: number; y: number } | null;
+  nearbySelf?: { x: number; y: number; heading?: number | null } | null;
   /** 最近一次赛季奇遇战（4886/4890）守卫的个体数据；没有奇遇战为 null */
   encounter?: SeasonEncounter | null;
   /**
@@ -48,7 +48,10 @@ export interface SeasonEncounter {
 /** 附近精灵的精简视图；只用于实时展示与提醒，不进入正式导入。 */
 export interface LiveNearbyPet {
   key: string; cfgId: number; name: string; level: number; voiceDb: number;
-  weightPct: number | null; kinds: string[]; rare: boolean;
+  weightPct: number | null;
+  /** 身高百分位（0–100）；图鉴缺身高区间 / 旧快照为 null（列表显示「高：xx.x%」） */
+  heightPct?: number | null;
+  kinds: string[]; rare: boolean;
   alertReason: string | null; distanceM: number | null;
   /** 性格（宠物记录回填）；未知为缺省 */
   nature?: string;

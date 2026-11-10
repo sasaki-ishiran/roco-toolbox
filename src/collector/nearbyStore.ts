@@ -14,6 +14,21 @@ export interface NearbySnapshot {
   pets: LiveNearbyPet[];
   /** 自身世界坐标（上行 307）；缺失时雷达退回里程计估算 */
   self: { x: number; y: number } | null;
+  /** 自身朝向（0=正北、顺时针，度）；静止时沿用上一次，没有朝向数据为 null */
+  selfHeading?: number | null;
+  /**
+   * 里程计估算的自身坐标（2026-11-10）：307 稀疏时地图与雷达改用它，
+   * 保证走动时点位会跟着移动；换场景 / 换会话时重新初始化。
+   */
+  estimatedSelf?: { x: number; y: number } | null;
+  /** 真实 307 的解码时间；没有真实坐标时为 undefined（用于判断是否已过期） */
+  selfAt?: number;
+  /**
+   * `self` 的来源（2026-11-10 真机排障）：
+   * packet = 本轮解到上行 307；odometry = 里程计估算；stale = 沿用上一帧；
+   * none = 还没有自身坐标。壳端 RocoPerf 靠它区分「数据没变」与「视图没平移」。
+   */
+  selfSource?: 'packet' | 'odometry' | 'stale' | 'none';
   /** 最近一次赛季奇遇战守卫的个体数据；没有奇遇战为 null */
   encounter: SeasonEncounter | null;
   /** 这段采集里抓到登录密钥没有（悬浮面板据此提示「还没拿到密钥」） */

@@ -29,11 +29,17 @@ describe('自身位置里程计', () => {
     expect(state.self).toEqual({ x: -100, y: 100 });
   });
 
-  test('视野内精灵全换一批时保持上次中心', () => {
+  test('视野内精灵整批换掉时用新一批精灵重新定位（否则走远后地图永远不动）', () => {
     let state = updateSelfEstimate(createSelfEstimate(), 's1', [pet('a', 0, 0), pet('b', 0, 200)], 1000);
-    const before = state.self;
-    state = updateSelfEstimate(state, 's1', [pet('x', 0, 0), pet('y', 0, 200)], 2000);
-    expect(state.self).toEqual(before);
+    // 玩家走远，旧精灵全部离开、新精灵在新位置附近出现：中心要跟到新区域
+    state = updateSelfEstimate(state, 's1', [pet('x', 500000, 500000), pet('y', 500000, 500200)], 2000);
+    expect(state.self).toEqual({ x: 500000, y: 500100 });
+  });
+
+  test('只有部分精灵换掉时仍按共同精灵算位移，不跳到新精灵中心', () => {
+    let state = updateSelfEstimate(createSelfEstimate(), 's1', [pet('a', 0, 0), pet('b', 0, 200)], 1000);
+    state = updateSelfEstimate(state, 's1', [pet('a', -100, 0), pet('x', 900000, 900000)], 2000);
+    expect(state.self).toEqual({ x: 100, y: 100 });
   });
 
   test('换会话重新初始化', () => {
@@ -54,5 +60,32 @@ describe('自身位置里程计', () => {
     const noPos: LiveNearbyPet = { ...pet('n', 0, 0), pos: undefined };
     const state = updateSelfEstimate(createSelfEstimate(), 's1', [pet('a', 100, 100), noPos], 1000);
     expect(state.self).toEqual({ x: 100, y: 100 });
+  });
+
+  test('有真实 307 时以它为锚点，而不是用精灵中位数', () => {
+    const state = updateSelfEstimate(
+      createSelfEstimate(), 's1', [pet('a', 0, 0), pet('b', 0, 200)], 1000,
+      { x: 5000, y: 6000 },
+    );
+    expect(state.self).toEqual({ x: 5000, y: 6000 });
+    expect(state.anchor).toEqual({ x: 5000, y: 6000 });
+  });
+
+  test('新的 307 会重锚，里程计从新坐标继续', () => {
+    let state = updateSelfEstimate(createSelfEstimate(), 's1', [pet('a', 0, 0)], 1000, { x: 0, y: 0 });
+    // 只换精灵不换 307：继续按位移走
+    state = updateSelfEstimate(state, 's1', [pet('a', -100, 0)], 2000);
+    expect(state.self).toEqual({ x: 100, y: 0 });
+    // 传来新的 307：直接回到真实坐标
+    state = updateSelfEstimate(state, 's1', [pet('a', -100, 0)], 3000, { x: 900, y: 900 });
+    expect(state.self).toEqual({ x: 900, y: 900 });
+    expect(state.anchorAt).toBe(3000);
+  });
+
+  test('换场景（会话键变化）时即使没有 307 也重新按精灵定位', () => {
+    let state = updateSelfEstimate(createSelfEstimate(), 's1#10003', [pet('a', 0, 0)], 1000, { x: 0, y: 0 });
+    state = updateSelfEstimate(state, 's1#20001', [pet('a', 800, 800)], 2000);
+    expect(state.self).toEqual({ x: 800, y: 800 });
+    expect(state.anchor).toBeNull();
   });
 });

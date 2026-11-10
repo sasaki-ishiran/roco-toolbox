@@ -19,6 +19,9 @@ export interface SelfEstimate {
   /** 上一帧各精灵坐标，用于计算帧间位移 */
   frame: Map<string, RadarVector>;
   updatedAt: number;
+  /** 最近一次上行 307 的真实坐标：有它就以它为锚点，避免里程计长期漂移 */
+  anchor: RadarVector | null;
+  anchorAt: number;
 }
 
 /** 单帧位移超过这个米数视为切场景 / 瞬移，重新初始化而不是累加误差。 */
@@ -28,7 +31,7 @@ export const MAX_FRAME_SHIFT_M = 200;
 const MIN_INIT_POINTS = 1;
 
 export function createSelfEstimate(): SelfEstimate {
-  return { session: null, self: null, frame: new Map(), updatedAt: 0 };
+  return { session: null, self: null, frame: new Map(), updatedAt: 0, anchor: null, anchorAt: 0 };
 }
 
 function hasPosition(pet: LiveNearbyPet): pet is LiveNearbyPet & { pos: { x: number; y: number; z: number } } {
@@ -45,19 +48,35 @@ export function updateSelfEstimate(
   session: string,
   pets: readonly LiveNearbyPet[],
   now = Date.now(),
+  /** 本帧解到的真实自身坐标（上行 307）；有就用它重锚，没有就继续累加位移 */
+  anchor: RadarVector | null = null,
 ): SelfEstimate {
   const placed = pets.filter(hasPosition);
   const frame = new Map(placed.map((pet) => [pet.key, { x: pet.pos.x, y: pet.pos.y }]));
   const init = (): SelfEstimate => ({
     session,
-    self: placed.length >= MIN_INIT_POINTS
+    self: anchor ?? (placed.length >= MIN_INIT_POINTS
       ? geometricMedian(placed.map((pet) => ({ x: pet.pos.x, y: pet.pos.y })))
-      : null,
+      : null),
     frame,
     updatedAt: now,
+    anchor: anchor ? { ...anchor } : null,
+    anchorAt: anchor ? now : 0,
   });
 
-  if (previous.session !== session || previous.self == null || placed.length === 0) return init();
+  if (previous.session !== session || previous.self == null) return init();
+  // 新的真实坐标：直接以它为准，里程计从锚点重新起算
+  if (anchor && (previous.anchor == null || previous.anchor.x !== anchor.x || previous.anchor.y !== anchor.y)) {
+    return {
+      session,
+      self: { ...anchor },
+      frame,
+      updatedAt: now,
+      anchor: { ...anchor },
+      anchorAt: now,
+    };
+  }
+  if (placed.length === 0) return init();
 
   // 相邻两帧同时出现的精灵：坐标位移中位数 = 世界相对玩家的位移
   const shifts: RadarVector[] = [];
@@ -67,7 +86,10 @@ export function updateSelfEstimate(
     shifts.push({ x: position.x - before.x, y: position.y - before.y });
   }
   if (shifts.length === 0) {
-    // 视野内精灵全换了一批：没有可比对的位移，保持上次估算位置
+    // 视野内精灵整批换掉：玩家已经走到别的区域，新精灵是在新位置附近刷出来的。
+    // 继续停在上一个中心会让地图永远不动（2026-11-10 真机：self 恒定、near 从 6m 涨到 971m）。
+    const overlap = [...frame.keys()].some((key) => previous.frame.has(key));
+    if (!overlap && placed.length >= MIN_INIT_POINTS) return init();
     return { ...previous, session, frame, updatedAt: now };
   }
   const shift = geometricMedian(shifts)!;
@@ -79,5 +101,7 @@ export function updateSelfEstimate(
     self: { x: previous.self.x - shift.x, y: previous.self.y - shift.y },
     frame,
     updatedAt: now,
+    anchor: previous.anchor,
+    anchorAt: previous.anchorAt,
   };
 }
