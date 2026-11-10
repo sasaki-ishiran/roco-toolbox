@@ -14,9 +14,10 @@ const KIND_COLOR = {
   big: '#0ea5e9', small: '#0ea5e9', high: '#059669', low: '#059669',
 };
 const KIND_PRIORITY = ['pollution', 'shiny', 'colorful', 'big', 'small', 'high', 'low'];
+/** 牌子文案：声音不再用「婉转声 / 粗嗓门」分类词，只在列表里直接显示分贝 */
 const KIND_LABEL = {
   colorful: '炫彩', shiny: '异色', pollution: '污染',
-  big: '大块头', small: '小不点', high: '婉转声', low: '粗嗓门',
+  big: '大块头', small: '小不点',
 };
 const VIEW_METERS = 300; // 横向 300m（半径 150m），120m 圈完整可见
 const THEME_KEY = 'roco.overlayTheme';
@@ -43,7 +44,10 @@ const colorOf = (kinds) => {
   for (const kind of KIND_PRIORITY) if (kinds.includes(kind)) return KIND_COLOR[kind];
   return '#64748b';
 };
-const labelsOf = (kinds) => kinds.map((kind) => KIND_LABEL[kind] || kind).join('·');
+/** 只取有文案的牌子（声音走分贝，不再出分类词） */
+const labelsOf = (kinds) => kinds.map((kind) => KIND_LABEL[kind]).filter(Boolean).join('·');
+/** 声音统一显示分贝：+99dB / -99dB（2026-11-11 与网页、手机悬浮窗同一口径） */
+const dbTextOf = (pet) => (pet.voiceDb == null ? '' : `${pet.voiceDb > 0 ? '+' : ''}${Math.round(pet.voiceDb)}dB`);
 
 function setStatus() {
   const payload = state.payload;
@@ -51,13 +55,15 @@ function setStatus() {
     statusEl.textContent = state.collapsed ? '附近 · 等待采集' : '等待采集数据…';
     return;
   }
-  const rare = payload.pets.filter((pet) => pet.rare).length;
+  // total / rareTotal 是截断前的总数（手机面板同口径）；旧版 payload 没有时按列表算
+  const rare = payload.rareTotal ?? payload.pets.filter((pet) => pet.rare).length;
+  const total = payload.total ?? payload.pets.length;
   if (state.collapsed) {
-    statusEl.innerHTML = `<b>${payload.capturing ? '采集中' : '已停止'}</b> · ${payload.pets.length} 只 · 稀有 ${rare}`;
+    statusEl.innerHTML = `<b>${payload.capturing ? '采集中' : '已停止'}</b> · ${total} 只 · 稀有 ${rare}`;
     return;
   }
   const key = payload.hasKey ? '已接通' : '等待登录';
-  statusEl.innerHTML = `<b>${payload.capturing ? '采集中' : '已停止'}</b> · ${key} · 附近 ${payload.pets.length} 只`;
+  statusEl.innerHTML = `<b>${payload.capturing ? '采集中' : '已停止'}</b> · ${key} · 附近 ${total} 只`;
 }
 
 function renderList() {
@@ -65,6 +71,10 @@ function renderList() {
   listEl.innerHTML = '';
   if (!payload || payload.pets.length === 0) {
     emptyEl.hidden = false;
+    // 有精灵但都被筛选挡掉时，别误报「还没收到数据」
+    emptyEl.innerHTML = payload && payload.total > 0
+      ? '当前筛选下没有精灵'
+      : '还没收到附近精灵<br />开始采集并进入野外后自动出现';
     return;
   }
   emptyEl.hidden = true;
@@ -80,10 +90,14 @@ function renderList() {
     dot.style.background = colorOf(pet.kinds || []);
     const name = document.createElement('span');
     name.className = 'name';
-    name.textContent = `${pet.name} Lv${pet.level}`;
+    // 等级统一「xx级」写法，不再用 Lv 前缀
+    name.textContent = `${pet.name} ${pet.level}级`;
     const meta = document.createElement('span');
     meta.className = 'meta';
-    meta.textContent = `${pet.distanceM != null ? `${Math.round(pet.distanceM)}m ` : ''}${pet.bearingLabel || ''}`;
+    // 方位用随自身朝向旋转的箭头，没有有效方向时只显示距离
+    const bearing = pet.bearingArrow || pet.bearingLabel || '';
+    const db = dbTextOf(pet);
+    meta.textContent = [pet.distanceM != null ? `${Math.round(pet.distanceM)}m` : '', bearing, db].filter(Boolean).join(' ');
     li.append(dot, name, meta);
     const tags = [];
     if (pet.alert) tags.push('需求');
@@ -95,10 +109,14 @@ function renderList() {
       li.append(tag);
     }
     li.title = [
-      `${pet.name} Lv${pet.level}`,
-      pet.gender || '', pet.nature ? `性格 ${pet.nature}` : '',
+      `${pet.name} ${pet.level}级`,
+      pet.gender || '',
+      pet.nature ? `性格:${pet.nature}` : '',
       labelsOf(pet.kinds || []),
-      pet.distanceM != null ? `${Math.round(pet.distanceM)}m ${pet.bearingLabel || ''}` : '',
+      pet.heightPct != null ? `高:${pet.heightPct.toFixed(1)}%` : '',
+      pet.weightPct != null ? `重:${pet.weightPct.toFixed(1)}%` : '',
+      db ? `声音:${db}` : '',
+      pet.distanceM != null ? `${Math.round(pet.distanceM)}m ${bearing}` : '',
     ].filter(Boolean).join(' · ');
     listEl.append(li);
   }
@@ -112,14 +130,45 @@ function worldToPixel(point) {
   };
 }
 
+/** 自身点：有朝向画三角箭头（0 = 正北、顺时针），没有可靠朝向退回圆点，不假装在指。 */
+function drawSelfMarker(cx, cy, heading) {
+  if (!Number.isFinite(heading)) {
+    ctx.beginPath();
+    ctx.fillStyle = '#0ea5e9';
+    ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    return;
+  }
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate((heading * Math.PI) / 180);
+  ctx.beginPath();
+  ctx.moveTo(0, -7);
+  ctx.lineTo(5, 5);
+  ctx.lineTo(0, 2.2);
+  ctx.lineTo(-5, 5);
+  ctx.closePath();
+  ctx.fillStyle = '#0ea5e9';
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawMap() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (state.collapsed) return;
   const payload = state.payload;
   const cal = state.calibration;
   if (!cal || !payload) return;
+  // 地图画附近所有带坐标的精灵（mapPets）；旧版 payload 没有该字段时退回列表里的点
+  const points = payload.mapPets && payload.mapPets.length > 0 ? payload.mapPets : payload.pets;
   const self = payload.self && Number.isFinite(payload.self.x) ? payload.self : null;
-  const center = self || (payload.pets.find((pet) => Number.isFinite(pet.x)) || null);
+  const center = self || (points.find((pet) => Number.isFinite(pet.x)) || null);
   if (!center) {
     mapHintEl.textContent = '无坐标';
     return;
@@ -163,7 +212,7 @@ function drawMap() {
   ctx.arc(canvas.width / 2, canvas.height / 2, ringRadius, 0, Math.PI * 2);
   ctx.stroke();
 
-  for (const pet of payload.pets) {
+  for (const pet of points) {
     if (!Number.isFinite(pet.x) || !Number.isFinite(pet.y)) continue;
     const point = toScreen(pet);
     if (point.x < -8 || point.y < -8 || point.x > canvas.width + 8 || point.y > canvas.height + 8) continue;
@@ -183,13 +232,7 @@ function drawMap() {
     }
   }
 
-  ctx.beginPath();
-  ctx.fillStyle = '#0ea5e9';
-  ctx.arc(canvas.width / 2, canvas.height / 2, 4.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.6;
-  ctx.stroke();
+  drawSelfMarker(canvas.width / 2, canvas.height / 2, payload.selfHeading);
   mapHintEl.textContent = `≈${VIEW_METERS / 2}m`;
 }
 
