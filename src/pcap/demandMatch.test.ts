@@ -12,7 +12,7 @@ const index = demandSpeciesIndex(species);
 
 const pet = (overrides: Partial<LiveNearbyPet> = {}): LiveNearbyPet => ({
   key: 'a', cfgId: 10000, petId: 3001, name: '喵喵', level: 10, voiceDb: 0,
-  weightPct: 50, kinds: [], rare: false, alertReason: null, distanceM: null,
+  weightPct: 50, heightPct: 50, kinds: [], rare: false, alertReason: null, distanceM: null,
   ...overrides,
 });
 
@@ -36,10 +36,23 @@ describe('demandHitsForPet', () => {
     expect(demandHitsForPet(pet({ petId: 99999 }), [demand()], index)).toHaveLength(0);
   });
 
-  test('体型条件：大块头按 98% 判定', () => {
-    expect(demandHitsForPet(pet({ weightPct: 99 }), [demand({ body: '大块头' })], index)).toHaveLength(1);
-    expect(demandHitsForPet(pet({ weightPct: 50 }), [demand({ body: '大块头' })], index)).toHaveLength(0);
+  test('体型条件：大块头要体重与身高同时 98% 以上', () => {
+    expect(demandHitsForPet(pet({ weightPct: 99, heightPct: 100 }), [demand({ body: '大块头' })], index)).toHaveLength(1);
+    expect(demandHitsForPet(pet({ weightPct: 50, heightPct: 100 }), [demand({ body: '大块头' })], index)).toHaveLength(0);
     expect(demandHitsForPet(pet({ weightPct: 100 }), [demand({ body: '满体重' })], index)).toHaveLength(1);
+  });
+
+  test('回归：格兰花 7.76/7.80kg（体重 98.9%、身高 60%）不算大块头', () => {
+    expect(demandHitsForPet(pet({ weightPct: 98.88, heightPct: 60 }), [demand({ body: '大块头' })], index))
+      .toHaveLength(0);
+    expect(demandHitsForPet(pet({ weightPct: 100, heightPct: 100 }), [demand({ body: '大块头' })], index))
+      .toHaveLength(1);
+  });
+
+  test('体型条件：小不点要体重与身高同时 2% 以下', () => {
+    expect(demandHitsForPet(pet({ weightPct: 2, heightPct: 0 }), [demand({ body: '小不点' })], index)).toHaveLength(1);
+    expect(demandHitsForPet(pet({ weightPct: 2, heightPct: 60 }), [demand({ body: '小不点' })], index)).toHaveLength(0);
+    expect(demandHitsForPet(pet({ weightPct: 2, heightPct: null }), [demand({ body: '小不点' })], index)).toHaveLength(0);
   });
 
   test('声音条件：+100 必须正好 100', () => {
@@ -67,7 +80,7 @@ describe('demandHitsForPet', () => {
   });
 
   test('多条需求全部返回，已满足的条件记入 known', () => {
-    const hits = demandHitsForPet(pet({ weightPct: 99, voiceDb: 100 }), [
+    const hits = demandHitsForPet(pet({ weightPct: 99, heightPct: 100, voiceDb: 100 }), [
       demand({ body: '大块头', voice: '+100' }),
       demand({ body: '小不点' }),
     ], index);

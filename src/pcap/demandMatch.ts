@@ -33,13 +33,15 @@ export function demandSpeciesIndex(species: readonly SpeciesEntry[]): DemandSpec
   return { byGameId };
 }
 
-function bodyMatches(body: string, weightPct: number | null): boolean {
+/** 体型条件：与附近列表的牌子同一套口径（`kindsOf`），大块头 / 小不点要身高同时到顶 / 到底。 */
+function bodyMatches(body: string, weightPct: number | null, heightPct: number | null): boolean {
   if (!body) return true;
   if (weightPct == null || !Number.isFinite(weightPct)) return false;
+  const height = heightPct != null && Number.isFinite(heightPct) ? heightPct : null;
   switch (body) {
-    case '大块头': return weightPct >= 98;
+    case '大块头': return weightPct >= 98 && height != null && height >= 98;
     case '满体重': return weightPct >= 100;
-    case '小不点': return weightPct <= 2;
+    case '小不点': return weightPct <= 2 && height != null && height <= 2;
     case '零体重': return weightPct <= 0;
     default: return true;
   }
@@ -66,7 +68,7 @@ export function demandHitsForPet(
     } else {
       continue;
     }
-    if (!bodyMatches(demand.body, pet.weightPct)) continue;
+    if (!bodyMatches(demand.body, pet.weightPct, pet.heightPct ?? null)) continue;
     if (!voiceMatches(demand.voice, pet.voiceDb)) continue;
     const known: string[] = [];
     if (demand.body) known.push('体型');

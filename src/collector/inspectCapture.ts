@@ -61,7 +61,7 @@ export async function inspectCaptureBytes(
     const row = withDistance(pet, null);
     return {
       key: pet.key, cfgId: pet.cfgId, name: pet.name, level: pet.level, voiceDb: pet.voiceDb,
-      weightPct: pet.weightPct, kinds: pet.kinds, rare: pet.rare,
+      weightPct: pet.weightPct, heightPct: pet.heightPct, kinds: pet.kinds, rare: pet.rare,
       nature: pet.nature, natureId: pet.natureId, gender: pet.gender,
       alertReason: pet.alertReason, distanceM: row.distanceM, pos: raw.pos, petId: pet.petId,
     };

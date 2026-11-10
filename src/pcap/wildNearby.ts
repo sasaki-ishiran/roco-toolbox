@@ -1,6 +1,8 @@
 import { parseSceneInfo, parseWildEntities, type WildEntityRaw } from '../pcap-decoder/tools/pcap-json-app/src/core';
 import catalog from '../pcap-decoder/tools/pcap-json-app/src/generated/catalog.json';
 import cfgPetMap from '../pcap-decoder/tools/pcap-json-app/src/generated/cfgPetMap.json';
+import { heightPercentOf } from '../shared/bodySize';
+import { species } from '../data/catalog';
 import { kindsOf, rareAlertReason, weightPercentile, type RareKind } from './rareRules';
 
 /**
@@ -30,6 +32,8 @@ export interface WildPet {
   pos: { x: number; y: number; z: number };
   /** 体重百分位（0–100）；没有收录体重区间时为 null */
   weightPct: number | null;
+  /** 身高百分位（0–100）；没有收录身高区间时为 null（列表显示「高：xx.x%」） */
+  heightPct: number | null;
   /** 性格 id（宠物记录回填）；未知为 null */
   natureId: number | null;
   /** 性格名（如「天真」）；未知为空字符串 */
@@ -61,6 +65,8 @@ for (const pet of (catalog.pets || []) as CatalogPet[]) {
 }
 const natureNames = ((catalog as unknown as CatalogNature).natureNamesById) ?? {};
 const cfgToPet = cfgPetMap as Record<string, number>;
+/** 身高区间只在主图鉴里；按 gameId（= 种族 petId）取，缺失就不显示百分比。 */
+const heightSizeByGameId = new Map(species.map((entry) => [entry.gameId, entry.heightSize]));
 
 /**
  * 特殊场景实体（cfgId 不在 10000–19999 野生段）→ 种族。
@@ -105,12 +111,18 @@ export function decorateWildPet(raw: WildEntityRaw, detail: WildDetail | null = 
   const weightPct = low != null && high != null && raw.weight > 0
     ? weightPercentile({ weightKg, lowKg: low, highKg: high })
     : null;
-  const kinds = kindsOf({ mutation: raw.mutation, glassType: raw.glassType, weightPct, voiceDb: raw.voiceDb });
+  const heightPct = petId != null && raw.height > 0
+    ? heightPercentOf(heightSizeByGameId.get(petId), raw.height)
+    : null;
+  const kinds = kindsOf({
+    mutation: raw.mutation, glassType: raw.glassType, weightPct, heightPct, voiceDb: raw.voiceDb,
+  });
   return {
     ...raw,
     petId,
     name: entry?.name ?? special?.name ?? `未知精灵 ${raw.cfgId}`,
     weightPct,
+    heightPct,
     natureId: detail?.natureId ?? null,
     nature: detail ? natureNames[String(detail.natureId)] ?? '' : '',
     gender: detail ? GENDER_NAMES[detail.genderId] ?? '' : '',
