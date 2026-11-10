@@ -302,7 +302,8 @@ public final class CaptureController {
             }
             if (from < 0 || from > grant.size) throw new IOException("invalid capture range");
             Map<String, String> headers = new HashMap<>();
-            headers.put("Access-Control-Allow-Origin", ORIGIN); headers.put("Cache-Control", "no-store");
+            // 必须跟随当前站点：写死正式站会让测试站 fetch 采集快照被 CORS 拦成「Failed to fetch」
+            headers.put("Access-Control-Allow-Origin", siteOrigin); headers.put("Cache-Control", "no-store");
             headers.put("Content-Length", Long.toString(grant.size - from));
             headers.put("X-Capture-From", Long.toString(from));
             headers.put("X-Capture-Total", Long.toString(grant.size));

@@ -16,8 +16,10 @@ import java.util.Set;
  */
 public final class NearbyOverlayModel {
 
-    /** 列表最多渲染 8 条，其余只报数。 */
-    public static final int MAX_ROWS = 8;
+    /** 列表最多渲染 24 条（高度封顶在小地图高度，超出的在框内上下滑动）。 */
+    public static final int MAX_ROWS = 24;
+    /** 地图 / 雷达最多画 24 个点（网页已按距离截断，这里再兜一层）。 */
+    public static final int MAX_MAP_POINTS = 24;
     /** 面板宽度（1.3.6 方案 2 两行：地图 120 + 列表 132 + 两侧 8 + 间距 6 = 274）。 */
     public static final int PANEL_WIDTH = 274;
     /** 球与屏边 / 面板与球 / 面板与屏边的间距。 */
@@ -63,16 +65,46 @@ public final class NearbyOverlayModel {
     public final Double selfX;
     public final Double selfY;
     public final boolean selfEstimated;
+    /** 自身坐标来源（packet / odometry / stale / none）；旧网页没有该字段时为 null。 */
+    public final String selfSource;
+    /** 自身坐标解出时间（epoch ms）；没有为 null。 */
+    public final Long selfAt;
+    /** 自身朝向（0 = 正北、顺时针，度）；没有朝向数据为 null，地图画圆点而不是箭头。 */
+    public final Double selfHeading;
+    /** 地图精灵里最近的距离（米）；用于 RocoPerf 判断地图是否跟随。 */
+    public final Double nearestM;
+    /** 列表：只放命中筛选口径的精灵（最多 {@link #MAX_ROWS} 条）。 */
     public final List<Pet> pets;
+    /** 地图：附近所有带坐标的精灵（含未命中筛选的普通精灵，最多 {@link #MAX_MAP_POINTS} 条）。 */
+    public final List<Pet> mapPets;
     public final int total;
     public final int rareTotal;
     public final int alertTotal;
     public final long updatedAt;
+    /**
+     * 网页侧解码轮询实测（2026-11-10）：随 payload 带上来，由壳端 RocoPerf 打印。
+     * 旧网页没有 perf 字段时全部为 -1（表示「没有数据」，不是 0ms）。
+     */
+    public final int perfReadAvg;
+    public final int perfReadMax;
+    public final int perfDecodeAvg;
+    public final int perfDecodeMax;
+    public final int perfBytes;
+    public final int perfGapAvg;
+    public final int perfRounds;
 
     private NearbyOverlayModel(JSONObject payload) {
         boolean[] panels = parsePanels(payload);
         battle = panels[0];
         nearby = panels[1];
+        JSONObject perf = payload.optJSONObject("perf");
+        perfReadAvg = perf == null ? -1 : perf.optInt("readAvg", -1);
+        perfReadMax = perf == null ? -1 : perf.optInt("readMax", -1);
+        perfDecodeAvg = perf == null ? -1 : perf.optInt("decodeAvg", -1);
+        perfDecodeMax = perf == null ? -1 : perf.optInt("decodeMax", -1);
+        perfBytes = perf == null ? -1 : perf.optInt("bytes", -1);
+        perfGapAvg = perf == null ? -1 : perf.optInt("gapAvg", -1);
+        perfRounds = perf == null ? -1 : perf.optInt("rounds", -1);
         capturing = payload.optBoolean("capturing", payload.optBoolean("visible", false));
         hasKey = payload.optBoolean("hasKey", true);
         scene = intOrNull(payload, "scene");
@@ -81,6 +113,9 @@ public final class NearbyOverlayModel {
         selfX = self == null ? null : numberOrNull(self, "x");
         selfY = self == null ? null : numberOrNull(self, "y");
         selfEstimated = payload.optBoolean("selfEstimated", false);
+        selfSource = textOrNull(payload, "selfSource");
+        selfAt = longOrNull(payload, "selfAt");
+        selfHeading = numberOrNull(payload, "selfHeading");
 
         List<Pet> parsed = new ArrayList<>();
         JSONArray array = payload.optJSONArray("pets");
@@ -94,6 +129,28 @@ public final class NearbyOverlayModel {
             parsed = new ArrayList<>(parsed.subList(0, MAX_ROWS));
         }
         pets = Collections.unmodifiableList(parsed);
+
+        // 地图用 mapPets（附近所有带坐标的精灵）；旧网页只给 pets 时退回 pets
+        List<Pet> mapped = new ArrayList<>();
+        JSONArray mapArray = payload.optJSONArray("mapPets");
+        if (mapArray == null) mapArray = array;
+        if (mapArray != null) {
+            for (int index = 0; index < mapArray.length(); index++) {
+                JSONObject item = mapArray.optJSONObject(index);
+                if (item != null) mapped.add(new Pet(item));
+            }
+        }
+        if (mapped.size() > MAX_MAP_POINTS) {
+            mapped = new ArrayList<>(mapped.subList(0, MAX_MAP_POINTS));
+        }
+        mapPets = Collections.unmodifiableList(mapped);
+
+        Double closest = null;
+        for (Pet pet : mapPets) {
+            if (pet.distanceM == null) continue;
+            if (closest == null || pet.distanceM < closest) closest = pet.distanceM;
+        }
+        nearestM = closest;
 
         int declaredTotal = payload.has("total") ? payload.optInt("total", pets.size()) : pets.size();
         total = Math.max(declaredTotal, pets.size());
@@ -141,6 +198,12 @@ public final class NearbyOverlayModel {
         return Double.isNaN(value) ? null : value;
     }
 
+    private static Long longOrNull(JSONObject object, String key) {
+        if (!object.has(key) || object.isNull(key)) return null;
+        long value = object.optLong(key, Long.MIN_VALUE);
+        return value == Long.MIN_VALUE ? null : value;
+    }
+
     private int countRare() {
         int count = 0;
         for (Pet pet : pets) if (pet.rare) count++;
@@ -177,10 +240,16 @@ public final class NearbyOverlayModel {
         return "还有 " + hiddenCount() + " 只未显示";
     }
 
-    /** 列表内容高度：8 条封顶，空列表用占位高度。 */
+    /** 列表内容高度：行数 × 行高，空列表用占位高度。 */
     public static int listHeight(int rows) {
         int safe = Math.max(0, Math.min(rows, MAX_ROWS));
         return safe > 0 ? safe * ROW_HEIGHT + (safe - 1) * ROW_GAP : EMPTY_BODY_HEIGHT;
+    }
+
+    /** 列表可视区域高度：不超过小地图，超出的在框内上下滑动。 */
+    public static int bodyHeight(int rows, boolean hasMap) {
+        if (hasMap) return MAP_SIZE;
+        return Math.min(listHeight(rows), MAP_SIZE);
     }
 
     /**
@@ -198,9 +267,7 @@ public final class NearbyOverlayModel {
         int hitHeight = 0;
         if (showBattle) hitHeight = hasHit ? HIT_HEIGHT : HIT_EMPTY_HEIGHT;
         if (!showNearby) return hitHeight;
-        int bodyHeight = hasMap
-            ? Math.max(MAP_SIZE, listHeight(rows))
-            : Math.max(EMPTY_BODY_HEIGHT, listHeight(rows));
+        int bodyHeight = bodyHeight(rows, hasMap);
         int footGap = hidden > 0 ? FOOT_ROW_GAP : FOOT_GAP;
         return hitHeight + BODY_TOP_GAP + bodyHeight + footGap;
     }
@@ -244,8 +311,8 @@ public final class NearbyOverlayModel {
         public final Double weightPct;
         /** 命中原因：demand / alert / rare / colorful / shiny / pollution；没有为 null。 */
         public final String reason;
-        /** 声音档位文字（婉转声 / 粗嗓门）；没有声音牌子为 null。 */
-        public final String voiceLabel;
+        /** 原始声音分贝；payload 里没有该字段时为 null。 */
+        public final Double voiceDb;
         public final Double x;
         public final Double y;
 
@@ -271,10 +338,9 @@ public final class NearbyOverlayModel {
             bearingArrow = item.optString("bearingArrow", "");
             heightPct = numberOrNull(item, "heightPct");
             weightPct = numberOrNull(item, "weightPct");
-            String parsedReason = item.optString("reason", "");
-            reason = parsedReason.isEmpty() ? null : parsedReason;
-            String parsedVoice = item.optString("voiceLabel", "");
-            voiceLabel = parsedVoice.isEmpty() ? null : parsedVoice;
+            // JSON 里的显式 null 不能用 optString：Android 会返回字面量 "null"（2026-11-10 真机反馈）
+            reason = textOrNull(item, "reason");
+            voiceDb = numberOrNull(item, "voiceDb");
             x = numberOrNull(item, "x");
             y = numberOrNull(item, "y");
         }
@@ -323,14 +389,27 @@ public final class NearbyOverlayModel {
     }
 
     /**
-     * 两行列表的第二行：高：xx.x% · 重：xx.x% · 声音。
+     * 两行列表的第二行：高:xx.x% · 重:xx.x% · 声音（直接给分贝值，不写「婉转声 / 粗嗓门」）。
      */
     public static String metaTextLine2(Pet pet) {
         StringBuilder builder = new StringBuilder();
-        append(builder, pet.heightPct == null ? "" : "高：" + pctText(pet.heightPct));
-        append(builder, pet.weightPct == null ? "" : "重：" + pctText(pet.weightPct));
-        append(builder, pet.voiceLabel == null ? "" : pet.voiceLabel);
+        append(builder, pet.heightPct == null ? "" : "高:" + pctText(pet.heightPct));
+        append(builder, pet.weightPct == null ? "" : "重:" + pctText(pet.weightPct));
+        append(builder, voiceText(pet));
         return builder.toString();
+    }
+
+    /** 声音只显示具体分贝（用户要求）；没有数据整段省略，不输出 null。 */
+    private static String voiceText(Pet pet) {
+        if (pet.voiceDb == null) return "";
+        long db = Math.round(pet.voiceDb);
+        return (db > 0 ? "+" : "") + db + "dB";
+    }
+
+    private static String textOrNull(JSONObject item, String key) {
+        if (!item.has(key) || item.isNull(key)) return null;
+        String value = item.optString(key, "");
+        return value.isEmpty() ? null : value;
     }
 
     private static void append(StringBuilder builder, String part) {

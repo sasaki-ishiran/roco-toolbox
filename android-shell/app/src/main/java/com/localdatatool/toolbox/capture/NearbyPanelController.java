@@ -12,6 +12,9 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -19,17 +22,21 @@ import android.text.style.ForegroundColorSpan;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.ReplacementSpan;
 import android.text.style.StyleSpan;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.ConsoleMessage;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -40,7 +47,6 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * 「附近」悬浮面板（2026-11-08）。
@@ -70,7 +76,6 @@ public final class NearbyPanelController {
     private final Activity activity;
     private final WindowManager windowManager;
     private final SharedPreferences prefs;
-    private final Set<Integer> mapScenes;
     private final String catalogJson;
 
     private JSONObject nearbyPayload;
@@ -89,12 +94,18 @@ public final class NearbyPanelController {
     private FrameLayout mapBox;
     private WebView mapView;
     private boolean mapReady;
+    /** 列表外层滚动容器：高度与小地图对齐，超出上下滑动（1.3.9） */
+    private ScrollView listScroll;
     private LinearLayout listBox;
+    /** 列表内容签名：不变就不重建行，否则每秒推送都会打断滑动（1.3.9） */
+    private String listSignature;
     private TextView footView;
     private boolean hasOrbRect;
     private int lastOrbX;
     private int lastOrbY;
     private int lastOrbSize;
+    /** 球是否吸附在右边缘：是则面板向左展开，否则一律在球的右侧（2026-11-10）。 */
+    private boolean lastOrbSnappedRight;
     private int lastScreenWidth;
     private int lastScreenHeight;
     /** 本次展开是否已经定过落点；用户拖过之后不再按默认规则重算 */
@@ -104,6 +115,54 @@ public final class NearbyPanelController {
     private int dragStartX;
     private int dragStartY;
     private boolean dragging;
+
+    // ── 卡顿量化（1.3.9）：RocoPerf 每 5 秒一行，真机 adb logcat -s RocoPerf 可看 ──
+    private static final String PERF_TAG = "RocoPerf";
+    private static final long PERF_INTERVAL_MS = 5000L;
+    /** 网页推来的 payload 次数（约每秒 1 次） */
+    private int perfPayloads;
+    /** 其中面板展开 / 收起时的 payload 次数（2026-11-10：区分「render=0 是因为面板没开」） */
+    private int perfPayloadOpen;
+    private int perfPayloadClosed;
+    /** 面板 re-render 次数 */
+    private int perfRenders;
+    /** 列表重建 / 因签名相同跳过重建的次数 */
+    private int perfListRebuilds;
+    private int perfSignatureSkips;
+    /** 推给 WebView 重绘地图的次数 / 其中地图中心真的平移了的次数 */
+    private int perfMapPushes;
+    private int perfMapPans;
+    private long perfParseUsTotal;
+    private long perfParseUsMax;
+    /**
+     * 网页侧解码轮询实测（2026-11-10）：每轮「取增量字节 / worker 解码」耗时、
+     * 每轮字节数、相邻两轮间隔。由 payload 的 perf 字段带上来，只在 RocoPerf 里打印。
+     * -1 = 旧网页没有该字段（不是 0ms）。
+     */
+    private int perfReadAvg = -1;
+    private int perfReadMax = -1;
+    private int perfDecodeAvg = -1;
+    private int perfDecodeMax = -1;
+    private int perfRoundBytes = -1;
+    private int perfRoundGap = -1;
+    private int perfRoundCount = -1;
+    private long perfSince = SystemClock.elapsedRealtime();
+    /** 上一次推给地图的自身坐标：用来判断这次推送有没有平移 */
+    private double lastPushedSelfX = Double.NaN;
+    private double lastPushedSelfY = Double.NaN;
+    /** 最近一次 render 的关键字段（payload 指纹 / 自身坐标 / 来源 / 最短距离） */
+    private String lastFingerprint = "-";
+    private String lastSelfSource = "-";
+    private double lastSelfX = Double.NaN;
+    private double lastSelfY = Double.NaN;
+    private long lastSelfAt;
+    private Double lastNearestM;
+    private boolean released;
+    private final Handler perfHandler = new Handler(Looper.getMainLooper());
+    private final Runnable perfTick = () -> {
+        logPerf(true);
+        schedulePerf();
+    };
 
     public NearbyPanelController(Activity activity) {
         this.activity = activity;
@@ -117,17 +176,28 @@ public final class NearbyPanelController {
         this.lastScreenHeight = activity.getResources().getDisplayMetrics().heightPixels;
         String catalog = readAsset("maps/maps.json");
         this.catalogJson = catalog;
-        this.mapScenes = NearbyOverlayModel.parseMapScenes(catalog);
+        // 常驻性能采样：不管面板展没展开都每 5 秒输出一行 RocoPerf
+        schedulePerf();
     }
 
     /** 网页推来的附近 payload（含 panels 配置）；返回给网页的结果固定是 ok。 */
     public String updateNearby(JSONObject payload) {
+        perfPayloads++;
         nearbyPayload = payload;
+        rememberRoundPerf(payload);
         if (nearbyPayload == null || !nearbyPayload.optBoolean("visible", false)) {
+            perfPayloadClosed++;
             collapse();
+            logPerf();
             return "ok";
         }
-        if (expanded) render();
+        if (expanded) {
+            perfPayloadOpen++;
+            render();
+        } else {
+            perfPayloadClosed++;
+        }
+        logPerf();
         return "ok";
     }
 
@@ -164,16 +234,19 @@ public final class NearbyPanelController {
     }
 
     /**
-     * 记录球当前的位置与屏幕尺寸，供**首次展开**时算「从另一侧展开」的默认落点。
+     * 记录球当前的位置与屏幕尺寸，供**首次展开**时算默认落点：
+     * 默认在球的右侧、与球同一垂直位置；球吸附在右边缘时改为向左展开。
      * 球拖动时只更新记录，不移动已经展开的面板。
      */
-    public void setOrbRect(int orbX, int orbY, int orbSize, int screenWidth, int screenHeight) {
+    public void setOrbRect(int orbX, int orbY, int orbSize, int screenWidth, int screenHeight,
+                           boolean snappedRight) {
         hasOrbRect = true;
         lastOrbX = orbX;
         lastOrbY = orbY;
         lastOrbSize = orbSize;
         lastScreenWidth = screenWidth;
         lastScreenHeight = screenHeight;
+        lastOrbSnappedRight = snappedRight;
     }
 
     /** 屏幕旋转 / 尺寸变化：把面板夹回新的屏幕范围，不重算默认落点。 */
@@ -193,10 +266,12 @@ public final class NearbyPanelController {
     }
 
     /**
-     * 面板落点：
+     * 面板落点（2026-11-10）：
      * <ul>
-     *   <li>用户拖过（有存档）→ 沿用存档位置，只夹回屏幕内；</li>
-     *   <li>没拖过 → 按球当前所在侧，从另一侧展开，默认不压住球。</li>
+     *   <li>有球的位置 → 固定在球的右侧、与球同一垂直位置；球吸附在右边缘时向左展开。
+     *       不做智能避让、不自动换边，只把结果夹回屏幕内；</li>
+     *   <li>还没有球的位置 → 沿用存档位置；</li>
+     *   <li>都没有 → 屏幕默认位置。</li>
      * </ul>
      */
     private void placePanel() {
@@ -206,14 +281,16 @@ public final class NearbyPanelController {
             int savedX = prefs.getInt(KEY_PANEL_X, Integer.MIN_VALUE);
             int savedY = prefs.getInt(KEY_PANEL_Y, Integer.MIN_VALUE);
             int[] spot;
-            if (savedX != Integer.MIN_VALUE && savedY != Integer.MIN_VALUE) {
-                spot = OverlayGeometry.clamp(savedX, savedY,
+            if (hasOrbRect) {
+                int anchorX = lastOrbSnappedRight
+                    ? lastOrbX - edge - panelParams.width
+                    : lastOrbX + lastOrbSize + edge;
+                spot = OverlayGeometry.clamp(anchorX, lastOrbY,
                     panelParams.width, panelParams.height,
                     lastScreenWidth, lastScreenHeight, edge);
-            } else if (hasOrbRect) {
-                spot = OverlayGeometry.oppositeOfBall(
+            } else if (savedX != Integer.MIN_VALUE && savedY != Integer.MIN_VALUE) {
+                spot = OverlayGeometry.clamp(savedX, savedY,
                     panelParams.width, panelParams.height,
-                    lastOrbX, lastOrbY, lastOrbSize, lastOrbSize,
                     lastScreenWidth, lastScreenHeight, edge);
             } else {
                 spot = OverlayGeometry.startPosition(
@@ -296,6 +373,8 @@ public final class NearbyPanelController {
 
     /** Activity 销毁时彻底释放 WebView。 */
     public void release() {
+        released = true;
+        perfHandler.removeCallbacks(perfTick);
         collapse();
         destroyMap();
     }
@@ -321,7 +400,9 @@ public final class NearbyPanelController {
         titleText = null;
         estimatedBadge = null;
         mapBox = null;
+        listScroll = null;
         listBox = null;
+        listSignature = null;
         footView = null;
     }
 
@@ -350,6 +431,14 @@ public final class NearbyPanelController {
         mapBox = buildMapBox();
         listBox = new LinearLayout(activity);
         listBox.setOrientation(LinearLayout.VERTICAL);
+        // 列表比地图高时在框内上下滑动：高度与小地图对齐，不再把面板拉长
+        listScroll = new PanelScrollView(activity);
+        listScroll.setVerticalScrollBarEnabled(false);
+        listScroll.setFillViewport(true);
+        listScroll.setClipToPadding(false);
+        listScroll.addView(listBox, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        listSignature = null;
         footView = text("", 9, theme.muted);
         footView.setGravity(Gravity.CENTER_VERTICAL);
         footView.setSingleLine(true);
@@ -358,7 +447,7 @@ public final class NearbyPanelController {
         root.addView(hitBox, frame(0, 0, NearbyOverlayModel.PANEL_WIDTH, NearbyOverlayModel.HIT_HEIGHT));
         root.addView(titleRow, frame(8, 0, NearbyOverlayModel.PANEL_WIDTH - 16, TITLE_HEIGHT_DP));
         root.addView(mapBox, frame(8, 0, NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.MAP_SIZE));
-        root.addView(listBox, frame(8, 0, NearbyOverlayModel.PANEL_WIDTH - 16, NearbyOverlayModel.EMPTY_BODY_HEIGHT));
+        root.addView(listScroll, frame(8, 0, NearbyOverlayModel.PANEL_WIDTH - 16, NearbyOverlayModel.EMPTY_BODY_HEIGHT));
         root.addView(footView, frame(8, 0, NearbyOverlayModel.PANEL_WIDTH - 16, NearbyOverlayModel.FOOT_TEXT_HEIGHT));
 
         try {
@@ -367,6 +456,7 @@ public final class NearbyPanelController {
             panel = null;
             panelParams = null;
             expanded = false;
+            return;
         }
     }
 
@@ -473,6 +563,19 @@ public final class NearbyPanelController {
             settings.setUseWideViewPort(false);
             settings.setLoadWithOverviewMode(false);
             settings.setTextZoom(100);
+            // 地图页每 5 秒自己统计 update / rebuild / dots（见 overlay-map.html），
+            // 只有把 console 转进 logcat 才能和壳端 RocoPerf 对照，否则看不出
+            // 「地图点不跟」是没推送、还是重建了、还是点位全被裁掉（2026-11-10）。
+            view.setWebChromeClient(new WebChromeClient() {
+                @Override public boolean onConsoleMessage(ConsoleMessage message) {
+                    String text = message == null ? null : message.message();
+                    if (text != null && text.startsWith("RocoPerf")) {
+                        Log.i(PERF_TAG, text);
+                        return true;
+                    }
+                    return false;
+                }
+            });
             view.setWebViewClient(new WebViewClient() {
                 @Override public boolean shouldOverrideUrlLoading(WebView webView, String url) {
                     return true;
@@ -509,11 +612,25 @@ public final class NearbyPanelController {
 
     private void render() {
         if (panel == null || panelParams == null) return;
+        long parseStart = SystemClock.elapsedRealtimeNanos();
         NearbyOverlayModel model = NearbyOverlayModel.parse(nearbyPayload);
+        long parseUs = (SystemClock.elapsedRealtimeNanos() - parseStart) / 1000L;
+        perfRenders++;
+        perfParseUsTotal += parseUs;
+        perfParseUsMax = Math.max(perfParseUsMax, parseUs);
         if (model == null) {
             collapse();
             return;
         }
+        // 排障快照（2026-11-10）：payload 到底有没有变化、自身坐标是不是同一份旧值
+        lastFingerprint = fingerprint(model);
+        lastSelfSource = model.selfSource != null
+            ? model.selfSource
+            : (model.selfX == null ? "none" : model.selfEstimated ? "odometry" : "packet");
+        lastSelfX = model.selfX == null ? Double.NaN : model.selfX;
+        lastSelfY = model.selfY == null ? Double.NaN : model.selfY;
+        lastSelfAt = model.selfAt == null ? 0L : model.selfAt;
+        lastNearestM = model.nearestM;
         PanelTheme theme = theme();
         panel.setBackground(cardBackground(theme));
         hitBox.setBackground(hitBackground(theme));
@@ -555,19 +672,29 @@ public final class NearbyPanelController {
 
         // ── 地图 / 列表 / 脚注 ─────────────────────────
         mapBox.setVisibility(hasMap ? View.VISIBLE : View.GONE);
-        listBox.setVisibility(showNearby ? View.VISIBLE : View.GONE);
+        listScroll.setVisibility(showNearby ? View.VISIBLE : View.GONE);
         if (showNearby) {
             int bodyTop = hitHeight + NearbyOverlayModel.BODY_TOP_GAP;
-            int listHeight = NearbyOverlayModel.listHeight(rows);
+            // 列表可视高度不超过小地图：超出的条数在框内上下滑动，面板不再被列表拉长
+            int bodyHeight = NearbyOverlayModel.bodyHeight(rows, hasMap);
             if (hasMap) {
                 setFrame(mapBox, 8, bodyTop, NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.MAP_SIZE);
-                setFrame(listBox,
+                setFrame(listScroll,
                     8 + NearbyOverlayModel.MAP_SIZE + NearbyOverlayModel.LIST_GAP,
-                    bodyTop, NearbyOverlayModel.LIST_WIDTH, listHeight);
+                    bodyTop, NearbyOverlayModel.LIST_WIDTH, bodyHeight);
             } else {
-                setFrame(listBox, 8, bodyTop, NearbyOverlayModel.PANEL_WIDTH - 16, listHeight);
+                setFrame(listScroll, 8, bodyTop,
+                    NearbyOverlayModel.PANEL_WIDTH - 16, bodyHeight);
             }
-            fillList(theme, model, rows);
+            // 内容签名不变就不重建：每秒推送都 removeAllViews 会把正在滑动的列表打断
+            String signature = listSignature(model, rows);
+            if (!signature.equals(listSignature)) {
+                fillList(theme, model, rows);
+                listSignature = signature;
+                perfListRebuilds++;
+            } else {
+                perfSignatureSkips++;
+            }
             footView.setVisibility(hidden > 0 ? View.VISIBLE : View.GONE);
             if (hidden > 0) {
                 footView.setText(model.footText());
@@ -583,6 +710,29 @@ public final class NearbyPanelController {
         panelParams.width = dp(NearbyOverlayModel.PANEL_WIDTH);
         panelParams.height = dp(panelHeight);
         placePanel();
+    }
+
+    /**
+     * 列表内容签名（1.3.9）：名称|等级|距离|箭头|牌子|命中原因|提醒|稀有。
+     * 每秒都会推送新 payload，但绝大多数字段没变；签名一致时保留现有行，
+     * 用户正在滑动 / 点按就不会被 removeAllViews 打断。
+     */
+    private static String listSignature(NearbyOverlayModel model, int rows) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(rows).append(model.waitingLogin() ? 'w' : '-');
+        for (int index = 0; index < rows; index++) {
+            NearbyOverlayModel.Pet pet = model.pets.get(index);
+            builder.append('#').append(pet.name).append('|')
+                .append(pet.level).append('|')
+                .append(pet.distanceM == null ? "" : Math.round(pet.distanceM)).append('|')
+                .append(pet.bearingArrow).append('|')
+                .append(pet.bearingLabel).append('|')
+                .append(TextUtils.join(",", pet.kinds)).append('|')
+                .append(pet.reason).append('|')
+                .append(pet.alert ? 'a' : '-')
+                .append(pet.rare ? 'r' : '-');
+        }
+        return builder.toString();
     }
 
     /**
@@ -719,10 +869,12 @@ public final class NearbyPanelController {
         return false;
     }
 
+    /**
+     * 地图区只要拿到自身坐标就显示：有底图就叠底图，没有底图 overlay-map.html 画雷达兜底。
+     * 2026-11-10：不再要求 scene 必须在 maps.json 里，避免切场景/传送后整块地图消失。
+     */
     private boolean hasMap(NearbyOverlayModel model) {
         return mapView != null
-            && model.scene != null
-            && mapScenes.contains(model.scene)
             && model.selfX != null
             && model.selfY != null;
     }
@@ -740,8 +892,11 @@ public final class NearbyPanelController {
             data.put("scene", model.scene);
             data.put("self", new JSONObject().put("x", model.selfX).put("y", model.selfY));
             data.put("estimated", model.selfEstimated);
+            // 朝向：null 时地图画圆点（旧网页 / 站着不动没速度方向），不画「假装在指」的箭头
+            if (model.selfHeading != null) data.put("heading", model.selfHeading);
             JSONArray pets = new JSONArray();
-            for (NearbyOverlayModel.Pet pet : model.pets) {
+            // 地图画全部附近精灵（mapPets），列表仍按筛选口径（pets）
+            for (NearbyOverlayModel.Pet pet : model.mapPets) {
                 if (pet.x == null || pet.y == null) continue;
                 JSONObject item = new JSONObject();
                 item.put("x", pet.x);
@@ -755,9 +910,101 @@ public final class NearbyPanelController {
             String json = data.toString();
             mapView.evaluateJavascript(
                 "window.RocoOverlayMap&&window.RocoOverlayMap.update(" + JSONObject.quote(json) + ")", null);
+            perfMapPushes++;
+            // 中心真的变了才算「平移」：payload 到了但坐标没变时 mapPush 会涨、mapPan 不涨
+            if (Double.isNaN(lastPushedSelfX)
+                || Math.abs(model.selfX - lastPushedSelfX) > 1
+                || Math.abs(model.selfY - lastPushedSelfY) > 1) {
+                perfMapPans++;
+            }
+            lastPushedSelfX = model.selfX;
+            lastPushedSelfY = model.selfY;
         } catch (Exception ignored) {
             // 地图数据坏掉时保留上一帧，不影响列表
         }
+    }
+
+    /**
+     * payload 内容指纹（2026-11-10）：场景 + 自身坐标 + 列表 / 地图条数 + 前三条 key 与距离。
+     * 不含 updatedAt，否则每轮都变，就看不出「内容其实完全一样」。
+     */
+    private static String fingerprint(NearbyOverlayModel model) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(model.scene).append('|')
+            .append(model.selfX == null ? "-" : Math.round(model.selfX)).append(',')
+            .append(model.selfY == null ? "-" : Math.round(model.selfY)).append('|')
+            // 朝向单独变化（站着转身）也要推动地图重绘；按 5° 一档取整，避免抖动刷屏
+            .append(model.selfHeading == null ? "-" : Math.round(model.selfHeading / 5)).append('|')
+            .append(model.pets.size()).append('/').append(model.mapPets.size());
+        int limit = Math.min(3, model.pets.size());
+        for (int index = 0; index < limit; index++) {
+            NearbyOverlayModel.Pet pet = model.pets.get(index);
+            builder.append('#').append(pet.key).append(',')
+                .append(pet.distanceM == null ? "-" : Math.round(pet.distanceM));
+        }
+        return Integer.toHexString(builder.toString().hashCode());
+    }
+
+    /**
+     * 网页侧每轮解码耗时（2026-11-10）：payload 里带了 perf 就记下来，RocoPerf 每 5 秒打印一次。
+     * 不参与渲染，只用于判断轮询到底卡在「取字节」还是「worker 解码」。
+     */
+    private void rememberRoundPerf(JSONObject payload) {
+        JSONObject perf = payload == null ? null : payload.optJSONObject("perf");
+        if (perf == null) return;
+        perfReadAvg = perf.optInt("readAvg", -1);
+        perfReadMax = perf.optInt("readMax", -1);
+        perfDecodeAvg = perf.optInt("decodeAvg", -1);
+        perfDecodeMax = perf.optInt("decodeMax", -1);
+        perfRoundBytes = perf.optInt("bytes", -1);
+        perfRoundGap = perf.optInt("gapAvg", -1);
+        perfRoundCount = perf.optInt("rounds", -1);
+    }
+
+    /**
+     * RocoPerf 采样（1.3.9）：每 5 秒一行，真机 `adb logcat -s RocoPerf` 直接可看。
+     * 记录 payload 次数、render 次数、WebView 地图重绘次数、单次解析耗时（平均 / 最大）。
+     */
+    private void logPerf() {
+        logPerf(false);
+    }
+
+    private void logPerf(boolean force) {
+        long now = SystemClock.elapsedRealtime();
+        long elapsed = now - perfSince;
+        if (!force && elapsed < PERF_INTERVAL_MS) return;
+        int renders = perfRenders;
+        double avgMs = renders == 0 ? 0 : perfParseUsTotal / 1000.0 / renders;
+        long selfAge = lastSelfAt > 0 ? System.currentTimeMillis() - lastSelfAt : -1;
+        Log.d(PERF_TAG, String.format(java.util.Locale.US,
+            "nearby window=%dms payload=%d open=%d closed=%d render=%d list=%d skip=%d"
+                + " mapPush=%d mapPan=%d selfSrc=%s self=%.1f,%.1f age=%dms near=%s fp=%s"
+                + " parseAvg=%.2fms parseMax=%.2fms"
+                + " readAvg=%dms readMax=%dms decodeAvg=%dms decodeMax=%dms bytes=%d gap=%dms round=%d",
+            elapsed, perfPayloads, perfPayloadOpen, perfPayloadClosed, perfRenders,
+            perfListRebuilds, perfSignatureSkips, perfMapPushes, perfMapPans,
+            lastSelfSource, lastSelfX, lastSelfY, selfAge,
+            lastNearestM == null ? "-" : String.format(java.util.Locale.US, "%.0fm", lastNearestM),
+            lastFingerprint, avgMs, perfParseUsMax / 1000.0,
+            perfReadAvg, perfReadMax, perfDecodeAvg, perfDecodeMax,
+            perfRoundBytes, perfRoundGap, perfRoundCount));
+        perfPayloads = 0;
+        perfPayloadOpen = 0;
+        perfPayloadClosed = 0;
+        perfRenders = 0;
+        perfListRebuilds = 0;
+        perfSignatureSkips = 0;
+        perfMapPushes = 0;
+        perfMapPans = 0;
+        perfParseUsTotal = 0;
+        perfParseUsMax = 0;
+        perfSince = now;
+    }
+
+    private void schedulePerf() {
+        if (released) return;
+        perfHandler.removeCallbacks(perfTick);
+        perfHandler.postDelayed(perfTick, PERF_INTERVAL_MS);
     }
 
     private void safeUpdate() {
@@ -938,6 +1185,33 @@ public final class NearbyPanelController {
                 new int[] { 0xFFDCFCE7, 0xFFFCE7F3, 0xFFFFEDD5, 0xFFEDE9FE, 0xFFFEF3C7, 0xFFFFFFFF },
                 new int[] { 0xFF14532D, 0xFF831843, 0xFF7C2D12, 0xFF4C1D95, 0xFF78350F, 0xFF0F172A },
                 0x0F0F172A);
+        }
+    }
+
+    /**
+     * 列表滚动容器（1.3.9）：内容不满一屏时不吃触摸，把事件交回外层面板拖动。
+     *
+     * <p>内置 ScrollView 会一直消费 ACTION_DOWN 并进入「准备滚动」状态，用户按在列表空白处
+     * 就拖不动面板；这里只在真正能滚动的时候才拦截 / 消费。</p>
+     */
+    private static final class PanelScrollView extends ScrollView {
+
+        PanelScrollView(Context context) {
+            super(context);
+        }
+
+        private boolean scrollable() {
+            return canScrollVertically(1) || canScrollVertically(-1);
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent event) {
+            return scrollable() && super.onInterceptTouchEvent(event);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            return scrollable() && super.onTouchEvent(event);
         }
     }
 

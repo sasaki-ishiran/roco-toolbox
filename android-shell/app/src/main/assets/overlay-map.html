@@ -14,6 +14,14 @@
     border-radius: 8px; overflow: hidden; background: #0d1a26;
   }
   #map img.art { position: absolute; display: block; max-width: none; pointer-events: none; }
+  /*
+   * 世界层（底图 / 精灵点各一层）：只改 transform 平移，不再整段重建 DOM。
+   * 220ms 线性过渡把两次坐标之间的位移补成连续移动，观感上不再是「一帧一跳」（2026-11-10）。
+   */
+  .layer {
+    position: absolute; left: 0; top: 0; width: 0; height: 0;
+    transition: transform 220ms linear; will-change: transform;
+  }
   .ring {
     position: absolute; border: 1px dashed rgba(255,255,255,.75); border-radius: 50%;
     box-shadow: 0 0 0 1px rgba(15,23,42,.35);
@@ -47,10 +55,19 @@
     position: absolute; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px;
     border-radius: 50%; background: #0ea5e9; border: 2px solid #fff;
     box-shadow: 0 1px 4px rgba(0,0,0,.6); box-sizing: border-box;
+    transition: transform 220ms linear;
   }
   .me.est {
     background: transparent; border: 1.5px dashed #f59e0b;
     width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px;
+  }
+  /* 有人物朝向时把圆点换成箭头：尖端朝上（正北）再按朝向旋转（2026-11-10 用户要求） */
+  .me.arrow, .me.arrow.est {
+    width: 10px; height: 12px; margin: -6px 0 0 -5px;
+    background: #0ea5e9; border: 0; border-radius: 0;
+    clip-path: polygon(50% 0%, 100% 100%, 50% 76%, 0% 100%);
+    filter: drop-shadow(0 0 2px rgba(255,255,255,.95));
+    box-sizing: border-box; transform-origin: 50% 50%;
   }
 </style>
 </head>
@@ -74,19 +91,43 @@
   var root = document.getElementById('map');
   /** 底图加载失败的文件名：记下来退回雷达，避免整块留空（2026-11-09） */
   var failedArt = {};
-  /** 上一次渲染是否用到了底图：底图失败时只重画一次，避免死循环 */
-  var usedArt = false;
-  // 卡顿量化（2026-11-10）：每 5s 报一次 update / 实际重绘次数，只看数据不优化
+
+  // ── 结构只建一次（2026-11-10）────────────────────────────────────────────
+  // 以前每次 update 都 root.innerHTML = 整段 html，一秒两次全量重建 DOM；
+  // 现在底图与精灵点各放一个 .layer，刷新只改 transform / 点位，重建只在切场景时发生。
+  var built = false;
+  var artLayer = null;
+  var dotLayer = null;
+  var artNode = null;
+  var meNode = null;
+  var dotPool = [];
+  /**
+   * 世界锚点：进入场景时的自身坐标。宠物与底图按它换算一次位置，
+   * 之后自身移动只改 layer 的 transform —— 屏幕位置 = 中心 + (宠物 - 自身) × 比例，与锚点无关。
+   */
+  var anchorX = 0;
+  var anchorY = 0;
+  var pxPerUnit = 1;
+  var unitsPerMeter = 100;
+  var sceneKey = '';
+  var lastHeading = 0;
+
+  // 卡顿量化（2026-11-10）：每 5s 报一次 update / 结构重建次数 / 实际画出的精灵点数，
+  // 只看数据不优化。壳里用 WebChromeClient 把这几行转进 logcat（RocoPerf）。
   var perfUpdates = 0;
-  var perfRenders = 0;
+  var perfRebuilds = 0;
+  var perfDots = 0;
+  var perfDotsMax = 0;
   var perfSince = Date.now();
 
   function perfLog() {
     var now = Date.now();
     if (now - perfSince < 5000) return;
-    console.log('RocoPerf map 5s update=' + perfUpdates + ' render=' + perfRenders);
+    console.log('RocoPerf map 5s update=' + perfUpdates + ' rebuild=' + perfRebuilds
+      + ' dots=' + perfDots + ' dotsMax=' + perfDotsMax);
     perfUpdates = 0;
-    perfRenders = 0;
+    perfRebuilds = 0;
+    perfDotsMax = 0;
     perfSince = now;
   }
 
@@ -96,11 +137,6 @@
       if (kinds.indexOf(KIND_PRIORITY[index]) >= 0) return KIND_COLOR[KIND_PRIORITY[index]];
     }
     return '#475569';
-  }
-
-  function escapeHtml(value) {
-    return String(value == null ? '' : value)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   /** 雷达底图：渐变 + 十字 + 同心圈（视野半径 120m，圈距 40m，跟着 240m 视野一起缩）。 */
@@ -125,14 +161,14 @@
    * 整张底图平移到视口外，表现就是「地图一片深色」。
    * 自身点必须落回底图范围内，否则视为标定 / 投影异常，退回雷达（不留空白）。
    */
-  function projectArt(map, selfX, selfY, pxPerUnit) {
+  function projectArt(map, selfX, selfY, pxPerUnitValue) {
     var side = Number(map.side_units);
     var originX = Number(map.origin_x);
     var originY = Number(map.origin_y);
     var declaredWidth = Number(map.declared_width) || 1;
     var declaredHeight = Number(map.declared_height) || declaredWidth;
     if (!isFinite(side) || side <= 0 || !isFinite(originX) || !isFinite(originY)) return null;
-    var width = side * pxPerUnit;
+    var width = side * pxPerUnitValue;
     var height = width * (declaredHeight / declaredWidth);
     if (!isFinite(width) || !isFinite(height) || width <= 0 || height <= 0) return null;
     // y 轴与 maps.json 的 "y":"south" 一致：世界 y 越大越靠南，图片 y 向下也越大
@@ -151,59 +187,173 @@
     };
   }
 
-  function render() {
-    perfRenders++;
-    perfLog();
-    if (!catalog || !state || !state.self) { root.innerHTML = ''; return; }
-    var unitsPerMeter = Number(catalog.coordinate_units_per_meter) || 100;
+  /** 固定的雷达骨架：顺序与改动前一致（软圈 → 底图 → 120m 实线圈 + N → 精灵点 → 箭头）。 */
+  function buildSkeleton() {
     var pxPerMeter = SIZE / VIEW_METERS;
-    var pxPerUnit = pxPerMeter / unitsPerMeter;
-    var selfX = Number(state.self.x);
-    var selfY = Number(state.self.y);
-    if (!isFinite(selfX) || !isFinite(selfY)) { root.innerHTML = ''; return; }
+    root.innerHTML = '';
+    var head = document.createElement('div');
+    head.innerHTML = radarBackdrop(pxPerMeter);
+    while (head.firstChild) root.appendChild(head.firstChild);
 
-    var map = state.scene != null && catalog.maps ? catalog.maps[String(state.scene)] : null;
-    // 雷达底图先铺：底图缺失 / 加载失败 / 投影对不上时它就是兜底，保证不会整块空白
-    var html = radarBackdrop(pxPerMeter);
-    var art = map ? projectArt(map, selfX, selfY, pxPerUnit) : null;
-    usedArt = !!(art && !failedArt[map.image]);
-    if (usedArt) {
-      html += '<img class="art" alt="" draggable="false" src="maps/' + escapeHtml(map.image) +
-        '" onerror="window.RocoOverlayMap&&window.RocoOverlayMap.artFailed(\'' +
-        escapeHtml(map.image) + '\')" style="width:' + art.width.toFixed(1) +
-        'px;height:' + art.height.toFixed(1) +
-        'px;left:' + art.left.toFixed(1) + 'px;top:' + art.top.toFixed(1) + 'px">';
-    }
+    artLayer = document.createElement('div');
+    artLayer.className = 'layer';
+    root.appendChild(artLayer);
 
     var ringRadius = 120 * pxPerMeter;
-    html += '<div class="ring" style="left:' + (SIZE / 2 - ringRadius).toFixed(1) +
+    var tail = document.createElement('div');
+    tail.innerHTML = '<div class="ring" style="left:' + (SIZE / 2 - ringRadius).toFixed(1) +
       'px;top:' + (SIZE / 2 - ringRadius).toFixed(1) + 'px;width:' + (ringRadius * 2).toFixed(1) +
-      'px;height:' + (ringRadius * 2).toFixed(1) + 'px"></div>';
-    html += '<div class="n">N</div>';
+      'px;height:' + (ringRadius * 2).toFixed(1) + 'px"></div><div class="n">N</div>';
+    while (tail.firstChild) root.appendChild(tail.firstChild);
 
+    dotLayer = document.createElement('div');
+    dotLayer.className = 'layer';
+    root.appendChild(dotLayer);
+
+    meNode = document.createElement('span');
+    meNode.className = 'me arrow';
+    meNode.style.left = (SIZE / 2) + 'px';
+    meNode.style.top = (SIZE / 2) + 'px';
+    root.appendChild(meNode);
+
+    dotPool = [];
+    artNode = null;
+    built = true;
+  }
+
+  /** 切场景 / 底图变化时重建底图与点池；调用方负责关掉过渡，避免锚点变化被动画成一次「滑动」。 */
+  function resetScene(map, selfX, selfY) {
+    anchorX = selfX;
+    anchorY = selfY;
+    if (artNode && artNode.parentNode) artNode.parentNode.removeChild(artNode);
+    artNode = null;
+    if (map && map.image && !failedArt[map.image]) {
+      var art = projectArt(map, anchorX, anchorY, pxPerUnit);
+      if (art) {
+        var img = document.createElement('img');
+        img.className = 'art';
+        img.alt = '';
+        img.draggable = false;
+        img.src = 'maps/' + map.image;
+        img.style.width = art.width.toFixed(1) + 'px';
+        img.style.height = art.height.toFixed(1) + 'px';
+        img.style.left = art.left.toFixed(1) + 'px';
+        img.style.top = art.top.toFixed(1) + 'px';
+        img.onerror = function () { artFailed(map.image); };
+        artLayer.appendChild(img);
+        artNode = img;
+      }
+    }
+    for (var index = 0; index < dotPool.length; index++) {
+      if (dotPool[index].parentNode) dotPool[index].parentNode.removeChild(dotPool[index]);
+    }
+    dotPool = [];
+  }
+
+  /**
+   * 精灵点：位置只跟「宠物绝对坐标 - 锚点」有关，刷新时按索引复用节点，不再重建整段 DOM。
+   *
+   * 裁剪半径必须按**当前自身坐标**算，不能按锚点（2026-11-10 修复）：
+   * 锚点只在切场景时更新，而壳推来的 mapPets 永远是「离我最近的 24 只」；
+   * 一旦走离锚点超过 120m，整批精灵点都会被当成「太远」剔掉，表现就是
+   * 列表每秒在变、地图上的精灵点却一直不动（跑得越远越明显）。
+   */
+  function layoutDots(selfX, selfY) {
     var pets = state.mapPets || state.pets || [];
+    var used = 0;
     for (var index = 0; index < pets.length; index++) {
       var pet = pets[index];
       var petX = Number(pet.x);
       var petY = Number(pet.y);
       if (!isFinite(petX) || !isFinite(petY)) continue;
-      var dx = (petX - selfX) * pxPerUnit;
-      var dy = (petY - selfY) * pxPerUnit;
-      if (Math.hypot(dx, dy) / pxPerMeter > DOT_RADIUS_METERS) continue;
+      // 视野半径按真实米数判断，避免远端精灵挤在圆圈外缘
+      if (Math.hypot(petX - selfX, petY - selfY) / unitsPerMeter > DOT_RADIUS_METERS) continue;
       var size = pet.rare ? 9 : 7;
-      var left = SIZE / 2 + dx - size / 2;
-      var top = SIZE / 2 + dy - size / 2;
-      if (left < -size || left > SIZE || top < -size || top > SIZE) continue;
-      html += '<span class="pt ' + (pet.rare ? 'rare' : 'norm') +
-        '" style="left:' + left.toFixed(1) + 'px;top:' + top.toFixed(1) +
-        'px;background:' + colorOfKinds(pet.kinds) + '">' +
-        (pet.reason === 'demand' ? '<span class="alert-ring demand"></span>'
-          : pet.alert ? '<span class="alert-ring"></span>' : '') + '</span>';
+      var dot = dotPool[used];
+      if (!dot) {
+        dot = document.createElement('span');
+        dotLayer.appendChild(dot);
+        dotPool.push(dot);
+      }
+      dot.className = 'pt ' + (pet.rare ? 'rare' : 'norm');
+      dot.style.display = '';
+      dot.style.left = (SIZE / 2 + (petX - anchorX) * pxPerUnit - size / 2).toFixed(1) + 'px';
+      dot.style.top = (SIZE / 2 + (petY - anchorY) * pxPerUnit - size / 2).toFixed(1) + 'px';
+      dot.style.background = colorOfKinds(pet.kinds);
+      // 壳端 payload 目前不带 reason，需求圈只有旧网页直连时才会出现
+      dot.innerHTML = pet.reason === 'demand' ? '<span class="alert-ring demand"></span>'
+        : pet.alert ? '<span class="alert-ring"></span>' : '';
+      used++;
+    }
+    for (var rest = used; rest < dotPool.length; rest++) dotPool[rest].style.display = 'none';
+    perfDots = used;
+    if (used > perfDotsMax) perfDotsMax = used;
+  }
+
+  /** 自身移动 → 两层一起平移；CSS 过渡把两次推送之间补成连续移动。 */
+  function moveTo(selfX, selfY) {
+    var transform = 'translate(' + (-(selfX - anchorX) * pxPerUnit).toFixed(2) + 'px,' +
+      (-(selfY - anchorY) * pxPerUnit).toFixed(2) + 'px)';
+    artLayer.style.transform = transform;
+    dotLayer.style.transform = transform;
+  }
+
+  /** 重建 / 切场景这一帧必须瞬时生效，否则会从旧锚点滑过去，看起来像地图抖一下。 */
+  function withoutTransition(fn) {
+    if (!artLayer) { fn(); return; }
+    artLayer.style.transition = 'none';
+    dotLayer.style.transition = 'none';
+    if (meNode) meNode.style.transition = 'none';
+    fn();
+    // 读一次布局，让浏览器把「无过渡」这一帧算完再恢复过渡
+    void dotLayer.offsetWidth;
+    artLayer.style.transition = '';
+    dotLayer.style.transition = '';
+    if (meNode) meNode.style.transition = '';
+  }
+
+  function teardown() {
+    root.innerHTML = '';
+    built = false;
+    artLayer = null;
+    dotLayer = null;
+    artNode = null;
+    meNode = null;
+    dotPool = [];
+    sceneKey = '';
+  }
+
+  function render() {
+    perfUpdates++;
+    perfLog();
+    if (!catalog || !state || !state.self) { teardown(); return; }
+    var selfX = Number(state.self.x);
+    var selfY = Number(state.self.y);
+    if (!isFinite(selfX) || !isFinite(selfY)) { teardown(); return; }
+
+    unitsPerMeter = Number(catalog.coordinate_units_per_meter) || 100;
+    pxPerUnit = (SIZE / VIEW_METERS) / unitsPerMeter;
+    var map = state.scene != null && catalog.maps ? catalog.maps[String(state.scene)] : null;
+    var key = (map && map.image ? map.image : 'radar') + '|' + state.scene + '|' + unitsPerMeter;
+
+    if (!built) buildSkeleton();
+    if (key !== sceneKey) {
+      sceneKey = key;
+      perfRebuilds++;
+      withoutTransition(function () {
+        resetScene(map, selfX, selfY);
+        layoutDots(selfX, selfY);
+        moveTo(selfX, selfY);
+      });
+    } else {
+      layoutDots(selfX, selfY);
+      moveTo(selfX, selfY);
     }
 
-    html += '<span class="me' + (state.estimated ? ' est' : '') +
-      '" style="left:' + (SIZE / 2) + 'px;top:' + (SIZE / 2) + 'px"></span>';
-    root.innerHTML = html;
+    // 人物标识统一用箭头（2026-11-10 用户要求）：有朝向按朝向旋转，没朝向沿用上一次
+    if (state.heading != null && isFinite(Number(state.heading))) lastHeading = Number(state.heading);
+    meNode.className = 'me arrow' + (state.estimated ? ' est' : '');
+    meNode.style.transform = 'rotate(' + lastHeading.toFixed(1) + 'deg)';
   }
 
   window.RocoOverlayMap = {
@@ -213,20 +363,20 @@
       catch (error) { catalog = null; }
       render();
     },
-    /** 附近 payload 的地图子集：{scene, self, estimated, mapPets:[{x,y,rare,alert,reason,kinds}]}。
+    /** 附近 payload 的地图子集：{scene, self, estimated, heading, pets:[{x,y,rare,alert,kinds}]}。
      *  mapPets 含未命中目标的普通精灵；旧壳只给 pets 时仍能画。
      *  scene 没有标定底图时画雷达模式（同一投影），不再整块留空。 */
     update: function (json) {
-      perfUpdates++;
       try { state = typeof json === 'string' ? JSON.parse(json) : json; }
       catch (error) { state = null; }
       render();
     },
-    /** 底图加载失败（WebView 拦截 file 资源等）：记下来并退回雷达，不留空白。 */
+    /** 底图加载失败（WebView 拦截 file 资源等）：撤掉底图退回雷达，不留空白。 */
     artFailed: function (image) {
       if (!image || failedArt[image]) return;
       failedArt[image] = true;
-      if (usedArt) render();
+      if (artNode && artNode.parentNode) artNode.parentNode.removeChild(artNode);
+      artNode = null;
     }
   };
 })();

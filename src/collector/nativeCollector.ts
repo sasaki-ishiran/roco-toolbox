@@ -31,6 +31,12 @@ declare global {
       startCapture?: (mode?: StartCaptureMode) => string | Promise<string>;
       /** 系统悬浮窗权限查询（仅新壳）：返回 "true" / "false" */
       canDrawOverlay?: () => string | Promise<string>;
+      /**
+       * 悬浮球隐藏状态（1.3.6）：长按球 500ms 隐藏，附近页按钮恢复。
+       * `readOrbHidden` 返回 "true" / "false"；`setOrbHidden` 返回 "ok"。
+       */
+      readOrbHidden?: () => string | Promise<string>;
+      setOrbHidden?: (hidden: boolean) => string | Promise<string>;
       /** 桌面版（Electron）专用：Npcap 网卡列表与选择 */
       listDevices?: () => string | Promise<string>;
       selectDevice?: (name: string) => string | Promise<string>;
@@ -281,4 +287,21 @@ export async function canDrawOverlay(): Promise<boolean | null> {
   const check = window.RocoCapture?.canDrawOverlay;
   if (typeof check !== 'function') return null;
   try { return String(await check()) === 'true'; } catch { return null; }
+}
+
+/**
+ * 悬浮球当前是否被隐藏（1.3.6）。
+ * 返回 `null` 表示当前壳没有这个能力（旧 APK / 网页版），调用方不显示按钮。
+ */
+export async function readOrbHidden(): Promise<boolean | null> {
+  const read = window.RocoCapture?.readOrbHidden;
+  if (typeof read !== 'function') return null;
+  try { return String(await read()) === 'true'; } catch { return null; }
+}
+
+/** 隐藏 / 显示悬浮球；只摘掉窗口，采集照常继续。返回是否调用成功。 */
+export async function setOrbHidden(hidden: boolean): Promise<boolean> {
+  const write = window.RocoCapture?.setOrbHidden;
+  if (typeof write !== 'function') return false;
+  try { return String(await write(hidden)) === 'ok'; } catch { return false; }
 }

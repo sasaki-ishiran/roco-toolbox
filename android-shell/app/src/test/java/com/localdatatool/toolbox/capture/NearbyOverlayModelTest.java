@@ -83,16 +83,49 @@ public class NearbyOverlayModelTest {
         assertTrue(nearbyOnly.nearby);
     }
 
-    @Test public void listKeepsEightRowsAndReportsHiddenTotal() throws Exception {
+    @Test public void listKeepsMaxRowsAndReportsHiddenTotal() throws Exception {
         JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
-        json.put("pets", pets(12));
-        json.put("total", 12);
+        json.put("pets", pets(NearbyOverlayModel.MAX_ROWS + 6));
+        json.put("total", NearbyOverlayModel.MAX_ROWS + 6);
         NearbyOverlayModel model = NearbyOverlayModel.parse(json);
         assertEquals(NearbyOverlayModel.MAX_ROWS, model.pets.size());
-        assertEquals(8, model.shownRows());
-        assertEquals(4, model.hiddenCount());
-        assertEquals("还有 4 只未显示", model.footText());
-        assertEquals("附近 12 · 稀有 2", model.titleText());
+        assertEquals(NearbyOverlayModel.MAX_ROWS, model.shownRows());
+        assertEquals(6, model.hiddenCount());
+        assertEquals("还有 6 只未显示", model.footText());
+        assertEquals("附近 " + (NearbyOverlayModel.MAX_ROWS + 6) + " · 稀有 2", model.titleText());
+    }
+
+    @Test public void mapPetsCarryAllNearbyWhileListKeepsFiltered() throws Exception {
+        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
+        JSONArray list = new JSONArray();
+        list.put(new JSONObject().put("key", "hit").put("name", "命中").put("x", 1).put("y", 2));
+        JSONArray map = new JSONArray();
+        map.put(new JSONObject().put("key", "hit").put("name", "命中").put("x", 1).put("y", 2));
+        map.put(new JSONObject().put("key", "plain").put("name", "普通").put("x", 3).put("y", 4));
+        json.put("pets", list);
+        json.put("mapPets", map);
+        json.put("total", 1);
+
+        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
+        assertEquals(1, model.pets.size());
+        assertEquals(2, model.mapPets.size());
+        assertEquals("plain", model.mapPets.get(1).key);
+
+        // 旧网页只给 pets：地图退回 pets，不空图
+        json.remove("mapPets");
+        NearbyOverlayModel legacy = NearbyOverlayModel.parse(json);
+        assertEquals(1, legacy.mapPets.size());
+        assertEquals("hit", legacy.mapPets.get(0).key);
+    }
+
+    @Test public void listBodyHeightClampsToMap() {
+        // 有地图时列表可视区固定等于地图高度
+        assertEquals(NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.bodyHeight(5, true));
+        assertEquals(NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.bodyHeight(24, true));
+        // 无地图时按行数算，超过地图高度就封顶（框内滑动）
+        assertEquals(72, NearbyOverlayModel.bodyHeight(2, false));
+        assertEquals(NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.bodyHeight(20, false));
+        assertEquals(NearbyOverlayModel.EMPTY_BODY_HEIGHT, NearbyOverlayModel.bodyHeight(0, false));
     }
 
     @Test public void missingPetFieldsDoNotBreakParsing() throws Exception {
@@ -121,20 +154,20 @@ public class NearbyOverlayModelTest {
     }
 
     @Test public void panelHeightMatchesSpecTable() {
-        // 命中 + 附近，5 条（方案 2 两行：行高 34 + 间距 4，列表 186 高于地图 120）
-        assertEquals(286, NearbyOverlayModel.panelHeight(true, true, true, 5, true, 0));
-        // 命中 + 附近，8 条截断
-        assertEquals(412, NearbyOverlayModel.panelHeight(true, true, true, 8, true, 4));
+        // 有地图：列表区固定等于地图高度（120），行数再多也不再拉长面板
+        assertEquals(220, NearbyOverlayModel.panelHeight(true, true, true, 5, true, 0));
+        assertEquals(232, NearbyOverlayModel.panelHeight(true, true, true, 8, true, 4));
+        assertEquals(232, NearbyOverlayModel.panelHeight(true, true, true, 24, true, 4));
         // 仅命中
         assertEquals(64, NearbyOverlayModel.panelHeight(true, true, false, 0, false, 0));
         // 命中区无数据 + 附近无精灵（实测 200 = 44 + 28 + 120 + 8）
         assertEquals(200, NearbyOverlayModel.panelHeight(true, false, true, 0, true, 0));
-        // 仅附近，5 条
-        assertEquals(222, NearbyOverlayModel.panelHeight(false, false, true, 5, true, 0));
-        // 仅附近，8 条截断
-        assertEquals(348, NearbyOverlayModel.panelHeight(false, false, true, 8, true, 4));
-        // 只有列表（无地图）：短列表不压缩到 44 以下
+        // 仅附近
+        assertEquals(156, NearbyOverlayModel.panelHeight(false, false, true, 5, true, 0));
+        assertEquals(168, NearbyOverlayModel.panelHeight(false, false, true, 8, true, 4));
+        // 只有列表（无地图）：短列表按行数算，超过地图高度就封顶
         assertEquals(64 + 28 + 72 + 8, NearbyOverlayModel.panelHeight(true, true, true, 2, false, 0));
+        assertEquals(64 + 28 + 120 + 8, NearbyOverlayModel.panelHeight(true, true, true, 20, false, 0));
         // 空列表 + 无地图
         assertEquals(64 + 28 + 44 + 8, NearbyOverlayModel.panelHeight(true, true, true, 0, false, 0));
     }
@@ -148,15 +181,41 @@ public class NearbyOverlayModelTest {
             .put("rare", true).put("alert", true)
             .put("distanceM", 12.38).put("bearingArrow", "↗")
             .put("heightPct", 12.38).put("weightPct", 0.29)
-            .put("voiceLabel", "婉转声").put("reason", "demand"));
+            .put("voiceDb", 15).put("reason", "demand"));
         json.put("pets", list);
         json.put("total", 1);
 
         NearbyOverlayModel.Pet pet = NearbyOverlayModel.parse(json).pets.get(0);
-        // 第一行：距离 · 箭头 · xx级；第二行：高 · 重 · 声音；只截断不四舍五入
+        // 第一行：距离 · 箭头 · xx级；第二行：高 · 重 · 声音（只写分贝，不出现分类词）；只截断不四舍五入
         assertEquals("12m ↗ 37级", NearbyOverlayModel.metaTextLine1(pet));
-        assertEquals("高：12.3% 重：0.2% 婉转声", NearbyOverlayModel.metaTextLine2(pet));
+        assertEquals("高:12.3% 重:0.2% +15dB", NearbyOverlayModel.metaTextLine2(pet));
         assertEquals(NearbyOverlayModel.RowTone.DEMAND, NearbyOverlayModel.toneOf(pet));
+    }
+
+    @Test public void voiceFallsBackToRawDbAndNeverPrintsNull() throws Exception {
+        JSONObject json = payload("{\"battle\":false,\"nearby\":true}");
+        JSONArray list = new JSONArray();
+        list.put(new JSONObject()
+            .put("key", "k1").put("name", "雪豆丁").put("level", 37)
+            .put("kinds", new JSONArray()).put("rare", false).put("alert", false)
+            .put("distanceM", 12.38)
+            .put("voiceLabel", JSONObject.NULL).put("voiceDb", -99)
+            .put("reason", JSONObject.NULL)
+            .put("x", 1.0).put("y", 2.0));
+        list.put(new JSONObject()
+            .put("key", "k2").put("name", "蹦蹦种子").put("level", 3)
+            .put("kinds", new JSONArray()).put("rare", false).put("alert", false)
+            .put("distanceM", 4.0)
+            .put("voiceLabel", JSONObject.NULL).put("reason", JSONObject.NULL));
+        json.put("pets", list);
+        json.put("total", 2);
+
+        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
+        // 没有声音牌子时用原始分贝，不能把 JSON null 读成字面量 "null"
+        assertEquals("-99dB", NearbyOverlayModel.metaTextLine2(model.pets.get(0)));
+        // 原始数据也没有声音字段时整段省略，不输出 null / 占位符
+        assertEquals("", NearbyOverlayModel.metaTextLine2(model.pets.get(1)));
+        assertNull(model.pets.get(0).reason);
     }
 
     @Test public void rowToneFollowsPriority() throws Exception {
@@ -215,6 +274,23 @@ public class NearbyOverlayModelTest {
         assertEquals("进入野外后自动出现", NearbyOverlayModel.EMPTY_NEARBY_HINT);
         assertEquals("登录后显示附近精灵", NearbyOverlayModel.WAITING_LOGIN);
         assertEquals("进入赛季奇遇战后，这里会显示守卫的个体数据。", NearbyOverlayModel.HIT_EMPTY_TEXT);
+    }
+
+    @Test public void selfDebugFieldsDrivePerfLogging() throws Exception {
+        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
+        json.put("selfSource", "odometry");
+        json.put("selfAt", 1731234567890L);
+        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
+        assertEquals("odometry", model.selfSource);
+        assertEquals(Long.valueOf(1731234567890L), model.selfAt);
+        // 地图里最近的距离（pets 默认 10m 起）
+        assertEquals(10.0, model.nearestM, 1e-9);
+
+        // 旧网页没有这两个字段：不能因此报错
+        JSONObject legacy = payload("{\"battle\":true,\"nearby\":true}");
+        NearbyOverlayModel old = NearbyOverlayModel.parse(legacy);
+        assertNull(old.selfSource);
+        assertNull(old.selfAt);
     }
 
     @Test public void mapCatalogComesFromSharedCalibrationJson() {

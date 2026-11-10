@@ -20,8 +20,8 @@ android {
         // 那样网页会被铺到状态栏底下。停在 34 时系统会自动让窗口避开系统栏，不用自己算 insets。
         // 这个壳只自己安装、不上架商店，不受商店 targetSdk 新规影响。
         targetSdk 34
-        versionCode 30
-        versionName "1.3.8"
+        versionCode 36
+        versionName "1.5.2"
         ndk { abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64' }
         externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON' } }
         buildConfigField 'String', 'CAPTURE_TOKEN', '"' + captureToken + '"'
@@ -65,15 +65,25 @@ tasks.register('verifyShellInvariants') {
         // 用 toRealPath 解析 junction：从 D:\roco-build\shell-authoritative 构建时也能回到仓库根
         def repoRoot = rootProject.projectDir.toPath().toRealPath().toFile().parentFile
         def manifestFile = new File(repoRoot, 'public/android/version.json')
+        // 测试包（2026-11-10）：只给单个用户验证的版本不对外发布，不能改 version.json，
+        // 否则所有用户都会被推到这个版本。用 -PtestOnlyBuild=true 区分：只要求版本号高于对外清单。
+        def testOnlyBuild = project.hasProperty('testOnlyBuild') && project.property('testOnlyBuild') == 'true'
         if (!manifestFile.exists()) {
             problems << "找不到版本清单 ${manifestFile}"
         } else {
             def manifest = new groovy.json.JsonSlurper().parse(manifestFile, 'UTF-8')
-            if ((manifest.versionCode as int) != android.defaultConfig.versionCode) {
-                problems << "versionCode 与清单不一致：build.gradle=${android.defaultConfig.versionCode}，清单=${manifest.versionCode}"
-            }
-            if (manifest.versionName != android.defaultConfig.versionName) {
-                problems << "versionName 与清单不一致：build.gradle=${android.defaultConfig.versionName}，清单=${manifest.versionName}"
+            if (testOnlyBuild) {
+                if (android.defaultConfig.versionCode <= (manifest.versionCode as int)) {
+                    problems << "测试包 versionCode 必须高于对外清单：build.gradle=${android.defaultConfig.versionCode}，清单=${manifest.versionCode}"
+                }
+                println "测试包模式：跳过 versionName 与清单一致校验（build=${android.defaultConfig.versionName}，清单=${manifest.versionName}）"
+            } else {
+                if ((manifest.versionCode as int) != android.defaultConfig.versionCode) {
+                    problems << "versionCode 与清单不一致：build.gradle=${android.defaultConfig.versionCode}，清单=${manifest.versionCode}"
+                }
+                if (manifest.versionName != android.defaultConfig.versionName) {
+                    problems << "versionName 与清单不一致：build.gradle=${android.defaultConfig.versionName}，清单=${manifest.versionName}"
+                }
             }
         }
 
@@ -83,6 +93,9 @@ tasks.register('verifyShellInvariants') {
         need('overlay-map.html', mapHtml, 'DOT_RADIUS_METERS = 120')
         need('overlay-map.html', mapHtml, '/ side')
         need('overlay-map.html', mapHtml, 'mapPets')
+        // 2b. 精灵点裁剪按**当前自身坐标**（2026-11-10 事故：按进场锚点裁，
+        //     走离入口 120m 后地图上的精灵点被整批剔掉，列表却在实时更新）
+        need('overlay-map.html', mapHtml, 'Math.hypot(petX - selfX, petY - selfY)')
 
         // 3. 附近面板宽度
         need('NearbyOverlayModel.java',
@@ -94,10 +107,41 @@ tasks.register('verifyShellInvariants') {
         need('BattleOverlayController.java', battle, 'LONG_PRESS_MS')
         need('BattleOverlayController.java', battle, 'longPressHide')
 
+        // 4b. 悬浮球外观与吸边（2026-11-10 用户定稿）：0.85 缩放、8dp 吸边阈值、
+        //     3 秒无操作半透明、右吸边时面板向左展开，避免以后哪次构建把这些丢掉
+        need('BattleOverlayController.java', battle, 'ORB_ICON_SCALE = 0.85f')
+        need('BattleOverlayController.java', battle, 'SNAP_THRESHOLD_DP = 8')
+        need('BattleOverlayController.java', battle, 'SNAP_FADE_DELAY_MS = 3000L')
+        need('BattleOverlayController.java', battle, 'snappedSide == 2')
+        def panelSource = read(file('src/main/java/com/localdatatool/toolbox/capture/NearbyPanelController.java'))
+        need('NearbyPanelController.java', panelSource, 'lastOrbSnappedRight')
+        need('NearbyPanelController.java', panelSource, 'lastOrbX - edge - panelParams.width')
+        need('NearbyPanelController.java', panelSource, 'lastOrbX + lastOrbSize + edge')
+
         // 5. 采集桥来源必须跟随当前站点，否则测试站读不到本机采集
         need('CaptureBridgePolicy.java',
             read(file('src/main/java/com/localdatatool/toolbox/capture/CaptureBridgePolicy.java')),
             'siteOrigin')
+        // 采集快照的 CORS 头也必须跟随当前站点（写死正式站 = 测试站 Failed to fetch）
+        need('CaptureController.java',
+            read(file('src/main/java/com/localdatatool/toolbox/capture/CaptureController.java')),
+            '"Access-Control-Allow-Origin", siteOrigin')
+
+        // 6. 长按隐藏必须有恢复入口：网页按钮 + 桥方法，缺一个就失败
+        //    （1.3.9 事故：longPressHide 在、capture-bridge.js 没暴露 readOrbHidden，
+        //     网页判定无此能力，按钮永远不渲染，球隐藏后找不回来）
+        def bridgeJs = read(file('src/main/assets/capture-bridge.js'))
+        need('capture-bridge.js', bridgeJs, 'readOrbHidden')
+        need('capture-bridge.js', bridgeJs, 'setOrbHidden')
+        need('MainActivity.java',
+            read(file('src/main/java/com/localdatatool/toolbox/MainActivity.java')),
+            'readOrbHidden')
+        need('src/ui/Nearby.tsx',
+            read(new File(repoRoot, 'src/ui/Nearby.tsx')),
+            'nearby-orb-toggle')
+        need('src/ui/Nearby.tsx',
+            read(new File(repoRoot, 'src/ui/Nearby.tsx')),
+            '显示悬浮球')
 
         if (!problems.isEmpty()) {
             throw new GradleException('壳不变量校验失败：\n - ' + problems.join('\n - '))

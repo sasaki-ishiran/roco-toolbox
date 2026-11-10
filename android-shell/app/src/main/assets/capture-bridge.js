@@ -42,5 +42,8 @@
     updateNearbyOverlay: (payload) => call('updateNearbyOverlay', undefined, { nearby: payload }),
     requestOverlayPermission: () => call('requestOverlayPermission'),
     canDrawOverlay: () => call('canDrawOverlay'),
+    // 悬浮球显示 / 隐藏（1.4.0）：长按隐藏后，附近页用这两个方法把球找回来
+    readOrbHidden: () => call('readOrbHidden'),
+    setOrbHidden: (hidden) => call('setOrbHidden', undefined, { hidden }),
   };
 })();

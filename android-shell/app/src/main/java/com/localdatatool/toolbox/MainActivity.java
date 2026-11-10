@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -124,14 +125,36 @@ public class MainActivity extends Activity {
      * 用户切到游戏后，工具箱页面不可见，WebView 会把 setTimeout / setInterval 节流到
      * 每分钟一次甚至暂停，悬浮球就会「有时候一直不刷新」。这里由原生每秒唤醒页面一次
      * （evaluateJavascript 不受页面定时器节流影响），网页侧再按需补一轮解析。
+     *
+     * 2026-11-10 修正触发条件：原来用的是 {@code !webView.isShown()}，但
+     * {@link android.view.View#isShown()} 只检查视图树里的可见标记、不看窗口可见性，
+     * Activity 退到后台后仍然返回 true，所以这个心跳在真机上**一次都没跑过**。
+     * 现在改由 {@link #pageVisible}（onResume / onPause 维护）判断。
      */
     private final Handler liveTick = new Handler(Looper.getMainLooper());
+    /** Activity 是否在前台交互（onResume / onPause 维护；不能拿 webView.isShown() 代替）。 */
+    private boolean pageVisible = true;
+    /**
+     * 后台心跳间隔（2026-11-10）：
+     * 采集进行中 250ms 唤醒一次，空闲 1200ms。真机日志显示 1200ms 心跳下每 5 秒只有 3~5 轮，
+     * 因为页面不可见时网页自己的 setTimeout 会被系统压到 1s 以上，只有这个原生心跳能带动轮询。
+     */
+    private static final long LIVE_TICK_BUSY_MS = 250;
+    private static final long LIVE_TICK_IDLE_MS = 1200;
+    /** 是否已经把 WebView 渲染进程提到 IMPORTANT，后台采集结束时用它恢复默认策略。 */
+    private boolean rendererBoosted;
     private final Runnable liveTickTask = new Runnable() {
         @Override public void run() {
-            if (webView != null && !webView.isShown() && CaptureVpnService.STATE.busy()) {
-                webView.evaluateJavascript("window.__rocoLiveTick&&window.__rocoLiveTick()", null);
+            boolean busy = CaptureVpnService.STATE.busy();
+            if (webView != null && !pageVisible) {
+                if (busy) {
+                    webView.evaluateJavascript("window.__rocoLiveTick&&window.__rocoLiveTick()", null);
+                } else if (rendererBoosted) {
+                    // 采集已结束：后台不再需要高优先级渲染进程，马上恢复默认策略
+                    applyRendererPriority(false);
+                }
             }
-            liveTick.postDelayed(this, 1200);
+            liveTick.postDelayed(this, busy ? LIVE_TICK_BUSY_MS : LIVE_TICK_IDLE_MS);
         }
     };
     private boolean captureBridgeInstalled;
@@ -405,10 +428,46 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // 回到前台：页面自己的定时器恢复，渲染进程回到默认策略
+        pageVisible = true;
+        applyRendererPriority(false);
         // 用户可能刚去系统设置里授予了悬浮窗权限：回来时把还在采集的球重新画上
         if (battleOverlay != null) battleOverlay.onResume();
         // 用户可能刚从「安装未知应用」设置页回来：权限拿到就把已下载的包接着装上
         if (updater != null) updater.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        // 切到游戏 / 其它应用：页面定时器会被 WebView 节流，刷新交给原生心跳；
+        // 同时把渲染进程提到 IMPORTANT，避免系统内存紧张（游戏在前台）时把它压缩 / 回收
+        pageVisible = false;
+        applyRendererPriority(true);
+        super.onPause();
+    }
+
+    /**
+     * 后台采集时把 WebView 渲染进程提到 IMPORTANT（2026-11-10 保活）。
+     *
+     * 1.4.0 真机日志（Redmi / Android 16）：游戏在前台时，主页面与地图两个 WebView 的 JS
+     * 会在几分钟后一起停住（payload / parse 全为 0），而主线程心跳仍在输出 RocoPerf，
+     * 切回应用立刻恢复——说明进程没被冻结，是渲染进程被降权 / 压缩。
+     * 默认策略在页面不可见时把渲染进程降为 WAIVED；这里只在采集进行中提升，
+     * 回到前台或采集结束时立刻恢复默认（BOUND + 不可见时让权）。
+     */
+    private void applyRendererPriority(boolean background) {
+        if (webView == null || Build.VERSION.SDK_INT < 26) return;
+        try {
+            if (background && CaptureVpnService.STATE.busy()) {
+                webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+                rendererBoosted = true;
+            } else {
+                webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true);
+                rendererBoosted = false;
+            }
+        } catch (Exception ignored) {
+            // 个别 WebView 版本不支持该策略：心跳仍然生效，不影响采集
+        }
     }
 
     @Override

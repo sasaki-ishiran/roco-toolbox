@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { observeCollectorState, isNearbyOwnedSession } from '../collector/captureOriginStore';
+import { observeCollectorState } from '../collector/captureOriginStore';
 import { battleTargetHit, useBattleTarget } from '../collector/battleTargetStore';
 import {
   hasNativeBattleOverlay,
@@ -121,12 +121,13 @@ export function BattleHudOrb() {
   }, [nativeOverlay]);
 
   // live 解码：phase=capturing 时持续刷新 nearbyStore（encounter 由此而来）
-  // 附近页发起的采集只解尾部 2MiB（战斗提示要快）；「我的」页发起的仍全量，保留自动导入判断。
+  // 2026-11-09：原生浮窗下统一走 2MiB 尾窗——悬浮窗要跟手，全量重解在后台跟不上心跳；
+  // 「我的」页的自动导入进度由采集页 / 附近页自己的（全量）解码负责，不在这里判断。
   useCaptureProgress(state, {
     live: true,
     persist: false,
     background: nativeOverlay,
-    windowBytes: isNearbyOwnedSession(state?.fileId) ? 2 * 1024 * 1024 : 0,
+    windowBytes: nativeOverlay ? 2 * 1024 * 1024 : 0,
   });
   const snapshot = useNearbySnapshot();
   const target = useBattleTarget();

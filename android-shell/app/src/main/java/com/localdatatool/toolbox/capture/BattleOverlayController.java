@@ -75,11 +75,26 @@ public final class BattleOverlayController {
     private static final int COLOR_HIT_ICON = 0xFFE11D48;
 
     private static final int ORB_DP = 52;
+    /**
+     * 图标本体缩放（2026-11-10 定稿 0.85）：只缩画面，不缩触摸热区。
+     * 球窗口仍是 {@link #ORB_DP}（52dp 热区），靠内边距把图标等比收进 0.85 倍的空间，
+     * 拖动、夹取、命中染色都不受影响。
+     */
+    private static final float ORB_ICON_SCALE = 0.85f;
     private static final int CARD_DP = 216;
     private static final int EDGE_DP = 8;
     private static final int DRAG_SLOP_DP = 8;
     /** 长按判定：按住 500ms 且位移不超过 slop 才算长按隐藏，超过按拖动处理 */
     private static final long LONG_PRESS_MS = 500L;
+    /**
+     * 拖拽结束吸边阈值（2026-11-10）：球中心距屏幕左右边缘 8dp 以内就吸附到该边，
+     * 只对齐 x，保留原来的上下位置（不上下吸）。
+     */
+    private static final int SNAP_THRESHOLD_DP = 8;
+    /** 吸附后多久没有操作开始半透明（常量，方便以后调）。 */
+    private static final long SNAP_FADE_DELAY_MS = 3000L;
+    /** 吸附静置后的透明度：50%。 */
+    private static final float SNAP_IDLE_ALPHA = 0.5f;
 
     private final Activity activity;
     private final WindowManager windowManager;
@@ -104,11 +119,20 @@ public final class BattleOverlayController {
     private boolean dragged;
     /** 本次按下是否已经触发长按隐藏（触发后抬手不再当点击） */
     private boolean longPressed;
+    /** 当前吸附到哪一侧：0 未吸附，1 左边缘，2 右边缘（面板按它决定向左 / 向右展开） */
+    private int snappedSide;
+    /** 手指是否正按在球上：按着的时候不做半透明 */
+    private boolean pressed;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable longPressHide = () -> {
         if (dragged || orb == null) return;
         longPressed = true;
         setOrbHidden(true);
+    };
+    /** 吸附后 3 秒无操作：图标降到 50%；任何按下都会立刻恢复 100% 并重排这个定时器。 */
+    private final Runnable snapFade = () -> {
+        if (orb == null || pressed || snappedSide == 0) return;
+        orb.setAlpha(SNAP_IDLE_ALPHA);
     };
     /** 点击球的回调；面板侧接管展开逻辑时设置，默认展开内置的命中卡。 */
     private TapListener tapListener;
@@ -241,6 +265,7 @@ public final class BattleOverlayController {
 
     public void destroy() {
         main.removeCallbacks(longPressHide);
+        main.removeCallbacks(snapFade);
         if (displayManager != null) displayManager.unregisterDisplayListener(displayListener);
         removeAll();
         nearbyPanel.release();
@@ -273,6 +298,9 @@ public final class BattleOverlayController {
         } catch (Exception ignored) {
             // 拿不到图标就留空球，不影响点击与拖动
         }
+        // 只缩小图标本体：视图（= 触摸热区）仍是 ORB_DP，内边距让 FIT_CENTER 等比缩到 0.7 倍
+        int iconInset = Math.round(size * (1f - ORB_ICON_SCALE) / 2f);
+        view.setPadding(iconInset, iconInset, iconInset, iconInset);
         orb = view;
 
         orbParams = new WindowManager.LayoutParams(
@@ -286,8 +314,11 @@ public final class BattleOverlayController {
         orbParams.x = prefs.getInt(KEY_X, -1);
         orbParams.y = prefs.getInt(KEY_Y, -1);
         applyStartPosition(orbParams);
+        // 上次退出时就停在边上：按存档位置恢复吸附状态，3 秒无操作照样半透明
+        snappedSide = snapSideOf(orbParams);
 
         orb.setOnTouchListener(this::onTouch);
+        scheduleSnapFade();
         try {
             windowManager.addView(orb, orbParams);
         } catch (Exception error) {
@@ -306,6 +337,10 @@ public final class BattleOverlayController {
                 startY = orbParams.y;
                 dragged = false;
                 longPressed = false;
+                // 按下立刻恢复不透明，并取消「3 秒无操作」的半透明排期
+                pressed = true;
+                main.removeCallbacks(snapFade);
+                view.setAlpha(1f);
                 main.postDelayed(longPressHide, LONG_PRESS_MS);
                 return true;
             case MotionEvent.ACTION_MOVE: {
@@ -314,6 +349,11 @@ public final class BattleOverlayController {
                 // 手指抖动不算拖动，否则想点开详情会变成挪球
                 if (!dragged && Math.hypot(dx, dy) < dp(DRAG_SLOP_DP)) return true;
                 dragged = true;
+                // 拖动中视为「已脱离吸附」：保持 100% 不透明，松手后再按新位置判定
+                if (snappedSide != 0) {
+                    snappedSide = 0;
+                    main.removeCallbacks(snapFade);
+                }
                 main.removeCallbacks(longPressHide);
                 orbParams.x = startX + Math.round(dx);
                 orbParams.y = startY + Math.round(dy);
@@ -325,12 +365,16 @@ public final class BattleOverlayController {
             }
             case MotionEvent.ACTION_UP: {
                 main.removeCallbacks(longPressHide);
+                pressed = false;
                 if (longPressed) return true;
                 orbParams.x = startX + Math.round(event.getRawX() - downRawX);
                 orbParams.y = startY + Math.round(event.getRawY() - downRawY);
                 clampToScreen(orbParams);
+                // 拖动结束才做吸边判定：只对齐 x，y 保持用户松手时的位置
+                if (dragged) snappedSide = snapSideOf(orbParams);
                 safeUpdate(orb, orbParams);
                 syncPanelAnchor();
+                scheduleSnapFade();
                 if (dragged) {
                     prefs.edit().putInt(KEY_X, orbParams.x).putInt(KEY_Y, orbParams.y).apply();
                     placeCard();
@@ -343,8 +387,10 @@ public final class BattleOverlayController {
             }
             case MotionEvent.ACTION_CANCEL:
                 main.removeCallbacks(longPressHide);
+                pressed = false;
                 dragged = false;
                 longPressed = false;
+                scheduleSnapFade();
                 return true;
             default:
                 return false;
@@ -545,7 +591,41 @@ public final class BattleOverlayController {
     private void syncPanelAnchor() {
         if (orbParams == null) return;
         Point screen = screenSize();
-        nearbyPanel.setOrbRect(orbParams.x, orbParams.y, orbParams.width, screen.x, screen.y);
+        // 吸附在右边缘时面板向左展开，其余情况一律在球的右侧（不做智能避让）
+        nearbyPanel.setOrbRect(
+            orbParams.x, orbParams.y, orbParams.width, screen.x, screen.y, snappedSide == 2);
+    }
+
+    /**
+     * 吸边判定（2026-11-10）：球中心距屏幕左右边缘 8dp 以内就吸附到该边。
+     * 只改 x、不动 y，所以吸附本身不会让球上下跳。
+     *
+     * @return 0 未吸附，1 左边缘，2 右边缘
+     */
+    private int snapSideOf(WindowManager.LayoutParams params) {
+        Point screen = screenSize();
+        float centerX = params.x + params.width / 2f;
+        int threshold = dp(SNAP_THRESHOLD_DP);
+        if (centerX <= threshold) {
+            params.x = 0;
+            return 1;
+        }
+        if (centerX >= screen.x - threshold) {
+            params.x = screen.x - params.width;
+            return 2;
+        }
+        return 0;
+    }
+
+    /** 吸附且 3 秒无操作后半透明；没吸附则立刻恢复 100%。 */
+    private void scheduleSnapFade() {
+        main.removeCallbacks(snapFade);
+        if (orb == null) return;
+        if (snappedSide == 0) {
+            orb.setAlpha(1f);
+            return;
+        }
+        main.postDelayed(snapFade, SNAP_FADE_DELAY_MS);
     }
 
     private void removeAll() {
@@ -568,6 +648,9 @@ public final class BattleOverlayController {
 
     private void removeOrb() {
         if (orb == null) return;
+        main.removeCallbacks(snapFade);
+        snappedSide = 0;
+        pressed = false;
         try {
             windowManager.removeView(orb);
         } catch (Exception ignored) {
