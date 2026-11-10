@@ -38,7 +38,7 @@ describe('稀有精灵提醒接线', () => {
     mock();
     const { rerender } = render(<CaptureProgressView state={state} rareAlertOn />);
     await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
-    expect(notify).toHaveBeenCalledWith('稀有精灵出现！', '护主犬 Lv37 · -100dB 粗嗓门');
+    expect(notify).toHaveBeenCalledWith('稀有精灵出现！', '护主犬 37级 · -100dB 粗嗓门');
     rerender(<CaptureProgressView state={state} rareAlertOn />);
     await act(async () => { await Promise.resolve(); });
     expect(notify).toHaveBeenCalledTimes(1);

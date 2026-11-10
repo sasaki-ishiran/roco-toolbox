@@ -20,6 +20,7 @@ import { HomeLand, saveHomeView } from './ui/Home';
 import { Collection } from './ui/Collection';
 import { CollectionGroups } from './ui/CollectionGroups';
 import { Nearby } from './ui/Nearby';
+import { NearbyErrorBoundary } from './ui/NearbyErrorBoundary';
 import { BattleHudOrb } from './ui/BattleHudOrb';
 import { useNearbyOverlayPush } from './nearby/useNearbyOverlayPush';
 import { Profile } from './ui/Profile';
@@ -272,7 +273,9 @@ export default function App() {
           }
         />
       ) : navigation.page === 'nearby' ? (
-        <Nearby onNavigate={navigate} />
+        <NearbyErrorBoundary>
+          <Nearby onNavigate={navigate} />
+        </NearbyErrorBoundary>
       ) : (
         <Collection
           location={collection}

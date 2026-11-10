@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LiveNearbyPet } from '../collector/captureProgress';
-import { metersPerPixel, projectToPixel, worldMapForScene, worldMapImageUrl } from '../pcap/worldMap';
+import { metersPerPixel, projectToPixel, worldMapForScene, worldMapImageUrl, type WorldMap } from '../pcap/worldMap';
 
 /** 牌子 → 标记颜色；与列表/雷达同一套语义 */
 const KIND_COLOR: Record<string, string> = {
@@ -52,28 +52,71 @@ export interface NearbyMapProps {
   className?: string;
 }
 
-interface ViewState {
+export interface ViewState {
   scale: number;
   tx: number;
   ty: number;
 }
 
 /**
- * 大世界地图（2026-11-08）。
- *
- * 和雷达的区别：雷达是「以估算中心为圆心的相对方位」，地图是真实世界坐标直接落点，
- * 可以缩放/拖动，能直接看到精灵在卡洛西亚大陆的位置，不会再出现「知道在旁边但找不到」。
- * 标定与坐标换算见 `src/pcap/worldMap.ts`（100 世界单位 = 1 米）。
+ * 自身位置变化 → 新的视图偏移：按同一位移平移地图，保留用户的缩放与拖动偏移。
+ * 抽成纯函数，便于单测「自身移动时地图确实跟着走」（2026-11-10）。
  */
+export function panForSelfMove(
+  map: WorldMap,
+  previous: { x: number; y: number },
+  next: { x: number; y: number },
+  view: ViewState,
+): ViewState {
+  const before = projectToPixel(map, previous);
+  const after = projectToPixel(map, next);
+  if (before.px === after.px && before.py === after.py) return view;
+  return {
+    ...view,
+    tx: view.tx - (after.px - before.px) * view.scale,
+    ty: view.ty - (after.py - before.py) * view.scale,
+  };
+}
+
+/**
+ * 以 (focusX, focusY) 为锚点缩放（2026-11-10）。
+ *
+ * 抽成纯函数并统一兜底：任何一步算出 NaN / Infinity 都原样返回旧视图。
+ * 之前缩放直接在 setView 的 updater 里算，一旦上一帧的 scale 被污染成 NaN，
+ * 后面每次 Math.min/max 都还是 NaN，地图会整块消失且再也回不来。
+ */
+export function zoomView(view: ViewState, factor: number, focusX: number, focusY: number): ViewState {
+  // 非法手势直接不动作：宁可这一下不缩放，也不要算出 NaN 把地图顶没。
+  if (!Number.isFinite(factor) || factor <= 0) return view;
+  if (!Number.isFinite(focusX) || !Number.isFinite(focusY)) return view;
+  const current = Number.isFinite(view.scale) && view.scale > 0 ? view.scale : 1;
+  const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, current * factor));
+  const ratio = scale / current;
+  const tx = focusX - (focusX - view.tx) * ratio;
+  const ty = focusY - (focusY - view.ty) * ratio;
+  if (!Number.isFinite(scale) || !Number.isFinite(tx) || !Number.isFinite(ty)) return view;
+  return { scale, tx, ty };
+}
+
 export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
   const map = worldMapForScene(scene);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [view, setView] = useState<ViewState>({ scale: 0.6, tx: 0, ty: 0 });
   const [selected, setSelected] = useState<string | null>(null);
-  const interacted = useRef(false);
   /** 用户缩放倍率（1 = 默认 150m）；存在 localStorage，下次打开沿用 */
   const zoom = useRef(readSavedZoom());
+
+  /** 自身位置：有 307 用它，没有就取精灵里离地图中心最近的一只（保持画面在有人区域） */
+  const self = useMemo(() => {
+    if (origin) return origin;
+    if (pets.length === 0) return null;
+    return pets.reduce((best, pet) => {
+      if (!pet.pos) return best;
+      if (!best) return { x: pet.pos.x, y: pet.pos.y };
+      return best;
+    }, null as { x: number; y: number } | null);
+  }, [origin, pets]);
 
   const baseScale = useCallback((width: number) => {
     if (!map || width === 0) return 1;
@@ -105,22 +148,12 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
     return () => observer.disconnect();
   }, []);
 
-  /** 自身位置：有 307 用它，没有就取精灵里离地图中心最近的一只（保持画面在有人区域） */
-  const self = useMemo(() => {
-    if (origin) return origin;
-    if (pets.length === 0) return null;
-    return pets.reduce((best, pet) => {
-      if (!pet.pos) return best;
-      if (!best) return { x: pet.pos.x, y: pet.pos.y };
-      return best;
-    }, null as { x: number; y: number } | null);
-  }, [origin, pets]);
-
   const centerOnSelf = useCallback(() => {
     if (!map || size.width === 0) return;
     const point = self ?? { x: map.originX + map.sideUnits / 2, y: map.originY + map.sideUnits / 2 };
     const { px, py } = projectToPixel(map, point);
-    const scale = baseScale(size.width) * zoom.current;
+    const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, baseScale(size.width) * zoom.current));
+    if (!Number.isFinite(scale) || !Number.isFinite(px) || !Number.isFinite(py)) return;
     setView({
       scale,
       tx: size.width / 2 - px * scale,
@@ -128,23 +161,30 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
     });
   }, [map, self, size.width, size.height, baseScale]);
 
-  // 首屏 / 换场景 / 面板尺寸变化时自动对到自身；用户手动拖动过就不再抢镜头
+  // 首屏 / 换场景 / 面板尺寸变化时对到自身；之后自身移动按同一位移平移视图，
+  // 保留用户的缩放与拖动偏移，地图始终跟着人走（2026-11-10 修复「地图不动」）
+  const lastFocus = useRef<{ x: number; y: number } | null>(null);
+  const lastFit = useRef<{ map: WorldMap | null; width: number; height: number } | null>(null);
   useEffect(() => {
-    if (size.width === 0 || interacted.current) return;
-    centerOnSelf();
-  }, [centerOnSelf, size.width]);
+    if (!map || size.width === 0) return;
+    const fitChanged = lastFit.current?.map !== map
+      || lastFit.current?.width !== size.width
+      || lastFit.current?.height !== size.height;
+    lastFit.current = { map, width: size.width, height: size.height };
+    const previous = lastFocus.current;
+    lastFocus.current = self;
+    if (fitChanged || !previous || !self) {
+      centerOnSelf();
+      return;
+    }
+    setView((current) => panForSelfMove(map, previous, self, current));
+  }, [map, self, size.width, size.height, centerOnSelf]);
 
   const zoomAt = useCallback((factor: number, focusX: number, focusY: number) => {
-    interacted.current = true;
     setView((current) => {
-      const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, current.scale * factor));
-      const ratio = scale / current.scale;
-      saveZoom(scale, size.width);
-      return {
-        scale,
-        tx: focusX - (focusX - current.tx) * ratio,
-        ty: focusY - (focusY - current.ty) * ratio,
-      };
+      const next = zoomView(current, factor, focusX, focusY);
+      if (next !== current) saveZoom(next.scale, size.width);
+      return next;
     });
   }, [saveZoom, size.width]);
 
@@ -162,30 +202,38 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
       return;
     }
     drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // 指针已被系统回收时 setPointerCapture 会抛 InvalidPointerId；不影响后续拖动
+    }
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (pinch.current.has(event.pointerId)) pinch.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pinchStart.current && pinch.current.size === 2) {
+    // 先把起手值取出来：pointerup 会把 pinchStart.current 清空，而 setView 的 updater
+    // 可能延后执行，原来在 updater 里写 `pinchStart.current!.distance` 会在这个窗口期
+    // 抛 TypeError（2026-11-10 真机「缩放地图弹错误」）。取出来后 updater 就是纯函数。
+    const start = pinchStart.current;
+    if (start && pinch.current.size === 2) {
       const [a, b] = [...pinch.current.values()];
       const distance = Math.hypot(a.x - b.x, a.y - b.y);
-      if (distance > 0) {
-        interacted.current = true;
+      // 两指落点重合时 ratio 会是 Infinity / NaN，直接跳过这一步
+      if (distance > 0 && start.distance > 0) {
+        const factor = distance / start.distance;
         setView((current) => {
-          const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, pinchStart.current!.scale * (distance / pinchStart.current!.distance)));
-          const ratio = scale / current.scale;
-          saveZoom(scale, size.width);
-          return { scale, tx: size.width / 2 - (size.width / 2 - current.tx) * ratio, ty: size.height / 2 - (size.height / 2 - current.ty) * ratio };
+          const next = zoomView(current, factor, size.width / 2, size.height / 2);
+          if (next !== current) saveZoom(next.scale, size.width);
+          return next;
         });
       }
       return;
     }
     const current = drag.current;
     if (!current || current.id !== event.pointerId) return;
-    interacted.current = true;
     const dx = event.clientX - current.x;
     const dy = event.clientY - current.y;
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
     drag.current = { ...current, x: event.clientX, y: event.clientY };
     setView((value) => ({ ...value, tx: value.tx + dx, ty: value.ty + dy }));
   };
@@ -198,7 +246,10 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
 
   if (!map) return null;
 
-  const { scale, tx, ty } = view;
+  // 渲染前再兜一道：任何一项不是有限值都退回安全默认，避免 NaN 写进 style 让整块地图消失。
+  const scale = Number.isFinite(view.scale) && view.scale > 0 ? view.scale : 1;
+  const tx = Number.isFinite(view.tx) ? view.tx : 0;
+  const ty = Number.isFinite(view.ty) ? view.ty : 0;
   const selectedPet = selected ? pets.find((pet) => pet.key === selected) ?? null : null;
   const toScreen = (point: { x: number; y: number }) => {
     const { px, py } = projectToPixel(map, point);
@@ -216,9 +267,14 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
       onPointerUp={endPointer}
       onPointerCancel={endPointer}
       onWheel={(event) => {
-        event.preventDefault();
-        const rect = event.currentTarget.getBoundingClientRect();
-        zoomAt(event.deltaY < 0 ? 1.18 : 1 / 1.18, event.clientX - rect.left, event.clientY - rect.top);
+        try {
+          event.preventDefault();
+          const rect = event.currentTarget.getBoundingClientRect();
+          zoomAt(event.deltaY < 0 ? 1.18 : 1 / 1.18, event.clientX - rect.left, event.clientY - rect.top);
+        } catch (error) {
+          // 缩放本身不该把整页顶掉：事件处理器里的异常错误边界接不到，就地吞掉并留日志。
+          console.error('地图缩放失败', error);
+        }
       }}
     >
       <img
@@ -271,7 +327,7 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
             }}
             className="absolute -translate-x-1/2 -translate-y-1/2"
             style={{ left: screen.x, top: screen.y }}
-            title={`${pet.name} Lv${pet.level}${distance != null ? ` · ${distance.toFixed(0)}m` : ''}`}
+            title={`${pet.name} ${pet.level}级${distance != null ? ` · ${distance.toFixed(0)}m` : ''}`}
           >
             {pet.alertReason ? (
               <span className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-rose-500" />
@@ -305,7 +361,7 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
           className="h-7 w-7 rounded-lg bg-white/90 text-sm font-semibold text-slate-700 shadow">+</button>
         <button type="button" aria-label="缩小" onClick={() => zoomAt(1 / 1.35, size.width / 2, size.height / 2)}
           className="h-7 w-7 rounded-lg bg-white/90 text-sm font-semibold text-slate-700 shadow">−</button>
-        <button type="button" aria-label="回到自身" title="回到自身" onClick={() => { interacted.current = false; centerOnSelf(); }}
+        <button type="button" aria-label="回到自身" title="回到自身" onClick={centerOnSelf}
           className="h-7 w-7 rounded-lg bg-white/90 text-[10px] font-medium text-slate-700 shadow">我</button>
       </div>
 
@@ -322,7 +378,7 @@ export function NearbyMap({ pets, origin, scene, className }: NearbyMapProps) {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold">
-                {selectedPet.name} · Lv{selectedPet.level}
+                {selectedPet.name} · {selectedPet.level}级
                 {selectedPet.gender ? ` · ${selectedPet.gender}` : ''}
               </p>
               <p className="text-[10px] text-slate-300">

@@ -29,7 +29,7 @@ describe('持续获取实时条', () => {
   test('有附近精灵时展示名称/等级/牌子与稀有数量', () => {
     render(<LiveCaptureBanner analysis={{ ...analysis, nearbyPets: 1, nearby: [nearby] }} sourceBytes={0} />);
     expect(screen.getByText(/附近 1 只（稀有 1）/)).toBeTruthy();
-    expect(screen.getByText(/护主犬 Lv37/)).toBeTruthy();
+    expect(screen.getByText(/护主犬 37级/)).toBeTruthy();
     expect(screen.getByText(/粗嗓门/)).toBeTruthy();
   });
 

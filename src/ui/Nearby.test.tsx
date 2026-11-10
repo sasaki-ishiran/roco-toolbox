@@ -10,6 +10,7 @@ import type { SeasonEncounter } from '../collector/captureProgress';
 import { useRareAlert } from '../collector/rareAlertStore';
 import { useNearbyFeed } from '../collector/useNearbyFeed';
 import { readNearbyOverlayPanels, resetNearbyOverlayPanelsForTest } from '../nearby/overlayPanels';
+import { resetNearbyFilterForTest } from '../nearby/nearbyFilterStore';
 import type { DemandCenterItem } from './useDemandCenter';
 import { useDemandCenter } from './useDemandCenter';
 import { Nearby } from './Nearby';
@@ -103,6 +104,7 @@ beforeEach(() => {
   resetNearbyAlertGateForTest();
   resetCaptureOriginForTest();
   resetNearbyOverlayPanelsForTest();
+  resetNearbyFilterForTest();
   window.localStorage.clear();
   vi.mocked(useRareAlert).mockReturnValue(false);
   vi.mocked(useAutoImport).mockReturnValue({ session: null, stage: 'idle', completion: null, completionError: null, error: null });

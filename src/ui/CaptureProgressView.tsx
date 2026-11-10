@@ -45,7 +45,7 @@ export function CaptureProgressView({ state, onReady, live = false, rareAlertOn 
     const fresh = nearbyAlertGate.scan(nearby, (pet) => pet.key, (pet) => Boolean(pet.alertReason));
     const hits = fresh.filter((pet) => pet.alertReason);
     if (!hits.length) return;
-    const lines = hits.slice(0, 3).map((pet) => `${pet.name} Lv${pet.level} · ${pet.alertReason}`);
+    const lines = hits.slice(0, 3).map((pet) => `${pet.name} ${pet.level}级 · ${pet.alertReason}`);
     if (hits.length > 3) lines.push(`…另有 ${hits.length - 3} 只`);
     void notifyRareAlert(rareAlertTitle(hits.length), lines.join('\n')).catch(() => {});
   }, [progress?.analysis, rareAlertOn, state.phase]);

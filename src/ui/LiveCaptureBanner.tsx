@@ -45,7 +45,7 @@ export function LiveCaptureBanner({ analysis, sourceBytes }: LiveCaptureBannerPr
       {nearby.length ? <ul className="mt-1.5 space-y-0.5" aria-label="附近精灵">
         {nearby.map((pet) => <li key={pet.key} className="flex items-center justify-between gap-2 text-xs">
           <span className={pet.rare ? 'font-semibold text-emerald-900' : 'text-emerald-800'}>
-            {pet.name} Lv{pet.level}
+            {pet.name} {pet.level}级
             <span className="ml-1 text-emerald-600">{natureText(pet) ? `${natureText(pet)} · ` : ''}{kindText(pet)}{pet.voiceDb ? ` ${pet.voiceDb > 0 ? '+' : ''}${pet.voiceDb}dB` : ''}</span>
           </span>
           {pet.alertReason ? <span className="text-rose-600">可提醒</span> : null}
