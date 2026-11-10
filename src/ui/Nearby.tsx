@@ -450,7 +450,6 @@ export function Nearby({ onNavigate }: NearbyProps) {
 
   const pushOverlay = () => {
     const latest = overlaySource.current;
-    if (!latest.snapshot) return;
     // 与手机悬浮面板共用同一个 payload 组装：分贝、方位箭头、身高/体重、自身朝向同一份口径
     void pushNearbyOverlay(buildNearbyOverlayPayload({
       capturing: true,
