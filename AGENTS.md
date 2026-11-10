@@ -82,3 +82,14 @@ Task name / Sender`）和 `encrypted_content` 占位符，看不到实际任务�
 1. 读 `.superpowers/ACTIVE_TASK.md`（相对当前工作目录）；若它指向某个 worktree，就去那个路径读同名文件。
 2. 按其中的指示执行（任务、任务简报、报告路径、验收命令都写在那份文件里），并把报告写到它指定的路径。
 3. 该文件不存在时，才回复"没有收到任务"，并说明已检查过 `.superpowers/ACTIVE_TASK.md`。
+
+## 正式站只读：未经用户明确放量，禁止部署 main（2026-11-10 事故后）
+
+- `roco-toolbox.pages.dev` 是正式站，用户正在用；**默认只允许向 `test` 分支发版**。
+- 只有用户明确说「放量 / 发正式」时，才允许部署 `main`，且必须走
+  `node scripts/deploy-web.mjs --branch main --approve-production`；
+  `npm run deploy:prod` 默认会拒绝执行，需要手动补 `-- --approve-production`。
+- 发版只走 `scripts/deploy-web.mjs`，不要手敲 `wrangler pages deploy`。脚本会打印 bundle
+  文件名与 SHA-256，并断言正式 bundle **不含**「收集计划」等内测文案；任何断言不过直接中止。
+- 已发生事故：2026-11-10 连续三次 `--branch main` 把 `feature/collection-plan-fixes`
+  顶到正式站，后用 Cloudflare rollback 回到部署 `66667282`（bundle `index-C_6hLomo.js`）。
