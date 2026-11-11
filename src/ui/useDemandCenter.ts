@@ -30,7 +30,13 @@ export interface DemandCenterState {
   reload: () => void;
 }
 
-export function useDemandCenter(): DemandCenterState {
+/**
+ * 需求中心列表。
+ *
+ * @param enabled 传 false 时不发请求（悬浮面板只在安卓壳里用需求命中过滤，
+ *                网页端不用为了它多打一轮接口）。
+ */
+export function useDemandCenter(enabled = true): DemandCenterState {
   const [accountId, setAccountId] = useState<string | null>(() => readAccountId());
   const [items, setItems] = useState<DemandCenterItem[]>(() => {
     const current = readAccountId();
@@ -48,6 +54,7 @@ export function useDemandCenter(): DemandCenterState {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     if (!accountId) {
       setItems([]);
       setLoading(false);
@@ -107,7 +114,7 @@ export function useDemandCenter(): DemandCenterState {
       cancelled = true;
       controller.abort();
     };
-  }, [accountId, nonce]);
+  }, [accountId, nonce, enabled]);
 
   const reload = useCallback(() => {
     forceRef.current = true;

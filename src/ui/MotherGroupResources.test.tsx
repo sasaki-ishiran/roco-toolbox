@@ -885,6 +885,7 @@ describe('MotherGroupResources 三视图', () => {
         gender: '母',
         body: '大块头',
         voice: '+100',
+        requireGreenNest: false,
       }),
     );
   });
