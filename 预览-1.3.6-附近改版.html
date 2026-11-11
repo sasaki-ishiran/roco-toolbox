@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>洛克工具箱 1.3.6 附近改版预览</title>
+<style>
+  :root {
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --page: #eef2f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 20px 60px;
+    background: var(--page);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; line-height: 1.7; }
+  h2 { font-size: 15px; margin: 28px 0 10px; }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.7; margin: 8px 0 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+
+  /* 手机画布 */
+  .phone {
+    width: 375px; height: 760px; border-radius: 26px; overflow: hidden;
+    position: relative; box-shadow: 0 18px 40px rgba(15, 23, 42, .18);
+    background:
+      radial-gradient(circle at 30% 20%, rgba(56, 189, 248, .22), transparent 55%),
+      radial-gradient(circle at 80% 70%, rgba(168, 85, 247, .18), transparent 55%),
+      linear-gradient(160deg, #101a2c, #0a1220 60%, #131c2b);
+    color: #e2e8f0; flex: 0 0 auto;
+  }
+  .phone.small { height: 560px; }
+  .bar { height: 26px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px; font-size: 10px; color: rgba(226, 232, 240, .65); }
+
+  /* 悬浮面板 */
+  .panel { position: absolute; left: 16px; top: 92px; border-radius: 12px; padding: 8px;
+    box-shadow: 0 10px 26px rgba(0, 0, 0, .35); }
+  .panel.light { background: #f8fafc; color: #0f172a; }
+  .panel.dark { background: #1b2740; color: #e2e8f0; }
+  .panel-title { display: flex; align-items: center; gap: 6px; font-size: 10px; margin-bottom: 5px; }
+  .badge { font-size: 8px; border-radius: 999px; padding: 1px 5px; background: #fde68a; color: #78350f; }
+  .body { display: flex; gap: 6px; }
+  .minimap { width: 120px; height: 120px; border-radius: 8px; flex: 0 0 120px;
+    background: radial-gradient(circle at center, #1e2f4a, #0b1424 78%); position: relative; overflow: hidden; }
+  .minimap.small { width: 104px; height: 104px; flex-basis: 104px; }
+  .ring { position: absolute; border: 1px solid rgba(148, 163, 184, .35); border-radius: 50%; }
+  .dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%); }
+  .me { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; border-radius: 50%;
+    background: #38bdf8; box-shadow: 0 0 0 3px rgba(56, 189, 248, .22); transform: translate(-50%, -50%); }
+  .list { width: 124px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+  .list.mid { width: 132px; }
+  .list.wide { width: 232px; }
+  .panel.wide-panel { left: 8px; }
+  .measure { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .measure.bad { color: #dc2626; font-weight: 600; }
+
+  /* 卡片 */
+  .card { position: relative; border-radius: 7px; padding: 4px 6px 5px; font-size: 9px; line-height: 1.35;
+    border: 1px solid rgba(15, 23, 42, .06); }
+  .card.alert::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px;
+    border-radius: 3px; background: #f43f5e; }
+  .line1 { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .name { font-weight: 600; font-size: 11px; }
+  .dim { opacity: .62; }
+  .line2 { display: flex; gap: 3px; white-space: nowrap; opacity: .78; }
+  .arrow { font-weight: 700; }
+
+  /* 六种底色 */
+  .c-normal { background: #ffffff; color: #0f172a; }
+  .c-rare { background: #fef3c7; color: #78350f; }
+  .c-colorful { background: #fce7f3; color: #831843; }
+  .c-shiny { background: #ffedd5; color: #7c2d12; }
+  .c-pollution { background: #ede9fe; color: #4c1d95; }
+  .c-demand { background: #dcfce7; color: #14532d; }
+  .dark .c-normal { background: #16233b; color: #e2e8f0; }
+  .dark .c-rare { background: #3b2a08; color: #fde68a; }
+  .dark .c-colorful { background: #3b0a22; color: #f9a8d4; }
+  .dark .c-shiny { background: #3b1a06; color: #fdba74; }
+  .dark .c-pollution { background: #2a1b4d; color: #ddd6fe; }
+  .dark .c-demand { background: #052e1a; color: #a7f3d0; }
+
+  /* 色卡 */
+  .swatches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .swatch { border-radius: 10px; padding: 10px 12px; border: 1px solid var(--line); background: #fff; }
+  .swatch .sample { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .swatch .label { font-size: 12px; font-weight: 600; }
+  .swatch .ratio { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .swatch .darkline { margin-top: 6px; }
+  .swatch .darkline span { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; }
+
+  /* 按钮 / 悬浮球 */
+  .orb {
+    width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 35% 30%, #475569, #1e293b 70%);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, .35);
+  }
+  .orb.old { box-shadow: 0 0 0 3px rgba(56, 189, 248, .55), 0 0 18px rgba(56, 189, 248, .55), 0 6px 16px rgba(0,0,0,.35); }
+  .orb.hit { box-shadow: 0 6px 16px rgba(0, 0, 0, .35); }
+  .orb-wrap { position: relative; display: inline-flex; padding: 10px; }
+  .mini-btn { min-height: 28px; display: inline-flex; align-items: center; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 0 8px; font-size: 12px; color: #475569; white-space: nowrap; }
+  .mini-btn.primary { background: #059669; border-color: #059669; color: #fff; font-weight: 500; }
+  .nearby-head { display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    background: #fff; color: #0f172a; border-radius: 12px; padding: 8px 10px; }
+  .nearby-head b { font-size: 12px; }
+
+  .toolbar { display: flex; gap: 6px; padding: 10px 12px; }
+  .tool { flex: 1; border: 1px solid rgba(148, 163, 184, .35); border-radius: 9px; padding: 7px 0;
+    text-align: center; font-size: 11px; color: #cbd5e1; background: rgba(30, 41, 59, .65); }
+  .tool.primary { background: #0ea5e9; border-color: #0ea5e9; color: #fff; font-weight: 600; }
+  .tool.ghost { flex: 0 0 auto; padding: 7px 10px; }
+
+  .battle-card { position: absolute; left: 16px; top: 92px; width: 168px; border-radius: 12px;
+    background: #1b2740; padding: 8px 10px 9px; box-shadow: 0 10px 26px rgba(0,0,0,.35); }
+  .battle-title { font-size: 10px; color: #cbd5e1; display: flex; justify-content: space-between; }
+  .battle-chips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { font-size: 9px; padding: 2px 6px; border-radius: 999px; background: #0f172a; color: #93c5fd; }
+  .tri { position: absolute; right: 8px; top: 0; width: 0; height: 0;
+    border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 8px solid #38bdf8; }
+  .hitbox { position: absolute; right: 0; top: 0; width: 22px; height: 22px; border: 1px dashed rgba(244,63,94,.8); border-radius: 6px; }
+  .cap { font-size: 11px; color: var(--muted); text-align: center; margin-top: 8px; }
+  .stack { display: flex; flex-direction: column; align-items: center; width: 375px; flex: 0 0 375px; }
+  .stack > .cap { width: 375px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .seg button { border: 0; background: #fff; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .seg button.on { background: #0f172a; color: #fff; }
+  .legend { font-size: 12px; color: var(--muted); }
+  code { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>1.3.6 附近改版预览（375 宽）</h1>
+  <p class="sub">
+    已定稿：① 列表**方案 2 两行**（面板 274dp，行高 34dp）；② 六种卡片底色（浅/深两套）；③ 悬浮球只留图标本体，命中只改图标颜色；
+    附近页按钮沿用现有小按钮样式；战斗卡片只删右上小三角，其余像素不变。
+    截断规则：<code>12.38% → 12.3%</code>、<code>0.29% → 0.2%</code>（只截断不四舍五入）。
+  </p>
+
+  <h2>① 列表排布：方案 2 两行（已定稿）</h2>
+  <p class="note">
+    已采用「方案 2」：面板 274dp，列表 132dp，同顺序两行——第一行 名称 · 距离 · 箭头 · xx级，第二行 高 · 重 · 声音；
+    单行方案（358dp）不再使用，只留作对照。
+    两行版本与单行顺序完全一致，只是第 5~7 项换到第二行。
+  </p>
+
+  <div class="row">
+    <div class="stack">
+      <div class="phone" id="phoneWide">
+        <div class="bar"><span>洛克王国 · 场景内</span><span>悬浮窗 · 浅色</span></div>
+        <div class="panel light wide-panel" id="panelLight">
+          <div class="panel-title"><b>附近 3 只</b><span class="badge">估算</span><span class="dim" style="margin-left:auto">13:42:05</span></div>
+          <div class="body">
+            <div class="minimap small">
+              <div class="ring" style="left:8px;top:8px;width:88px;height:88px"></div>
+              <div class="ring" style="left:26px;top:26px;width:52px;height:52px"></div>
+              <div class="dot" style="left:34%;top:40%;background:#ec4899"></div>
+              <div class="dot" style="left:66%;top:52%;background:#f59e0b"></div>
+              <div class="dot" style="left:52%;top:72%;background:#7c3aed"></div>
+              <div class="me"></div>
+            </div>
+            <div class="list wide" id="listLight">
+              <div class="card c-demand alert">
+                <div class="line1"><span class="name">雪豆丁</span><span>12m</span><span class="arrow">↗</span><span>45级</span><span>高：12.3%</span><span>重：8.1%</span><span>婉转声</span></div>
+              </div>
+              <div class="card c-colorful">
+                <div class="line1"><span class="name">火花</span><span>28m</span><span class="arrow">←</span><span>31级</span><span>高：44.8%</span><span>重：30.2%</span><span>粗嗓门</span></div>
+              </div>
+              <div class="card c-normal">
+                <div class="line1"><span class="name">暗夜魔王</span><span>100m</span><span class="arrow">↓</span><span>18级</span><span>高：9.9%</span><span>重：30.2%</span><span>婉转声</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">方案 1 · 地图 104 + 列表 232，面板 358dp；第 3 行用 4 字名 / 100m 做最坏情况</div>
+      <div class="measure" id="measureWide">实测：—</div>
+    </div>
+
+    <div class="stack">
+      <div class="phone">
+        <div class="bar"><span>洛克王国 · 场景内</span><span>悬浮窗 · 浅色</span></div>
+        <div class="panel light">
+          <div class="panel-title"><b>附近 3 只</b><span class="badge">估算</span><span class="dim" style="margin-left:auto">13:42:05</span></div>
+          <div class="body">
+            <div class="minimap">
+              <div class="ring" style="left:10px;top:10px;width:100px;height:100px"></div>
+              <div class="ring" style="left:30px;top:30px;width:60px;height:60px"></div>
+              <div class="dot" style="left:34%;top:40%;background:#ec4899"></div>
+              <div class="dot" style="left:66%;top:52%;background:#f59e0b"></div>
+              <div class="dot" style="left:52%;top:72%;background:#7c3aed"></div>
+              <div class="me"></div>
+            </div>
+            <div class="list mid" id="listNarrow">
+              <div class="card c-demand alert">
+                <div class="line1"><span class="name">雪豆丁</span><span>12m</span><span class="arrow">↗</span><span>45级</span></div>
+                <div class="line2"><span>高：12.3%</span><span>重：8.1%</span><span>婉转声</span></div>
+              </div>
+              <div class="card c-colorful">
+                <div class="line1"><span class="name">火花</span><span>28m</span><span class="arrow">←</span><span>31级</span></div>
+                <div class="line2"><span>高：44.8%</span><span>重：30.2%</span><span>粗嗓门</span></div>
+              </div>
+              <div class="card c-normal">
+                <div class="line1"><span class="name">暗夜魔王</span><span>100m</span><span class="arrow">↓</span><span>18级</span></div>
+                <div class="line2"><span>高：9.9%</span><span>重：30.2%</span><span>婉转声</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">方案 2 · 地图 120 + 列表 132，面板 274dp（现状 268，只多 6dp），行高仍 34dp</div>
+    </div>
+
+    <div class="stack">
+      <div class="phone">
+        <div class="bar"><span>洛克王国 · 场景内</span><span>悬浮窗 · 深色</span></div>
+        <div class="panel dark wide-panel">
+          <div class="panel-title"><b>附近 3 只</b><span class="badge">估算</span><span class="dim" style="margin-left:auto">13:42:05</span></div>
+          <div class="body">
+            <div class="minimap small">
+              <div class="ring" style="left:8px;top:8px;width:88px;height:88px"></div>
+              <div class="ring" style="left:26px;top:26px;width:52px;height:52px"></div>
+              <div class="dot" style="left:34%;top:40%;background:#ec4899"></div>
+              <div class="dot" style="left:66%;top:52%;background:#f59e0b"></div>
+              <div class="dot" style="left:52%;top:72%;background:#7c3aed"></div>
+              <div class="me"></div>
+            </div>
+            <div class="list wide" id="listDark">
+              <div class="card c-demand alert">
+                <div class="line1"><span class="name">雪豆丁</span><span>12m</span><span class="arrow">↗</span><span>45级</span><span>高：12.3%</span><span>重：8.1%</span><span>婉转声</span></div>
+              </div>
+              <div class="card c-colorful">
+                <div class="line1"><span class="name">火花</span><span>28m</span><span class="arrow">←</span><span>31级</span><span>高：44.8%</span><span>重：30.2%</span><span>粗嗓门</span></div>
+              </div>
+              <div class="card c-normal">
+                <div class="line1"><span class="name">喵喵</span><span>63m</span><span class="arrow">↓</span><span>18级</span><span>高：9.9%</span><span>重：—</span><span class="dim">—</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">方案 1 · 深色主题（底色换深色版）</div>
+    </div>
+  </div>
+
+  <h2>② 卡片底色方案（稀有 / 炫彩 / 异色 / 污染 / 命中需求）</h2>
+  <p class="note">
+    不再出独立标签，改用底色；优先级：命中需求 &gt; 炫彩 &gt; 异色 &gt; 污染 &gt; 稀有 &gt; 普通。
+    「可提醒」不占底色，只留左侧 3px 红条。下面的对比度是浏览器实时计算的 WCAG 值。
+  </p>
+  <div class="swatches" id="swatches"></div>
+
+  <h2>③ 悬浮球 / 附近页按钮 / 战斗卡片</h2>
+  <div class="row">
+    <div class="phone small" style="flex:0 0 375px">
+      <div class="bar"><span>悬浮球外观</span><span>左：现在 / 中：去圈后 / 右：命中</span></div>
+      <div style="display:flex; justify-content:space-around; position:absolute; left:0; right:0; top:110px;">
+        <div style="text-align:center">
+          <div class="orb-wrap"><div class="orb old">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#e2e8f0" stroke-width="1.8">
+              <circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4" fill="#38bdf8" stroke="none"/>
+              <path d="M12 4v2M12 18v2M4 12h2M18 12h2"/>
+            </svg>
+          </div></div>
+          <div class="cap">现在（外圈 + 呼吸）</div>
+        </div>
+        <div style="text-align:center">
+          <div class="orb-wrap"><div class="orb">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e2e8f0" stroke-width="1.8">
+              <circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4" fill="#38bdf8" stroke="none"/>
+              <path d="M12 4v2M12 18v2M4 12h2M18 12h2"/>
+            </svg>
+          </div></div>
+          <div class="cap">去圈后（只留图标本体）</div>
+        </div>
+        <div style="text-align:center">
+          <div class="orb-wrap"><div class="orb hit">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="1.9">
+              <circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4" fill="#f43f5e" stroke="none"/>
+              <path d="M12 4v2M12 18v2M4 12h2M18 12h2"/>
+            </svg>
+          </div></div>
+          <div class="cap">命中（只有图标变色，无红点/色块）</div>
+        </div>
+      </div>
+
+      <div style="position:absolute; left:0; right:0; top:300px; padding:0 10px;">
+        <div class="cap" style="text-align:left; margin:0 0 6px;">附近页：沿用现有小按钮样式，加在标题行右侧</div>
+        <div class="nearby-head">
+          <b>大世界采集 · 附近精灵</b>
+          <div style="display:flex; gap:4px;">
+            <span class="mini-btn">隐藏小窗</span>
+            <span class="mini-btn">隐藏悬浮球</span>
+            <span class="mini-btn primary">开始采集</span>
+          </div>
+        </div>
+        <p class="note" style="margin-top:8px">隐藏后本按钮变成「显示悬浮球」，位置不变，永远是恢复入口；重开 App 保持隐藏状态。</p>
+      </div>
+    </div>
+
+    <div class="phone small" style="flex:0 0 375px">
+      <div class="bar"><span>战斗收集卡片</span><span>左：现在 / 右：去三角</span></div>
+      <div class="battle-card" style="left:14px; top:80px;">
+        <div class="tri"></div>
+        <div class="battle-title"><span>战斗收集 · 命中</span><span>Lv45</span></div>
+        <div class="battle-chips">
+          <span class="chip">性格 保守</span><span class="chip">母</span><span class="chip">婉转声</span><span class="chip">大块头</span>
+        </div>
+      </div>
+      <div class="cap" style="position:absolute; left:14px; top:160px;">现在：右上小三角</div>
+
+      <div class="battle-card" style="left:196px; top:80px;">
+        <div class="battle-title"><span>战斗收集 · 命中</span><span>Lv45</span></div>
+        <div class="battle-chips">
+          <span class="chip">性格 保守</span><span class="chip">母</span><span class="chip">婉转声</span><span class="chip">大块头</span>
+        </div>
+      </div>
+      <div class="cap" style="position:absolute; left:196px; top:160px; width:168px;">去三角：右上无装饰、无热区</div>
+
+      <div style="position:absolute; left:0; right:0; top:250px; padding:0 14px;">
+        <p class="note">三角只是装饰，但看起来像「点击收起」，用户会误点。删除后卡片高度与内容不变，右上角不留空白与额外点击区。</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>④ 未标定场景（传送后）的悬浮窗地图</h2>
+  <div class="row">
+    <div class="phone small" style="flex:0 0 375px">
+      <div class="bar"><span>洛克王国 · 新场景</span><span>无底图 → 雷达</span></div>
+      <div class="panel light" style="left:16px;top:70px;">
+        <div class="panel-title"><b>附近 2 只</b><span class="badge">估算</span><span class="dim" style="margin-left:auto">13:42:05</span></div>
+        <div class="body">
+          <div class="minimap" style="width:220px;height:220px;flex-basis:220px;">
+            <div class="ring" style="left:14px;top:14px;width:192px;height:192px"></div>
+            <div class="ring" style="left:52px;top:52px;width:116px;height:116px"></div>
+            <div class="dot" style="left:40%;top:34%;background:#ec4899"></div>
+            <div class="dot" style="left:68%;top:64%;background:#ef4444"></div>
+            <div class="me"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1 1 380px; min-width:320px;">
+      <p class="note">
+        传送后场景没有内置底图时，悬浮窗不再整块空白 / 消失：<br>
+        ① 地图区仍保留，中心用自身（307 或里程计；都没有时用最近一只精灵）兜底；<br>
+        ② 没有底图就画雷达圈 + 点位，标题标「估算」；<br>
+        ③ 有底图的场景（10003）照常按新坐标重算投影，不需要重开面板。
+      </p>
+      <p class="note">
+        列表行同一条链路：自身坐标每秒按里程计更新，走位时点位会跟着移动，不会再出现「人走了、点在原地」。
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 实时计算 WCAG 对比度，避免手写数字不准
+  function luminance(hex) {
+    const value = hex.replace('#', '');
+    const rgb = [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16) / 255)
+      .map((channel) => (channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4)));
+    return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+  }
+  function contrast(a, b) {
+    const la = luminance(a), lb = luminance(b);
+    const [high, low] = la > lb ? [la, lb] : [lb, la];
+    return (high + 0.05) / (low + 0.05);
+  }
+
+  const THEMES = [
+    { key: 'light', name: '浅色主题', rows: [
+      { label: '普通', bg: '#ffffff', fg: '#0f172a' },
+      { label: '稀有', bg: '#fef3c7', fg: '#78350f' },
+      { label: '炫彩', bg: '#fce7f3', fg: '#831843' },
+      { label: '异色', bg: '#ffedd5', fg: '#7c2d12' },
+      { label: '污染', bg: '#ede9fe', fg: '#4c1d95' },
+      { label: '命中需求', bg: '#dcfce7', fg: '#14532d' }
+    ]},
+    { key: 'dark', name: '深色主题', rows: [
+      { label: '普通', bg: '#16233b', fg: '#e2e8f0' },
+      { label: '稀有', bg: '#3b2a08', fg: '#fde68a' },
+      { label: '炫彩', bg: '#3b0a22', fg: '#f9a8d4' },
+      { label: '异色', bg: '#3b1a06', fg: '#fdba74' },
+      { label: '污染', bg: '#2a1b4d', fg: '#ddd6fe' },
+      { label: '命中需求', bg: '#052e1a', fg: '#a7f3d0' }
+    ]}
+  ];
+
+  const swatches = document.getElementById('swatches');
+  THEMES.forEach((theme) => {
+    const block = document.createElement('div');
+    block.style.gridColumn = '1 / -1';
+    block.innerHTML = `<div class="legend" style="margin:4px 0 2px;">${theme.name}</div>`;
+    const grid = document.createElement('div');
+    grid.className = 'swatches';
+    theme.rows.forEach((row) => {
+      const ratio = contrast(row.bg, row.fg).toFixed(2);
+      const item = document.createElement('div');
+      item.className = 'swatch';
+      item.innerHTML =
+        `<div class="sample" style="background:${row.bg};color:${row.fg};border-radius:8px;padding:8px 10px;">
+           <span class="label">${row.label}</span><span class="ratio" style="color:${row.fg};opacity:.75">${ratio}:1</span>
+         </div>
+         <div class="darkline"><span style="background:${row.bg};color:${row.fg}">雪豆丁 12m ↗ 45级 高：12.3%</span></div>`;
+      grid.appendChild(item);
+    });
+    block.appendChild(grid);
+    swatches.appendChild(block);
+  });
+
+  // 实测每行是否溢出，避免手写「放得下」的结论
+  function overflowOf(rootId) {
+    let worst = 0;
+    document.querySelectorAll(`${rootId} .line1, ${rootId} .line2`).forEach((line) => {
+      worst = Math.max(worst, line.scrollWidth - line.clientWidth);
+    });
+    return worst;
+  }
+  function report() {
+    const wide = overflowOf('#listLight');
+    const narrow = overflowOf('#listNarrow');
+    const measure = document.getElementById('measureWide');
+    const ok = wide <= 0 && narrow <= 0;
+    measure.textContent = `实测溢出：方案 1 ${Math.max(0, wide)}px / 方案 2 ${Math.max(0, narrow)}px · ${ok ? '两种都不截断' : '有行被截断'}`;
+    measure.classList.toggle('bad', !ok);
+  }
+  report();
+</script>
+</body>
+</html>

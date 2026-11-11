@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>我的收集 · 两列卡片三方案</title>
+<style>
+  :root{
+    --pad:12px; --gap:8px; --radius:12px;
+    --emerald:#059669; --emerald-50:#ecfdf5; --emerald-100:#d1fae5; --emerald-200:#a7f3d0;
+    --sky:#0284c7; --sky-50:#f0f9ff; --sky-200:#bae6fd;
+    --amber:#d97706; --amber-50:#fffbeb; --amber-200:#fde68a; --amber-700:#b45309;
+    --slate-50:#f8fafc; --slate-100:#f1f5f9; --slate-200:#e2e8f0; --slate-300:#cbd5e1;
+    --slate-400:#94a3b8; --slate-500:#64748b; --slate-600:#475569; --slate-700:#334155; --slate-800:#1e293b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:#eef2f6;font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--slate-800);padding:10px}
+  body.shot{padding:0;background:#fff}
+
+  .toolbar{max-width:430px;margin:0 auto 10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .toolbar button{font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid var(--slate-300);background:#fff;color:var(--slate-600);cursor:pointer}
+  .toolbar button.on{background:var(--emerald);border-color:var(--emerald);color:#fff;font-weight:600}
+  .toolbar .sep{width:1px;height:18px;background:var(--slate-300);margin:0 2px}
+  .toolbar .hint{font-size:11px;color:var(--slate-400);margin-left:auto}
+
+  .frame{width:100%;max-width:390px;margin:0 auto;background:#fff;border-radius:18px;box-shadow:0 8px 26px rgba(15,23,42,.1);overflow:hidden;position:relative}
+  body.shot .frame{border-radius:0;box-shadow:none;margin:0}
+  .tabs{display:flex;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--slate-100);font-size:12px;color:var(--slate-500)}
+  .tabs span.on{color:var(--emerald);font-weight:600;border-bottom:2px solid var(--emerald);padding-bottom:5px}
+  .phone{position:relative;background:#f6f8fa;padding:var(--pad);height:720px;overflow:auto}
+  body.full .phone{height:auto;overflow:visible}
+
+  .groupbar{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:11px;background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.06);margin-bottom:8px}
+  .groupbar b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .groupbar .sub{font-size:11px;color:var(--slate-400);flex-shrink:0}
+  .groupbar .ops{margin-left:auto;display:flex;gap:6px;flex-shrink:0}
+  .btn{border:1px solid var(--slate-200);background:#fff;border-radius:8px;padding:4px 8px;font-size:11px;color:var(--slate-500);white-space:nowrap;cursor:pointer}
+  .btn.ghost{border:0;background:transparent;color:var(--slate-400);padding:4px 2px}
+
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--slate-100);border-radius:10px;padding:3px;margin-bottom:10px}
+  .seg button{min-height:28px;border:0;border-radius:8px;background:transparent;font-size:12.5px;color:var(--slate-500);cursor:pointer}
+  .seg button.on{background:#fff;color:var(--emerald);font-weight:600;box-shadow:0 1px 2px rgba(15,23,42,.08)}
+
+  .sec-head{display:flex;align-items:center;gap:6px;margin:2px 2px 8px}
+  .sec-head h3{margin:0;font-size:14px;font-weight:700}
+  .sec-head .count{font-size:11px;color:var(--slate-400)}
+  .sec-head .right{margin-left:auto}
+
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--gap)}
+
+  /* 两列卡公共 */
+  .card{position:relative;background:#fff;border-radius:var(--radius);box-shadow:0 1px 3px rgba(15,23,42,.08);padding:9px;min-width:0;cursor:pointer;overflow:hidden}
+  .card:active{transform:scale(.99)}
+  .top{display:flex;align-items:center;gap:8px;min-width:0}
+  .ava{position:relative;width:44px;height:44px;flex-shrink:0}
+  .ava>img.pet{width:44px;height:44px;object-fit:contain;display:block}
+  .medal{position:absolute;width:15px;height:15px;object-fit:contain;filter:drop-shadow(0 1px 1px rgba(15,23,42,.18))}
+  .medal.body{left:-5px;top:-5px}
+  .medal.voice{right:-5px;top:-5px}
+  .gm{position:absolute;left:-4px;bottom:-4px;width:13px;height:13px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1;box-shadow:0 0 0 1.5px #fff}
+  .gm.male{background:#e0f2fe;color:#0369a1}
+  .gm.female{background:#fce7f3;color:#db2777}
+  .gm.unknown{background:var(--slate-100);color:var(--slate-500)}
+  .rare{position:absolute;right:-5px;bottom:-5px;width:14px;height:14px;object-fit:contain;filter:drop-shadow(0 1px 1px rgba(15,23,42,.2))}
+
+  .who{min-width:0;flex:1}
+  .name{font-size:13px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .state{display:flex;align-items:center;gap:3px;margin-top:3px;font-size:10.5px;font-weight:600;white-space:nowrap}
+  .state .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .t-amber{color:var(--amber-700)} .t-amber .dot,.dot.t-amber{background:var(--amber)}
+  .t-green{color:var(--emerald)} .t-green .dot,.dot.t-green{background:var(--emerald)}
+  .t-sky{color:var(--sky)} .t-sky .dot,.dot.t-sky{background:var(--sky)}
+  .t-slate{color:var(--slate-500)} .t-slate .dot,.dot.t-slate{background:var(--slate-400)}
+
+  .prog{display:flex;align-items:center;gap:4px;margin-top:8px;font-size:10.5px;color:var(--slate-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prog i{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+
+  .act{width:100%;min-height:27px;margin-top:8px;border-radius:8px;font-size:11.5px;font-weight:600;cursor:pointer;border:1px solid var(--slate-200);background:#fff;color:var(--slate-600)}
+  .act.amber{background:var(--amber);border-color:var(--amber);color:#fff}
+  .act.green{background:#fff;border-color:var(--emerald-200);color:var(--emerald)}
+  .act.sky{background:#fff;border-color:var(--sky-200);color:var(--sky)}
+  .act.slate{background:#fff;border-color:var(--slate-200);color:var(--slate-500)}
+
+  /* 方案 B：五步进度点 */
+  .steps{display:flex;align-items:flex-start;margin-top:8px}
+  .steps .s{flex:1;min-width:0;text-align:center;position:relative}
+  .steps .s i{display:block;width:6px;height:6px;border-radius:50%;background:var(--slate-300);margin:0 auto}
+  .steps .s::after{content:'';position:absolute;top:2.5px;left:calc(50% + 4px);right:calc(-50% + 4px);height:1px;background:var(--slate-200)}
+  .steps .s:last-child::after{display:none}
+  .steps .s b{display:block;margin-top:3px;font-size:8px;line-height:1.1;font-weight:400;color:var(--slate-400);white-space:nowrap}
+  .steps.amber .s.done i{background:var(--amber)}
+  .steps.amber .s.now i{background:var(--amber);box-shadow:0 0 0 2px #fef3c7}
+  .steps.amber .s.now b{color:var(--amber-700);font-weight:700}
+  .steps.green .s.done i{background:var(--emerald)}
+  .steps.green .s.now i{background:var(--emerald);box-shadow:0 0 0 2px var(--emerald-100)}
+  .steps.green .s.now b{color:var(--emerald);font-weight:700}
+  .steps.sky .s.done i{background:var(--sky)}
+  .steps.sky .s.now i{background:var(--sky);box-shadow:0 0 0 2px var(--sky-50)}
+  .steps.sky .s.now b{color:var(--sky);font-weight:700}
+  .steps .s.done b{color:var(--slate-500)}
+  .noprog{margin-top:9px;font-size:10px;color:var(--slate-400)}
+
+  /* 方案 C：顶部色带 + 状态胶囊 */
+  .card.band{padding-top:11px}
+  .band-top{position:absolute;left:0;right:0;top:0;height:4px}
+  .band-top.amber{background:linear-gradient(90deg,var(--amber),#fbbf24)}
+  .band-top.green{background:linear-gradient(90deg,var(--emerald),#34d399)}
+  .band-top.sky{background:linear-gradient(90deg,var(--sky),#38bdf8)}
+  .band-top.slate{background:linear-gradient(90deg,var(--slate-300),var(--slate-200))}
+  .foot{display:flex;align-items:center;gap:5px;margin-top:8px;min-width:0}
+  .pill{display:inline-flex;align-items:center;gap:3px;border-radius:6px;padding:2px 5px;font-size:9.5px;font-weight:700;white-space:nowrap;flex-shrink:0}
+  .pill.amber{background:var(--amber-50);color:var(--amber-700)}
+  .pill.green{background:var(--emerald-50);color:var(--emerald)}
+  .pill.sky{background:var(--sky-50);color:var(--sky)}
+  .pill.slate{background:var(--slate-100);color:var(--slate-500)}
+  .foot .act{margin-top:0;width:auto;flex:1;min-width:0;padding:0 6px;font-size:11px}
+
+  /* ---------- 二级页 ---------- */
+  .overlay{position:absolute;inset:0;background:rgba(15,23,42,.38);display:none;align-items:flex-end;z-index:20}
+  .overlay.on{display:flex}
+  .sheet{width:100%;max-height:92%;overflow:auto;background:#fff;border-radius:18px 18px 0 0;padding:14px 14px 16px;animation:up .22s ease-out}
+  @keyframes up{from{transform:translateY(24px);opacity:.5}to{transform:none;opacity:1}}
+  .sheet-head{display:flex;align-items:center;gap:10px}
+  .sheet-head .ava{width:46px;height:46px}
+  .sheet-head .ava>img.pet{width:46px;height:46px}
+  .sheet-head .t{min-width:0;flex:1}
+  .sheet-head .name{font-size:16px}
+  .sheet-head .who-line{font-size:11px;color:var(--slate-400);margin-top:3px}
+  .sheet-close{border:0;background:var(--slate-100);color:var(--slate-500);border-radius:50%;width:28px;height:28px;font-size:15px;line-height:1;cursor:pointer;flex-shrink:0}
+
+  .kv{display:flex;align-items:flex-start;gap:8px;padding:9px 0;border-top:1px solid var(--slate-100);font-size:12px}
+  .kv:first-of-type{border-top:0}
+  .kv .k{color:var(--slate-400);width:52px;flex-shrink:0;padding-top:1px}
+  .kv .v{flex:1;min-width:0;color:var(--slate-700);line-height:1.7}
+  .cond{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .cond img{width:18px;height:18px;object-fit:contain}
+  .cond .chip{font-size:10.5px;background:var(--slate-100);color:var(--slate-600);border-radius:5px;padding:1px 5px}
+
+  .steps-big{display:flex;align-items:flex-start;margin:10px 0 4px}
+  .step{flex:1;position:relative;text-align:center;min-width:0}
+  .step i{display:block;width:8px;height:8px;border-radius:50%;background:var(--slate-300);margin:0 auto}
+  .step::after{content:'';position:absolute;top:3.5px;left:calc(50% + 7px);right:calc(-50% + 7px);height:1px;background:var(--slate-200)}
+  .step:last-child::after{display:none}
+  .step b{display:block;margin-top:4px;font-size:9.5px;font-weight:400;color:var(--slate-400);white-space:nowrap}
+  .steps-big[data-step="0"] .step:nth-child(1) i{background:var(--emerald)}
+  .steps-big[data-step="0"] .step:nth-child(1) b{color:var(--emerald);font-weight:700}
+  .steps-big[data-step="1"] .step:nth-child(-n+2) i{background:var(--emerald)}
+  .steps-big[data-step="1"] .step:nth-child(2) b{color:var(--emerald);font-weight:700}
+  .steps-big[data-step="2"] .step:nth-child(-n+3) i{background:var(--emerald)}
+  .steps-big[data-step="2"] .step:nth-child(3) b{color:var(--emerald);font-weight:700}
+  .steps-big[data-step="3"] .step:nth-child(-n+3) i{background:var(--emerald)}
+  .steps-big[data-step="3"] .step:nth-child(4) i{background:var(--amber);box-shadow:0 0 0 3px #fef3c7}
+  .steps-big[data-step="3"] .step:nth-child(4) b{color:var(--amber-700);font-weight:700}
+  .steps-big[data-step="4"] .step:nth-child(-n+5) i{background:var(--emerald)}
+  .steps-big[data-step="4"] .step:nth-child(5) b{color:var(--emerald);font-weight:700}
+
+  .note{width:100%;min-height:34px;border:1px solid var(--slate-200);border-radius:9px;padding:0 10px;font-size:12px}
+  .sheet-foot{display:flex;gap:8px;margin-top:12px}
+  .sheet-foot .btn{flex:1;min-height:38px;font-size:13px}
+  .btn.danger{border-color:#fecdd3;color:#e11d48}
+  .btn.solid{background:var(--emerald);border-color:var(--emerald);color:#fff;font-weight:600}
+
+  .toast{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);background:rgba(15,23,42,.88);color:#fff;font-size:11.5px;border-radius:9px;padding:7px 11px;display:none;z-index:30;white-space:nowrap;max-width:92%}
+  .toast.on{display:block}
+
+  @media (max-width:360px){ .name{font-size:12px} .act{font-size:11px} }
+</style>
+</head>
+<body>
+<div class="toolbar" id="toolbar">
+  <button data-scheme="A" class="on">A 紧凑卡</button>
+  <button data-scheme="B">B 五步点</button>
+  <button data-scheme="C">C 色带</button>
+  <span class="sep"></span>
+  <button data-width="375" class="on">375</button>
+  <button data-width="390">390</button>
+  <span class="hint">点卡片看二级页</span>
+</div>
+
+<div class="frame" id="frame">
+  <div class="tabs"><span>看板</span><span>家园</span><span>收集</span><span class="on">小组</span><span>我的</span></div>
+  <div class="phone" id="phone">
+    <div class="groupbar">
+      <span class="badge" style="font-size:10.5px;background:var(--emerald-50);color:var(--emerald);border-radius:6px;padding:1px 5px;font-weight:600">收集</span>
+      <b>对性母本全收集</b><span class="sub">4 人</span>
+      <span class="ops"><button class="btn ghost">刷新</button><button class="btn" data-open="settingsSheet">设置</button></span>
+    </div>
+    <div class="seg">
+      <button class="on" id="segMine">我的收集</button>
+      <button id="segGroup">组内广场</button>
+    </div>
+
+    <div class="sec-head">
+      <h3>进行中</h3><span class="count">4 / 8</span>
+      <span class="right"><button class="btn ghost" data-toast="打开批量导入">＋ 想收</button></span>
+    </div>
+
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <!-- 二级页 -->
+  <div class="overlay" id="detailSheet">
+    <div class="sheet">
+      <div class="sheet-head">
+        <span class="ava">
+          <img class="pet" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" />
+          <img class="medal body" src="public/ui/medals/1001.png" alt="大块头" />
+          <img class="medal voice" src="public/ui/medals/1026-max.png" alt="婉转声" />
+          <span class="gm female">♀</span>
+          <img class="rare" src="public/ui/rarity/shiny.png" alt="异色" />
+        </span>
+        <div class="t">
+          <div class="name">伊贝儿</div>
+          <div class="who-line">我发布的 · 阿乙 已上窝</div>
+        </div>
+        <button class="sheet-close" data-close>×</button>
+      </div>
+
+      <div class="kv">
+        <span class="k">条件</span>
+        <span class="v"><span class="cond">
+          <span class="gm female" style="position:static;box-shadow:none">♀</span>
+          <img src="public/ui/medals/1001.png" alt="大块头" />
+          <img src="public/ui/medals/1026-max.png" alt="婉转声" />
+          <span class="chip">缺 胆小</span><span class="chip">缺 固执</span>
+        </span></span>
+      </div>
+      <div class="kv" style="display:block">
+        <div class="steps-big" data-step="3">
+          <div class="step"><i></i><b>待接单</b></div>
+          <div class="step"><i></i><b>已认领</b></div>
+          <div class="step"><i></i><b>已上窝</b></div>
+          <div class="step"><i></i><b>待我确认</b></div>
+          <div class="step"><i></i><b>已完成</b></div>
+        </div>
+      </div>
+      <div class="kv"><span class="k">需求</span><span class="v">胆小 · 阿乙已接<br />固执 · 待承接</span></div>
+      <div class="kv"><span class="k">提供</span><span class="v">阿乙：有现成的蛋</span></div>
+      <div class="kv"><span class="k">备注</span><span class="v"><input class="note" placeholder="给自己留一句" /></span></div>
+
+      <div class="sheet-foot">
+        <button class="btn danger" data-toast="已删除">删除计划</button>
+        <button class="btn solid" data-close>关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设置 -->
+  <div class="overlay" id="settingsSheet">
+    <div class="sheet">
+      <div class="sheet-head" style="margin-bottom:6px">
+        <div class="t"><div class="name">小组设置</div><div class="who-line">对性母本全收集 · 4 人</div></div>
+        <button class="sheet-close" data-close>×</button>
+      </div>
+      <div class="kv"><span class="k">成员</span><span class="v">4 人 · 邀请码 7K2M</span></div>
+      <div class="kv"><span class="k">类型</span><span class="v">收集小组</span></div>
+      <div class="kv"><span class="k">资源</span><span class="v">2 个游戏账号</span></div>
+      <div class="kv"><span class="k">切换</span><span class="v">切换 / 新建 / 加入小组</span></div>
+      <div class="sheet-foot">
+        <button class="btn danger" data-toast="已退出">退出小组</button>
+        <button class="btn solid" data-close>完成</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+  const STEPS = ['待接单', '已认领', '已上窝', '待我确认', '已完成'];
+  const PLANS = [
+    { id:'p1', name:'伊贝儿', img:'3043', gender:'female', body:'public/ui/medals/1001.png', voice:'public/ui/medals/1026-max.png', rare:'public/ui/rarity/shiny.png', tone:'amber', state:'待我确认', progress:'阿乙已上窝', action:'去确认', step:3, actor:'阿乙' },
+    { id:'p2', name:'云梦豚', img:'3784', gender:'female', body:'public/ui/medals/1002.png', voice:'public/ui/medals/1026-max.png', rare:'', tone:'green', state:'待接单', progress:'等有人接单', action:'看需求', step:0, actor:'' },
+    { id:'p3', name:'雪绒鸟', img:'3279', gender:'male', body:'public/ui/medals/1001-max.png', voice:'', rare:'', tone:'sky', state:'已认领', progress:'昭序已接单', action:'看进度', step:1, actor:'昭序' },
+    { id:'p4', name:'石冠王蜥', img:'3108', gender:'male', body:'public/ui/medals/1001.png', voice:'public/ui/medals/1025-max.png', rare:'', tone:'slate', state:'进行中', progress:'还没发需求', action:'发需求', step:-1, actor:'' },
+    { id:'p5', name:'睡铃雪影娃娃', img:'3746', gender:'female', body:'public/ui/medals/1002.png', voice:'', rare:'public/ui/rarity/colorful.png', tone:'slate', state:'想收', progress:'还没开始', action:'开始', step:-1, actor:'' },
+  ];
+
+  function avatar(plan, big){
+    return `<span class="ava"${big ? '' : ''}>
+      <img class="pet" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/${plan.img}/icon.png" alt="" />
+      ${plan.body ? `<img class="medal body" src="${plan.body}" alt="" />` : ''}
+      ${plan.voice ? `<img class="medal voice" src="${plan.voice}" alt="" />` : ''}
+      <span class="gm ${plan.gender}">${plan.gender === 'male' ? '♂' : '♀'}</span>
+      ${plan.rare ? `<img class="rare" src="${plan.rare}" alt="稀有" />` : ''}
+    </span>`;
+  }
+
+  function steps(plan){
+    if (plan.step < 0) return `<div class="noprog">${plan.state === '想收' ? '还没开始' : '还没发需求'}</div>`;
+    return `<div class="steps ${plan.tone}">
+      ${STEPS.map((label, index) => {
+        const cls = index < plan.step ? 'done' : index === plan.step ? 'now' : '';
+        return `<span class="s ${cls}"><i></i><b>${label}</b></span>`;
+      }).join('')}
+    </div>`;
+  }
+
+  function cardA(plan){
+    return `<article class="card" data-open="detailSheet">
+      <div class="top">${avatar(plan)}
+        <div class="who"><div class="name">${plan.name}</div>
+          <div class="state t-${plan.tone}"><i class="dot"></i>${plan.state}</div></div>
+      </div>
+      <div class="prog"><i class="dot t-${plan.tone}"></i>${plan.progress}</div>
+      <button class="act ${plan.tone}" data-toast="${plan.action}">${plan.action}</button>
+    </article>`;
+  }
+
+  function cardB(plan){
+    const idle = plan.step < 0
+      ? `<div class="noprog">${plan.state === '想收' ? '想收 · 还没开始' : '进行中 · 还没发需求'}</div>`
+      : '';
+    return `<article class="card" data-open="detailSheet">
+      <div class="top">${avatar(plan)}
+        <div class="who"><div class="name">${plan.name}</div>${idle}</div>
+      </div>
+      ${plan.step < 0 ? '' : steps(plan)}
+      <button class="act ${plan.tone}" data-toast="${plan.action}">${plan.action}</button>
+    </article>`;
+  }
+
+  function cardC(plan){
+    const stepLabel = plan.step < 0 ? plan.state : `${plan.step + 1}/5 ${plan.state}`;
+    return `<article class="card band" data-open="detailSheet">
+      <i class="band-top ${plan.tone}"></i>
+      <div class="top">${avatar(plan)}
+        <div class="who"><div class="name">${plan.name}</div>
+          <div class="state t-${plan.tone}"><i class="dot"></i>${plan.progress}</div></div>
+      </div>
+      <div class="foot">
+        <span class="pill ${plan.tone}">${stepLabel}</span>
+        <button class="act ${plan.tone}" data-toast="${plan.action}">${plan.action}</button>
+      </div>
+    </article>`;
+  }
+
+  let scheme = 'A';
+  const renders = { A: cardA, B: cardB, C: cardC };
+  function render(){
+    document.getElementById('grid').innerHTML = PLANS.map(renders[scheme]).join('');
+    bind();
+  }
+
+  const toast = document.getElementById('toast');
+  let timer;
+  function say(text){
+    toast.textContent = text;
+    toast.classList.add('on');
+    clearTimeout(timer);
+    timer = setTimeout(() => toast.classList.remove('on'), 1600);
+  }
+
+  function bind(){
+    document.querySelectorAll('[data-open]').forEach((el) => {
+      el.addEventListener('click', (event) => {
+        if (event.target.closest('[data-toast]')) return;
+        document.getElementById(el.dataset.open).classList.add('on');
+      });
+    });
+    document.querySelectorAll('[data-toast]').forEach((btn) => {
+      btn.addEventListener('click', (event) => { event.stopPropagation(); say(btn.dataset.toast); });
+    });
+  }
+
+  document.querySelectorAll('[data-scheme]').forEach((btn) => {
+    btn.onclick = () => {
+      scheme = btn.dataset.scheme;
+      document.querySelectorAll('[data-scheme]').forEach((b) => b.classList.toggle('on', b === btn));
+      render();
+    };
+  });
+  document.querySelectorAll('[data-width]').forEach((btn) => {
+    btn.onclick = () => {
+      document.getElementById('frame').style.width = `${btn.dataset.width}px`;
+      document.querySelectorAll('[data-width]').forEach((b) => b.classList.toggle('on', b === btn));
+    };
+  });
+  document.querySelectorAll('[data-close]').forEach((btn) => {
+    btn.onclick = () => {
+      btn.closest('.overlay').classList.remove('on');
+      if (btn.dataset.toast) say(btn.dataset.toast);
+    };
+  });
+  document.querySelectorAll('.overlay').forEach((ov) => {
+    ov.onclick = (e) => { if (e.target === ov) ov.classList.remove('on'); };
+  });
+  document.getElementById('segGroup').onclick = () => say('本轮只做「我的收集」两列方案');
+  document.getElementById('segMine').onclick = () => say('已在「我的收集」');
+
+  render();
+
+  // 截图 / 分享参数：?shot=1&full=1&scheme=A&w=375
+  const params = new URLSearchParams(location.search);
+  if (params.get('shot') === '1') document.body.classList.add('shot');
+  if (params.get('full') === '1') document.body.classList.add('full');
+  const w = Number(params.get('w'));
+  if (w >= 320 && w <= 430) {
+    document.getElementById('frame').style.width = `${w}px`;
+    document.querySelectorAll('[data-width]').forEach((b) => b.classList.toggle('on', b.dataset.width === String(w)));
+  }
+  const s = (params.get('scheme') || '').toUpperCase();
+  if (renders[s]) {
+    scheme = s;
+    document.querySelectorAll('[data-scheme]').forEach((b) => b.classList.toggle('on', b.dataset.scheme === s));
+    render();
+  }
+  if (params.get('detail') === '1') document.getElementById('detailSheet').classList.add('on');
+</script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>组内广场 改版预览</title>
+<style>
+  :root{
+    --ink:#0f172a; --sub:#64748b; --faint:#94a3b8; --line:#e2e8f0;
+    --amber:#d97706; --amber-soft:#fef3c7; --green:#059669; --green-soft:#d1fae5;
+    --sky:#0284c7; --sky-soft:#e0f2fe; --rose:#e11d48; --rose-soft:#ffe4e6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#eef2f7;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}
+  .stage{display:flex;gap:28px;padding:24px;align-items:flex-start;justify-content:center}
+  .wrap{display:flex;flex-direction:column;gap:8px;align-items:center}
+  .cap{font-size:12px;color:#64748b}
+  .phone{background:#f6f8fb;border-radius:18px;box-shadow:0 8px 30px rgba(15,23,42,.12);overflow:hidden}
+  .phone[data-w="375"]{width:375px}
+  .phone[data-w="390"]{width:390px}
+  body.only{background:#f6f8fb}
+  body.only .stage{padding:0;gap:0}
+  body.only .cap{display:none}
+  body.only .phone{border-radius:0;box-shadow:none;width:100vw!important}
+
+  .tabbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fff;border-bottom:1px solid #eef2f7}
+  .logo{font-size:13px;font-weight:700}
+  .seg{display:flex;background:#eef2f7;border-radius:10px;padding:2px;margin:10px 12px 0}
+  .seg b{flex:1;text-align:center;font-size:12px;padding:6px 0;border-radius:8px;color:#64748b;font-weight:500}
+  .seg b.on{background:#fff;color:#0f172a;font-weight:700;box-shadow:0 1px 3px rgba(15,23,42,.08)}
+
+  .sec{margin:14px 12px 0}
+  .sec-h{display:flex;align-items:baseline;gap:6px;margin-bottom:7px}
+  .sec-h h3{margin:0;font-size:12.5px;font-weight:700}
+  .sec-h span{font-size:11px;color:var(--faint)}
+  .sec-h .hint{margin-left:auto;font-size:10.5px;color:#cbd5e1}
+
+  .row{position:relative;display:flex;align-items:center;gap:8px;background:#fff;border-radius:12px;padding:8px 9px;margin-bottom:7px;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+  .row.block{border:1px solid #fde68a;background:linear-gradient(0deg,#fffdf5,#fff)}
+  .row.tight{border:1px solid #eef2f7}
+  .ava{width:40px;height:40px;flex:0 0 40px;border-radius:10px;background:radial-gradient(circle at 35% 30%,#dbeafe,#bfdbfe);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .mid{min-width:0;flex:1}
+  .l1{display:flex;align-items:baseline;gap:4px;min-width:0}
+  .nm{font-size:13px;font-weight:700;white-space:nowrap}
+  .form{font-size:9.5px;color:var(--faint);white-space:nowrap}
+  .cond{display:flex;align-items:center;gap:3px;margin-top:2px;font-size:10.5px;color:#475569;white-space:nowrap;overflow:hidden}
+  .nat{font-weight:700;color:#0f172a}
+  .sex{font-size:10px;line-height:1;padding:1px 2px;border-radius:4px;background:#fce7f3;color:#db2777}
+  .sex.m{background:#e0f2fe;color:#0369a1}
+  .med{font-size:9px;padding:1px 3px;border-radius:4px;background:#f1f5f9;color:#475569;letter-spacing:.2px}
+  .l2{margin-top:3px;font-size:10.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .l2 b{font-weight:600;color:#334155}
+  .why{color:var(--green)}
+  .stale{color:var(--amber)}
+  .btn{flex:0 0 auto;border:none;border-radius:8px;padding:7px 10px;font-size:11.5px;font-weight:700;line-height:1}
+  .btn.p{background:var(--amber);color:#fff}
+  .btn.g{background:var(--green);color:#fff}
+  .btn.o{background:#fff;border:1px solid #e2e8f0;color:#475569;font-weight:600}
+  .tag{display:inline-block;font-size:9.5px;padding:1px 4px;border-radius:4px;background:var(--rose-soft);color:var(--rose);margin-left:4px}
+  .tag.a{background:var(--amber-soft);color:var(--amber)}
+  .tag.s{background:var(--sky-soft);color:var(--sky)}
+  .tag.g{background:var(--green-soft);color:var(--green)}
+
+  .foot{margin:14px 12px 22px;font-size:10.5px;color:#cbd5e1;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="wrap">
+    <div class="cap">375 · 组内广场（改版）</div>
+    <div class="phone" data-w="375" id="p375"></div>
+  </div>
+  <div class="wrap">
+    <div class="cap">390 · 组内广场（改版）</div>
+    <div class="phone" data-w="390" id="p390"></div>
+  </div>
+</div>
+
+<template id="tpl">
+  <div class="tabbar"><div class="logo">洛克工具箱</div><div style="font-size:11px;color:#94a3b8">周末互换 · 3 人</div></div>
+  <div class="seg"><b>我的收集</b><b class="on">组内广场</b></div>
+
+  <div class="sec">
+    <div class="sec-h"><h3>需要你处理</h3><span>1</span></div>
+    <div class="row block">
+      <div class="ava">🗡️</div>
+      <div class="mid">
+        <div class="l1"><span class="nm">喵喵</span><span class="form">海神球</span></div>
+        <div class="cond"><span class="nat">固执</span><span class="sex">♀</span><span class="med">大块头</span><span class="med">+100</span></div>
+        <div class="l2"><b>阿乙</b> 已认领 · <span class="stale">3 天没上窝</span></div>
+      </div>
+      <button class="btn p">去上窝</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h3>你能接的</h3><span>3</span><span class="hint">能直接接优先</span></div>
+
+    <div class="row">
+      <div class="ava">🔥</div>
+      <div class="mid">
+        <div class="l1"><span class="nm">火花</span></div>
+        <div class="cond"><span class="nat">固执</span><span class="sex">♀</span><span class="med">大块头</span><span class="med">+100</span></div>
+        <div class="l2"><span class="why">甲的大号 有这颗蛋</span> · <b>阿丙</b> 在等</div>
+      </div>
+      <button class="btn g">接单</button>
+    </div>
+
+    <div class="row">
+      <div class="ava">🐱</div>
+      <div class="mid">
+        <div class="l1"><span class="nm">喵喵</span></div>
+        <div class="cond"><span class="nat">勇敢</span><span class="sex m">♂</span><span class="med">大块头</span><span class="med">+100</span></div>
+        <div class="l2">图鉴有、要现孵 · <b>阿乙</b> 在等</div>
+      </div>
+      <button class="btn g">接单</button>
+    </div>
+
+    <div class="row tight">
+      <div class="ava">💧</div>
+      <div class="mid">
+        <div class="l1"><span class="nm">水蓝蓝</span></div>
+        <div class="cond"><span class="nat">保守</span><span class="sex">♀</span><span class="med">小不点</span><span class="med">-100</span></div>
+        <div class="l2">图鉴有、要现孵 · <b>阿甲</b> 在等</div>
+      </div>
+      <button class="btn g">接单</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h3>其他人在收</h3><span>3</span><span class="hint">最近动静优先</span></div>
+
+    <div class="row tight">
+      <div class="ava">🧊</div>
+      <div class="mid">
+        <div class="l1"><span class="nm">冰封怨灵</span></div>
+        <div class="cond"><span class="nat">沉着</span><span class="sex m">♂</span><span class="med">小不点</span><span class="med">-100</span></div>
+        <div class="l2"><b>阿丙</b> 已上窝 · 今天 <span class="tag s">等发布人结单</span></div>
+      </div>
+      <button class="btn o">›</button>
+    </div>
+
+    <div class="row tight">
+      <div class="ava">🦌</div>
+      <div class="mid">
+        <div class="l1"><span class="nm">焰火</span></div>
+        <div class="cond"><span class="nat">开朗</span><span class="sex">♀</span><span class="med">大块头</span><span class="med">+100</span></div>
+        <div class="l2"><b>阿甲</b> 还没发需求 · 今天</div>
+      </div>
+      <button class="btn o">›</button>
+    </div>
+
+    <div class="row tight">
+      <div class="ava">🐢</div>
+      <div class="mid">
+        <div class="l1"><span class="nm">石冠王蜥</span></div>
+        <div class="cond"><span class="nat">固执</span><span class="sex m">♂</span><span class="med">大块头</span><span class="med">+100</span></div>
+        <div class="l2"><b>阿乙</b> 待接单 · <span class="tag a">2 天没人接</span></div>
+      </div>
+      <button class="btn o">›</button>
+    </div>
+  </div>
+
+  <div class="foot">只画奖牌：体型 / 声音（玩家认图）· 只写文字：性格 / 蛋名 / 人 / 时间</div>
+</template>
+
+<script>
+  const tpl = document.getElementById('tpl');
+  for (const phone of document.querySelectorAll('.phone')) {
+    phone.appendChild(tpl.content.cloneNode(true));
+  }
+  const only = new URLSearchParams(location.search).get('only');
+  if (only) {
+    document.body.classList.add('only');
+    for (const phone of document.querySelectorAll('.phone')) {
+      if (phone.dataset.w !== only) phone.style.display = 'none';
+    }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>悬浮球外框 · 可交互预览</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+  }
+  .layout { display: flex; align-items: flex-start; gap: 24px; padding: 20px; min-width: 1180px; }
+
+  /* ============ 左侧控制台 ============ */
+  .controls {
+    width: 320px; flex: none; background: #16233b; border: 1px solid #24344f;
+    border-radius: 14px; padding: 16px 16px 20px; position: sticky; top: 20px;
+  }
+  .controls h1 { font-size: 15px; margin: 0 0 4px; }
+  .controls .sub { font-size: 11px; color: #8fa3bf; line-height: 1.6; margin-bottom: 14px; }
+  .group { border-top: 1px solid #24344f; padding-top: 10px; margin-top: 10px; }
+  .group:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+  .group-title { font-size: 11px; color: #6f86a6; letter-spacing: .08em; margin-bottom: 8px; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; }
+  .row label { width: 108px; flex: none; color: #b9c9de; }
+  .row input[type="range"] { flex: 1; min-width: 0; accent-color: #10b981; }
+  .row .val { width: 52px; text-align: right; font-variant-numeric: tabular-nums; color: #6ee7b7; font-size: 11px; }
+  .row input[type="color"] { width: 34px; height: 24px; padding: 0; border: 1px solid #2c405e; background: none; }
+  .row select { flex: 1; background: #0f1b2e; color: #e2e8f0; border: 1px solid #2c405e; border-radius: 6px; padding: 4px 6px; font-size: 12px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 8px 0; color: #b9c9de; }
+  .check input { accent-color: #10b981; }
+  .note { font-size: 11px; line-height: 1.6; color: #7f93af; background: #0f1b2e; border-radius: 8px; padding: 8px 10px; margin-top: 10px; }
+  .note b { color: #6ee7b7; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .actions button {
+    flex: 1; border: 1px solid #2c405e; background: #0f1b2e; color: #cbd5e1;
+    border-radius: 8px; padding: 7px 8px; font-size: 12px; cursor: pointer;
+  }
+  .actions button.primary { background: #059669; border-color: #059669; color: #fff; }
+  .json {
+    margin-top: 10px; width: 100%; height: 76px; resize: vertical; background: #0b1424;
+    color: #93c5fd; border: 1px solid #23344e; border-radius: 8px; padding: 8px;
+    font: 11px/1.5 ui-monospace, Consolas, monospace;
+  }
+
+  /* ============ 右侧舞台 ============ */
+  .stage { display: flex; gap: 28px; align-items: flex-start; }
+  .phone-box { text-align: center; }
+  .phone-label { font-size: 12px; color: #8fa3bf; margin-bottom: 8px; }
+  .phone {
+    position: relative; overflow: hidden; border-radius: 26px;
+    border: 6px solid #23344e; box-shadow: 0 20px 50px rgba(0,0,0,.45);
+    background:
+      radial-gradient(120% 70% at 70% 20%, rgba(93, 143, 255, .28), transparent 60%),
+      radial-gradient(90% 60% at 20% 85%, rgba(16, 185, 129, .22), transparent 65%),
+      linear-gradient(160deg, #1a2a46 0%, #16233a 45%, #101a2c 100%);
+  }
+  .phone[data-w="375"] { width: 375px; height: 812px; }
+  .phone[data-w="390"] { width: 390px; height: 844px; }
+
+  /* 假游戏背景，用来观察对比度 */
+  .scene { position: absolute; inset: 0; pointer-events: none; }
+  .scene .hill { position: absolute; bottom: -40px; border-radius: 50% 50% 0 0; background: rgba(10, 24, 20, .55); }
+  .scene .hill.a { left: -80px; width: 320px; height: 180px; }
+  .scene .hill.b { right: -60px; width: 280px; height: 150px; background: rgba(12, 30, 26, .6); }
+  .scene .hud {
+    position: absolute; left: 16px; top: 14px; display: flex; gap: 8px;
+  }
+  .scene .hud span {
+    font-size: 10px; color: rgba(226, 232, 240, .75);
+    background: rgba(15, 23, 42, .55); border: 1px solid rgba(148, 163, 184, .25);
+    border-radius: 999px; padding: 3px 9px;
+  }
+
+  /* ============ 悬浮球 ============ */
+  .orb-wrap {
+    position: absolute; width: var(--ball-size); height: var(--ball-size);
+    --ring-inset: calc(-1 * (var(--ring-gap) + var(--ring-width)));
+  }
+  .orb {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--ball-bg); border: var(--ball-border) solid var(--ball-border-color);
+    border-radius: var(--ball-radius); padding: var(--ball-pad);
+    opacity: var(--ball-opacity);
+  }
+  .orb img { width: 100%; height: 100%; object-fit: contain; border-radius: calc(var(--ball-radius) - var(--ball-pad) / 2); pointer-events: none; }
+  .ring {
+    position: absolute; inset: var(--ring-inset); border-radius: var(--ring-radius);
+    border: var(--ring-width) solid var(--ring-color); pointer-events: none;
+    animation-name: breathScale; animation-duration: var(--breath-period);
+    animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+  }
+  @keyframes breathScale {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(var(--breath-scale)); }
+  }
+  @keyframes breathOpacity {
+    0%, 100% { opacity: 1; }
+    50% { opacity: var(--breath-opacity); }
+  }
+
+  /* ============ 面板（固定不透明，用来看"透明度不影响面板"） ============ */
+  .panel-demo {
+    position: absolute; width: 268px; border-radius: 14px; overflow: hidden;
+    background: #111c33; border: 1px solid rgba(148, 163, 184, .22);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+  }
+  .panel-demo .p-title { padding: 10px 12px 8px; font-size: 12px; color: #e2e8f0; border-bottom: 1px solid rgba(148,163,184,.16); }
+  .panel-demo .p-row { display: flex; justify-content: space-between; padding: 7px 12px; font-size: 11px; color: #cbd5e1; }
+  .panel-demo .p-row span:last-child { color: #94a3b8; }
+  .panel-demo .p-empty { padding: 14px 12px; font-size: 11px; color: #93a4bd; line-height: 1.6; }
+  .panel-flag {
+    position: absolute; font-size: 10px; color: #6ee7b7; background: rgba(6, 78, 59, .8);
+    border: 1px solid rgba(16, 185, 129, .5); border-radius: 999px; padding: 2px 8px;
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- 控制台 -->
+  <aside class="controls">
+    <h1>悬浮球外框 · 参数预览</h1>
+    <div class="sub">实时调参，右侧 375 / 390 两块屏同步变化。本轮只做预览，不落代码。</div>
+
+    <div class="group">
+      <div class="group-title">球体</div>
+      <div class="row"><label>球尺寸</label><input id="ballSize" type="range" min="44" max="64" step="1" value="52"><span class="val" id="ballSizeVal">52px</span></div>
+      <div class="row"><label>圆角半径</label><input id="ballRadius" type="range" min="0" max="28" step="1" value="14"><span class="val" id="ballRadiusVal">14px</span></div>
+      <div class="row"><label>图标内留白</label><input id="ballPad" type="range" min="0" max="10" step="1" value="4"><span class="val" id="ballPadVal">4px</span></div>
+      <div class="row"><label>球边框宽度</label><input id="ballBorder" type="range" min="0" max="4" step="1" value="2"><span class="val" id="ballBorderVal">2px</span></div>
+      <div class="row"><label>球体透明度</label><input id="ballOpacity" type="range" min="40" max="100" step="5" value="100"><span class="val" id="ballOpacityVal">100%</span></div>
+      <label class="check"><input id="hitState" type="checkbox"> 命中态（球边框变红）</label>
+    </div>
+
+    <div class="group">
+      <div class="group-title">外框（贴合球的圆角矩形）</div>
+      <div class="row"><label>与球间距</label><input id="ringGap" type="range" min="0" max="8" step="1" value="2"><span class="val" id="ringGapVal">2px</span></div>
+      <div class="row"><label>外框粗细</label><input id="ringWidth" type="range" min="1" max="5" step="1" value="2"><span class="val" id="ringWidthVal">2px</span></div>
+      <label class="check"><input id="ringFollow" type="checkbox" checked> 圆角跟随球体</label>
+      <div class="row"><label>外框圆角</label><input id="ringRadius" type="range" min="0" max="34" step="1" value="18" disabled><span class="val" id="ringRadiusVal">跟随</span></div>
+      <div class="row"><label>外框颜色</label><input id="ringColor" type="color" value="#059669"><input id="ringAlpha" type="range" min="20" max="100" step="5" value="90"><span class="val" id="ringAlphaVal">90%</span></div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">呼吸</div>
+      <div class="row"><label>呼吸方式</label>
+        <select id="breathMode">
+          <option value="scale">缩放脉动</option>
+          <option value="opacity">透明度脉动</option>
+        </select>
+      </div>
+      <div class="row"><label>呼吸周期</label><input id="breathPeriod" type="range" min="10" max="50" step="1" value="24"><span class="val" id="breathPeriodVal">2.4s</span></div>
+      <div class="row"><label>呼吸幅度</label><input id="breathAmp" type="range" min="0" max="80" step="1" value="45"><span class="val" id="breathAmpVal">45%</span></div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">对照</div>
+      <label class="check"><input id="showPanel" type="checkbox" checked> 显示展开面板（验证它不跟着变透明）</label>
+      <div class="note">透明度滑块只作用于<b>球体</b>；展开面板固定 <b>100% 不透明</b>。外框呼吸独立，不受球体透明度影响。</div>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="copyBtn">复制参数 JSON</button>
+      <button id="resetBtn">重置默认</button>
+    </div>
+    <textarea class="json" id="jsonOut" readonly></textarea>
+  </aside>
+
+  <!-- 舞台 -->
+  <main class="stage">
+    <div class="phone-box">
+      <div class="phone-label">375 × 812</div>
+      <div class="phone" data-w="375">
+        <div class="scene">
+          <div class="hud"><span>赛季奇遇 · 第 3 层</span><span>附近 6</span></div>
+          <div class="hill a"></div><div class="hill b"></div>
+        </div>
+        <div class="panel-demo" style="left: 46px; top: 400px;">
+          <div class="p-title">战斗采集 · 赛季奇遇</div>
+          <div class="p-row"><span>等级</span><span>Lv.32</span></div>
+          <div class="p-row"><span>性别</span><span>未知</span></div>
+          <div class="p-row"><span>身高</span><span>68%</span></div>
+          <div class="p-row"><span>体重</span><span>52%</span></div>
+          <div class="p-empty">这个面板固定不透明，拖球透明度不影响它。</div>
+        </div>
+        <div class="panel-flag" style="left: 46px; top: 376px;">面板 100% 不透明</div>
+
+        <div class="orb-wrap" id="orb375" style="left: 300px; top: 690px;">
+          <div class="ring"></div>
+          <div class="orb"><img src="public/icon-192.png" alt=""></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phone-box">
+      <div class="phone-label">390 × 844</div>
+      <div class="phone" data-w="390">
+        <div class="scene">
+          <div class="hud"><span>赛季奇遇 · 第 3 层</span><span>附近 6</span></div>
+          <div class="hill a"></div><div class="hill b"></div>
+        </div>
+        <div class="panel-demo" style="left: 48px; top: 420px;">
+          <div class="p-title">战斗采集 · 赛季奇遇</div>
+          <div class="p-row"><span>等级</span><span>Lv.32</span></div>
+          <div class="p-row"><span>性别</span><span>未知</span></div>
+          <div class="p-row"><span>身高</span><span>68%</span></div>
+          <div class="p-row"><span>体重</span><span>52%</span></div>
+          <div class="p-empty">这个面板固定不透明，拖球透明度不影响它。</div>
+        </div>
+        <div class="panel-flag" style="left: 48px; top: 396px;">面板 100% 不透明</div>
+
+        <div class="orb-wrap" id="orb390" style="left: 312px; top: 720px;">
+          <div class="ring"></div>
+          <div class="orb"><img src="public/icon-192.png" alt=""></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var defaults = {
+    ballSize: 52, ballRadius: 14, ballPad: 4, ballBorder: 2, ballOpacity: 100, hitState: false,
+    ringGap: 2, ringWidth: 2, ringFollow: true, ringRadius: 18, ringColor: '#059669', ringAlpha: 90,
+    breathMode: 'scale', breathPeriod: 24, breathAmp: 45, showPanel: true
+  };
+
+  var el = {};
+  ['ballSize','ballRadius','ballPad','ballBorder','ballOpacity','hitState','ringGap','ringWidth',
+   'ringFollow','ringRadius','ringColor','ringAlpha','breathMode','breathPeriod','breathAmp',
+   'showPanel'].forEach(function (id) { el[id] = document.getElementById(id); });
+
+  var panels = document.querySelectorAll('.panel-demo, .panel-flag');
+
+  function num(id) { return Number(el[id].value); }
+
+  function sync() {
+    root.style.setProperty('--ball-size', num('ballSize') + 'px');
+    root.style.setProperty('--ball-radius', num('ballRadius') + 'px');
+    root.style.setProperty('--ball-pad', num('ballPad') + 'px');
+    root.style.setProperty('--ball-border', num('ballBorder') + 'px');
+    root.style.setProperty('--ball-opacity', (num('ballOpacity') / 100).toString());
+    root.style.setProperty('--ball-border-color', el.hitState.checked ? '#e11d48' : '#059669');
+    root.style.setProperty('--ball-bg', '#ffffff');
+
+    root.style.setProperty('--ring-gap', num('ringGap') + 'px');
+    root.style.setProperty('--ring-width', num('ringWidth') + 'px');
+    var alpha = num('ringAlpha') / 100;
+    root.style.setProperty('--ring-color', hexToRgba(el.ringColor.value, alpha));
+    root.style.setProperty('--breath-period', (num('breathPeriod') / 10) + 's');
+    if (el.ringFollow.checked) {
+      el.ringRadius.disabled = true;
+      root.style.setProperty('--ring-radius-manual', '0px');
+      document.querySelectorAll('.ring').forEach(function (r) { r.style.borderRadius = ''; });
+      root.style.setProperty('--ring-radius', 'calc(var(--ball-radius) + var(--ring-gap) + var(--ring-width))');
+    } else {
+      el.ringRadius.disabled = false;
+      root.style.setProperty('--ring-radius', num('ringRadius') + 'px');
+    }
+
+    var mode = el.breathMode.value;
+    document.querySelectorAll('.ring').forEach(function (r) {
+      r.style.animationName = mode === 'scale' ? 'breathScale' : 'breathOpacity';
+    });
+    root.style.setProperty('--breath-scale', (1 + num('breathAmp') / 1000).toString());
+    root.style.setProperty('--breath-opacity', (1 - num('breathAmp') / 100).toString());
+
+    panels.forEach(function (p) { p.style.display = el.showPanel.checked ? '' : 'none'; });
+
+    // 数值显示
+    el.ballSizeVal.textContent = num('ballSize') + 'px';
+    el.ballRadiusVal.textContent = num('ballRadius') + 'px';
+    el.ballPadVal.textContent = num('ballPad') + 'px';
+    el.ballBorderVal.textContent = num('ballBorder') + 'px';
+    el.ballOpacityVal.textContent = num('ballOpacity') + '%';
+    el.ringGapVal.textContent = num('ringGap') + 'px';
+    el.ringWidthVal.textContent = num('ringWidth') + 'px';
+    el.ringRadiusVal.textContent = el.ringFollow.checked ? '跟随' : num('ringRadius') + 'px';
+    el.ringAlphaVal.textContent = num('ringAlpha') + '%';
+    el.breathPeriodVal.textContent = (num('breathPeriod') / 10).toFixed(1) + 's';
+    el.breathAmpVal.textContent = el.breathMode.value === 'scale'
+      ? (num('breathAmp') / 10).toFixed(1) + '%'
+      : num('breathAmp') + '%';
+
+    el.jsonOut.value = JSON.stringify({
+      ballSize: num('ballSize'), ballRadius: num('ballRadius'), ballPad: num('ballPad'),
+      ballBorder: num('ballBorder'), ballOpacity: num('ballOpacity') / 100,
+      ringGap: num('ringGap'), ringWidth: num('ringWidth'),
+      ringRadius: el.ringFollow.checked
+        ? num('ballRadius') + num('ringGap') + num('ringWidth') : num('ringRadius'),
+      ringFollow: el.ringFollow.checked,
+      ringColor: hexToRgba(el.ringColor.value, num('ringAlpha') / 100),
+      breathMode: el.breathMode.value,
+      breathPeriodSec: num('breathPeriod') / 10,
+      breathScale: 1 + num('breathAmp') / 1000,
+      breathOpacityMin: 1 - num('breathAmp') / 100
+    }, null, 2);
+  }
+
+  function hexToRgba(hex, alpha) {
+    var h = hex.replace('#', '');
+    var r = parseInt(h.substring(0, 2), 16);
+    var g = parseInt(h.substring(2, 4), 16);
+    var b = parseInt(h.substring(4, 6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
+
+  Object.keys(el).forEach(function (k) {
+    el[k].addEventListener('input', sync);
+    el[k].addEventListener('change', sync);
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    Object.keys(defaults).forEach(function (k) {
+      if (el[k].type === 'checkbox') el[k].checked = defaults[k];
+      else el[k].value = defaults[k];
+    });
+    sync();
+  });
+
+  document.getElementById('copyBtn').addEventListener('click', function () {
+    el.jsonOut.select();
+    try { document.execCommand('copy'); } catch (e) { }
+    if (navigator.clipboard) navigator.clipboard.writeText(el.jsonOut.value).catch(function () { });
+  });
+
+  sync();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>收集计划 · 卡片 + 二级页原型</title>
+<style>
+  :root{
+    --page-pad:12px; --card-pad:12px; --radius:14px;
+    --emerald:#059669; --emerald-50:#ecfdf5; --emerald-100:#d1fae5; --emerald-200:#a7f3d0;
+    --slate-50:#f8fafc; --slate-100:#f1f5f9; --slate-200:#e2e8f0; --slate-300:#cbd5e1;
+    --slate-400:#94a3b8; --slate-500:#64748b; --slate-600:#475569; --slate-700:#334155; --slate-800:#1e293b;
+    --amber:#d97706; --amber-50:#fffbeb; --amber-200:#fde68a; --amber-700:#b45309;
+    --rose:#e11d48; --rose-50:#fff1f2;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:#eef2f6;font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--slate-800);padding:10px}
+  body.shot{padding:0;background:#fff}
+
+  .toolbar{max-width:420px;margin:0 auto 10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .toolbar button{font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid var(--slate-300);background:#fff;cursor:pointer;color:var(--slate-600)}
+  .toolbar button.on{background:var(--emerald);border-color:var(--emerald);color:#fff;font-weight:600}
+  .toolbar .sub{font-size:11px;color:var(--slate-400);margin-left:auto}
+
+  .frame{position:relative;width:100%;max-width:390px;margin:0 auto;background:#fff;border-radius:18px;box-shadow:0 8px 26px rgba(15,23,42,.10);overflow:hidden}
+  body.shot .frame{border-radius:0;box-shadow:none;margin:0}
+  body.full .phone{height:auto;overflow:visible}
+  .tabs{display:flex;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--slate-100);font-size:12px;color:var(--slate-500)}
+  .tabs span.on{color:var(--emerald);font-weight:600;border-bottom:2px solid var(--emerald);padding-bottom:5px}
+  .phone{position:relative;background:#f6f8fa;padding:var(--page-pad);height:720px;overflow:auto}
+
+  .groupbar{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.06);margin-bottom:8px}
+  .groupbar b{font-size:13px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .groupbar .sub{font-size:11px;color:var(--slate-400);white-space:nowrap}
+  .groupbar .ops{margin-left:auto;display:flex;gap:6px;flex-shrink:0}
+
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--slate-100);border-radius:10px;padding:3px;margin-bottom:10px}
+  .seg button{min-height:30px;border:0;border-radius:8px;background:transparent;font-size:13px;color:var(--slate-500);cursor:pointer}
+  .seg button.on{background:#fff;color:var(--emerald);font-weight:600;box-shadow:0 1px 2px rgba(15,23,42,.08)}
+
+  .badge{display:inline-block;border-radius:6px;padding:1px 5px;font-size:10.5px;font-weight:600;white-space:nowrap}
+  .badge.green{background:var(--emerald-50);color:var(--emerald)}
+  .badge.gray{background:var(--slate-100);color:var(--slate-500)}
+  .badge.amber{background:var(--amber-50);color:var(--amber-700)}
+
+  .btn{border:1px solid var(--slate-200);background:#fff;border-radius:8px;padding:5px 9px;font-size:11.5px;color:var(--slate-500);white-space:nowrap;cursor:pointer}
+  .btn.primary{border-color:var(--emerald);color:var(--emerald);font-weight:600}
+  .btn.solid{background:var(--emerald);border-color:var(--emerald);color:#fff;font-weight:600}
+  .btn.amber{background:var(--amber);border-color:var(--amber);color:#fff;font-weight:600}
+  .btn.danger{border-color:#fecdd3;color:var(--rose)}
+  .btn.sm{padding:4px 8px;font-size:11px}
+  .btn.ghost{border:0;background:transparent;color:var(--slate-400);padding:4px 2px}
+
+  .sec-head{display:flex;align-items:center;gap:6px;margin:12px 2px 7px}
+  .sec-head:first-child{margin-top:2px}
+  .sec-head h3{margin:0;font-size:14px;font-weight:700}
+  .sec-head .count{font-size:11px;color:var(--slate-400)}
+  .sec-head .right{margin-left:auto;display:flex;gap:6px}
+
+  /* 计划卡：单列，卡面四段（头像名字 / 条件 / 状态副行 / 操作） */
+  .plan{background:#fff;border-radius:var(--radius);box-shadow:0 1px 3px rgba(15,23,42,.07);padding:var(--card-pad);cursor:pointer}
+  .plan + .plan{margin-top:8px}
+  .plan:active{transform:scale(.995)}
+  .plan[data-tone="confirm"]{box-shadow:inset 0 0 0 1px var(--amber-200),0 1px 3px rgba(15,23,42,.07)}
+  .plan[data-tone="claimed"]{box-shadow:inset 0 0 0 1px var(--emerald-200),0 1px 3px rgba(15,23,42,.07)}
+  .plan-top{display:flex;align-items:center;gap:9px;min-width:0}
+  .plan-top img{width:38px;height:38px;object-fit:contain;flex-shrink:0}
+  .plan-top .t{min-width:0;flex:1}
+  .plan-top .name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .plan-top .who{font-size:10.5px;color:var(--slate-400);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .plan-top .badge{flex-shrink:0}
+
+  .crit{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden;margin-top:8px}
+  .crit span{font-size:10.5px;border-radius:5px;padding:1px 5px;white-space:nowrap;flex-shrink:0}
+  .crit .g{background:#fdf2f8;color:#be185d}
+  .crit .b{background:var(--emerald-50);color:#047857}
+  .crit .v{background:var(--amber-50);color:var(--amber-700)}
+  .crit .miss{background:var(--rose-50);color:var(--rose);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .crit .n{background:var(--slate-100);color:var(--slate-500)}
+  .crit .dot{color:var(--slate-300)}
+
+  .plan-foot{display:flex;align-items:center;gap:6px;margin-top:9px}
+  .plan-foot .hint{font-size:10.5px;color:var(--slate-400);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .plan-foot .ops{margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0}
+  .plan-foot .btn.solid{min-height:30px;padding:0 12px;font-size:12px}
+
+  /* 广场：两列卡片栅格 */
+  .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pcard{background:#fff;border-radius:var(--radius);box-shadow:0 1px 3px rgba(15,23,42,.07);padding:10px;min-width:0;cursor:pointer}
+  .pcard-top{display:flex;align-items:center;gap:7px;min-width:0}
+  .pcard-top img{width:34px;height:34px;object-fit:contain;flex-shrink:0}
+  .pcard-top .t{min-width:0;flex:1}
+  .pcard .name{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pcard .who{font-size:10px;color:var(--slate-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pcard .crit{flex-wrap:wrap;gap:3px;margin-top:7px;overflow:visible}
+  .pcard .crit span{font-size:10px;padding:1px 4px}
+  .pcard .foot{display:flex;align-items:center;gap:4px;margin-top:7px}
+  .pcard .foot .st{font-size:10px;color:var(--slate-400)}
+  .pcard .foot .st.active{color:var(--emerald);font-weight:600}
+  .pcard .foot .btn{margin-left:auto}
+
+  /* 你能补的：整行卡 */
+  .offer{background:linear-gradient(180deg,var(--emerald-50),#fff 72%);border:1px solid var(--emerald-200);border-radius:var(--radius);padding:10px 12px;cursor:pointer}
+  .offer + .offer{margin-top:8px}
+  .offer .row{display:flex;align-items:center;gap:9px;min-width:0}
+  .offer img{width:36px;height:36px;object-fit:contain;flex-shrink:0}
+  .offer .t{min-width:0;flex:1}
+  .offer .name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .offer .who{font-size:10.5px;color:var(--slate-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .offer .crit{margin-top:6px}
+  .offer .ops{flex-shrink:0}
+
+  /* ---------- 二级页（底部弹出，贴齐现有 ModalSurface sheet） ---------- */
+  .overlay{position:absolute;inset:0;background:rgba(15,23,42,.38);display:none;align-items:flex-end;z-index:20}
+  .overlay.on{display:flex}
+  .sheet{width:100%;max-height:92%;overflow:auto;background:#fff;border-radius:18px 18px 0 0;padding:14px 14px 16px;animation:up .22s ease-out}
+  @keyframes up{from{transform:translateY(24px);opacity:.5}to{transform:none;opacity:1}}
+  .sheet-head{display:flex;align-items:center;gap:10px}
+  .sheet-head img{width:46px;height:46px;object-fit:contain}
+  .sheet-head .t{min-width:0;flex:1}
+  .sheet-head .name{font-size:16px;font-weight:700}
+  .sheet-head .who{font-size:11px;color:var(--slate-400);margin-top:2px}
+  .sheet-close{border:0;background:var(--slate-100);color:var(--slate-500);border-radius:50%;width:28px;height:28px;font-size:15px;line-height:1;cursor:pointer;flex-shrink:0}
+
+  .kv{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--slate-100);font-size:12px}
+  .kv:first-of-type{border-top:0}
+  .kv .k{color:var(--slate-400);width:52px;flex-shrink:0}
+  .kv .v{flex:1;min-width:0;color:var(--slate-700);line-height:1.7}
+  .kv .v .crit{margin-top:0;flex-wrap:wrap;overflow:visible}
+
+  .steps{display:flex;align-items:flex-start;margin:10px 0 4px}
+  .step{flex:1;position:relative;text-align:center;min-width:0}
+  .step i{display:block;width:8px;height:8px;border-radius:50%;background:var(--slate-300);margin:0 auto}
+  .step::after{content:'';position:absolute;top:3.5px;left:calc(50% + 7px);right:calc(-50% + 7px);height:1px;background:var(--slate-200)}
+  .step:last-child::after{display:none}
+  .step b{display:block;margin-top:4px;font-size:9.5px;font-weight:400;color:var(--slate-400);white-space:nowrap}
+  .steps[data-step="2"] .step:nth-child(-n+2) i{background:var(--emerald)}
+  .steps[data-step="2"] .step:nth-child(2) b{color:var(--emerald);font-weight:700}
+  .steps[data-step="4"] .step:nth-child(-n+3) i{background:var(--emerald)}
+  .steps[data-step="4"] .step:nth-child(4) i{background:var(--amber);box-shadow:0 0 0 3px #fef3c7}
+  .steps[data-step="4"] .step:nth-child(4) b{color:var(--amber-700);font-weight:700}
+  .steps[data-step="5"] .step:nth-child(-n+5) i{background:var(--emerald)}
+  .steps[data-step="5"] .step:nth-child(5) b{color:var(--emerald);font-weight:700}
+
+  .note{width:100%;min-height:34px;border:1px solid var(--slate-200);border-radius:9px;padding:0 10px;font-size:12px;margin-top:6px}
+  .sheet-foot{display:flex;gap:8px;margin-top:12px}
+  .sheet-foot .btn{flex:1;min-height:38px;font-size:13px}
+
+  .pcard.egg{padding:8px 4px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--slate-200);text-align:center}
+  .pcard.egg.on{box-shadow:inset 0 0 0 2px var(--emerald);background:var(--emerald-50)}
+  .pcard.egg .name{font-size:10.5px;margin-top:3px}
+
+  .toast{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);background:rgba(15,23,42,.88);color:#fff;font-size:11.5px;border-radius:9px;padding:7px 11px;display:none;z-index:30;white-space:nowrap;max-width:92%}
+  .toast.on{display:block}
+</style>
+</head>
+<body>
+<div class="toolbar" id="toolbar">
+  <button id="tabMine" class="on">我的收集</button>
+  <button id="tabGroup">组内广场</button>
+  <button data-open="mineSheet">我的收集二级页</button>
+  <button data-open="groupSheet">广场二级页</button>
+  <span class="sub">点卡片也能打开二级页</span>
+</div>
+
+<div class="frame" id="frame" data-page="mine">
+  <div class="tabs"><span>看板</span><span>家园</span><span>收集</span><span class="on">小组</span><span>我的</span></div>
+  <div class="phone">
+    <div class="groupbar">
+      <span class="badge green">收集</span>
+      <b>对性母本全收集</b><span class="sub">4 人</span>
+      <span class="ops"><button class="btn sm ghost">刷新</button><button class="btn sm" data-open="settingsSheet">设置</button></span>
+    </div>
+    <div class="seg">
+      <button class="on" data-goto="mine">我的收集</button>
+      <button data-goto="group">组内广场</button>
+    </div>
+
+    <!-- ================= 我的收集 ================= -->
+    <div class="page mine">
+      <div class="sec-head">
+        <h3>进行中</h3><span class="count">3 / 8</span>
+        <span class="right"><button class="btn sm" data-open="addSheet">＋ 想收</button></span>
+      </div>
+
+      <div class="plan" data-tone="confirm" data-open="mineSheet">
+        <div class="plan-top">
+          <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" />
+          <div class="t">
+            <div class="name">伊贝儿</div>
+            <div class="who">阿乙 已上窝</div>
+          </div>
+          <span class="badge amber">待我确认</span>
+        </div>
+        <div class="crit">
+          <span class="g">公</span><span class="b">大块头</span><span class="v">+100</span>
+          <span class="miss">缺 胆小 · 固执</span>
+        </div>
+        <div class="plan-foot">
+          <span class="hint">阿乙：有现成的蛋</span>
+          <span class="ops">
+            <button class="btn ghost" data-open="mineSheet">详情 ›</button>
+            <button class="btn solid" data-toast="已确认收货">去确认</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="plan" data-tone="claimed" data-open="mineSheet">
+        <div class="plan-top">
+          <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3784/icon.png" alt="" />
+          <div class="t">
+            <div class="name">云梦豚</div>
+            <div class="who">昭序 已认领</div>
+          </div>
+          <span class="badge green">已认领</span>
+        </div>
+        <div class="crit">
+          <span class="g">母</span><span class="b">小不点</span><span class="v">婉转声</span>
+          <span class="miss">缺 开朗</span>
+        </div>
+        <div class="plan-foot">
+          <span class="hint">等昭序上窝</span>
+          <span class="ops">
+            <button class="btn ghost" data-open="mineSheet">详情 ›</button>
+            <button class="btn primary" data-toast="已打开发需求">发需求</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="plan" data-open="mineSheet">
+        <div class="plan-top">
+          <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" style="filter:hue-rotate(280deg)" />
+          <div class="t">
+            <div class="name">雪绒鸟</div>
+            <div class="who">还没发需求</div>
+          </div>
+          <span class="badge gray">进行中</span>
+        </div>
+        <div class="crit">
+          <span class="g">母</span><span class="b">大块头</span><span class="v">不限</span>
+          <span class="miss">缺 天真 · 勇敢</span>
+        </div>
+        <div class="plan-foot">
+          <span class="hint">先攒着</span>
+          <span class="ops">
+            <button class="btn ghost" data-open="mineSheet">详情 ›</button>
+            <button class="btn primary" data-toast="已打开发需求">发需求</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="sec-head">
+        <h3>想收</h3><span class="count">2</span>
+        <span class="right"><button class="btn sm ghost" data-batch>批量导入</button></span>
+      </div>
+
+      <div class="plan" data-open="mineSheet">
+        <div class="plan-top">
+          <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3784/icon.png" alt="" style="filter:hue-rotate(120deg)" />
+          <div class="t">
+            <div class="name">石冠王蜥</div>
+            <div class="who">想收</div>
+          </div>
+          <span class="badge gray">想收</span>
+        </div>
+        <div class="crit">
+          <span class="g">公</span><span class="b">大块头</span><span class="v">-100</span>
+          <span class="miss">缺 傲慢</span>
+        </div>
+        <div class="plan-foot">
+          <span class="hint"></span>
+          <span class="ops">
+            <button class="btn ghost" data-open="mineSheet">详情 ›</button>
+            <button class="btn solid" data-toast="已开始">开始</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="plan" data-open="mineSheet">
+        <div class="plan-top">
+          <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" style="filter:hue-rotate(60deg)" />
+          <div class="t">
+            <div class="name">喵喵</div>
+            <div class="who">想收</div>
+          </div>
+          <span class="badge gray">想收</span>
+        </div>
+        <div class="crit">
+          <span class="g">母</span><span class="b">小不点</span><span class="v">不限</span>
+          <span class="miss">缺 胆小</span>
+        </div>
+        <div class="plan-foot">
+          <span class="hint"></span>
+          <span class="ops">
+            <button class="btn ghost" data-open="mineSheet">详情 ›</button>
+            <button class="btn solid" data-toast="已开始">开始</button>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 组内广场 ================= -->
+    <div class="page group" style="display:none">
+      <div class="sec-head">
+        <h3>你能补的</h3><span class="count">2</span>
+      </div>
+
+      <div class="offer" data-open="groupSheet">
+        <div class="row">
+          <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" />
+          <div class="t">
+            <div class="name">伊贝儿</div>
+            <div class="who">阿乙 的收集</div>
+          </div>
+          <span class="ops"><button class="btn sm primary" data-offer>我能提供</button></span>
+        </div>
+        <div class="crit">
+          <span class="g">公</span><span class="b">大块头</span><span class="v">+100</span>
+          <span class="miss">缺 胆小 · 固执</span>
+        </div>
+      </div>
+
+      <div class="offer" data-open="groupSheet">
+        <div class="row">
+          <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3784/icon.png" alt="" />
+          <div class="t">
+            <div class="name">云梦豚</div>
+            <div class="who">昭序 的收集</div>
+          </div>
+          <span class="ops"><button class="btn sm primary" data-offer>我能提供</button></span>
+        </div>
+        <div class="crit">
+          <span class="g">母</span><span class="b">小不点</span><span class="v">婉转声</span>
+          <span class="miss">缺 开朗</span>
+        </div>
+      </div>
+
+      <div class="sec-head">
+        <h3>成员计划</h3><span class="count">4</span>
+      </div>
+      <div class="pgrid">
+        <div class="pcard" data-open="groupSheet">
+          <div class="pcard-top">
+            <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" />
+            <div class="t"><div class="name">伊贝儿</div><div class="who">阿乙</div></div>
+          </div>
+          <div class="crit">
+            <span class="g">公</span><span class="b">大块头</span><span class="v">+100</span>
+            <span class="miss">缺 胆小</span>
+          </div>
+          <div class="foot"><span class="st active">进行中</span><span class="btn sm ghost">›</span></div>
+        </div>
+        <div class="pcard" data-open="groupSheet">
+          <div class="pcard-top">
+            <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3784/icon.png" alt="" />
+            <div class="t"><div class="name">云梦豚</div><div class="who">昭序</div></div>
+          </div>
+          <div class="crit">
+            <span class="g">母</span><span class="b">小不点</span><span class="v">婉转声</span>
+            <span class="miss">缺 开朗</span>
+          </div>
+          <div class="foot"><span class="st">想收</span><span class="btn sm ghost">›</span></div>
+        </div>
+        <div class="pcard" data-open="groupSheet">
+          <div class="pcard-top">
+            <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3784/icon.png" alt="" style="filter:hue-rotate(120deg)" />
+            <div class="t"><div class="name">石冠王蜥</div><div class="who">哈基米</div></div>
+          </div>
+          <div class="crit">
+            <span class="g">公</span><span class="b">大块头</span><span class="v">-100</span>
+            <span class="miss">缺 勇敢</span>
+          </div>
+          <div class="foot"><span class="st active">进行中</span><span class="btn sm ghost">›</span></div>
+        </div>
+        <div class="pcard" data-open="groupSheet">
+          <div class="pcard-top">
+            <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" style="filter:hue-rotate(280deg)" />
+            <div class="t"><div class="name">雪绒鸟</div><div class="who">阿乙</div></div>
+          </div>
+          <div class="crit">
+            <span class="g">母</span><span class="b">大块头</span><span class="v">不限</span>
+            <span class="miss">缺 天真</span>
+          </div>
+          <div class="foot"><span class="st">想收</span><span class="btn sm ghost">›</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 我的收集二级页 ============ -->
+    <div class="overlay" id="mineSheet">
+      <div class="sheet">
+        <div class="sheet-head">
+          <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" />
+          <div class="t">
+            <div class="name">伊贝儿</div>
+            <div class="who">我发布的</div>
+          </div>
+          <span class="badge amber">待我确认</span>
+          <button class="sheet-close" data-close>×</button>
+        </div>
+
+        <div class="kv">
+          <span class="k">条件</span>
+          <span class="v"><span class="crit"><span class="g">公</span><span class="b">大块头</span><span class="v">+100</span><span class="miss">缺 胆小 · 固执</span></span></span>
+        </div>
+        <div class="kv" style="display:block">
+          <div class="steps" data-step="4">
+            <div class="step"><i></i><b>待接单</b></div>
+            <div class="step"><i></i><b>已认领</b></div>
+            <div class="step"><i></i><b>已上窝</b></div>
+            <div class="step"><i></i><b>待我确认</b></div>
+            <div class="step"><i></i><b>已完成</b></div>
+          </div>
+        </div>
+        <div class="kv">
+          <span class="k">需求</span>
+          <span class="v">胆小 · 阿乙已接<br />固执 · 待承接</span>
+        </div>
+        <div class="kv">
+          <span class="k">提供</span>
+          <span class="v">阿乙：有现成的蛋，大概开朗</span>
+        </div>
+        <div class="kv">
+          <span class="k">备注</span>
+          <span class="v"><input class="note" placeholder="给自己留一句" /></span>
+        </div>
+
+        <div class="sheet-foot">
+          <button class="btn danger" data-toast="已删除">删除计划</button>
+          <button class="btn solid" data-close>关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 广场二级页 ============ -->
+    <div class="overlay" id="groupSheet">
+      <div class="sheet">
+        <div class="sheet-head">
+          <img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" />
+          <div class="t">
+            <div class="name">伊贝儿</div>
+            <div class="who">阿乙 发布 · 10-29</div>
+          </div>
+          <span class="badge green">进行中</span>
+          <button class="sheet-close" data-close>×</button>
+        </div>
+
+        <div class="kv">
+          <span class="k">条件</span>
+          <span class="v"><span class="crit"><span class="g">公</span><span class="b">大块头</span><span class="v">+100</span><span class="miss">缺 胆小 · 固执</span></span></span>
+        </div>
+        <div class="kv" style="display:block">
+          <div class="steps" data-step="2">
+            <div class="step"><i></i><b>待接单</b></div>
+            <div class="step"><i></i><b>已认领</b></div>
+            <div class="step"><i></i><b>已上窝</b></div>
+            <div class="step"><i></i><b>待确认</b></div>
+            <div class="step"><i></i><b>已完成</b></div>
+          </div>
+        </div>
+        <div class="kv">
+          <span class="k">提供者</span>
+          <span class="v">哈基米：我这有现成的</span>
+        </div>
+        <div class="kv">
+          <span class="k">我的备注</span>
+          <span class="v"><input class="note" placeholder="说明能提供什么" /></span>
+        </div>
+
+        <div class="sheet-foot">
+          <button class="btn" data-close>关闭</button>
+          <button class="btn solid" data-toast="备注已保存">保存备注</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 添加想收（复用发需求弹层的选蛋网格） ============ -->
+    <div class="overlay" id="addSheet">
+      <div class="sheet">
+        <div class="sheet-head" style="margin-bottom:8px">
+          <div class="t"><div class="name">添加想收</div><div class="who">可多选</div></div>
+          <button class="sheet-close" data-close>×</button>
+        </div>
+        <div class="pgrid" style="grid-template-columns:repeat(3,1fr)">
+          <div class="pcard egg on" style="text-align:center"><img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" style="width:40px;height:40px;margin:0 auto" /><div class="name">伊贝儿</div></div>
+          <div class="pcard egg on" style="text-align:center"><img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3784/icon.png" alt="" style="width:40px;height:40px;margin:0 auto" /><div class="name">云梦豚</div></div>
+          <div class="pcard egg" style="text-align:center"><img src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="" style="width:40px;height:40px;margin:0 auto;filter:hue-rotate(280deg)" /><div class="name">雪绒鸟</div></div>
+        </div>
+        <div class="sheet-foot">
+          <button class="btn" data-close>取消</button>
+          <button class="btn solid" data-close data-toast="已添加 2 条想收">添加 2 条</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 小组设置 ============ -->
+    <div class="overlay" id="settingsSheet">
+      <div class="sheet">
+        <div class="sheet-head" style="margin-bottom:6px">
+          <div class="t"><div class="name">小组设置</div><div class="who">对性母本全收集 · 4 人</div></div>
+          <button class="sheet-close" data-close>×</button>
+        </div>
+        <div class="kv"><span class="k">成员</span><span class="v">4 人 · 邀请码 7K2M</span></div>
+        <div class="kv"><span class="k">类型</span><span class="v">收集小组</span></div>
+        <div class="kv"><span class="k">资源</span><span class="v">2 个游戏账号</span></div>
+        <div class="kv"><span class="k">切换</span><span class="v">切换 / 新建 / 加入小组</span></div>
+        <div class="sheet-foot">
+          <button class="btn danger" data-toast="已退出">退出小组</button>
+          <button class="btn solid" data-close>完成</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<script>
+  const frame = document.getElementById('frame');
+  const toast = document.getElementById('toast');
+  let timer;
+  function say(text){
+    toast.textContent = text;
+    toast.classList.add('on');
+    clearTimeout(timer);
+    timer = setTimeout(() => toast.classList.remove('on'), 1800);
+  }
+  function selectTab(page){
+    frame.dataset.page = page;
+    document.getElementById('tabMine').classList.toggle('on', page === 'mine');
+    document.getElementById('tabGroup').classList.toggle('on', page === 'group');
+    document.querySelector('.page.mine').style.display = page === 'mine' ? 'block' : 'none';
+    document.querySelector('.page.group').style.display = page === 'group' ? 'block' : 'none';
+  }
+  document.getElementById('tabMine').onclick = () => selectTab('mine');
+  document.getElementById('tabGroup').onclick = () => selectTab('group');
+  document.querySelectorAll('[data-goto]').forEach((btn) => {
+    btn.onclick = () => {
+      document.querySelectorAll('.seg button').forEach((b) => b.classList.toggle('on', b === btn));
+      selectTab(btn.dataset.goto);
+    };
+  });
+
+  function open(id){ document.getElementById(id).classList.add('on'); }
+  function closeAll(){ document.querySelectorAll('.overlay.on').forEach((el) => el.classList.remove('on')); }
+  document.querySelectorAll('[data-open]').forEach((el) => {
+    el.addEventListener('click', (event) => {
+      if (event.target.closest('[data-offer],[data-toast],[data-close]')) return;
+      open(el.dataset.open);
+    });
+  });
+  document.querySelectorAll('[data-close]').forEach((btn) => {
+    btn.onclick = () => {
+      btn.closest('.overlay').classList.remove('on');
+      if (btn.dataset.toast) say(btn.dataset.toast);
+    };
+  });
+  document.querySelectorAll('[data-toast]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      say(btn.dataset.toast);
+    });
+  });
+  document.querySelectorAll('[data-offer]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      btn.textContent = btn.textContent === '我能提供' ? '已标记' : '我能提供';
+      btn.classList.toggle('solid');
+      say(btn.textContent === '已标记' ? '已标记：我能提供' : '已取消标记');
+    });
+  });
+  document.querySelectorAll('.overlay').forEach((ov) => {
+    ov.onclick = (e) => { if (e.target === ov) ov.classList.remove('on'); };
+  });
+  document.querySelectorAll('.egg').forEach((egg) => {
+    egg.onclick = () => egg.classList.toggle('on');
+  });
+  document.querySelectorAll('[data-batch]').forEach((btn) => {
+    btn.onclick = () => say('已导入 5 条想收，已完成跳过 3 颗');
+  });
+
+  // 截图模式：?shot=1&w=375&view=mine|group&detail=mineSheet|groupSheet
+  const params = new URLSearchParams(location.search);
+  if (params.get('shot') === '1') document.body.classList.add('shot');
+  if (params.get('full') === '1') document.body.classList.add('full');
+  const width = Number(params.get('w'));
+  if (width >= 320 && width <= 430) frame.style.width = width + 'px';
+  const view = params.get('view');
+  if (view === 'group') selectTab('group');
+  const detail = params.get('detail');
+  if (detail) open(detail);
+</script>
+</body>
+</html>

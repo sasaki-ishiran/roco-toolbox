@@ -32,7 +32,8 @@
   .map { position:relative; width:100%; aspect-ratio:1/1; border-radius:12px; overflow:hidden; background:#1e293b; touch-action:none; cursor:grab; }
   .map.dragging { cursor:grabbing; }
   .map img { position:absolute; left:0; top:0; pointer-events:none; user-select:none; }
-  .ring { position:absolute; border:1px solid rgba(255,255,255,.38); border-radius:50%; pointer-events:none; }
+  .ring { position:absolute; border:1px solid rgba(255,255,255,.72); border-radius:50%; pointer-events:none; box-shadow:0 0 0 1px rgba(15,23,42,.35); }
+  .ring span { position:absolute; left:50%; top:0; transform:translate(-50%,-100%); background:rgba(15,23,42,.7); color:#fff; font-size:9px; line-height:12px; padding:0 4px; border-radius:3px; white-space:nowrap; }
   .self { position:absolute; transform:translate(-50%,-50%); pointer-events:none; text-align:center; }
   .self i { display:block; width:16px; height:16px; border-radius:50%; background:#0ea5e9; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.4); }
   .self span { font-size:9px; color:#fff; text-shadow:0 1px 3px #000; }
@@ -172,15 +173,15 @@
           </span>
         </div>
         <div class="ov-main">
-          <div class="ov-map"><canvas id="ovmap" width="240" height="240"></canvas><span>≈380m</span></div>
+          <div class="ov-map"><canvas id="ovmap" width="240" height="240"></canvas><span>≈150m</span></div>
           <ul class="ov-list" id="ovlist"></ul>
         </div>
         <div class="ov-foot"><span>场景 10003</span><span>更新 16:38:15</span></div>
       </div>
       <ul class="notes">
+        <li>· 应用内地图默认 150m 视野、只画一个 120m 圈；右上角可缩放，倍率会记住</li>
         <li>· 地图放大到原来的 1.8 倍（240×240）；列表压成两行：名字/等级 + 距离/方向 + 一个牌子</li>
         <li>· 窗口高度按「地图 + 边距」定，下面不再留空白；点「收起」变 280×38 状态条</li>
-        <li>· 状态条上直接能看到「附近 N 只 · 稀有 M」，需要细节再展开</li>
         <li>· 主题、收起状态、位置都会记住；小窗始终置顶</li>
       </ul>
     </div>
@@ -211,7 +212,7 @@ const img = document.getElementById('mapimg');
 let view = { scale:1, tx:0, ty:0 };
 function fit() {
   const rect = mapEl.getBoundingClientRect();
-  const scale = rect.width / (520 / MPP);
+  const scale = rect.width / (300 / MPP);
   const self = project(SELF);
   view = { scale, tx: rect.width/2 - self.px*scale, ty: rect.height/2 - self.py*scale };
   draw();
@@ -224,11 +225,12 @@ function draw() {
   mapEl.querySelectorAll('.pet,.self,.ring').forEach(el=>el.remove());
   const at = (p) => { const q = project(p); return { x: tx+q.px*scale, y: ty+q.py*scale }; };
   const self = at(SELF);
-  [100,300].forEach(m => {
+  [120].forEach(m => {
     const r = (m/MPP)*scale;
     const ring = document.createElement('div');
     ring.className='ring';
     ring.style.cssText = `left:${self.x-r}px;top:${self.y-r}px;width:${r*2}px;height:${r*2}px`;
+    ring.innerHTML = `<span>${m}m</span>`;
     mapEl.append(ring);
   });
   PETS.forEach(p => {
@@ -289,10 +291,11 @@ document.getElementById('theme').addEventListener('click', ()=>{
 const ov = document.getElementById('ovmap'); const ctx = ov.getContext('2d');
 const ovImg = new Image(); ovImg.src='public/maps/10003.webp';
 function drawOverlay(){
-  const VIEW=380, viewPx=VIEW/MPP, scale=ov.width/viewPx, c=project(SELF);
+  const VIEW=300, viewPx=VIEW/MPP, scale=ov.width/viewPx, c=project(SELF);
   ctx.clearRect(0,0,ov.width,ov.height);
   if (ovImg.complete) ctx.drawImage(ovImg, c.px-viewPx/2, c.py-viewPx/2, viewPx, viewPx, 0,0,ov.width,ov.height);
-  ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(ov.width/2,ov.height/2,(100/MPP)*scale,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(ov.width/2,ov.height/2,(120/MPP)*scale,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,.88)'; ctx.lineWidth=1.3; ctx.beginPath(); ctx.arc(ov.width/2,ov.height/2,(120/MPP)*scale,0,Math.PI*2); ctx.stroke();
   PETS.slice(0,6).forEach(p=>{ const q=project(p); const x=(q.px-c.px)*scale+ov.width/2, y=(q.py-c.py)*scale+ov.height/2;
     if (x<-8||y<-8||x>ov.width+8||y>ov.height+8) return;
     ctx.beginPath(); ctx.fillStyle=colorOf(p.kinds); ctx.arc(x,y,p.rare?3.6:2.6,0,Math.PI*2); ctx.fill();
