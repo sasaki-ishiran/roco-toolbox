@@ -8,6 +8,8 @@
  *
  * 已读按**分段 + 版本号**记：以后某段步骤大改，把 `TOUR_VERSION` +1 即可让该段再弹一次。
  */
+import { readShared, syncShared, writeShared } from '../api/sharedPrefs';
+
 /** 旧版（固定 15 步）的已读键，只用于老用户迁移，不再写入 */
 const LEGACY_TOUR_SEEN_KEY = 'roco.tourSeen';
 const TOUR_SEEN_PREFIX = 'roco.tourSeen.';
@@ -220,20 +222,13 @@ export function segmentOfPage(page: TourPage): TourSegment {
 
 function readSeen(segment: TourSegment): string | null {
   if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(TOUR_SEEN_PREFIX + segment);
-  } catch {
-    return null;
-  }
+  // 经共享层读取：测试站与正式站各自一个 origin，切服后不该重弹教程
+  return readShared(TOUR_SEEN_PREFIX + segment);
 }
 
 function writeSeen(segment: TourSegment): void {
   if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(TOUR_SEEN_PREFIX + segment, TOUR_VERSION);
-  } catch {
-    // 隐私模式写不了：这次看过就算了，下次再弹
-  }
+  writeShared(TOUR_SEEN_PREFIX + segment, TOUR_VERSION);
 }
 
 /** 这一段是否还没看过（版本号变了也算没看过）。 */
@@ -245,9 +240,25 @@ export function markSegmentSeen(segment: TourSegment): void {
   writeSeen(segment);
 }
 
+/** 把本环境已有的「已读」同步进壳，切服后不再重弹（首次装新版时调用一次即可）。 */
+export function syncTourSeen(): void {
+  for (const segment of TOUR_SEGMENT_ORDER) syncShared(TOUR_SEEN_PREFIX + segment);
+}
+
 /** 首启主线是否还没走（只有它会在打开应用时自动弹）。 */
 export function startTourPending(): boolean {
   return segmentPending('start');
+}
+
+/**
+ * 测试版不自动弹新手引导（2026-11-09 用户口径）。
+ *
+ * `test.` / `internal.` 子域是给自己验收用的，每个页签都弹一次很打断；
+ * 只关自动弹，顶部「教程」入口保留，仍可手动重播。正式域名与本地开发不受影响。
+ */
+export function tourSuppressed(hostname?: string): boolean {
+  const host = hostname ?? (typeof window === 'undefined' ? '' : window.location.hostname);
+  return host.startsWith('test.') || host.startsWith('internal.');
 }
 
 /** 是否还有任一分段待看（更新弹窗据此让路，避免两层浮层叠加）。 */

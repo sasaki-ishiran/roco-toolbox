@@ -38,6 +38,7 @@ function notify(): void {
 
 export function readToken(): string | null {
   if (typeof window === 'undefined') return null;
+  // 登录态按 origin 各存各的（测试站 / 正式站可以是两个账号），切服不清存储即可保留
   return window.localStorage.getItem(TOKEN_KEY);
 }
 

@@ -1,12 +1,14 @@
 import type { NavigationIntent, ProfileSection } from './navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { appUpdateSnapshot, checkAppUpdate, hasAppUpdateShell, installAppUpdateBridge, seedAppUpdate, subscribeAppUpdate } from '../collector/appUpdate';
 import { AccountPanel } from './AccountPanel';
 import { ImportOutcomeNotice } from './ImportOutcomeNotice';
 import { ImportPanel } from './ImportPanel';
 import { NativeCollectorPanel } from './NativeCollectorPanel';
 import { Button } from './primitives/Button';
 import { SegmentedControl } from './primitives/SegmentedControl';
-import { ServerAddressPanel, serverBridge } from './ServerAddressPanel';
+import { ServerAddressPanel, serverBridge, toggleServer } from './ServerAddressPanel';
+import { serverEnvOf } from './serverEnv';
 import { StateNotice } from './primitives/StateNotice';
 import { setSyncConflict, useSyncFeedback } from './syncNoticeStore';
 import { useSnapshots } from './useSnapshots';
@@ -25,7 +27,7 @@ const SECTIONS = [
   { value: 'sync', label: '私有同步' },
 ];
 
-/** 内测入口：2 秒内连点版本号 5 次 */
+/** 内测入口：2 秒内连点版本号 5 次，在测试站 / 正式站之间互切 */
 const VERSION_TAPS = 5;
 const TAP_WINDOW_MS = 2000;
 
@@ -45,22 +47,62 @@ export function Profile({
   const { conflict: autoConflict } = useSyncFeedback();
   // 入门卡只在「本机还没有任何导入数据」时出现：导入过一次就不再打扰（2026-11-01）
   const { snapshots, loaded } = useSnapshots();
+  // 更新入口（1.3.6）：壳负责检查 / 下载 / 安装，这里只显示状态与触发
+  const update = useSyncExternalStore(subscribeAppUpdate, appUpdateSnapshot);
+  const [updateSupported] = useState(hasAppUpdateShell);
+  useEffect(() => {
+    installAppUpdateBridge();
+    seedAppUpdate();
+  }, []);
   // 「服务器地址」只在内测壳里存在：浏览器没有 RocoServer，连点也不会开
   const [serverPanelOpen, setServerPanelOpen] = useState(false);
+  const [serverSwitching, setServerSwitching] = useState(false);
+  const [serverNotice, setServerNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const versionTaps = useRef<number[]>([]);
 
   const onVersionTap = () => {
-    if (!serverBridge()) return;
+    const bridge = serverBridge();
+    if (!bridge || serverSwitching) return;
     const now = Date.now();
     versionTaps.current = [...versionTaps.current, now].filter((at) => now - at < TAP_WINDOW_MS);
-    if (versionTaps.current.length >= VERSION_TAPS) {
-      versionTaps.current = [];
+    if (versionTaps.current.length < VERSION_TAPS) return;
+    versionTaps.current = [];
+    // 1.3 内测包默认测试站：连点直接在测试站 / 正式站之间互切（成功时壳会清缓存并重载页面）
+    setServerSwitching(true);
+    setServerNotice({ kind: 'ok', text: '正在探活并切换服务器…' });
+    // 桥调用是同步阻塞的（探活最多 5 秒），先让「切换中」画出来再进桥
+    window.setTimeout(() => {
+      const result = toggleServer(bridge);
+      setServerSwitching(false);
+      if (result.ok) {
+        setServerNotice({ kind: 'ok', text: result.message });
+        return;
+      }
+      // 探活失败时壳不会重载：把原因留在页面上，并打开手动面板兜底
+      setServerNotice({ kind: 'error', text: result.message });
       setServerPanelOpen(true);
-    }
+    }, 30);
   };
+
+  const env = serverEnvOf(typeof window === 'undefined' ? '' : window.location.hostname);
+  const envMeta = {
+    test: { label: '内测', cls: 'border-orange-200 bg-orange-50 text-orange-600' },
+    prod: { label: '正式', cls: 'border-slate-200 bg-slate-100 text-slate-500' },
+    custom: { label: '自定义', cls: 'border-sky-200 bg-sky-50 text-sky-600' },
+  }[env];
 
   return (
     <main className="mx-auto max-w-md space-y-3 p-4">
+      {/* 环境角标：按当前域名自动判定（测试站 / 正式站 / 自定义），切服重载后自动变化 */}
+      <div className="flex justify-end" data-testid="env-badge-row">
+        <span
+          data-testid="env-badge"
+          data-env={env}
+          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${envMeta.cls}`}
+        >
+          {envMeta.label}
+        </span>
+      </div>
       <SegmentedControl
         label="我的分区"
         value={section}
@@ -70,6 +112,16 @@ export function Profile({
         }
         optionTestId={(value) => `profile-section-${value}`}
       />
+
+      {serverNotice ? (
+        <p
+          className={`text-xs ${serverNotice.kind === 'ok' ? 'text-emerald-700' : 'text-rose-600'}`}
+          data-testid="server-switch-notice"
+          aria-live="polite"
+        >
+          {serverNotice.text}
+        </p>
+      ) : null}
 
       {returnToGroups ? (
         <Button
@@ -123,6 +175,32 @@ export function Profile({
           <NativeCollectorPanel />
           <ImportPanel />
         </>
+      ) : null}
+
+      {/* 更新入口 A：左「检查更新 / 当前版本」右按钮；有新版变「更新」并显示新版本号 */}
+      {updateSupported ? (
+        <section className="flex items-center justify-between gap-2 rounded-2xl bg-white p-4 shadow-sm" data-testid="app-update-card">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-800">检查更新</p>
+            <p className="text-xs text-slate-500">当前版本 {update.current || '—'}</p>
+            {update.state === 'available' ? (
+              <p className="text-xs text-emerald-700">发现新版本 {update.latest}</p>
+            ) : update.state === 'latest' ? (
+              <p className="text-xs text-slate-400">已是最新版本</p>
+            ) : update.state === 'failed' ? (
+              <p className="text-xs text-rose-600">{update.message ?? '检查失败，请稍后重试'}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => { checkAppUpdate(); }}
+            disabled={update.state === 'checking'}
+            data-testid="app-update-button"
+            className="min-h-[28px] shrink-0 rounded-lg border border-slate-200 px-2 text-xs text-slate-600 disabled:text-slate-300"
+          >
+            {update.state === 'available' ? '更新' : update.state === 'checking' ? '检查中' : '检查'}
+          </button>
+        </section>
       ) : null}
 
       {/* 构建时间（原顶栏版本标记）：排障时确认「拿到的是不是最新一版」 */}

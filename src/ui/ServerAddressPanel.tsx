@@ -3,12 +3,17 @@ import { Button } from './primitives/Button';
 
 /** 壳注入的服务器地址接口（浏览器里不存在，所以整个入口只在内测壳里可见）。 */
 export interface ServerBridge {
-  /** `{ current, defaultUrl }` */
+  /** `{ current, defaultUrl, productionUrl }` */
   read(): string;
   /** 探活通过才保存；返回 `{ ok, message, baseUrl }`，成功后壳会清缓存并重载页面 */
   apply(url: string): string;
   /** 恢复生产地址，不需要探活 */
   reset(): string;
+  /**
+   * 一键互切（1.3.3+ 的壳才有）：自家两个地址直接切，不探活、不等网络。
+   * 老壳没有这个方法，调用方回退到 `apply`。
+   */
+  toggle?(): string;
 }
 
 declare global {
@@ -19,27 +24,42 @@ declare global {
 
 type Notice = { kind: 'ok' | 'error'; text: string };
 
-const DEFAULT_HINT = 'https://roco-toolbox.pages.dev';
+/** 1.3 内测包默认地址：测试站（壳返回缺字段时的兜底）。 */
+const DEFAULT_HINT = 'https://test.roco-toolbox.pages.dev';
+const PRODUCTION_HINT = 'https://roco-toolbox.pages.dev';
 
 export function serverBridge(): ServerBridge | undefined {
   return typeof window === 'undefined' ? undefined : window.RocoServer;
 }
 
-function readInfo(bridge: ServerBridge): { current: string; defaultUrl: string } {
+export interface ServerInfo {
+  current: string;
+  defaultUrl: string;
+  productionUrl: string;
+}
+
+export function readServerInfo(bridge: ServerBridge): ServerInfo {
   try {
-    const parsed = JSON.parse(bridge.read()) as Partial<{ current: string; defaultUrl: string }>;
+    const parsed = JSON.parse(bridge.read()) as Partial<ServerInfo>;
     return {
       current: parsed.current ?? '',
       defaultUrl: parsed.defaultUrl || DEFAULT_HINT,
+      productionUrl: parsed.productionUrl || PRODUCTION_HINT,
     };
   } catch {
-    return { current: '', defaultUrl: DEFAULT_HINT };
+    return { current: '', defaultUrl: DEFAULT_HINT, productionUrl: PRODUCTION_HINT };
   }
 }
 
-function parseResult(raw: string): { ok: boolean; message: string; baseUrl: string } {
+export interface ServerSwitchResult {
+  ok: boolean;
+  message: string;
+  baseUrl: string;
+}
+
+function parseResult(raw: string): ServerSwitchResult {
   try {
-    const parsed = JSON.parse(raw) as Partial<{ ok: boolean; message: string; baseUrl: string }>;
+    const parsed = JSON.parse(raw) as Partial<ServerSwitchResult>;
     return {
       ok: parsed.ok === true,
       message: parsed.message ?? (parsed.ok ? '已切换，正在重新加载。' : '保存失败'),
@@ -51,6 +71,21 @@ function parseResult(raw: string): { ok: boolean; message: string; baseUrl: stri
 }
 
 /**
+ * 连点版本号后的快切：当前在默认站（测试站）就切正式站，否则切回默认站。
+ *
+ * <p>1.3.3 起的壳提供 `toggle()`：自家两个地址直接互切，不探活也不等待网络，
+ * 所以不会再因为探活超时弹出地址输入面板。老壳没有 `toggle()` 时退回 `apply`。</p>
+ */
+export function toggleServer(bridge: ServerBridge): ServerSwitchResult {
+  if (typeof bridge.toggle === 'function') {
+    return parseResult(bridge.toggle());
+  }
+  const info = readServerInfo(bridge);
+  const target = info.current === info.defaultUrl ? info.productionUrl : info.defaultUrl;
+  return parseResult(bridge.apply(target));
+}
+
+/**
  * 服务器地址（2026-11-09）：只有壳里连点版本号 5 次才会出现。
  *
  * <p>保存前壳会真的打一次 `{地址}/api/health`，正文里没有 `ok:true` 就不保存，
@@ -58,8 +93,8 @@ function parseResult(raw: string): { ok: boolean; message: string; baseUrl: stri
  */
 export function ServerAddressPanel({ onClose }: { onClose: () => void }) {
   const bridge = serverBridge();
-  const [info, setInfo] = useState(() =>
-    bridge ? readInfo(bridge) : { current: '', defaultUrl: DEFAULT_HINT },
+  const [info, setInfo] = useState<ServerInfo>(() =>
+    bridge ? readServerInfo(bridge) : { current: '', defaultUrl: DEFAULT_HINT, productionUrl: PRODUCTION_HINT },
   );
   const [value, setValue] = useState(info.current);
   const [busy, setBusy] = useState(false);
@@ -100,7 +135,9 @@ export function ServerAddressPanel({ onClose }: { onClose: () => void }) {
     run(() => bridge.apply(raw));
   };
 
-  const currentKind = info.current === info.defaultUrl ? '生产' : '内测';
+  const currentKind = info.current === info.defaultUrl
+    ? '测试服（默认）'
+    : info.current === info.productionUrl ? '正式服' : '自定义';
 
   return (
     <section
@@ -125,8 +162,15 @@ export function ServerAddressPanel({ onClose }: { onClose: () => void }) {
         <div className="flex gap-2">
           <dt className="shrink-0 text-slate-500">默认：</dt>
           <dd className="break-all text-slate-500">
-            <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">生产</span>
+            <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">测试服</span>
             {info.defaultUrl}
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="shrink-0 text-slate-500">正式：</dt>
+          <dd className="break-all text-slate-500">
+            <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">正式服</span>
+            {info.productionUrl}
           </dd>
         </div>
       </dl>

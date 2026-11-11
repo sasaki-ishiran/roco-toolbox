@@ -12,6 +12,8 @@ import {
   segmentOfPage,
   segmentPending,
   startTourPending,
+  syncTourSeen,
+  tourSuppressed,
   type TourSegment,
   type TourStep,
 } from './ui/tour';
@@ -106,7 +108,7 @@ export default function App() {
   // 更新内容弹窗：启动时算一次「本机没看过的更新」，点「知道了」后记住已读（2026-10-05 起固定做法）
   // 引导与更新弹窗不叠加：还有任一分段待引导时先不讲更新，等下次启动再看（同教程互斥的处理）
   const [changelog, setChangelog] = useState(() =>
-    anyTourPending() ? [] : pendingChangelog(readChangelogSeen()),
+    anyTourPending() && !tourSuppressed() ? [] : pendingChangelog(readChangelogSeen()),
   );
   const closeChangelog = () => {
     if (CHANGELOG[0]) markChangelogSeen(CHANGELOG[0].id);
@@ -120,6 +122,9 @@ export default function App() {
    */
   const [tour, setTour] = useState<TourSegment | null>(() => {
     migrateLegacyTourSeen();
+    // 首次装新版时把本环境已有的教程进度同步进壳，切服后不再重弹
+    syncTourSeen();
+    if (tourSuppressed()) return null;
     return startTourPending() ? 'start' : null;
   });
   const closeTour = () => {
@@ -143,6 +148,7 @@ export default function App() {
     if (tourPageRef.current === page) return;
     tourPageRef.current = page;
     if (tour) return;
+    if (tourSuppressed()) return;
     const segment = segmentOfPage(page);
     if (segmentPending(segment)) setTour(segment);
   }, [navigation.page, tour]);

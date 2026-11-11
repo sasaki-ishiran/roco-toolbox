@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { Profile } from './Profile';
 import { beginImport, resetImportOutcomeForTest, updateImportOutcome } from './importOutcomeStore';
@@ -68,26 +68,71 @@ describe('Profile（我的）', () => {
     expect(onNavigate).toHaveBeenCalledWith({ type: 'open-groups' });
   });
 
-  test('连点版本号 5 次才出现「服务器地址」，浏览器里永远不出现', () => {
-    renderProfile('identity');
-    const version = screen.getByTestId('app-version');
+  test('连点版本号 5 次在测试站 / 正式站之间互切，浏览器里没有反应', () => {
+    vi.useFakeTimers();
+    try {
+      const TEST_URL = 'https://test.roco-toolbox.pages.dev';
+      const PROD_URL = 'https://roco-toolbox.pages.dev';
+      renderProfile('identity');
+      const version = screen.getByTestId('app-version');
 
-    for (let tap = 0; tap < 5; tap += 1) fireEvent.click(version);
-    expect(screen.queryByTestId('server-address-panel')).toBeNull();
+      // 浏览器里没有 RocoServer：连点什么都不该发生
+      for (let tap = 0; tap < 5; tap += 1) fireEvent.click(version);
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      expect(screen.queryByTestId('server-address-panel')).toBeNull();
+      expect(screen.queryByTestId('server-switch-notice')).toBeNull();
 
-    window.RocoServer = {
-      read: () =>
-        JSON.stringify({
-          current: 'https://roco-toolbox.pages.dev',
-          defaultUrl: 'https://roco-toolbox.pages.dev',
+      const apply = vi.fn(() =>
+        JSON.stringify({ ok: true, message: '已切换到正式服，正在重新加载。', baseUrl: PROD_URL }),
+      );
+      window.RocoServer = {
+        read: () => JSON.stringify({ current: TEST_URL, defaultUrl: TEST_URL, productionUrl: PROD_URL }),
+        apply,
+        reset: () => '{}',
+      };
+      for (let tap = 0; tap < 4; tap += 1) fireEvent.click(version);
+      expect(apply).not.toHaveBeenCalled();
+
+      fireEvent.click(version);
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      expect(apply).toHaveBeenCalledTimes(1);
+      expect(apply).toHaveBeenCalledWith(PROD_URL);
+      // 成功时壳会重载页面，不打开手动面板
+      expect(screen.queryByTestId('server-address-panel')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('连点快切失败时打开服务器地址面板并显示原因', () => {
+    vi.useFakeTimers();
+    try {
+      const message = '探活失败：https://roco-toolbox.pages.dev/api/health 超时，地址没有保存。';
+      window.RocoServer = {
+        read: () => JSON.stringify({
+          current: 'https://test.roco-toolbox.pages.dev',
+          defaultUrl: 'https://test.roco-toolbox.pages.dev',
+          productionUrl: 'https://roco-toolbox.pages.dev',
         }),
-      apply: () => '{}',
-      reset: () => '{}',
-    };
-    for (let tap = 0; tap < 4; tap += 1) fireEvent.click(version);
-    expect(screen.queryByTestId('server-address-panel')).toBeNull();
+        apply: () => JSON.stringify({ ok: false, message, baseUrl: '' }),
+        reset: () => '{}',
+      };
+      renderProfile('identity');
+      const version = screen.getByTestId('app-version');
 
-    fireEvent.click(version);
-    expect(screen.getByTestId('server-address-panel')).toBeTruthy();
+      for (let tap = 0; tap < 5; tap += 1) fireEvent.click(version);
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+
+      expect(screen.getByTestId('server-switch-notice')).toHaveTextContent('探活失败');
+      expect(screen.getByTestId('server-address-panel')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
