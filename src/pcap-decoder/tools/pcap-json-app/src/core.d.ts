@@ -121,6 +121,12 @@ export interface LiveDecodeState {
 export function exportLiveDecodeState(): LiveDecodeState | null;
 export function importLiveDecodeState(state: unknown): boolean;
 export function parseSeasonEncounterUnits(payload: Uint8Array): SeasonEncounterRaw[];
+/** 战斗帧 → 奇遇卡：4886 里有单位但不是奇遇形态时清空上一场残留；4890 只合并不清空。 */
+export function applyBattleEncounterFrame(
+  previous: SeasonEncounterRaw | null,
+  opcode: number,
+  payload: Uint8Array,
+): SeasonEncounterRaw | null;
 export function inspectExtractedCapture(extracted: ExtractedCapture): CaptureDiagnostics;
 
 /** 野外实体（330/1043/1044）的协议字段；名称与判定在 src/pcap/wildNearby.ts。 */

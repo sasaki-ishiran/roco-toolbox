@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { decorateWildPet, sortNearby, withDistance, type WildPet } from './wildNearby';
-import { applyWildEntityFrame, parseSceneInfo, parseWildEntities, parseOwnedPetDetails, parseSeasonEncounterUnits, parseUpstreamSelfPosition, removeCapturedWildPets, type WildEntityRaw } from '../pcap-decoder/tools/pcap-json-app/src/core';
+import { applyBattleEncounterFrame, applyWildEntityFrame, parseSceneInfo, parseWildEntities, parseOwnedPetDetails, parseSeasonEncounterUnits, parseUpstreamSelfPosition, removeCapturedWildPets, type SeasonEncounterRaw, type WildEntityRaw } from '../pcap-decoder/tools/pcap-json-app/src/core';
 
 /** 真实野外抓包 capture-1793891528222.pcap 里出现过的实体（脱敏：只保留协议字段）。 */
 const HUSKY: WildEntityRaw = {
@@ -164,6 +164,30 @@ describe('赛季奇遇战（龙棋士）', () => {
 
   test('普通对战（非奇遇形态）不解析', () => {
     expect(parseSeasonEncounterUnits(encounterFrame(4, 3572))).toEqual([]);
+  });
+
+  describe('跨战斗残留（2026-11-11 真机：伊雷龙战斗显示上一场的小翼龙）', () => {
+    const previous: SeasonEncounterRaw = {
+      formId: 1646, guardName: '龙棋士', unitId: 3209, level: 42, natureId: 23,
+      natureConfirmed: true, genderId: 1, height: 64, weight: 26560, bloodId: 24, voiceDb: 68,
+    };
+
+    test('新战斗的 4886 里有单位、但不是奇遇形态 → 清掉上一场的卡', () => {
+      expect(applyBattleEncounterFrame(previous, 4886, encounterFrame(4, 3572))).toBeNull();
+    });
+
+    test('新战斗的 4886 仍是奇遇形态 → 正常替换成这一场的守卫', () => {
+      const next = applyBattleEncounterFrame(previous, 4886, encounterFrame(4));
+      expect(next).toMatchObject({ formId: 1646, unitId: 9006, level: 41 });
+    });
+
+    test('4890 会在一场战斗里重复下发：没有奇遇记录也不能清掉当前卡', () => {
+      expect(applyBattleEncounterFrame(previous, 4890, encounterFrame(4, 3572))).toBe(previous);
+    });
+
+    test('4886 里没有任何宠物记录（心跳/空帧）→ 保持现状', () => {
+      expect(applyBattleEncounterFrame(previous, 4886, new Uint8Array([0x08, 0x01]))).toBe(previous);
+    });
   });
 
   test('秒杀/奖励登场：战斗帧（5107/4890）里与守卫同数据的记录可解析为宠物记录', () => {

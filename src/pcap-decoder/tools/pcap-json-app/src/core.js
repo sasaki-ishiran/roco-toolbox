@@ -1655,8 +1655,11 @@ function applyPlaintextToAccount(event, capture, retainRawProtocol = true) {
     }
     // 赛季奇遇战（4886/4890）：守卫的宠物记录带真实性格，供捕获前展示
     if (opcode === 4886 || opcode === 4890) {
-      const units = parseSeasonEncounterUnits(event.homePayload);
-      if (units.length) capture.seasonEncounter = mergeSeasonEncounterUnit(capture.seasonEncounter, units[units.length - 1]);
+      capture.seasonEncounter = applyBattleEncounterFrame(
+        capture.seasonEncounter,
+        opcode,
+        event.homePayload,
+      );
     }
   }
   capture.hasKey = capture.hasKey || Boolean(event.hasKey);
@@ -2029,6 +2032,21 @@ export function parseSeasonEncounterUnits(payload) {
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * 战斗帧 → 奇遇卡（2026-11-11 真机反馈：伊雷龙战斗中卡片还显示上一场的小翼龙）。
+ *
+ * 4886 是战斗开始时的单位详情帧：里面有单位却没有奇遇形态，说明这一场不是奇遇战
+ * （普通对战 / 未收录形态），必须把上一场的卡清掉，不能继续挂着旧守卫的名字与命中状态。
+ * 4886 空帧（心跳 / 没有宠物记录）保持现状，避免把正在打的这一场误清。
+ * 4890 会在一场战斗里重复下发（玩家出战宠、奖励登场），所以只合并、绝不清空。
+ */
+export function applyBattleEncounterFrame(previous, opcode, payload) {
+  const units = parseSeasonEncounterUnits(payload);
+  if (units.length) return mergeSeasonEncounterUnit(previous, units[units.length - 1]);
+  if (opcode === 4886 && parseOwnedPetDetails(payload).length) return null;
+  return previous;
 }
 
 /**
