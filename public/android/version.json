@@ -1,7 +1,7 @@
 {
-  "versionName": "1.3.8",
-  "versionCode": 30,
+  "versionName": "1.5.1",
+  "versionCode": 35,
   "apkUrl": "https://roco-toolbox-downloads.pages.dev/android/roco-toolbox-latest.apk",
-  "notes": "修复 1.3.7 一打开就闪退（服务器配置在 Activity 上下文就绪前初始化）；修复测试站下本机采集读不到状态（原生桥白名单原来只放行正式站）；补齐 1.3.6 地图改动（视野 240 米、点位 120 米、底图投影按 side_units）。切服与悬浮窗其余改动不变。",
-  "minSupportedVersionCode": 16
+  "notes": "地图人物箭头缩小到 10×12，仍然随朝向旋转；悬浮球图标 0.7；附近列表直接显示分贝、英文冒号；抓到的精灵自动从地图与列表移除；刷新更快（约 0.5~1.5 秒）；保活与战斗场景刷新优化。",
+  "minSupportedVersionCode": 0
 }
