@@ -1,3 +1,5 @@
+import { handleEggMatching, readMigratedDemandFeed } from './eggMatching';
+import { handleEggBotSettings } from './eggBotBridge';
 /**
  * 小组收集二期：统一接口 `/api/collection-groups`。
  *
@@ -125,12 +127,24 @@ export async function handleCollectionGroups(
       return failCode(origin, 404, 'GROUP_NOT_FOUND', '没有这个接口');
     }
 
+    if(rest.length===2&&rest[1]==='egg-matching')return await handleEggMatching(request,env,origin,accountId,groupId);
+    if(rest.length===2&&rest[1]==='egg-bot')return await handleEggBotSettings(request,env,origin,accountId,groupId);
+    if(['demands','plans'].includes(rest[1])&&method!=='GET'){
+      const migrated=await env.DB.prepare('SELECT 1 AS ready FROM egg_matching_groups WHERE group_id=?').bind(groupId).first();
+      if(migrated){
+        const denied=await requireMember(env,origin,accountId,groupId);if(denied)return denied;
+        return failCode(origin,409,'WORKFLOW_UPGRADED','换蛋已升级，请刷新网页后操作');
+      }
+    }
     if (rest.length === 2 && rest[1] === 'version' && method === 'GET') {
       const readLimited = await limited(env, origin, `cg-read:${accountId}`, READ_LIMIT);
       if (readLimited) return readLimited;
       const denied = await requireMember(env, origin, accountId, groupId);
       if (denied) return denied;
-      return okJson(origin, { ...(await readCollectionGroupVersion(env.DB, groupId)) });
+      const versions=await readCollectionGroupVersion(env.DB,groupId);
+      const workflow=await env.DB.prepare('SELECT version FROM egg_matching_groups WHERE group_id=?').bind(groupId).first<{version:number}>();
+      if(workflow)versions.demands='egg:'+workflow.version;
+      return okJson(origin,{...versions});
     }
 
     if (rest.length === 3 && rest[1] === 'resources' && rest[2] === 'me' && method === 'PUT') {
@@ -182,6 +196,7 @@ export async function handleCollectionGroups(
     }
     return failCode(origin, 404, 'GROUP_NOT_FOUND', '没有这个接口');
   } catch (error) {
+    if(error instanceof Error&&/WORKFLOW_UPGRADED/i.test(error.message))return failCode(origin,409,'WORKFLOW_UPGRADED','换蛋已升级，请刷新网页后操作');
     if (error instanceof MotherInputError) {
       return failCode(
         origin,
@@ -508,7 +523,7 @@ async function handleDemandsList(
   const denied = await requireMember(env, origin, accountId, groupId);
   if (denied) return denied;
   // 未完成列表 + 已结单聚合 + 我的最近完成（2026-11-01，不再下发全量历史）
-  const feed = await readDemandFeed(env.DB, groupId, accountId);
+  const feed = await readMigratedDemandFeed(env.DB,groupId,accountId) ?? await readDemandFeed(env.DB, groupId, accountId);
   return okJson(origin, { ...feed });
 }
 

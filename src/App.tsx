@@ -37,6 +37,7 @@ import {
 import { readLastTab, saveLastTab } from './ui/lastTab';
 import { readSwapMainView, saveSwapMainView } from './ui/swapViewStore';
 import { getImportOutcome, useImportOutcome } from './ui/importOutcomeStore';
+import { usePlanBadge } from './ui/plan/usePlanBadge';
 import { useSnapshots } from './ui/useSnapshots';
 import { useDraftLeaveGuard } from './ui/useDraftLeaveGuard';
 import { SnapshotRefreshNotice } from './ui/SnapshotRefreshNotice';
@@ -71,6 +72,7 @@ export default function App() {
   /** 手动刷新按钮的忙碌态（真正刷新会让页面重载，这里只防连点） */
   const [refreshing, setRefreshing] = useState(false);
   const { snapshots, loaded, refreshError, refreshedAt } = useSnapshots();
+  usePlanBadge();
   // 壳（APK）把分享内容注入**当前页面**，而消费分享的监听挂在「导入数据」页里（只挂载当前页）：
   // 应用开着且停在别的页签时，分享会被静默搁置（看起来像「分享过来什么都没发生」）。
   // 所以一收到分享事件就切到导入页；导入完成后**不再自动跳看板**（2026-10-25 用户要求）：

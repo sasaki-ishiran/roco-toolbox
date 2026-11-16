@@ -74,6 +74,30 @@ const MIGRATIONS = [
     file: path.join(root, 'functions/migrations/2026-11-01-collection-demand-green-nest.sql'),
     repeat: 1,
   },
+  {
+    // 收集计划 + 「我能提供」标记（2026-11-08）。建表全部 IF NOT EXISTS，可重复执行；
+    // 与 schema.sql 的 `>>> collection-plans (2026-11-08)` 区块逐列比较。
+    label: 'collection-plans',
+    file: path.join(root, 'functions/migrations/2026-11-08-collection-plans.sql'),
+    start: '-- >>> collection-plans (2026-11-08)',
+    end: '-- <<< collection-plans (2026-11-08)',
+    tables: ['collection_plans', 'plan_offers'],
+  },
+  {
+    // 需求新增「已上窝」时间戳（发布人视角的「待我确认」依据）。
+    // ADD COLUMN 不支持 IF NOT EXISTS，只执行一次；必须排在需求建表迁移之后。
+    label: 'collection-demand-placed-at',
+    file: path.join(root, 'functions/migrations/2026-11-08-collection-demand-placed-at.sql'),
+    repeat: 1,
+  },
+  {
+    label: 'egg-matching',
+    file: path.join(root, 'functions/migrations/2026-11-16-egg-matching.sql'),
+    start: '-- >>> egg-matching (2026-11-16)',
+    end: '-- <<< egg-matching (2026-11-16)',
+    tables: ['egg_matching_groups', 'egg_matching_locks', 'egg_matching_parent_reservations', 'egg_matching_legacy_revisions'],
+  },
+
 ];
 const NEW_TABLES = MIGRATIONS.flatMap((item) => item.tables ?? []);
 
@@ -264,11 +288,50 @@ const count = (sql, ...params) => full.prepare(sql).get(...params).count;
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_accounts'), 3);
 assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_demands'), 2);
 
-// 删普通成员 → 其共享账号与种公摘要级联删除，别的成员不受影响
+// 收集计划：同成员同组同蛋唯一；不同成员 / 不同组可以各有同一颗蛋
+const insertPlan = full.prepare(
+  `INSERT INTO collection_plans
+     (id, group_id, member_account_id, egg_game_id, note, status, version, created_at, updated_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+);
+insertPlan.run('plan-a1', 'g1', 'acc-a', 101, '', 'active', 1, now, now);
+insertPlan.run('plan-b1', 'g1', 'acc-b', 101, '', 'backlog', 0, now, now);
+insertPlan.run('plan-a2', 'g2', 'acc-a', 101, '', 'backlog', 0, now, now);
+assert.throws(
+  () => insertPlan.run('plan-a1-dup', 'g1', 'acc-a', 101, '', 'backlog', 0, now, now),
+  /UNIQUE|constraint/i,
+);
+// 不是组员不能建计划
+assert.throws(
+  () => insertPlan.run('plan-d1', 'g1', 'acc-d', 101, '', 'backlog', 0, now, now),
+  /FOREIGN KEY|constraint/i,
+);
+
+// 「我能提供」：同一位成员对同一条计划只能标记一次
+const insertOffer = full.prepare(
+  `INSERT INTO plan_offers
+     (id, group_id, plan_id, offer_account_id, note, status, created_at, updated_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+);
+insertOffer.run('offer-1', 'g1', 'plan-a1', 'acc-b', '有成品', 'pending', now, now);
+assert.throws(
+  () => insertOffer.run('offer-2', 'g1', 'plan-a1', 'acc-b', '再来一次', 'pending', now, now),
+  /UNIQUE|constraint/i,
+);
+// 不是组员不能标记
+assert.throws(
+  () => insertOffer.run('offer-3', 'g1', 'plan-a1', 'acc-d', '', 'pending', now, now),
+  /FOREIGN KEY|constraint/i,
+);
+assert.equal(count('SELECT COUNT(*) AS count FROM plan_offers'), 1);
+
+// 删普通成员 → 其共享账号、种公摘要、收集计划与「我能提供」标记级联删除，别的成员不受影响
 full.prepare('DELETE FROM mother_group_members WHERE group_id = ? AND account_id = ?').run('g1', 'acc-b');
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_accounts WHERE member_account_id = ?', 'acc-b'), 0);
 assert.equal(count('SELECT COUNT(*) AS count FROM mother_group_accounts WHERE member_account_id = ?', 'acc-a'), 2);
 assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_stud_accounts WHERE member_account_id = ?', 'acc-b'), 0);
+assert.equal(count('SELECT COUNT(*) AS count FROM collection_plans WHERE member_account_id = ?', 'acc-b'), 0);
+assert.equal(count('SELECT COUNT(*) AS count FROM plan_offers'), 0);
 
 // 注销账号 → 自己创建的组、组成员、组内共享账号、组配置、任务 owner 全部处理
 full.prepare('DELETE FROM accounts WHERE id = ?').run('acc-b');
@@ -281,6 +344,8 @@ assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_configs'), 0)
 assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_stud_accounts'), 0);
 assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_tasks'), 0);
 assert.equal(count('SELECT COUNT(*) AS count FROM collection_group_demands'), 0);
+assert.equal(count('SELECT COUNT(*) AS count FROM collection_plans'), 0);
+assert.equal(count('SELECT COUNT(*) AS count FROM plan_offers'), 0);
 
 const fkCheck = full.prepare('PRAGMA foreign_key_check').all();
 assert.deepEqual(fkCheck, [], 'foreign_key_check 应无结果');
@@ -291,4 +356,5 @@ console.log('  - 空库迁移被拒绝（不依赖 SQLite 的外键报错）');
 console.log('  - 同组重复游戏 UID 被拒绝，不同组同 UID 允许');
 console.log('  - 组配置唯一、任务按「修订 + 目标键 + 轮次」唯一');
 console.log('  - 需求按「蛋 + 性格 + 性别 + 体型 + 声音」唯一，同蛋母/公可并存');
-console.log('  - 删成员 / 注销账号的级联行为正确，foreign_key_check 无结果');
+console.log('  - 收集计划按「组 + 成员 + 蛋」唯一，非组员不能建计划 / 标记提供');
+console.log('  - 删成员 / 注销账号的级联行为正确（含计划与提供标记），foreign_key_check 无结果');

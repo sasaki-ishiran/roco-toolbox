@@ -86,8 +86,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByTestId('guide-open'));
     expect(screen.getByTestId('tour-root')).toBeDefined();
-    // 跳过会先给出「教程」入口提示，再点一次才关闭
-    fireEvent.click(screen.getByTestId('tour-skip'));
+    // 分页教程没有首启收尾步，一次跳过即关闭。
     fireEvent.click(screen.getByTestId('tour-skip'));
 
     expect(screen.queryByTestId('tour-root')).toBeNull();

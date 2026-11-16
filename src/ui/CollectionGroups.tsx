@@ -11,7 +11,8 @@ import { useNatureOverrides } from './natureOverrideStore';
 import { CollectionGroupSetup } from './CollectionGroupSetup';
 import { useCollectionGroups } from './useCollectionGroups';
 import { MotherGroupMembers } from './MotherGroupMembers';
-import { MotherGroupResources } from './MotherGroupResources';
+import { GroupPlanHub } from './plan/GroupPlanHub';
+import { EggBotConnection } from './plan/EggBotConnection';
 import { MotherResourceEditor } from './MotherResourceEditor';
 import { useCollectionSummary } from './useCollectionSummary';
 import { useSnapshots } from './useSnapshots';
@@ -286,6 +287,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             </div>
 
             <div className="mt-1 border-t border-slate-100 pt-1">
+              <EggBotConnection groupId={hook.currentGroup.group.id} isOwner={hook.currentGroup.group.ownerAccountId===hook.accountId}/>
               <MotherGroupMembers
                 key={`members:${hook.currentGroup.group.id}:${hook.accountId}`}
                 embedded
@@ -389,7 +391,7 @@ export function CollectionGroups({ onGoAccount, onDraftDirtyChange, focus }: Col
             />
           ) : null}
 
-          <MotherGroupResources
+          <GroupPlanHub
             key={`mother-resources:${hook.currentGroup.group.id}:${hook.accountId}`}
             group={hook.currentGroup}
             viewerAccountId={hook.accountId ?? ''}

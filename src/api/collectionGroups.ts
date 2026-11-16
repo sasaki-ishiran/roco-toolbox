@@ -761,3 +761,29 @@ export async function removeCollectionGroupMember(
 export async function dissolveCollectionGroup(groupId: string, signal?: AbortSignal): Promise<void> {
   await request(`/api/collection-groups/${encodeURIComponent(groupId)}`, jsonInit('DELETE', undefined, signal));
 }
+
+export interface DemandPlacementInput {
+  demanderAccountId: string;
+  eggGameId: number;
+  nature: string;
+  gender: DemandGender;
+  body: DemandBody;
+  voice: DemandVoice;
+  /** 上窝用的游戏账号标识（uid:<gameId>）；只落库，别人的视图不展示。 */
+  accountKey?: string | null;
+}
+
+export async function markCollectionDemandPlaced(
+  groupId: string,
+  input: DemandPlacementInput,
+  signal?: AbortSignal,
+): Promise<CollectionDemand> {
+  const data = asRecord(
+    await request(
+      `/api/collection-groups/${encodeURIComponent(groupId)}/demands/${input.eggGameId}/placement`,
+      jsonInit('POST', input, signal),
+    ),
+    '响应',
+  );
+  return parseDemand(data.demand);
+}

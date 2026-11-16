@@ -21,6 +21,7 @@
  */
 import { handleDeleteAccount, handleLogout, handleMe, handleRecover, handleRegister, handleRotate } from './auth';
 import { handleCollectionGroups } from './collectionGroups';
+import { handleEggBotBridge } from './eggBotBridge';
 import { handleEvent, handleStats } from './events';
 import { handleMotherGroups } from './motherGroups';
 import { handleSyncGet, handleSyncPut } from './sync';
@@ -37,6 +38,7 @@ export async function route(request: Request, env: Env): Promise<Response> {
   const method = request.method.toUpperCase();
 
   if (pathname === '/api/health') return json({ ok: true, at: Date.now() }, 200, origin);
+  if (pathname.startsWith('/api/egg-bot/')) return handleEggBotBridge(request, env);
   if (pathname === '/api/stats' && method === 'GET') return handleStats(request, env);
   if (pathname === '/api/event' && method === 'POST') return handleEvent(request, env, origin);
 

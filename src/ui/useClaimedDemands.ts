@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getCollectionDemands, listCollectionGroups } from '../api/collectionGroups';
+import { listCollectionGroups } from '../api/collectionGroups';
+import { getEggMatching } from '../api/eggMatching';
+import type { EggLine, WorkflowTrade } from '../shared/eggWorkflow';
 import { readAccountId, subscribeSession } from '../api/session';
 import type { CollectionDemand } from '../shared/collectionGroups';
 
@@ -11,6 +13,10 @@ import type { CollectionDemand } from '../shared/collectionGroups';
  */
 export interface ClaimedDemandItem extends CollectionDemand {
   groupName: string;
+  workflowTaskId?:string;
+  workflowVersion?:number;
+  workflowTask?:WorkflowTrade;
+  placementLine?:EggLine;
 }
 
 interface Cache {
@@ -24,6 +30,8 @@ const CACHE_TTL_MS = 60_000;
 
 /** 切页不闪：模块级缓存，回来先用旧内容；60 秒内直接复用，过期再后台刷新。 */
 let cache: Cache | null = null;
+// Invalidate even while the home view is unmounted.
+if(typeof window!=='undefined')window.addEventListener('roco:egg-workflow-changed',()=>{cache=null;});
 
 export interface ClaimedDemandsState {
   accountId: string | null;
@@ -45,6 +53,11 @@ export function useClaimedDemands(): ClaimedDemandsState {
   const requestRef = useRef(0);
   /** 重试 / 手动刷新时绕过缓存有效期。 */
   const forceRef = useRef(false);
+  useEffect(()=>{
+    const changed=()=>{forceRef.current=true;setNonce(value=>value+1);};
+    window.addEventListener('roco:egg-workflow-changed',changed);
+    return()=>window.removeEventListener('roco:egg-workflow-changed',changed);
+  },[]);
 
   useEffect(
     () =>
@@ -87,10 +100,17 @@ export function useClaimedDemands(): ClaimedDemandsState {
         );
         const results = await Promise.allSettled(
           groups.map(async (group) => {
-            const demands = await getCollectionDemands(group.id, controller.signal);
-            return demands
-              .filter((demand) => demand.status === 'claimed' && demand.claimerAccountId === accountId)
-              .map((demand) => ({ ...demand, groupName: group.name }));
+            const data = await getEggMatching(group.id, controller.signal);
+            return data.state.trades
+              .filter(t=>t.status==='accepted'&&t.type==='custom'&&(t.supplierAccountId===accountId&&!!(t.line||t.legacy||!t.returnLine)||t.demanderAccountId===accountId&&!!t.returnLine))
+              .map((t):ClaimedDemandItem=>{
+                const isReturn=t.demanderAccountId===accountId;
+                const egg=isReturn?t.receive!:t.give;
+                return {groupId:group.id,groupName:group.name,demanderAccountId:isReturn?t.supplierAccountId:t.demanderAccountId,
+                  eggGameId:egg.eggGameId,nature:egg.nature,gender:'',body:egg.body==='unknown'?'':egg.body,voice:egg.voice==='unknown'?'':egg.voice,
+                  status:'claimed',claimerAccountId:accountId,version:data.version,createdAt:t.createdAt,updatedAt:t.createdAt,placedAt:(isReturn?t.returnPlaced:t.placed)?t.createdAt:null,
+                  workflowTaskId:t.id,workflowVersion:data.version,workflowTask:t,placementLine:isReturn?t.returnLine:t.line};
+              });
           }),
         );
         if (cancelled || requestRef.current !== requestId) return;

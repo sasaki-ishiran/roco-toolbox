@@ -1,0 +1,33 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { expect, test, vi } from 'vitest';
+import { EggBotConnection } from './EggBotConnection';
+vi.mock('../../api/eggPatrol', () => ({ getEggBotStatus: vi.fn(), createEggBotCode: vi.fn(), disconnectEggBot: vi.fn() }));
+import { getEggBotStatus, createEggBotCode, disconnectEggBot } from '../../api/eggPatrol';
+test('owner generates a real expiring code and member cannot generate one', async () => {
+  vi.mocked(getEggBotStatus).mockResolvedValue({ binding: null, quotaUsed: 12 });
+  vi.mocked(createEggBotCode).mockResolvedValue({ code: 'ABCD-EFGH-JKLM', expiresAt: Date.now()+600000 });
+  const view=render(<EggBotConnection groupId="g" isOwner/>);
+  fireEvent.click(screen.getByRole('button',{name:'机器人接入'}));
+  await screen.findByText('12 / 100');
+  fireEvent.click(screen.getByRole('button',{name:'生成接入码'}));
+  expect(await screen.findByText('rc换蛋接入 ABCD-EFGH-JKLM')).toBeTruthy();
+  view.unmount();render(<EggBotConnection groupId="g" isOwner={false}/>);
+  fireEvent.click(screen.getByRole('button',{name:'机器人接入'}));
+  await screen.findByText('未接入');
+  expect(screen.queryByRole('button',{name:'生成接入码'})).toBeNull();
+});
+test('generation errors stay visible and unlink requires confirmation',async()=>{
+  vi.mocked(getEggBotStatus).mockResolvedValue({binding:{qqGroupId:'123456',updatedAt:1},quotaUsed:0});
+  vi.mocked(disconnectEggBot).mockResolvedValue(undefined);
+  render(<EggBotConnection groupId="g" isOwner/>);
+  fireEvent.click(screen.getByRole('button',{name:'机器人接入'}));await screen.findByText('123456');
+  fireEvent.click(screen.getByRole('button',{name:'断开群关联'}));
+  expect(disconnectEggBot).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'确认断开'}));
+  await waitFor(()=>expect(disconnectEggBot).toHaveBeenCalledWith('g'));
+  expect(await screen.findByText('未接入')).toBeTruthy();
+  vi.mocked(createEggBotCode).mockRejectedValue(new Error('暂不可用'));
+  fireEvent.click(screen.getByRole('button',{name:'生成接入码'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('暂不可用');
+  expect(screen.queryByText(/ABCD/)).toBeNull();
+});

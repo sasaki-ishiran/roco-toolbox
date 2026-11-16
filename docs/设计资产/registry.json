@@ -1,0 +1,1031 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-11-16",
+  "productionBaseline": "release/prod-1.5.0 @ 9fbfec0864225c324673c0c767271fb748d6d4cf",
+  "verification": "本地Git、已审原型及375/390真实HTTP浏览器证据；换蛋已落隔离开发分支但未正式部署。历史正式资产依据各条记录，未实时重验全部线上模块。",
+  "assets": [
+    {
+      "id": "pet-compact",
+      "title": "160px 精灵卡布局",
+      "status": "已采用",
+      "releaseScope": "正式发布有记录",
+      "scope": "家园/需求详情的 PetCompactCard 字号、绝对坐标与160px卡体；作为单卡布局工具参考。",
+      "remaining": "整页布局需接共用外壳；昵称长度补丁另外见长昵称方案。",
+      "files": [
+        {
+          "path": "卡片布局编辑器.html",
+          "sha256": "db9eb4576558dda20f3fb535a8e2c6c71afad750199527c9c7a77332186cf031"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "精灵卡布局与调试流程明确指向该编辑器。"
+        },
+        {
+          "path": "src/ui/PetCompactCard.tsx",
+          "detail": "160×115/120 和 L 坐标；正式线基线包含该实现。"
+        },
+        {
+          "path": "docs/交接-下一会话.md",
+          "detail": "2026-10-29已发布test+正式记录，含部署地址、bundle名与布局核对；最终只显示基础名。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "compact-long-name",
+      "title": "紧凑卡长昵称：方案 A",
+      "status": "已采用",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "仅方案 A：昵称 maxWidth + 省略号，坐标不动。",
+      "remaining": "B缩字号、C移徽标为对照未采用；不要整稿继承。",
+      "files": [
+        {
+          "path": "紧凑卡-长昵称-布局方案.html",
+          "sha256": "48050d9554bbd7dc528874f011dbb40ba77c72ab5133646c7d713c0c0255ebf2"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/code-review/2026-11-01-R2/R2-5.md",
+          "detail": "修复记录9c0aff3：方案A，maxWidth78px，相关测试与375/390截图。"
+        },
+        {
+          "path": "src/ui/PetCompactCard.tsx",
+          "detail": "NAME_MAX_WIDTH和truncate，正式线存在。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "demand-four",
+      "title": "旧需求三页四列：方案 C",
+      "status": "已采用",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "旧我缺的/需求中心/共同寻找的79×104四列卡，方案C；也复用编辑器交互形式。",
+      "remaining": "只约束旧需求三页；不覆盖计划中心两列卡或新换蛋三列需求卡。",
+      "files": [
+        {
+          "path": "需求卡-4列-重排版方案.html",
+          "sha256": "289de6ed1329ddd854c9e57f19c2ecaaf0771eb31f1fac800ffd6c90be8c3995"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "四列79×104及首选编辑器形式；三列仅历史参考。"
+        },
+        {
+          "path": "src/ui/MotherGroupResources.tsx",
+          "detail": "DEMAND_CARD_W=79，DEMAND_CARD_H=104，正式线同样存在。"
+        },
+        {
+          "path": "docs/code-review/2026-11-01-R2/R2-8.md",
+          "detail": "d312443明确记录小组三页改回四列。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "demand-three",
+      "title": "需求卡三列历史落地稿",
+      "status": "已被替代",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "曾采用106×95三列，后被同日四列方案C替代。",
+      "remaining": "尺寸/列数不再现行；编辑器交互能力仍可参考。",
+      "files": [
+        {
+          "path": "需求卡-3列-布局编辑器.html",
+          "sha256": "0b2ae798325947864958b9eb91410ea0f7e7d2346ea9d65c1f92fe22fbf01d5f"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "明确三列只作历史参考。"
+        },
+        {
+          "path": "需求卡-3列-布局编辑器.html",
+          "detail": "文件内记录106×95曾定稿落地。"
+        }
+      ],
+      "supersededBy": [
+        "demand-four"
+      ]
+    },
+    {
+      "id": "demand-early",
+      "title": "需求卡早期79px编辑稿",
+      "status": "已被替代",
+      "releaseScope": "待核实",
+      "scope": "早期单卡编排工具，现行卡体和坐标以四列方案C及实现为准。",
+      "remaining": "缺少该早期稿单独采用记录；不沿用其默认坐标。",
+      "files": [
+        {
+          "path": "需求卡-布局编辑器.html",
+          "sha256": "a5979bafc64a3e182250d78911fdff1dc7c140f0da2378ad5147817ea579293a"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "明确推荐后续四列重排稿。"
+        }
+      ],
+      "supersededBy": [
+        "demand-four"
+      ]
+    },
+    {
+      "id": "group-header",
+      "title": "小组组头：四卡合一",
+      "status": "已采用",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "只采用组头四卡合一、成员与新建加入默认折叠。",
+      "remaining": "稿中个人求蛋、组类型/口径编辑等旧入口已失效，不恢复；计划中心另有开发线方案。",
+      "files": [
+        {
+          "path": "预览-小组页改版.html",
+          "sha256": "66d9515e167286e735d8efc169eb1f0caa13f60bccb895a5835b6f29065296bc"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "小组页顶部2026-10-29口径。"
+        },
+        {
+          "path": "src/ui/CollectionGroups.tsx",
+          "detail": "2026-10-29注释与单张组头实现；正式线保留该结构。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "group-v2-full",
+      "title": "小组 v2 整页历史稿",
+      "status": "已被替代",
+      "releaseScope": "待核实",
+      "scope": "2026-10-26方案有落地记录；顶部四块后来收为一张组头。",
+      "remaining": "旧母本/种公分组、口径编辑及顶部结构不再照搬。",
+      "files": [
+        {
+          "path": ".preview/小组页方案v2-整页.html",
+          "sha256": "5a2edb71e0ea79e500d9a0955cf887378a5b2ec6a935df9b8bf4ed76485e4b20"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/superpowers/plans/2026-10-26-小组页精简与我缺的分级.md",
+          "detail": "明确代码已落地、链接该组HTML；后续组头见2026-10-29规范。"
+        },
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "小组顶部四卡合一。"
+        }
+      ],
+      "supersededBy": [
+        "group-header"
+      ]
+    },
+    {
+      "id": "group-v2-missing",
+      "title": "小组 v2 我缺的分区",
+      "status": "已被替代",
+      "releaseScope": "开发/内测实现",
+      "scope": "历史缺口分区方案有实施记录；现入口以我的收集与全部缺口为准。",
+      "remaining": "开发线计划中心已接管组内入口，旧缺口仍作二级入口保留，正式线未同步计划中心。",
+      "files": [
+        {
+          "path": ".preview/小组页方案v2-我缺的分区.html",
+          "sha256": "146df0f35a11b47bca73557dd1a28069bba779ceb621feec7469dadd46325471"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/superpowers/plans/2026-10-26-小组页精简与我缺的分级.md",
+          "detail": "历史分区实施依据。"
+        },
+        {
+          "path": "docs/收集计划-上正式-评审清单-2026-11-14.md",
+          "detail": "列出我的收集、全部缺口与保留旧三页边界。"
+        }
+      ],
+      "supersededBy": [],
+      "replacedByImplementation": "src/ui/plan/GroupPlanHub.tsx"
+    },
+    {
+      "id": "group-v2-demand",
+      "title": "小组需求中心 v3 历史稿",
+      "status": "已被替代",
+      "releaseScope": "待核实",
+      "scope": "历史需求中心/成员管理方案；现行旧需求三页统一四列卡与详情操作。",
+      "remaining": "不能用该稿恢复旧页头及卡面操作；独立采用范围未全量追溯。",
+      "files": [
+        {
+          "path": ".preview/小组页方案v2-需求中心.html",
+          "sha256": "8cc2dbdd8f234bf29a856eee12f0ff43665800739f1477de34116da737468a5b"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/superpowers/plans/2026-10-26-小组页精简与我缺的分级.md",
+          "detail": "历史HTML对应需求中心和成员管理。"
+        },
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "后续四列卡、操作收进详情及组头规则。"
+        }
+      ],
+      "supersededBy": [],
+      "replacedByImplementation": "src/ui/MotherGroupResources.tsx"
+    },
+    {
+      "id": "group-v2-compare",
+      "title": "小组 v2 结构对照附件",
+      "status": "评审附件",
+      "releaseScope": "不适用",
+      "scope": "改前8块和改后4块的评审对照，不是独立现行页面。",
+      "remaining": "",
+      "files": [
+        {
+          "path": ".preview/小组页方案v2-结构对照.html",
+          "sha256": "f87e87207139bfb677090be768f37170550713f6eec53dac3d2e56c08c172e86"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/superpowers/plans/2026-10-26-小组页精简与我缺的分级.md",
+          "detail": "对照材料与截图说明。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "plan-initial",
+      "title": "收集计划单列卡与二级页初稿",
+      "status": "已被替代",
+      "releaseScope": "开发/内测实现",
+      "scope": "我的收集/组内广场和二级页概念有开发线实现；该稿单列卡已被用户否决，后续两列替代。",
+      "remaining": "只保留历史上下文，不能再把初稿单列卡当现行布局。",
+      "files": [
+        {
+          "path": "收集计划-我的收集与组内广场-原型.html",
+          "sha256": "b41f8a495e579989c280f8fc1ea6172d4aefa7152c9ea7b1a9ad4cad111c45e5"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/收集计划-细化方案-2026-11-08.md",
+          "detail": "第10节明确第7节单列卡被否，改两列。"
+        },
+        {
+          "path": "docs/收集计划-上正式-评审清单-2026-11-14.md",
+          "detail": "计划中心在开发线；正式线没有src/ui/plan。"
+        }
+      ],
+      "supersededBy": [
+        "plan-two"
+      ]
+    },
+    {
+      "id": "plan-two",
+      "title": "收集计划两列 A/B/C 比选",
+      "status": "已被替代",
+      "releaseScope": "开发/内测实现",
+      "scope": "两列卡比选历史；后续进入B编辑稿，现行两页共用PlanCard。",
+      "remaining": "A/B/C并非全部采用；B五步点阵后被卡顶细分段条替代。",
+      "files": [
+        {
+          "path": "收集计划-两列卡方案-原型.html",
+          "sha256": "379600402d19860b0b557456a7cae983d8afd6ecc9658527843fb4c7fda8bb65"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/收集计划-细化方案-2026-11-08.md",
+          "detail": "第10节三案尺寸、原型及卡片被否背景。"
+        },
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "同模块一套两列卡；点阵不进卡面。"
+        }
+      ],
+      "supersededBy": [
+        "plan-b"
+      ]
+    },
+    {
+      "id": "plan-b",
+      "title": "计划卡方案 B 编辑稿（局部采用）",
+      "status": "已采用",
+      "releaseScope": "开发/内测实现",
+      "scope": "两列网格、375卡宽171.5/390卡宽179、间距8；编辑器可继续用于评审。",
+      "remaining": "仅布局基线被采用；卡内点阵、部分坐标已迭代，现行以PlanCard的L与顶部5段细条为准。正式线无计划中心。",
+      "files": [
+        {
+          "path": "收集计划-方案B-卡片布局编辑器.html",
+          "sha256": "73d6a44ad16950d6d9d33002d120852ff3ec0582e25b893b50dd03fa6a86605f"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "同模块一套卡型明确两列和尺寸；不再画五步点阵。"
+        },
+        {
+          "path": "src/ui/plan/PlanCard.tsx",
+          "detail": "顶部注释给出尺寸、奖牌和细条规则，L记录当前坐标。"
+        },
+        {
+          "path": "docs/收集计划-上正式-评审清单-2026-11-14.md",
+          "detail": "计划中心发布范围边界。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "plan-square",
+      "title": "组内广场分区改版（局部采用）",
+      "status": "已采用",
+      "releaseScope": "开发/内测实现",
+      "scope": "采用需要你处理/你能接的/其他人在收等分区语义。",
+      "remaining": "稿内独立卡型/横卡不再指导实现；实际两页共用PlanCard，正式线未实现计划中心。",
+      "files": [
+        {
+          "path": "docs/preview/组内广场-改版-预览.html",
+          "sha256": "0ce5ec65454d81cf63a91e21a008704e5f82824ab764c8756dbaacf936f94798"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "src/ui/plan/GroupSquareView.tsx",
+          "detail": "分区实现及注释：和我的收集共用两列卡。"
+        },
+        {
+          "path": "docs/收集计划-上正式-评审清单-2026-11-14.md",
+          "detail": "广场入口、分区与正式线缺口。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "home-placement",
+      "title": "家园顶部接单上窝历史交互稿",
+      "status": "已被替代",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "接单上窝场景已有实现；当前家园用页内视角与HomeDemandPlacements承载。",
+      "remaining": "旧顶部常驻展开结构不再原样复用；亲本卡后来缩为142px外框两列，避免横向滚动。",
+      "files": [
+        {
+          "path": "家园顶部-接单上窝-交互稿.html",
+          "sha256": "bbd7f3c8428d8480c59189f4f2dc165f84dbead1cb3c3cc6a07f4fcfad276c32"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "src/ui/Home.tsx",
+          "detail": "家园现状/接单上窝视角与内容入口。"
+        },
+        {
+          "path": "src/ui/HomeDemandPlacements.tsx",
+          "detail": "142×107外框、160×120卡体缩放0.885、无滚动。"
+        }
+      ],
+      "supersededBy": [],
+      "replacedByImplementation": "src/ui/HomeDemandPlacements.tsx"
+    },
+    {
+      "id": "mother-detail",
+      "title": "母本详情卡编排稿",
+      "status": "待核实",
+      "releaseScope": "待核实",
+      "scope": "可交互母本详情编排，保留原稿供追溯。",
+      "remaining": "缺少具体布局JSON/确认记录与现行弹层逐项对照；不能因母本详情功能存在就判本稿已采用。",
+      "files": [
+        {
+          "path": "母本详情-布局编辑器.html",
+          "sha256": "a9cd521dc163fe438f4b1b6b9ca973e367f81198d5ebd9fd8b9c6b48336cc5a5"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "现行母本详情规则已列；尚未证明该稿的具体坐标被采用。"
+        },
+        {
+          "path": "母本详情-布局编辑器.html",
+          "detail": "现存编辑稿本体。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "phone-overlay",
+      "title": "手机悬浮窗冻结原型（局部采用）",
+      "status": "已采用",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "单球展开面板、地图与紧凑列表的基线，规格文档明确以该稿实测。正式线模型为268/120/34。",
+      "remaining": "规格和当前工作区已转214/90/28；旧HTML参数不能盖过后续档位二。最大条数和旧说明亦须按当前实现复核。 旧稿球外观、面板跟随/锚点规则也经历变更，不整体继承。",
+      "files": [
+        {
+          "path": "手机悬浮窗原型.html",
+          "sha256": "7e1ce9c1b68fd98726dd5da8c1b88171291dab65102c361558937a1372f23aae"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/手机悬浮窗-面板规格.md",
+          "detail": "开头明确依据该冻结稿；后续2026-11-12参数214/90/28。"
+        },
+        {
+          "path": "android-shell/app/src/main/java/com/localdatatool/toolbox/capture/NearbyOverlayModel.java",
+          "detail": "工作区214/90/28；核对正式线基线则268/120/34，分开记录。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "nearby-panel-early",
+      "title": "附近面板纵向布局早稿",
+      "status": "已被替代",
+      "releaseScope": "待核实",
+      "scope": "268宽、地图168高/列表4行等早期纵向比选。",
+      "remaining": "当前采用地图与列表并排的手机面板，不再以该稿默认尺寸实现。",
+      "files": [
+        {
+          "path": "附近面板-布局预览.html",
+          "sha256": "2810293e9356cd5a02617b36551ab0ea6367a01c57954e875311eff2cfcd617b"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/手机悬浮窗-面板规格.md",
+          "detail": "并排地图+列表及固定可视高度的现行规格。"
+        },
+        {
+          "path": "附近面板-布局预览.html",
+          "detail": "默认地图168、4行的历史稿。"
+        }
+      ],
+      "supersededBy": [
+        "phone-overlay"
+      ]
+    },
+    {
+      "id": "overlay-map",
+      "title": "只缩地图的对比稿",
+      "status": "已被替代",
+      "releaseScope": "仅原型",
+      "scope": "仅缩地图而保持整面板高度的102/90方案，作为历史对照。",
+      "remaining": "后续改为面板与地图一起缩小；原稿156/220高度方案不再指导现行实现。",
+      "files": [
+        {
+          "path": "docs/prototypes/overlay-map-size.html",
+          "sha256": "4f9887109196f01e121f87f1029558f529098ac4900acafa3667da147809935d"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/prototypes/overlay-panel-scale.html",
+          "detail": "后续给整体缩小档位二。"
+        },
+        {
+          "path": "docs/手机悬浮窗-面板规格.md",
+          "detail": "214/90/28的当前规格。"
+        }
+      ],
+      "supersededBy": [
+        "overlay-panel"
+      ]
+    },
+    {
+      "id": "overlay-panel",
+      "title": "悬浮面板整体缩小：档位二",
+      "status": "已采用",
+      "releaseScope": "开发/内测实现",
+      "scope": "仅档位二：214面板、90地图、102卡宽、28行高；与当前工作区及规格一致。",
+      "remaining": "档位一240/102/32及自由滑杆不是全部采用。正式线基线仍268/120/34，不能声称缩小版已正式上线。",
+      "files": [
+        {
+          "path": "docs/prototypes/overlay-panel-scale.html",
+          "sha256": "0b880411d22949c3d9eed7786566911330bab8c57355ddb3baa0869e78686ca6"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/手机悬浮窗-面板规格.md",
+          "detail": "2026-11-12档位二明确参数。"
+        },
+        {
+          "path": "android-shell/app/src/main/java/com/localdatatool/toolbox/capture/NearbyOverlayModel.java",
+          "detail": "PANEL_WIDTH214、MAP_SIZE90、ROW_HEIGHT28。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "nearby-136",
+      "title": "1.3.6 附近改版定稿（局部采用）",
+      "status": "已采用",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "两行列表、卡片底色/百分比展示等历史定稿；现正式线有两行34高度模型。",
+      "remaining": "原稿274宽及球仅图标等不能整套照搬：正式线模型268，后续工作区214；球外框以后续实际实现为准。",
+      "files": [
+        {
+          "path": "预览-1.3.6-附近改版.html",
+          "sha256": "0c6684ac57c1ee0a75fc256915e6587d5c794ab6ff9c45fd1e92bb9b367be35e"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "预览-1.3.6-附近改版.html",
+          "detail": "文件内已定稿清单，仍包含274等历史数值。"
+        },
+        {
+          "path": "android-shell/app/src/main/java/com/localdatatool/toolbox/capture/NearbyOverlayModel.java",
+          "detail": "正式线268/120/34，开发工作区214/90/28；差异明确保留。"
+        },
+        {
+          "path": "src/data/changelog.json",
+          "detail": "悬浮球/面板迭代记录。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "battle-scale",
+      "title": "战斗详情卡放大到13sp/320dp",
+      "status": "已采用",
+      "releaseScope": "开发/内测实现",
+      "scope": "320dp固定宽、13sp标签、两排两端对齐，与当前控制器2026-11-13注释和代码一致。",
+      "remaining": "正式线基线没有CARD_WIDTH_DP和13sp这一版，当前仅记录工作区实现。",
+      "files": [
+        {
+          "path": "docs/prototypes/battle-card-scale.html",
+          "sha256": "d76c97bc5bc828365c0cbe85419b4bef0af424f0978b9d529c45ce9bea4476a0"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "android-shell/app/src/main/java/com/localdatatool/toolbox/capture/BattleOverlayController.java",
+          "detail": "CARD_WIDTH_DP=320；标签setTextSize13；两端对齐注释。"
+        },
+        {
+          "path": "docs/prototypes/battle-card-scale.html",
+          "detail": "对应13sp/320dp布局对照。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "nearby-target",
+      "title": "附近目标精灵筛选：方案 A",
+      "status": "已采用",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "方案A：范围控件第4档目标·N，编辑/清除和按物种筛选。",
+      "remaining": "B独立开关行仅对照，未采用；不把原型所有示例规则当业务依据。",
+      "files": [
+        {
+          "path": "docs/prototypes/nearby-target-species-filter.html",
+          "sha256": "526343523a768017c12d5f6c6f9cb772e74cda3225638383fb12c8c329ee8fe5"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "src/ui/Nearby.tsx",
+          "detail": "target选项、目标编辑和清除；正式线含相同入口。"
+        },
+        {
+          "path": "src/nearby/nearbyTargetStore.ts",
+          "detail": "目标名单与范围过滤实现。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "orb-editor",
+      "title": "悬浮球布局编辑稿",
+      "status": "待核实",
+      "releaseScope": "待核实",
+      "scope": "球/卡/地图位置与缩放实验工具。",
+      "remaining": "尚缺选定布局JSON与明确采用记录；不以悬浮球功能存在推定本稿所有参数采用。",
+      "files": [
+        {
+          "path": "悬浮球-布局编辑器.html",
+          "sha256": "899587e3c66643de8c578a433953debb7e51f078f4034bb04d8c19feae0a4633"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "android-shell/app/src/main/java/com/localdatatool/toolbox/capture/BattleOverlayController.java",
+          "detail": "现行球尺寸、拖动/吸边和面板位置为代码事实，可据此后续核对。"
+        },
+        {
+          "path": "悬浮球-布局编辑器.html",
+          "detail": "现存交互工具，待补用户选定版本。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "orb-frame",
+      "title": "悬浮球外框可调稿",
+      "status": "待核实",
+      "releaseScope": "待核实",
+      "scope": "外框、颜色、间距的可调比选材料。",
+      "remaining": "正式线有透明底和圆角边框，但未找到本稿选定JSON/参数记录，局部外观采用关系待核实。",
+      "files": [
+        {
+          "path": "悬浮球外框-预览.html",
+          "sha256": "96f257c4ca8c3edbeed2a2db9574ed6563fbf07c5166ed3c608ab55be9568d17"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "android-shell/app/src/main/java/com/localdatatool/toolbox/capture/BattleOverlayController.java",
+          "detail": "正式线与工作区外观不同，仅证实球功能存在。"
+        },
+        {
+          "path": "悬浮球外框-预览.html",
+          "detail": "多参数比选，文件名不构成确认记录。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "map-overlay",
+      "title": "地图视图与悬浮小窗早期方案",
+      "status": "待核实",
+      "releaseScope": "待核实",
+      "scope": "地图视图和悬浮小窗的历史方案材料。",
+      "remaining": "地图实现存在，尚缺本稿各视图/悬窗方案具体选择记录；不能把整稿一概标未实现。",
+      "files": [
+        {
+          "path": "地图与悬浮窗-预览.html",
+          "sha256": "f5d917aea8964cc0cf4cfe3bd6d135bec53558253e44afb02f95c38179e562cb"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/code-review/2026-11-08/review-report.md",
+          "detail": "范围记录含该HTML，但不等同采用确认。"
+        },
+        {
+          "path": "docs/手机悬浮窗-面板规格.md",
+          "detail": "手机侧明确选择内嵌网页地图B；其他视图要独立追溯。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "check-update",
+      "title": "我的页检查更新：入口 A",
+      "status": "已采用",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "左侧检查更新/当前版本，右侧检查或更新按钮；保留检查中、最新、失败、新版反馈。",
+      "remaining": "原型其他布局选项未一并采用。",
+      "files": [
+        {
+          "path": "检查更新入口-预览.html",
+          "sha256": "01fd2af881ff74c551a4f98874a2486d3c58ddfffae1732f20845e4f2a2e8235"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "src/ui/Profile.tsx",
+          "detail": "明确注释更新入口A，正式线也含同一实现。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "release-page",
+      "title": "正式版内容汇总页原型",
+      "status": "未实现",
+      "releaseScope": "仅原型",
+      "scope": "本次放量/内测内容等独立汇总页的排版原型。",
+      "remaining": "当前UI未找到该独立页面与导航入口；现有检查更新和Changelog不等于此汇总页。原型版本/commit均假数据，不当发布记录。",
+      "files": [
+        {
+          "path": "docs/prototypes/release-page-prototype.html",
+          "sha256": "96a2676ed1c57af555b90d1d82d47ed7fa38a834d73a18d9b3b583bd64bbc5c1"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/发版与更新规范.md",
+          "detail": "第8节明确正式版内容页待实现、方案待确认，是未实现状态的直接证据。"
+        },
+        {
+          "path": "docs/prototypes/release-page-prototype.html",
+          "detail": "明确原型假数据，仅确认三块顺序与密度。"
+        },
+        {
+          "path": "src/ui/navigation.ts",
+          "detail": "现有路由未含正式版内容页。"
+        },
+        {
+          "path": "src/ui/ChangelogModal.tsx",
+          "detail": "现有更新说明弹层，未实现原型独立汇总页。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "filter-accordion",
+      "title": "筛选器手风琴 v3",
+      "status": "已采用",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "三列维度头部、互斥展开、多选不自动收起、淡色不限与已选数量、清除本组。",
+      "remaining": "具体尺寸以后续控件规范为准，不整稿复制旧间距。",
+      "files": [
+        {
+          "path": "docs/ui-mockup/filter-accordion.html",
+          "sha256": "b97f45e05b123af1af2771bcc9088d8babda595471ccf9c8cb0cf3518ca7b761"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/待确认决策.md",
+          "detail": "2026-10-05四轮追加修订明确落地及原型链接。"
+        },
+        {
+          "path": "src/ui/FilterAccordion.tsx",
+          "detail": "用户拍板注释与同语义实现，正式线包含。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "pet-early",
+      "title": "早期我的精灵卡片稿",
+      "status": "已被替代",
+      "releaseScope": "正式线有实现（未实时核验线上）",
+      "scope": "早期字段组合与标签交互，文件有历史上线说明。",
+      "remaining": "原稿流式标签卡被2026-10-27四列大头像PetCard替代；家园另用160px PetCompactCard，两种卡片场景不能混用。",
+      "files": [
+        {
+          "path": "docs/ui-mockup/pet-card.html",
+          "sha256": "b4f0edaeb9d408e731959558e29ee0608f7ce06645739638e3c58de6f5a66ed0"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/待确认决策.md",
+          "detail": "三.6原型及当期字段迭代记录。"
+        },
+        {
+          "path": "docs/产品交互规范.md",
+          "detail": "后续PetCompactCard绝对坐标与编辑器规范。"
+        },
+        {
+          "path": "src/ui/PetCard.tsx",
+          "detail": "明确注释2026-10-27用户要求重做四列、56px头像与真实奖牌。"
+        }
+      ],
+      "supersededBy": [],
+      "replacedByImplementation": "src/ui/PetCard.tsx"
+    },
+    {
+      "id": "egg-matching",
+      "title": "换蛋撮合：已审共用外壳稿",
+      "status": "已采用",
+      "releaseScope": "开发/内测实现",
+      "scope": "用户已验收：工具箱共用外壳；三列精灵需求卡与四列蛋仓；轻量详情弹窗；多性格为或、共享数量；未接单改撤；现蛋/现孵接单；卡内进度、催进度与300ms且位移>8px排序；仅需求方已收到。2026-11-16最新口径：普通蛋默认可换，异色/特殊蛋禁换置后，不再强制自孵来源。",
+      "remaining": "真实React/API实现位于隔离分支codex/egg-web-20261116，尚未部署。375/390本地真实HTTP流程已验收。旧蛋组需求迁移处理、家园未收蛋/实际亲本/自孵筛选的数据缺口尚待用户决定首版边界；蛋组筛选与QQ提醒/巡查待办。原型里的自孵限制已被最新口径覆盖。",
+      "files": [
+        {
+          "path": "2026-11-15/换蛋撮合原型/editor/index.html",
+          "sha256": "3e0243962e44a96646ea307161e2cc00600eaf172ad8d0dfe8d36bf84e167c00"
+        },
+        {
+          "path": "2026-11-15/换蛋撮合原型/outputs/index.html",
+          "sha256": "3e0243962e44a96646ea307161e2cc00600eaf172ad8d0dfe8d36bf84e167c00"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "2026-11-15/换蛋撮合原型/README.md",
+          "detail": "范围、打开方法与可验证链路。"
+        },
+        {
+          "path": "docs/superpowers/plans/2026-11-16-换蛋撮合共用外壳-执行记录.md",
+          "detail": "用户口径、375/390浏览器验证与不发布边界。"
+        },
+        {
+          "path": "docs/superpowers/plans/2026-11-16-换蛋原型17条批注-执行记录.md",
+          "detail": "用户确认17条批注方案；本轮改动、375/390与真实触摸验证；仅原型。"
+        },
+        {
+          "path": "docs/superpowers/plans/2026-11-16-换蛋真实链路与迁移.md",
+          "detail": "用户确认开发并授权main仅网页；本地验收、真实采集缺口和迁移阻断单独记录，不等同正式已上线。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "egg-matching-old",
+      "title": "换蛋撮合改壳前存档",
+      "status": "已被替代",
+      "releaseScope": "仅原型",
+      "scope": "原版存档，保留批注对应现场。",
+      "remaining": "导航平级混乱、假详情跳页签、两列需求/三列库存等均被共用外壳稿替代；不是功能取消。",
+      "files": [
+        {
+          "path": "2026-11-15/换蛋撮合原型/work/before-shared-shell-20261116-012437/editor-index.html",
+          "sha256": "2e03e916bf8a8e90f6772818f72e93960b74fb3c45cdf0b35f11970746d9e9e1"
+        },
+        {
+          "path": "2026-11-15/换蛋撮合原型/work/before-shared-shell-20261116-012437/outputs-index.html",
+          "sha256": "2e03e916bf8a8e90f6772818f72e93960b74fb3c45cdf0b35f11970746d9e9e1"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/superpowers/plans/2026-11-16-换蛋撮合共用外壳-执行记录.md",
+          "detail": "原版备份位置与本轮覆盖口径。"
+        }
+      ],
+      "supersededBy": [
+        "egg-matching"
+      ]
+    },
+    {
+      "id": "pet-compact-snapshot",
+      "title": "2026-10-29 精灵卡编辑器留档",
+      "status": "评审附件",
+      "releaseScope": "不适用",
+      "scope": "当日精灵卡编辑器快照，保留原文件；现行复用根目录编辑器。",
+      "remaining": "无独立采用结论；具体坐标应查现行根目录稿与PetCompactCard。",
+      "files": [
+        {
+          "path": "截图-2026-10-29/editor.html",
+          "sha256": "adf479d2f21496b7a1880a1a76b6c3ac02dae1193736b0ea05bd3f33ec5e359e"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/交接-下一会话.md",
+          "detail": "2026-10-29已发布test+正式记录，含部署地址、bundle名与布局核对；最终只显示基础名。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "pet-fullname-old",
+      "title": "精灵卡多形态全名预览旧稿",
+      "status": "已被替代",
+      "releaseScope": "仅原型",
+      "scope": "当日预览页曾展示多形态全名与自动缩字。",
+      "remaining": "最终发布改为基础名、不写形态；6字名字另有方案A省略号补丁。全名预览仅供追溯，不恢复旧口径。",
+      "files": [
+        {
+          "path": "截图-2026-10-29/preview.html",
+          "sha256": "9597241a1693e3c7d4c0548fa949d91e8218c27a6aed9112ec1494efb5182679"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/交接-下一会话.md",
+          "detail": "2026-10-29已发布test+正式记录，含部署地址、bundle名与布局核对；最终只显示基础名。"
+        }
+      ],
+      "supersededBy": [
+        "pet-compact"
+      ]
+    },
+    {
+      "id": "egg-matching-before-feedback17",
+      "title": "换蛋撮合共用外壳首稿：17条批注前",
+      "status": "已被替代",
+      "releaseScope": "仅原型",
+      "scope": "保留本轮批注现场和外壳初稿，不删除原件。",
+      "remaining": "需求图标、轻量详情全页化、自孵来源/改撤/卡内任务不足，由当前评审稿替代；不是功能取消。",
+      "files": [
+        {
+          "path": "2026-11-15/换蛋撮合原型/work/before-feedback17-20261116-022117/editor-index.html",
+          "sha256": "2d0741ef756a780274307cb8892c7d5f2646243fcf0f964f50fb1134aa074e5d"
+        },
+        {
+          "path": "2026-11-15/换蛋撮合原型/work/before-feedback17-20261116-022117/outputs-index.html",
+          "sha256": "2d0741ef756a780274307cb8892c7d5f2646243fcf0f964f50fb1134aa074e5d"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/superpowers/plans/2026-11-16-换蛋原型17条批注-执行记录.md",
+          "detail": "本轮修改前备份与替代范围。"
+        }
+      ],
+      "supersededBy": [
+        "egg-matching"
+      ]
+    }
+  ],
+  "attachments": [
+    {
+      "path": ".trae-html-share-packages/docs/preview/组内广场-改版-预览.html.zip",
+      "sha256": "77224e45147d96fa687bee5b330e5f7656a923ea5d8c59959deacc34f2b41240",
+      "relatedTo": "plan-square"
+    },
+    {
+      "path": ".trae-html-share-packages/docs/prototypes/battle-card-scale.html.zip",
+      "sha256": "30145be43677b106df8a40beb9c090e1ff90b6531659d9113bff44fc6812d94b",
+      "relatedTo": "battle-scale"
+    },
+    {
+      "path": ".trae-html-share-packages/docs/prototypes/nearby-target-species-filter.html.zip",
+      "sha256": "fd96ee72e15e7cca5c79e51edd78cb28e8897a5ecc42ef8eae1dc9a89ff3db49",
+      "relatedTo": "nearby-target"
+    },
+    {
+      "path": ".trae-html-share-packages/docs/prototypes/overlay-map-size.html.zip",
+      "sha256": "a34863d90d521756452b596e7e485f3ee2105b961db09e7789aa1282a28f022b",
+      "relatedTo": "overlay-map"
+    },
+    {
+      "path": ".trae-html-share-packages/docs/prototypes/overlay-panel-scale.html.zip",
+      "sha256": "84e27a6b70906539e91ee10516f2958b8fdd875e85d1cbc7347b42b304f19067",
+      "relatedTo": "overlay-panel"
+    },
+    {
+      "path": ".trae-html-share-packages/docs/prototypes/release-page-prototype.html.zip",
+      "sha256": "83563e35ae865106797b7506d13fbc6e9701e63c78d984749a0ef2f65701a0ea",
+      "relatedTo": "release-page"
+    },
+    {
+      "path": ".trae-html-share-packages/地图与悬浮窗-预览.html.zip",
+      "sha256": "832eb91e0dce6a9bcc2d549896bd5d2ffe8d5346bbe9787db8063cd8932b9a55",
+      "relatedTo": "map-overlay"
+    },
+    {
+      "path": ".trae-html-share-packages/悬浮球-布局编辑器.html.zip",
+      "sha256": "148bf35187cdbf56bc152e36d0b9310c3988a432c3f64503160a318d1783a269",
+      "relatedTo": "orb-editor"
+    },
+    {
+      "path": ".trae-html-share-packages/悬浮球外框-预览.html.zip",
+      "sha256": "30508ff3eb945270ab88be4e8dcf18985b048be1faf12c91c290619e221195eb",
+      "relatedTo": "orb-frame"
+    },
+    {
+      "path": ".trae-html-share-packages/手机悬浮窗原型.html.zip",
+      "sha256": "816fff3bf9e5894a5bc33025bfd9fbc482248aaa5ed2d06f435faaa9925d477e",
+      "relatedTo": "phone-overlay"
+    },
+    {
+      "path": ".trae-html-share-packages/收集计划-两列卡方案-原型.html.zip",
+      "sha256": "d2c9decaeed8d2ce2f350c6bc35aaa5774f4a3318de741036cff3a86714cefc6",
+      "relatedTo": "plan-two"
+    },
+    {
+      "path": ".trae-html-share-packages/收集计划-我的收集与组内广场-原型.html.zip",
+      "sha256": "2ad65062ef673936b24806e2b1af0f5a50ba0ae0905dbd342a1a8ebc7211530c",
+      "relatedTo": "plan-initial"
+    },
+    {
+      "path": ".trae-html-share-packages/收集计划-方案B-卡片布局编辑器.html.zip",
+      "sha256": "2b7dc36c18adaa16a773893acfa71b0d6b052b39dc3873738fab84a3ed3dc2ae",
+      "relatedTo": "plan-b"
+    },
+    {
+      "path": ".trae-html-share-packages/检查更新入口-预览.html.zip",
+      "sha256": "dca8931ac282644385b531dcfbb6e73120b8438e3507732ae59a5f3338290091",
+      "relatedTo": "check-update"
+    },
+    {
+      "path": ".trae-html-share-packages/附近面板-布局预览.html.zip",
+      "sha256": "dcf0c8652da08acf1a63bffcec50b355dced899bbec197ab2b490d156edc0400",
+      "relatedTo": "nearby-panel-early"
+    },
+    {
+      "path": ".trae-html-share-packages/预览-1.3.6-附近改版.html.zip",
+      "sha256": "236d8bff0bd8415e874b558acda5b0f3d85c21c8714c32a86ba0fe242f9f6991",
+      "relatedTo": "nearby-136"
+    }
+  ],
+  "exclusions": [
+    {
+      "path": ".trae-html-share-packages/补充数据/母本收集表.html.zip",
+      "sha256": "4c04d5cbb06120a157fe21977b79886bae8c5135da6edf2fac9b73317fb61099",
+      "reason": "个人数据参考的分享包装，不列入UI设计；不解包、不展示数据。"
+    },
+    {
+      "path": "desktop/overlay/index.html",
+      "sha256": "ecf2704460cd07e48b966a45358c43133fcf0123c52d3a029ae84f4eab188b8e",
+      "reason": "桌面悬浮窗运行时入口，不是设计稿。"
+    },
+    {
+      "path": "index.html",
+      "sha256": "2dd0bd96435d53706f76e701ae2f623837b1584a2b32e27f8093232ed9eefc12",
+      "reason": "Vite业务应用入口，不是设计稿。"
+    },
+    {
+      "path": "补充数据/母本收集表.html",
+      "sha256": "51d5a0260b9abbb20b112a540f2586d90f013e6a20e914c3d547fd6f0d6c446c",
+      "reason": "个人数据参考，不是UI设计稿；不改现有忽略与隐私边界。"
+    }
+  ]
+}

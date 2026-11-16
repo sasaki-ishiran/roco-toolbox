@@ -3,6 +3,8 @@ export interface Env {
   DB: D1Database;
   ALLOWED_ORIGINS: string;
   STATS_TOKEN: string;
+  EGG_BOT_BRIDGE_TOKEN?: string;
+  ROCOM_PATROL_API_KEY?: string;
 }
 
 /** 允许跨域的前端来源；预检与实际请求都走这里 */

@@ -357,6 +357,11 @@ export interface CollectionDemand extends DemandCriteria {
   demanderAccountId: string;
   status: CollectionDemandStatus;
   claimerAccountId: string | null;
+  /**
+   * 认领人标记「已上窝」的时间；null / 缺省 = 还没上窝（2026-11-08）。
+   * 发布人据此看到「已上窝 → 待我确认」。
+   */
+  placedAt?: number | null;
   version: number;
   createdAt: number;
   updatedAt: number;

@@ -970,7 +970,7 @@ async function removeMemberCleanup(
         `UPDATE collection_group_demands
             SET status = 'open', claimer_account_id = NULL,
                 updated_at = ?, version = version + 1
-          WHERE group_id = ? AND claimer_account_id = ? AND status = 'claimed'`,
+          WHERE group_id = ? AND claimer_account_id = ? AND status = 'claimed' AND NOT EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=collection_group_demands.group_id)`,
       )
       .bind(now, groupId, accountId),
     // 成员离开改变了组内资源集合：递增 epoch。注意：客户端目前**没有**消费这个字段
@@ -990,11 +990,35 @@ async function removeMemberCleanup(
       db
         .prepare(
           `DELETE FROM collection_group_demands
-            WHERE group_id = ? AND demander_account_id = ? AND status != 'done'`,
+            WHERE group_id = ? AND demander_account_id = ? AND status != 'done' AND NOT EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=collection_group_demands.group_id)`,
         )
         .bind(groupId, accountId),
     );
   }
+  statements.push(
+    db.prepare(`UPDATE egg_matching_groups SET version=version+1,updated_at=?,state_json=json_set(state_json,
+      '$.eggs',json((SELECT json_group_array(json(CASE
+        WHEN json_extract(e.value,'$.status')='reserved' AND EXISTS(
+          SELECT 1 FROM json_each(state_json,'$.trades') t
+          WHERE json_extract(t.value,'$.status')='accepted'
+          AND ? IN(json_extract(t.value,'$.supplierAccountId'),json_extract(t.value,'$.demanderAccountId'))
+          AND ((json_extract(e.value,'$.id')=json_extract(t.value,'$.give.id') AND json_extract(e.value,'$.accountId')=json_extract(t.value,'$.give.accountId'))
+            OR (json_extract(e.value,'$.id')=json_extract(t.value,'$.receive.id') AND json_extract(e.value,'$.accountId')=json_extract(t.value,'$.receive.accountId')))
+        ) THEN json_set(e.value,'$.status','available','$.listed',json('false')) ELSE e.value END))
+        FROM json_each(state_json,'$.eggs') e)),
+      '$.trades',json((SELECT json_group_array(json(CASE WHEN json_extract(t.value,'$.status') IN('proposed','accepted')
+        AND ? IN(json_extract(t.value,'$.supplierAccountId'),json_extract(t.value,'$.demanderAccountId'))
+        THEN json_set(t.value,'$.status','cancelled') ELSE t.value END)) FROM json_each(state_json,'$.trades') t)),
+      '$.demands',json((SELECT json_group_array(json(CASE WHEN json_extract(d.value,'$.demanderAccountId')=? AND json_extract(d.value,'$.status')='open'
+        THEN json_set(d.value,'$.status','withdrawn') ELSE d.value END)) FROM json_each(state_json,'$.demands') d)),
+      '$.lines',json((SELECT json_group_array(json(l.value)) FROM json_each(state_json,'$.lines') l WHERE json_extract(l.value,'$.accountId')<>?))
+    ) WHERE group_id=?`).bind(now,accountId,accountId,accountId,accountId,groupId),
+    db.prepare(`UPDATE egg_matching_groups SET state_json=json_set(state_json,'$.eggs',json((SELECT json_group_array(json(value)) FROM json_each(state_json,'$.eggs') WHERE NOT(json_extract(value,'$.status')='available' AND COALESCE(json_extract(value,'$.missingFromCapture'),0)=1)))) WHERE group_id=?`).bind(groupId),
+    db.prepare(`DELETE FROM egg_matching_locks WHERE group_id=? AND status='reserved'
+      AND trade_id IN(SELECT json_extract(value,'$.id') FROM egg_matching_groups,json_each(state_json,'$.trades') WHERE group_id=? AND json_extract(value,'$.status')='cancelled')`).bind(groupId,groupId),
+    db.prepare(`DELETE FROM egg_matching_parent_reservations WHERE group_id=?
+      AND trade_id IN(SELECT json_extract(value,'$.id') FROM egg_matching_groups,json_each(state_json,'$.trades') WHERE group_id=? AND json_extract(value,'$.status')='cancelled')`).bind(groupId,groupId),
+  );
   const memberIndex = statements.length;
   statements.push(
     db

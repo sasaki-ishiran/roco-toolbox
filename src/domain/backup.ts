@@ -155,6 +155,7 @@ export function parseToolboxBackup(raw: unknown): ToolboxBackup {
           .map((pet) => sanitizePet(pet, account.accountName))
           .filter((pet): pet is OwnedPet => pet !== undefined),
         eggs: Array.isArray(raw.eggs) ? (raw.eggs as AccountSnapshot['eggs']) : [],
+        ...(typeof raw.eggInventoryComplete === 'boolean' ? {eggInventoryComplete:raw.eggInventoryComplete} : {}),
         ...(home ? { home } : {}),
       };
     });

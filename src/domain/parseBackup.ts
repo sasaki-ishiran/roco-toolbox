@@ -24,6 +24,22 @@ export interface BackupEgg {
   petName: string;
   weightGrams: number;
   obtainedAt: string;
+  externalEggId?: string;
+  instanceId?: number;
+  speciesPetId?: number;
+  petConfId?: number;
+  itemConfId?: number;
+  sourceType?: string;
+  isOrdinary?: boolean;
+  isShiny?: boolean;
+  preciousEggType?: number;
+  specialEggConfId?: number;
+  appearanceType?: number;
+  extensionType?: number;
+  nature?: string;
+  voiceDb?: number;
+  heightCm?: number;
+  quantity?: number;
 }
 
 export interface AccountSnapshot {
@@ -39,6 +55,8 @@ export interface AccountSnapshot {
   importedAt: string;
   pets: OwnedPet[];
   eggs: BackupEgg[];
+  /** Missing/partial capture must not remove stock previously seen. */
+  eggInventoryComplete?: boolean;
   /** 家园场景快照（抓包里带出来的住户/小窝/配对/地上的蛋）；没有采集过家园时为空。 */
   home?: HomeSnapshot;
 }
@@ -261,6 +279,22 @@ export function parseBackup(raw: unknown, importedAt: string): AccountSnapshot {
           petName: asString(egg.petName),
           weightGrams: asNumber(egg.weightGrams),
           obtainedAt: asString(egg.obtainedAt),
+          externalEggId: asOptionalString(egg.externalEggId),
+          instanceId: asOptionalNumber(egg.instanceId),
+          speciesPetId: asOptionalNumber(egg.speciesPetId),
+          petConfId: asOptionalNumber(egg.petConfId),
+          itemConfId: asOptionalNumber(egg.itemConfId),
+          sourceType: asOptionalString(egg.sourceType),
+          isOrdinary: typeof egg.isOrdinary === 'boolean' ? egg.isOrdinary : undefined,
+          isShiny: typeof egg.isShiny === 'boolean' ? egg.isShiny : undefined,
+          preciousEggType: asOptionalNumber(egg.preciousEggType),
+          specialEggConfId: asOptionalNumber(egg.specialEggConfId),
+          appearanceType: asOptionalNumber(egg.appearanceType),
+          extensionType: asOptionalNumber(egg.extensionType),
+          nature: asOptionalString(egg.nature),
+          voiceDb: asOptionalNumber(egg.voiceDb),
+          heightCm: asOptionalNumber(egg.heightCm),
+          quantity: asOptionalNumber(egg.quantity),
         }))
     : [];
 
@@ -273,6 +307,12 @@ export function parseBackup(raw: unknown, importedAt: string): AccountSnapshot {
     importedAt,
     pets,
     eggs,
+    ...(typeof eggInventory?.complete === 'boolean' ? { eggInventoryComplete: eggInventory.complete } :
+      eggInventory && typeof eggInventory.countReliable === 'boolean' ? { eggInventoryComplete:
+        eggInventory.countReliable && Number.isSafeInteger(eggInventory.declaredCount) &&
+        eggInventory.declaredCount === eggInventory.receivedCount &&
+        eggInventory.declaredCount === eggs.length &&
+        Number(eggInventory.unrecognizedCount ?? 0) === 0 && Number(eggInventory.skippedCount ?? 0) === 0 } : {}),
     ...(home ? { home } : {}),
   };
 }

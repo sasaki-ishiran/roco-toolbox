@@ -19,10 +19,9 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const ROOT = process.cwd();
-const DIST = join(ROOT, 'dist');
 const PROJECT = 'roco-toolbox';
 
 const args = process.argv.slice(2);
@@ -32,6 +31,7 @@ const value = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
+const DIST = resolve(ROOT, value('--dist') ?? 'dist');
 const branch = value('--branch');
 const dryRun = flag('--dry-run');
 const approveProduction = flag('--approve-production');
@@ -119,6 +119,7 @@ if (branch === 'main') {
 
 console.log('=== 网页发版检查 ===');
 console.log(`目标分支 : ${branch}${dryRun ? '（演练，不部署）' : ''}`);
+console.log(`产物目录 : ${DIST}`);
 console.log(`bundle   : ${bundleRel}`);
 console.log(`SHA-256  : ${hash}`);
 console.log(`大小     : ${bundle.length} 字节`);
@@ -150,7 +151,7 @@ if (dryRun) {
 }
 
 console.log(`\n开始部署到 ${branch} …`);
-execFileSync('npx', ['wrangler', 'pages', 'deploy', 'dist', '--project-name', PROJECT, '--branch', branch, '--commit-dirty=true'], {
+execFileSync('npx', ['wrangler', 'pages', 'deploy', DIST, '--project-name', PROJECT, '--branch', branch, '--commit-dirty=true'], {
   stdio: 'inherit',
   shell: true,
 });

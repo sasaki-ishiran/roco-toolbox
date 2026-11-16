@@ -4,11 +4,15 @@ import type { CollectionDemand, CollectionGroupSummary } from '../shared/collect
 import { getCollectionDemands, listCollectionGroups } from '../api/collectionGroups';
 import { markSynced } from '../api/session';
 import { useClaimedDemands } from './useClaimedDemands';
+import { getEggMatching, type EggMatchingResponse } from '../api/eggMatching';
+import { emptyEggWorkflow } from '../shared/eggWorkflow';
 
 vi.mock('../api/collectionGroups', () => ({
   listCollectionGroups: vi.fn(),
   getCollectionDemands: vi.fn(),
 }));
+vi.mock('../api/eggMatching',()=>({getEggMatching:vi.fn()}));
+const matchingMock=vi.mocked(getEggMatching);
 
 const listMock = vi.mocked(listCollectionGroups);
 const demandMock = vi.mocked(getCollectionDemands);
@@ -38,11 +42,14 @@ const claimed = (over: Partial<CollectionDemand> = {}): CollectionDemand => ({
   updatedAt: 2,
   ...over,
 });
+const workflow=(rows:CollectionDemand[]):EggMatchingResponse=>({version:1,state:{...emptyEggWorkflow(),trades:rows.map((d,i)=>({id:'t'+i,groupId:d.groupId,demandId:'d',supplierAccountId:d.claimerAccountId!,demanderAccountId:d.demanderAccountId,give:{id:'planned'+i,accountId:d.claimerAccountId!,eggGameId:d.eggGameId,nature:d.nature,body:d.body,voice:d.voice,status:'available',confidence:'manual',provenance:'unknown'},receive:null,type:'custom',status:'accepted',placed:false,createdAt:d.createdAt}))}});
 
 beforeEach(() => {
   window.localStorage.clear();
   listMock.mockReset();
   demandMock.mockReset();
+  matchingMock.mockReset();
+  matchingMock.mockResolvedValue({version:0,state:emptyEggWorkflow()});
 });
 
 afterEach(() => {
@@ -51,10 +58,52 @@ afterEach(() => {
 });
 
 describe('useClaimedDemands', () => {
+  test('a committed exchange invalidates home tasks even within the cache lifetime',async()=>{
+    window.localStorage.setItem('roco.accountId','cache-update-user');
+    listMock.mockResolvedValue([group('g1')]);
+    matchingMock.mockResolvedValue(workflow([claimed({claimerAccountId:'cache-update-user'})]));
+    const first=renderHook(()=>useClaimedDemands());
+    await waitFor(()=>expect(first.result.current.items).toHaveLength(1));
+    first.unmount();
+    matchingMock.mockResolvedValue(workflow([]));
+    act(()=>window.dispatchEvent(new Event('roco:egg-workflow-changed')));
+    const second=renderHook(()=>useClaimedDemands());
+    await waitFor(()=>expect(second.result.current.items).toHaveLength(0));
+    expect(listMock).toHaveBeenCalledTimes(2);
+  });
+  test('includes my return production line in home placement with its own attributes',async()=>{
+    window.localStorage.setItem('roco.accountId','return-user');listMock.mockResolvedValue([group('g1')]);
+    const data=workflow([claimed({claimerAccountId:'b',demanderAccountId:'return-user'})]);
+    const trade=data.state.trades[0];
+    trade.returnLine={eggGameId:3436,nature:'保守',body:'小不点',voice:'粗嗓门',gameAccountKey:'uid:9',motherId:'m9',fatherId:'f9'};
+    trade.receive={...trade.give,accountId:'return-user',eggGameId:3436,nature:'保守',body:'小不点',voice:'粗嗓门'};
+    trade.returnPlaced=true;matchingMock.mockResolvedValue(data);
+    const view=renderHook(()=>useClaimedDemands());
+    await waitFor(()=>expect(view.result.current.items).toHaveLength(1));
+    expect(view.result.current.items[0]).toMatchObject({eggGameId:3436,nature:'保守',placedAt:1,placementLine:{motherId:'m9',fatherId:'f9'}});
+  });
+  test('a spot supplier is not assigned a hatch task just because the return side is custom',async()=>{
+    window.localStorage.setItem('roco.accountId','spot-supplier');listMock.mockResolvedValue([group('g1')]);
+    const data=workflow([claimed({claimerAccountId:'spot-supplier',demanderAccountId:'b'})]);
+    data.state.trades[0].returnLine={eggGameId:3436,nature:'保守',body:'',voice:'',gameAccountKey:'uid:9',motherId:'m',fatherId:'f'};
+    matchingMock.mockResolvedValue(data);
+    const view=renderHook(()=>useClaimedDemands());
+    await waitFor(()=>expect(view.result.current.loading).toBe(false));
+    expect(view.result.current.items).toHaveLength(0);
+  });
+  test('reads accepted custom tasks from the new state and never old demand rows',async()=>{
+    window.localStorage.setItem('roco.accountId','new-user');
+    listMock.mockResolvedValue([group('g1')]);
+    matchingMock.mockResolvedValue({version:3,state:{...emptyEggWorkflow(),trades:[{id:'new-task',groupId:'g1',demandId:'d',supplierAccountId:'new-user',demanderAccountId:'a',give:{id:'planned',accountId:'new-user',eggGameId:100,nature:'固执',body:'',voice:'',status:'available',confidence:'manual',provenance:'unknown'},receive:null,type:'custom',status:'accepted',placed:false,createdAt:1}]}});
+    const view=renderHook(()=>useClaimedDemands());
+    await waitFor(()=>expect(view.result.current.items).toHaveLength(1));
+    expect(view.result.current.items[0]).toMatchObject({workflowTaskId:'new-task',workflowVersion:3,gender:''});
+    expect(demandMock).not.toHaveBeenCalled();
+  });
   test('60 秒内的缓存直接复用，反复挂载不重拉；重试会强制刷新', async () => {
     window.localStorage.setItem('roco.accountId', 'a1');
     listMock.mockResolvedValue([group('g1')]);
-    demandMock.mockResolvedValue([claimed({ claimerAccountId: 'a1' })]);
+    matchingMock.mockResolvedValue(workflow([claimed({ claimerAccountId: 'a1' })]));
 
     const first = renderHook(() => useClaimedDemands());
     await waitFor(() => expect(first.result.current.items).toHaveLength(1));
@@ -73,11 +122,11 @@ describe('useClaimedDemands', () => {
   test('换身份后旧请求晚回来也不回写，列表不会串到新身份', async () => {
     window.localStorage.setItem('roco.accountId', 'me');
     listMock.mockResolvedValue([group('g1')]);
-    let releaseOld: (value: CollectionDemand[]) => void = () => {};
-    demandMock.mockImplementationOnce(
-      () => new Promise<CollectionDemand[]>((resolve) => (releaseOld = resolve)),
+    let releaseOld: (value: EggMatchingResponse) => void = () => {};
+    matchingMock.mockImplementationOnce(
+      () => new Promise<EggMatchingResponse>((resolve) => (releaseOld = resolve)),
     );
-    demandMock.mockResolvedValue([]);
+    matchingMock.mockResolvedValue(workflow([]));
 
     const view = renderHook(() => useClaimedDemands());
     await waitFor(() => expect(view.result.current.loading).toBe(true));
@@ -89,7 +138,7 @@ describe('useClaimedDemands', () => {
     await waitFor(() => expect(view.result.current.accountId).toBe('other'));
 
     await act(async () => {
-      releaseOld([claimed()]);
+      releaseOld(workflow([claimed()]));
     });
     expect(view.result.current.items).toEqual([]);
   });
@@ -97,9 +146,9 @@ describe('useClaimedDemands', () => {
   test('一个小组读失败时保留其它组的单，并提示有几个组失败', async () => {
     window.localStorage.setItem('roco.accountId', 'x9');
     listMock.mockResolvedValue([group('g1'), group('g2')]);
-    demandMock.mockImplementation(async (groupId: string) => {
+    matchingMock.mockImplementation(async (groupId: string) => {
       if (groupId === 'g2') throw new Error('组已解散');
-      return [claimed({ claimerAccountId: 'x9' })];
+      return workflow([claimed({ claimerAccountId: 'x9' })]);
     });
 
     const view = renderHook(() => useClaimedDemands());

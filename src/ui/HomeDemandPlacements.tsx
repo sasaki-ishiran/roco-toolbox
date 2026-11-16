@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { markCollectionDemandPlaced } from '../api/collectionGroups';
+import { mutateEggMatching } from '../api/eggMatching';
+import { EggLineSummary } from './plan/EggLineSummary';
+import { MotherGroupsApiError } from '../api/motherGroups';
 import { eggGroupNames, species } from '../data/catalog';
 import { boxLabel } from '../domain/coverageDetail';
 import {
@@ -166,6 +170,7 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
     readPlacementChoices(accountId),
   );
   const [marks, setMarks] = useState<PlacementMarks>(() => readPlacementMarks(accountId));
+  const [placeNotice, setPlaceNotice] = useState('');
   const [openOptions, setOpenOptions] = useState<string[]>([]);
   /** 不挑性格的单按「推荐性格」配对时要认用户的按蛋覆盖（2026-11-03）。 */
   const natureOverrides = useNatureOverrides();
@@ -199,7 +204,7 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
   /** 接单明细：小组页 / 家园共用同一份字段，后面算选蛋偏好和整份方案都以它为准。 */
   const baseDemands = useMemo(
     () =>
-      items.map((item) => ({
+      items.filter(item=>!(item.placementLine??item.workflowTask?.line)).map((item) => ({
         groupId: item.groupId,
         groupName: item.groupName,
         demanderAccountId: item.demanderAccountId,
@@ -255,7 +260,7 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
 
   const demands = useMemo(
     () =>
-      items.map((item) => {
+      items.filter(item=>!(item.placementLine??item.workflowTask?.line)).map((item) => {
         const key = rowKeyOfDemand({ ...item, claimedAt: item.updatedAt });
         return {
           groupId: item.groupId,
@@ -317,10 +322,47 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
     if (accountId) writeCollapsedAccounts(accountId, next);
   };
 
+  /**
+   * 勾「已上窝」：先记本机，同时把状态同步到服务端——
+   * 只有服务端也有 placedAt，发布方才能走到第 4 步「待我确认」。
+   * 旧服务端没有这个接口（404）时退回本机勾选，历史结单 / 归档不受影响。
+   */
   const toggleMark = (placement: DemandPlacement) => {
     if (!accountId) return;
     const rowKey = rowKeyOf(placement);
-    setMarks(togglePlacementMark(accountId, rowKey, !marks[rowKey]));
+    const next = !marks[rowKey];
+    setMarks(togglePlacementMark(accountId, rowKey, next));
+    if (!next) return;
+    const demand = placement.demand;
+    setPlaceNotice('');
+    const workflow=items.find(item=>item.workflowTaskId&&item.groupId===demand.groupId&&item.demanderAccountId===demand.demanderAccountId&&item.eggGameId===demand.eggGameId&&item.createdAt===demand.claimedAt);
+    if(workflow?.workflowTaskId&&workflow.workflowVersion!=null){
+      void mutateEggMatching(workflow.groupId,workflow.workflowVersion,{type:'place',id:workflow.workflowTaskId}).then(()=>reload()).catch((failure:unknown)=>{
+        setMarks(togglePlacementMark(accountId,rowKey,false));
+        setPlaceNotice(failure instanceof Error?failure.message:'上窝同步失败');
+        reload();
+      });
+      return;
+    }
+    void markCollectionDemandPlaced(demand.groupId, {
+      demanderAccountId: demand.demanderAccountId,
+      eggGameId: demand.eggGameId,
+      nature: demand.nature,
+      gender: demand.gender,
+      body: demand.body,
+      voice: demand.voice,
+      accountKey: placement.accountKey ?? null,
+    }).catch((failure: unknown) => {
+      if (failure instanceof MotherGroupsApiError && failure.status === 404) {
+        setPlaceNotice('当前服务端还不支持「已上窝」，已先记在本机');
+        return;
+      }
+      setPlaceNotice(
+        failure instanceof Error && failure.message
+          ? failure.message
+          : '「已上窝」同步失败，请稍后重试',
+      );
+    });
   };
 
   const renderRow = (placement: DemandPlacement) => {
@@ -525,15 +567,19 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
     </div>
   );
 
+  const fixedTasks=items.filter(item=>(item.placementLine??item.workflowTask?.line));
+  const taskAccounts=new Set([...withPlacements.map(a=>a.accountKey),...fixedTasks.map(i=>(i.placementLine??i.workflowTask!.line!).gameAccountKey)]);
+  const taskParents=new Set([...placedRows.flatMap(p=>[p.mother,p.father].map(parent=>JSON.stringify([parent.accountKey,parent.pet.captureId??parent.pet]))),...fixedTasks.flatMap(i=>[(i.placementLine??i.workflowTask!.line!).motherId,(i.placementLine??i.workflowTask!.line!).fatherId].map(id=>JSON.stringify([(i.placementLine??i.workflowTask!.line!).gameAccountKey,id])))]);
+  const totalMarked=markedCount+fixedTasks.filter(i=>i.placedAt!=null).length;
   const summary = !accountId
     ? '登录后显示接的单'
     : loading && items.length === 0
       ? '正在读取接单…'
       : items.length === 0
         ? '暂无接单'
-        : `${withPlacements.length} 个账号 · ${result.placedCount} 单待上窝${
-            markedCount > 0 ? `（已标记 ${markedCount}）` : ''
-          } · ${petCount} 只精灵`;
+        : `${taskAccounts.size} 个账号 · ${result.placedCount+fixedTasks.length} 单待上窝${
+            totalMarked > 0 ? `（已标记 ${totalMarked}）` : ''
+          } · ${fixedTasks.length?taskParents.size:petCount} 只精灵`;
 
   /** 读取失败的统一入口：全部失败与「有一个组失败」都给重试，不再只剩一行黄字。 */
   const renderError = () => (
@@ -572,7 +618,7 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
 
       {!accountId ? (
         <p className={`${HINT} rounded-xl bg-slate-50 p-3`} data-testid="home-demand-signed-out">
-          开启云同步并加入收集小组后，你在需求中心接的单会汇总到这里。
+          开启云同步后查看现孵任务。
         </p>
       ) : loading && items.length === 0 ? (
         <p className={HINT} data-testid="home-demand-loading">
@@ -583,13 +629,19 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
           renderError()
         ) : (
           <p className={`${HINT} rounded-xl bg-slate-50 p-3`} data-testid="home-demand-empty">
-            你还没有接单。去「小组 → 需求中心 → 我能接的」接一单，这里就会出现要上窝的母本和种公。
+            暂无现孵任务。
           </p>
         )
       ) : (
         <>
           {error ? renderError() : null}
-          {withPlacements.length === 0 ? (
+          {placeNotice ? (
+            <p className={`${HINT} rounded-xl bg-amber-50 p-2 text-amber-800`} data-testid="home-demand-place-notice">
+              {placeNotice}
+            </p>
+          ) : null}
+          {fixedTasks.map(item=><article key={item.workflowTaskId} className="space-y-1 rounded-xl border border-slate-200 p-2"><div className="flex items-center justify-between gap-2"><strong className="text-xs">{eggNameOf(item.eggGameId)}</strong><label className="flex min-h-7 items-center gap-1 text-[11px]"><input data-testid="home-demand-placed" type="checkbox" checked={!!item.placedAt} disabled={!!item.placedAt} onChange={()=>{setPlaceNotice('');void mutateEggMatching(item.groupId,item.workflowVersion!,{type:'place',id:item.workflowTaskId}).then(()=>reload()).catch(e=>{setPlaceNotice(e instanceof Error?e.message:'上窝同步失败');reload();});}}/>已上窝</label></div><EggLineSummary line={item.placementLine??item.workflowTask!.line!} snapshots={snapshots}/></article>)}
+          {withPlacements.length === 0 && fixedTasks.length===0 ? (
             <p className={`${HINT} rounded-xl bg-slate-50 p-3`} data-testid="home-demand-nothing-placeable">
               已接的单在本机都排不上配对，原因见下方。
             </p>

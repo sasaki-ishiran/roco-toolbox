@@ -51,6 +51,10 @@ const homeOf = (capturedAt: string): HomeSnapshot => ({
 });
 
 describe('buildBackup / parseToolboxBackup', () => {
+  test('preserves egg snapshot completeness through backup restore', () => {
+    const saved=buildBackup([{...snapshot('甲',0),eggInventoryComplete:true}],{exportedAt:'now',catalogVersion:'s4'});
+    expect(parseToolboxBackup(saved).accounts[0].eggInventoryComplete).toBe(true);
+  });
   test('早期备份缺奖牌时，用体重百分位按 98% / 2% 补回（与抓包导入同口径）', () => {
     const parsed = parseToolboxBackup({
       type: BACKUP_TYPE,

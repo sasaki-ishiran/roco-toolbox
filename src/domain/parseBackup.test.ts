@@ -7,6 +7,28 @@ const fixturePath = resolve(process.cwd(), 'src/domain/__fixtures__/backup-sampl
 const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
 
 describe('parseBackup', () => {
+  test('uses real reliable inventory counters; partial and unknown entries never erase stock', () => {
+    const capture = (extra: Record<string,unknown>) => parseBackup({ meta:{type:'hatch-backup',gameId:1}, collections:{petBackpack:{items:[]},eggInventory:{declaredCount:0,receivedCount:0,decodedCount:0,unrecognizedCount:0,skippedCount:0,countReliable:true,eggs:[],...extra}}},'now');
+    expect(capture({}).eggInventoryComplete).toBe(true);
+    expect(capture({declaredCount:2,receivedCount:1}).eggInventoryComplete).toBe(false);
+    expect(capture({countReliable:false}).eggInventoryComplete).toBe(false);
+    expect(capture({unrecognizedCount:1}).eggInventoryComplete).toBe(false);
+  });
+  test('蛋仓保留实例、物种、来源与不可赠送分类证据，不把缺失属性补成已知', () => {
+    const snapshot = parseBackup({ meta: { type: 'hatch-backup', gameId: 1001 },
+      collections: { petBackpack: { items: [] }, eggInventory: { complete: true, eggs: [{
+        externalEggId: '9007199254740993', instanceId: 88, speciesPetId: 3227, petConfId: 3227001,
+        petName: '菊花梨', weightGrams: 120, obtainedAt: '2026-11-16', sourceType: '交换',
+        isOrdinary: true, isShiny: false, preciousEggType: 0, nature: '固执', voiceDb: 100,
+        specialEggConfId: 0, heightCm: 10, quantity: 1,
+      }, { petName: '特殊蛋', isShiny: true, isOrdinary: false, preciousEggType: 2 }] } } }, 'now');
+    expect(snapshot.eggInventoryComplete).toBe(true);
+    expect(snapshot.eggs[0]).toMatchObject({ externalEggId: '9007199254740993', speciesPetId: 3227,
+      sourceType: '交换', isOrdinary: true, isShiny: false, nature: '固执', voiceDb: 100 });
+    expect(snapshot.eggs[1]).toMatchObject({ isShiny: true, isOrdinary: false, preciousEggType: 2 });
+    expect(snapshot.eggs[1].nature).toBeUndefined();
+    expect(snapshot.eggs[1].externalEggId).toBeUndefined();
+  });
   test('旧采集器 JSON 缺体型奖牌时，用精确成体体重恢复布灵母本；不使用舍入百分位猜判', () => {
     const items = [
       { speciesPetId: 3775, name: '布灵', gender: '母', voiceDb: 100, isShiny: true, medalBody: '', weightGrams: 2862 },

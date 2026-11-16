@@ -5,6 +5,8 @@ import type { AccountSnapshot } from '../domain/parseBackup';
 import type { OwnedPet } from '../domain/types';
 import { demandPickKey } from './demandPickStore';
 import { HomeDemandPlacements } from './HomeDemandPlacements';
+import { mutateEggMatching } from '../api/eggMatching';
+vi.mock('../api/eggMatching',()=>({mutateEggMatching:vi.fn().mockResolvedValue({})}));
 
 const h = vi.hoisted(() => ({
   state: {
@@ -104,6 +106,14 @@ afterEach(() => {
 });
 
 describe('家园 · 接单上窝', () => {
+  test('a migrated workflow task marks placement through its task ID and version',async()=>{
+    h.state.items=[demandItem({workflowTaskId:'task-new',workflowVersion:7,workflowTask:{id:'task-new',line:{gameAccountKey:'uid:1001',motherId:'cap_academy',fatherId:'cap_'+fatherSpecies.gameId+'_公'}}})];
+    renderPanel([pet({gameId:egg.gameId,gender:'母',captureId:'cap_academy'}),pet({gameId:fatherSpecies.gameId,gender:'公'})]);
+    expect(screen.getByTestId('home-demand-summary')).toHaveTextContent('1 个账号 · 1 单待上窝');
+    expect(screen.getByTestId('home-demand-summary')).toHaveTextContent('2 只精灵');
+    fireEvent.click(screen.getByTestId('home-demand-placed'));
+    expect(mutateEggMatching).toHaveBeenCalledWith('g1',7,{type:'place',id:'task-new'});
+  });
   test('摘要显示待上窝单数，单行默认展开', () => {
     h.state.items = [demandItem()];
     renderPanel([
@@ -488,6 +498,6 @@ describe('家园 · 接单上窝', () => {
     h.state.items = [];
     renderPanel([]);
 
-    expect(screen.getByTestId('home-demand-empty')).toHaveTextContent('需求中心');
+    expect(screen.getByTestId('home-demand-empty')).toHaveTextContent('暂无现孵任务');
   });
 });

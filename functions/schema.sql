@@ -181,6 +181,8 @@ CREATE INDEX IF NOT EXISTS idx_collection_group_tasks_owner
 -- 一个性格算一条；空字符串统一表示「不挑 / 不限」，不参与匹配。
 -- 主键含性别 / 体型 / 声音，同蛋同性格的母、公需求可以并存，发布不会覆盖已接单的行。
 -- 增量文件 functions/migrations/2026-10-27-collection-demand-criteria.sql 必须与本区块一致。
+-- placed_at（2026-11-08「已上窝」同步服务端）由
+-- functions/migrations/2026-11-08-collection-demand-placed-at.sql 单独加列。
 CREATE TABLE IF NOT EXISTS collection_group_demands (
   group_id            TEXT NOT NULL,
   demander_account_id TEXT NOT NULL,
@@ -192,6 +194,11 @@ CREATE TABLE IF NOT EXISTS collection_group_demands (
   require_green_nest  INTEGER NOT NULL DEFAULT 0,
   status              TEXT NOT NULL DEFAULT 'open',
   claimer_account_id  TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+  -- 认领人标记「已上窝」的时间；NULL = 还没上窝。发布人据此看到「待我确认」
+  placed_at           INTEGER,
+  -- 上窝用的游戏账号（uid:<gameId>），多账号时便于发布人确认是谁放的；
+  -- 别人的视图只展示昵称，不展示这个标识本身
+  placed_by_account_key TEXT,
   version             INTEGER NOT NULL DEFAULT 0,
   created_at          INTEGER NOT NULL,
   updated_at          INTEGER NOT NULL,
@@ -227,3 +234,324 @@ CREATE INDEX IF NOT EXISTS idx_collection_group_demand_completions_demand
   ON collection_group_demand_completions
     (group_id, demander_account_id, egg_game_id, nature, gender, body, voice);
 -- <<< collection-demand-completions (2026-10-29)
+
+-- >>> collection-plans (2026-11-08)
+-- 收集计划：组内可见、成员级、按蛋（物种 / 进化链）粗粒度。同一位成员在同一个组里
+-- 同一颗蛋只有一条计划，重复导入按 UNIQUE 合并而不是新增。
+--
+-- status：backlog（想收，默认）/ active（进行中）/ done（已完成）。
+--   backlog → active：成员点「开始」，或直接给这条计划发需求（发需求自动进行中）。
+--   active → done：成员手动完成，或该蛋关联的需求「全部结单」自动完成（中途撤回不算）。
+--   删除 = 物理删除，plan_offers 级联清理。
+--
+-- 刻意**不存 demand_id**：需求主键是「发布人 + 蛋 + 性格 + 性别 + 体型 + 声音」，
+-- 且结单时整行搬进归档表，存 id 会悬空。计划与需求的关联统一按「同组成员 + 同蛋」现算。
+--
+-- 增量文件 functions/migrations/2026-11-08-collection-plans.sql 必须与本区块一致
+-- （tools/test/verify-mother-groups-schema.mjs 会逐列比较）。
+CREATE TABLE IF NOT EXISTS collection_plans (
+  id                TEXT PRIMARY KEY,
+  group_id          TEXT NOT NULL,
+  member_account_id TEXT NOT NULL,
+  egg_game_id       INTEGER NOT NULL,
+  note              TEXT NOT NULL DEFAULT '',
+  status            TEXT NOT NULL DEFAULT 'backlog',
+  version           INTEGER NOT NULL DEFAULT 0,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL,
+  UNIQUE (group_id, member_account_id, egg_game_id),
+  FOREIGN KEY (group_id, member_account_id)
+    REFERENCES mother_group_members (group_id, account_id) ON DELETE CASCADE
+);
+-- 组内广场按「组 + 状态」取成员计划；「我的收集」走 (group_id, member_account_id)
+CREATE INDEX IF NOT EXISTS idx_collection_plans_group_status
+  ON collection_plans (group_id, status);
+CREATE INDEX IF NOT EXISTS idx_collection_plans_member
+  ON collection_plans (group_id, member_account_id);
+
+-- 「我能提供」标记：一位成员对一条计划最多一条，可带自由备注。
+-- status 预留给后续的「已提供 / 已谢绝」，一期只有 pending（标记即生效）。
+CREATE TABLE IF NOT EXISTS plan_offers (
+  id               TEXT PRIMARY KEY,
+  group_id         TEXT NOT NULL,
+  plan_id          TEXT NOT NULL REFERENCES collection_plans (id) ON DELETE CASCADE,
+  offer_account_id TEXT NOT NULL,
+  note             TEXT NOT NULL DEFAULT '',
+  status           TEXT NOT NULL DEFAULT 'pending',
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL,
+  UNIQUE (plan_id, offer_account_id),
+  FOREIGN KEY (group_id, offer_account_id)
+    REFERENCES mother_group_members (group_id, account_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_plan_offers_account
+  ON plan_offers (group_id, offer_account_id);
+-- <<< collection-plans (2026-11-08)
+
+-- >>> egg-matching (2026-11-16)
+-- Additive only: legacy demand/history rows are retained as migration evidence.
+CREATE TABLE IF NOT EXISTS egg_matching_groups (
+  group_id TEXT PRIMARY KEY REFERENCES mother_groups(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL DEFAULT 0,
+  state_json TEXT NOT NULL,
+  mutation_id TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS egg_matching_locks (
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  resource_id TEXT NOT NULL,
+  group_id TEXT NOT NULL REFERENCES mother_groups(id) ON DELETE CASCADE,
+  trade_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('reserved', 'transferred')),
+  PRIMARY KEY (account_id, resource_id)
+);
+CREATE INDEX IF NOT EXISTS idx_egg_matching_locks_group ON egg_matching_locks(group_id);
+
+CREATE TABLE IF NOT EXISTS egg_matching_parent_reservations (
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  game_account_key TEXT NOT NULL,
+  mother_id TEXT NOT NULL,
+  father_id TEXT NOT NULL,
+  green_parent_id TEXT,
+  group_id TEXT NOT NULL REFERENCES mother_groups(id) ON DELETE CASCADE,
+  trade_id TEXT NOT NULL,
+  PRIMARY KEY(account_id,game_account_key,mother_id,father_id)
+);
+CREATE INDEX IF NOT EXISTS idx_egg_matching_parents_group ON egg_matching_parent_reservations(group_id);
+CREATE TRIGGER IF NOT EXISTS egg_matching_parent_capacity
+BEFORE INSERT ON egg_matching_parent_reservations
+BEGIN
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM egg_matching_parent_reservations p
+    WHERE p.account_id=NEW.account_id AND p.game_account_key=NEW.game_account_key AND (
+      (NEW.green_parent_id IS NOT NULL AND p.green_parent_id IS NOT NULL AND NEW.green_parent_id<>p.green_parent_id)
+      OR ((NEW.mother_id IN(p.mother_id,p.father_id) OR NEW.father_id IN(p.mother_id,p.father_id)) AND (
+        (NEW.green_parent_id IS NULL)<>(p.green_parent_id IS NULL)
+        OR (NEW.green_parent_id IS NOT NULL AND (
+          (NEW.mother_id IN(p.mother_id,p.father_id) AND NEW.mother_id<>NEW.green_parent_id)
+          OR (NEW.father_id IN(p.mother_id,p.father_id) AND NEW.father_id<>NEW.green_parent_id)
+        ))
+      ))
+    )
+  ) THEN RAISE(ABORT,'parent academy constraint') END;
+  SELECT CASE WHEN (
+    SELECT COUNT(*) FROM egg_matching_parent_reservations p
+    WHERE p.account_id=NEW.account_id AND p.game_account_key=NEW.game_account_key
+      AND NEW.mother_id IN(p.mother_id,p.father_id)
+  )>=2 OR (
+    SELECT COUNT(*) FROM egg_matching_parent_reservations p
+    WHERE p.account_id=NEW.account_id AND p.game_account_key=NEW.game_account_key
+      AND NEW.father_id IN(p.mother_id,p.father_id)
+  )>=2 THEN RAISE(ABORT,'parent capacity constraint') END;
+  SELECT CASE WHEN (
+    SELECT COUNT(*) FROM (
+      SELECT mother_id FROM egg_matching_parent_reservations WHERE account_id=NEW.account_id AND game_account_key=NEW.game_account_key
+      UNION SELECT father_id FROM egg_matching_parent_reservations WHERE account_id=NEW.account_id AND game_account_key=NEW.game_account_key
+      UNION SELECT NEW.mother_id UNION SELECT NEW.father_id
+    )
+  )>11 THEN RAISE(ABORT,'parent nest capacity constraint') END;
+END;
+
+-- Monotonic legacy revision closes the read/initialize race. New groups are fenced
+-- at statement execution, including requests that passed the old HTTP gate earlier.
+CREATE TABLE IF NOT EXISTS egg_matching_legacy_revisions (
+  group_id TEXT PRIMARY KEY REFERENCES mother_groups(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL DEFAULT 0
+);
+CREATE TRIGGER IF NOT EXISTS egg_fence_collection_group_demands_insert
+BEFORE INSERT ON collection_group_demands
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=NEW.group_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_collection_group_demands_insert
+AFTER INSERT ON collection_group_demands
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT NEW.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_collection_group_demands_update
+BEFORE UPDATE ON collection_group_demands
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=NEW.group_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_collection_group_demands_update
+AFTER UPDATE ON collection_group_demands
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT NEW.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_collection_group_demands_delete
+BEFORE DELETE ON collection_group_demands
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=OLD.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=OLD.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=OLD.group_id AND account_id=OLD.demander_account_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_collection_group_demands_delete
+AFTER DELETE ON collection_group_demands
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT OLD.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=OLD.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_collection_group_demand_completions_insert
+BEFORE INSERT ON collection_group_demand_completions
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=NEW.group_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_collection_group_demand_completions_insert
+AFTER INSERT ON collection_group_demand_completions
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT NEW.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_collection_group_demand_completions_update
+BEFORE UPDATE ON collection_group_demand_completions
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=NEW.group_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_collection_group_demand_completions_update
+AFTER UPDATE ON collection_group_demand_completions
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT NEW.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_collection_group_demand_completions_delete
+BEFORE DELETE ON collection_group_demand_completions
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=OLD.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=OLD.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=OLD.group_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_collection_group_demand_completions_delete
+AFTER DELETE ON collection_group_demand_completions
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT OLD.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=OLD.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_collection_plans_insert
+BEFORE INSERT ON collection_plans
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=NEW.group_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_collection_plans_insert
+AFTER INSERT ON collection_plans
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT NEW.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_collection_plans_update
+BEFORE UPDATE ON collection_plans
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=NEW.group_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_collection_plans_update
+AFTER UPDATE ON collection_plans
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT NEW.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_collection_plans_delete
+BEFORE DELETE ON collection_plans
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=OLD.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=OLD.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=OLD.group_id AND account_id=OLD.member_account_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_collection_plans_delete
+AFTER DELETE ON collection_plans
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT OLD.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=OLD.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_plan_offers_insert
+BEFORE INSERT ON plan_offers
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=NEW.group_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_plan_offers_insert
+AFTER INSERT ON plan_offers
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT NEW.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_plan_offers_update
+BEFORE UPDATE ON plan_offers
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=NEW.group_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_plan_offers_update
+AFTER UPDATE ON plan_offers
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT NEW.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=NEW.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+CREATE TRIGGER IF NOT EXISTS egg_fence_plan_offers_delete
+BEFORE DELETE ON plan_offers
+WHEN EXISTS(SELECT 1 FROM egg_matching_groups WHERE group_id=OLD.group_id)
+AND EXISTS(SELECT 1 FROM mother_groups WHERE id=OLD.group_id)
+AND EXISTS(SELECT 1 FROM mother_group_members WHERE group_id=OLD.group_id AND account_id=OLD.offer_account_id)
+AND EXISTS(SELECT 1 FROM collection_plans WHERE id=OLD.plan_id)
+BEGIN SELECT RAISE(ABORT,'WORKFLOW_UPGRADED'); END;
+CREATE TRIGGER IF NOT EXISTS egg_revision_plan_offers_delete
+AFTER DELETE ON plan_offers
+BEGIN
+  INSERT INTO egg_matching_legacy_revisions(group_id,revision)
+    SELECT OLD.group_id,1 WHERE EXISTS(SELECT 1 FROM mother_groups WHERE id=OLD.group_id)
+    ON CONFLICT(group_id) DO UPDATE SET revision=revision+1;
+END;
+-- <<< egg-matching (2026-11-16)
+
+-- Additive patrol state; historical exchange and legacy records are untouched.
+CREATE TABLE IF NOT EXISTS egg_bot_codes (
+  group_id TEXT PRIMARY KEY REFERENCES mother_groups(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL, consumed_at INTEGER,
+  owner_account_id TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS egg_bot_bindings (
+  group_id TEXT PRIMARY KEY REFERENCES mother_groups(id) ON DELETE CASCADE,
+  qq_group_id TEXT NOT NULL, bot_id TEXT NOT NULL, binding_version TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS egg_patrol_cache (
+  uid TEXT PRIMARY KEY, next_at INTEGER NOT NULL DEFAULT 0, success_at INTEGER,
+  lease_token TEXT NOT NULL DEFAULT '', lease_until INTEGER NOT NULL DEFAULT 0,
+  scene_json TEXT, task_keys_json TEXT NOT NULL DEFAULT '[]',
+  pending_task_id TEXT, status TEXT NOT NULL DEFAULT 'pending'
+);
+CREATE TABLE IF NOT EXISTS egg_patrol_quota (
+  day TEXT PRIMARY KEY, used INTEGER NOT NULL DEFAULT 0 CHECK(used>=0 AND used<=100)
+);
+CREATE TABLE IF NOT EXISTS egg_patrol_observations (
+  uid TEXT NOT NULL, actor_id TEXT NOT NULL, task_key TEXT NOT NULL,
+  group_id TEXT NOT NULL REFERENCES mother_groups(id) ON DELETE CASCADE,
+  trade_id TEXT NOT NULL, side TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('produced','ambiguous')),
+  observed_at INTEGER NOT NULL, PRIMARY KEY(uid,actor_id,task_key)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS egg_patrol_one_egg ON egg_patrol_observations(uid,actor_id) WHERE status='produced';
+CREATE TABLE IF NOT EXISTS egg_patrol_notifications (
+  id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES mother_groups(id) ON DELETE CASCADE,
+  binding_version TEXT NOT NULL, trade_id TEXT NOT NULL, side TEXT NOT NULL,
+  uid TEXT NOT NULL, actor_id TEXT NOT NULL, payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+  next_at INTEGER NOT NULL, lease_token TEXT NOT NULL DEFAULT '', lease_until INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL, sent_at INTEGER, error_code TEXT,
+  UNIQUE(group_id,trade_id,side,uid,actor_id)
+);
+CREATE INDEX IF NOT EXISTS egg_patrol_notification_due ON egg_patrol_notifications(status,next_at,lease_until);
