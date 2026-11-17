@@ -1,7 +1,7 @@
 {
   "name": "roco-toolbox",
   "private": true,
-  "version": "1.3.2",
+  "version": "1.5.6",
   "license": "GPL-3.0-only",
   "type": "module",
   "main": "desktop/main.cjs",
@@ -27,7 +27,7 @@
   },
   "build": {
     "appId": "com.localdatatool.toolbox",
-    "productName": "洛克工具箱",
+    "productName": "小布助手",
     "directories": {
       "output": "release",
       "buildResources": "desktop/build"
@@ -35,6 +35,7 @@
     "files": [
       "desktop/main.cjs",
       "desktop/preload.cjs",
+      "desktop/userdata.cjs",
       "desktop/capture/**/*",
       "desktop/overlay/**/*",
       "desktop/app-dist/**/*",
@@ -68,11 +69,11 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "洛克工具箱",
-      "artifactName": "洛克工具箱-Setup-${version}.${ext}"
+      "shortcutName": "小布助手",
+      "artifactName": "小布助手-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "洛克工具箱-${version}-便携版.${ext}"
+      "artifactName": "小布助手-${version}-便携版.${ext}"
     }
   },
   "dependencies": {

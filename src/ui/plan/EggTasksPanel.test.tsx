@@ -114,3 +114,13 @@ test('a placed custom task shows the placement step while waiting for actual egg
  expect(screen.getByRole('list',{name:'换蛋进度'}).querySelector('[aria-current=step]')?.textContent).toBe('已上窝');
  expect(screen.getByRole('button',{name:'分配现蛋'})).toBeTruthy();
 });
+
+test('demander sees who is blocking instead of a dead-looking 已收到 button',()=>{
+ const give={id:'planned',accountId:'b',eggGameId:3227,nature:'固执',body:'' as const,voice:'' as const,provenance:'unknown' as const,confidence:'manual' as const,status:'available' as const};
+ const line={eggGameId:3227,nature:'固执',body:'' as const,voice:'' as const,gameAccountKey:'uid:1',motherId:'m',fatherId:'f'};
+ const trade:WorkflowTrade={id:'t',groupId:'g',demandId:'d',supplierAccountId:'b',demanderAccountId:'a',give,receive:null,line,type:'custom',status:'accepted',placed:true,createdAt:1};
+ render(<EggTasksPanel state={{...emptyEggWorkflow(),trades:[trade]}} me="a" members={[]} species={[]} busy={false} mutate={vi.fn()}/>);
+ expect(screen.getByText('待分配现蛋')).toBeTruthy();
+ expect(screen.getByText('等待对方分配现蛋')).toBeTruthy();
+ expect(screen.queryByRole('button',{name:'已收到'})).toBeNull();
+});

@@ -46,8 +46,8 @@ describe('Profile（我的）', () => {
 
   test('身份与同步分区的标题与说明写清主语', () => {
     const { rerender } = renderProfile('identity');
-    expect(screen.getByTestId('profile-identity-intro')).toHaveTextContent('工具箱身份');
-    expect(screen.getByTestId('account-panel')).toHaveTextContent('工具箱身份');
+    expect(screen.getByTestId('profile-identity-intro')).toHaveTextContent('我的身份');
+    expect(screen.getByTestId('account-panel')).toHaveTextContent('我的身份');
 
     rerender(
       <Profile section="sync" returnToGroups onNavigate={vi.fn()} />,

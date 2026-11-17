@@ -254,7 +254,7 @@ export function AccountPanel({
     >
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-700">
-          {section === 'identity' ? '工具箱身份' : section === 'sync' ? '私有同步' : '云同步（跨设备）'}
+          {section === 'identity' ? '我的身份' : section === 'sync' ? '私有同步' : '云同步（跨设备）'}
         </h2>
         {/* 文案避开「N 个账号」的写法：导入面板那行用的是那个格式，别让 e2e 的选择器撞车。
             账号数直接读内存快照，避免异步算大小导致切页时文字先闪一下。 */}
@@ -329,7 +329,7 @@ export function AccountPanel({
         </div>
       ) : section === 'sync' ? (
         <p className="mt-2 text-xs text-slate-500" data-testid="account-sync-needs-identity">
-          还没有工具箱身份。先到「工具箱身份」开启云同步或输入恢复码。
+          还没有我的身份。先到「我的身份」开启云同步或输入恢复码。
         </p>
       ) : (
         <div className="mt-2 space-y-2">

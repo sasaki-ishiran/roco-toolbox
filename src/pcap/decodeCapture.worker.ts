@@ -12,7 +12,7 @@ self.onmessage = async (event: MessageEvent<{ id?: number; bytes?: Uint8Array; u
     if (event.data.url) {
       if (!isCollectorCaptureUrl(event.data.url)) throw new Error('无效的本机采集授权链接');
       const response = await fetch(event.data.url, { cache: 'no-store', credentials: 'omit' });
-      if (!response.ok) throw new Error('无法读取本机原包，请返回工具箱重新导入');
+      if (!response.ok) throw new Error('无法读取本机原包，请返回小布助手重新导入');
       const length = Number(response.headers.get('Content-Length'));
       if (length > MAX_CAPTURE_BYTES) throw new Error('抓包超过 128MiB，请缩短采集时长后重新采集');
       bytes = new Uint8Array(await response.arrayBuffer());

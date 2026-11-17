@@ -82,7 +82,7 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
     {
       id: 'start-collect',
       title: '点「开始采集」',
-      body: '在安卓工具箱里点「开始采集」，按提示同意 VPN 授权，再打开游戏依次看一遍精灵仓库、背包和蛋仓。进度走满会自动停止、保存并导入；采集成功后会自动继续。',
+      body: '在安卓版小布助手里点「开始采集」，按提示同意 VPN 授权，再打开游戏依次看一遍精灵仓库、背包与蛋仓。进度走满会自动停止、保存并导入；采集成功后会自动继续。',
       profileSection: 'data',
       anchor: 'collector-start',
       waitForImport: true,

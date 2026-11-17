@@ -42,11 +42,11 @@ public final class CaptureVpnService extends VpnService {
         if (!START.equals(intent.getAction()) || running || network != null) return START_NOT_STICKY;
         if (Build.VERSION.SDK_INT < 26 || !"starting".equals(STATE.phase)) { stopSelf(); return START_NOT_STICKY; }
         try {
-            Notification notice = notification("仅采集洛克王国游戏流量，点击返回工具箱");
+            Notification notice = notification("仅采集洛克王国游戏流量，点击返回小布助手");
             if (Build.VERSION.SDK_INT >= 34) startForeground(NOTICE, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
             else startForeground(NOTICE, notice);
             getPackageManager().getApplicationInfo(GAME_PACKAGE, 0);
-            Builder builder = new Builder().setSession("洛克工具箱 · 本机采集").setMtu(1500)
+            Builder builder = new Builder().setSession("小布助手 · 本机采集").setMtu(1500)
                 .addAddress("10.215.173.2", 32).addAddress("fd66:646b::2", 128)
                 .addRoute("0.0.0.0", 0).addRoute("::", 0)
                 .addAllowedApplication(GAME_PACKAGE).setBlocking(false);
@@ -131,7 +131,7 @@ public final class CaptureVpnService extends VpnService {
                     notified = now;
                     String text = STATE.packets == 0 ? "等待游戏连接，请重新登录洛克王国"
                         : "已接收 " + STATE.packets + " 包 · " + String.format(Locale.ROOT, "%.2f MiB", STATE.bytes / 1048576.0)
-                            + "，返回工具箱查看数据进度";
+                            + "，返回小布助手查看数据进度";
                     getSystemService(NotificationManager.class).notify(NOTICE, notification(text));
                 }
             }
@@ -162,7 +162,7 @@ public final class CaptureVpnService extends VpnService {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, CaptureVpnService.class).setAction(STOP), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_capture)
-            .setContentTitle("洛克工具箱 · 本机采集").setContentText(message).setOngoing(true)
+            .setContentTitle("小布助手 · 本机采集").setContentText(message).setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(open).addAction(0, "停止并保存", stop).build();
     }

@@ -81,7 +81,7 @@ public final class CaptureController {
         }
     }
     public String startCapture(String mode) {
-        if (!trusted) return "请在工具箱内使用采集";
+        if (!trusted) return "请在小布助手内使用采集";
         if (Build.VERSION.SDK_INT < 26) return "内置采集需要 Android 8 或以上，仍可手动导入文件";
         if (!CaptureVpnService.STATE.begin(mode)) return "采集正在进行或保存中";
         activity.runOnUiThread(() -> {
@@ -127,7 +127,7 @@ public final class CaptureController {
         permissionPending = false; askVpn(); return true;
     }
     public String stopCapture() {
-        if (!trusted) return "请在工具箱内停止采集";
+        if (!trusted) return "请在小布助手内停止采集";
         activity.runOnUiThread(() -> {
             if (!trusted) return;
             if (permissionPending) { awaitingLaunch = false; CaptureVpnService.STATE.update("idle", "已取消启动采集"); return; }
@@ -136,7 +136,7 @@ public final class CaptureController {
         return "";
     }
     public String openGame() {
-        if (!trusted) return "请在工具箱内打开游戏";
+        if (!trusted) return "请在小布助手内打开游戏";
         activity.runOnUiThread(() -> {
             if (!trusted) return;
             try {
@@ -161,7 +161,7 @@ public final class CaptureController {
         }
     }
     private File requireFile(String id, boolean importable) throws IOException {
-        if (!trusted) throw new IOException("请在工具箱内使用采集文件");
+        if (!trusted) throw new IOException("请在小布助手内使用采集文件");
         if (CaptureVpnService.STATE.busy()) throw new IOException("请先停止采集并等待保存完成");
         CaptureFiles files = CaptureVpnService.files(activity);
         File file = files.require(id);
@@ -185,7 +185,7 @@ public final class CaptureController {
      * 与采集前台通知分开，避免被正在进行的采集通知覆盖。
      */
     public String notifyRareAlert(String title, String body) {
-        if (!trusted) return "请在工具箱内使用提醒";
+        if (!trusted) return "请在小布助手内使用提醒";
         try {
             String safeTitle = title == null ? "" : title.trim();
             String safeBody = body == null ? "" : body.trim();
@@ -223,7 +223,7 @@ public final class CaptureController {
         }
     }
     public String inspectCapture() throws Exception {
-        if (!trusted) throw new IOException("请在工具箱内查看采集进度");
+        if (!trusted) throw new IOException("请在小布助手内查看采集进度");
         CaptureState state = CaptureVpnService.STATE;
         synchronized (state) {
             if (!"capturing".equals(state.phase) || state.savedBytes <= 24 || state.fileId.isEmpty()) return "";

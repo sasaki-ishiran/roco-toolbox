@@ -11,7 +11,7 @@ async function waitForController(page: Page) {
   });
 }
 
-test('manifest 声明了分享目标（采集器「分享」→「洛克工具箱」的前提）', async ({ page }) => {
+test('manifest 声明了分享目标（采集器「分享」→「小布助手」的前提）', async ({ page }) => {
   await page.goto('/');
 
   const href = await page.getAttribute('link[rel="manifest"]', 'href');

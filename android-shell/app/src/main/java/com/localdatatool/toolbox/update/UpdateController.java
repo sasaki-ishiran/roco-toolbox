@@ -290,7 +290,7 @@ public final class UpdateController {
                 toast("没有可用的剪贴板");
                 return;
             }
-            clipboard.setPrimaryClip(ClipData.newPlainText("洛克工具箱下载链接", url));
+            clipboard.setPrimaryClip(ClipData.newPlainText("小布助手下载链接", url));
             toast("下载链接已复制");
         } catch (Exception error) {
             toast("复制失败：" + describe(error));
@@ -365,7 +365,7 @@ public final class UpdateController {
     private void showInstallPermission() {
         new AlertDialog.Builder(activity)
             .setTitle("需要允许安装未知应用")
-            .setMessage("系统要求先允许「洛克工具箱」安装应用，才能继续安装更新。")
+            .setMessage("系统要求先允许「小布助手」安装应用，才能继续安装更新。")
             .setPositiveButton("去设置", (dialog, which) -> openInstallSettings())
             .setNegativeButton("取消", (dialog, which) ->
                 toast("没有允许安装，更新包已下载好，之后可以再试。"))
@@ -380,7 +380,7 @@ public final class UpdateController {
             activity.startActivity(intent);
         } catch (Exception error) {
             settingsOpened = false;
-            dialog("打不开系统设置", "请到系统设置里允许「洛克工具箱」安装未知应用后重试。");
+            dialog("打不开系统设置", "请到系统设置里允许「小布助手」安装未知应用后重试。");
         }
     }
 

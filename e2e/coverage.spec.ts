@@ -85,7 +85,7 @@ test('覆盖度页：蛋组行按状态色档从差到好排（未收集多的�
   await page.getByTestId('coverage-group-toggle').first().click();
   await expect(page.getByTestId('coverage-nature-cell')).toHaveCount(3);
   await page.getByRole('button', { name: '看板', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '洛克工具箱' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '小布助手' })).toBeVisible();
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
   await expect(page.getByTestId('coverage-nature-cell')).toHaveCount(3);

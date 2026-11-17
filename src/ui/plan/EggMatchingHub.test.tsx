@@ -26,6 +26,21 @@ test('uses approved hub levels and species names, with stock and tasks as utilit
   expect(screen.getAllByRole('img',{name:'大块头'}).length).toBeGreaterThan(1);
 });
 
+test('a home scene alone syncs its eggs with homeComplete',async()=>{
+  mutate.mockClear();mutate.mockResolvedValue(undefined);
+  const home={schemaVersion:1 as const,gameId:'1001',capturedAt:'2026-11-17T23:00:00+08:00',
+    residents:[{instanceId:'11',baseId:'b',confId:10009,furnitureGuid:'nest1',actorId:'a1',name:'菊花梨',gender:'母' as const}],
+    nests:[{furnitureGuid:'nest1',configId:1,nestType:'ordinary' as const,nestName:'普通小窝',residentIds:[]}],
+    layEggCouples:[],sceneEggs:[{actorId:'e1',furnitureGuid:'nest1'}],couplesStale:false,snapshotKind:'full' as const};
+  const snapshots=[{accountName:'甲',gameId:1001,exportedAt:'2026-11-17T14:00:00Z',importedAt:'2026-11-17T14:00:01Z',pets:[],eggs:[],eggInventoryComplete:true,home}];
+  render(<EggMatchingHub {...props} snapshots={snapshots}/>);
+  await waitFor(()=>expect(mutate).toHaveBeenCalledTimes(1));
+  const action=mutate.mock.calls[0][0];
+  expect(action).toMatchObject({type:'stock-sync',complete:true,homeComplete:true});
+  expect(action.eggs).toHaveLength(1);
+  expect(action.eggs[0]).toMatchObject({location:'home',eggGameId:3011,lastConfirmedAt:Date.parse('2026-11-17T23:00:00+08:00')});
+});
+
 test('a failed capture sync is attempted once until the user retries',async()=>{
   mutate.mockClear();mutate.mockRejectedValue(new Error('网络失败'));
   const snapshots=[{accountName:'甲',gameId:1001,exportedAt:'2026-11-16T00:00:00Z',importedAt:'2026-11-16T00:00:01Z',pets:[],eggs:[],eggInventoryComplete:true}];

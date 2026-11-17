@@ -286,11 +286,11 @@ describe('家园页', () => {
     expect(screen.getByTestId('home-pair-diagram')).toHaveTextContent('公本未知');
   });
 
-  test('浏览器里「刷新家园」不可用，并说明只在安卓工具箱内可刷', () => {
+  test('浏览器里「刷新家园」不可用，并说明只在安卓版小布助手内可刷', () => {
     h.snapshots = [snapshotWithHome()];
     render(<HomeLand />);
 
-    expect(screen.getByTestId('home-refresh-hint')).toHaveTextContent('只在安卓工具箱安装包内可用');
+    expect(screen.getByTestId('home-refresh-hint')).toHaveTextContent('只在安卓版小布助手安装包内可用');
     expect(screen.getByTestId('home-refresh-start')).toBeDisabled();
   });
 

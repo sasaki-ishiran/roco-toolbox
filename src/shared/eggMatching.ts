@@ -18,6 +18,30 @@ export interface EggDemand {
   greenNest?: boolean;
 }
 
+/** 家园蛋从采集快照里能读到的父母；背包蛋没有这一段。 */
+export interface EggParentInfo {
+  id: string;
+  gameId: number;
+  name: string;
+  nature: string;
+  body: string;
+  voice: string;
+  /** 所在小窝名（绿窝 / 普通小窝）。 */
+  nestName?: string;
+  /** 学院小窝那只：性格 100% 遗传。 */
+  academy?: boolean;
+}
+
+export interface EggParentsInfo {
+  mother?: EggParentInfo;
+  /** 学院 1:2 时可能有多个父本候选。 */
+  fathers?: EggParentInfo[];
+  /** 游戏是否确认亲子关系；本地采集只能给「当前配对候选」。 */
+  confirmed?: boolean;
+  /** 采集期间有精灵进出，配对可能已过期。 */
+  stale?: boolean;
+}
+
 export interface EggRecord {
   /** Stable captured instance ID, scoped by accountId; never name + weight. */
   id: string;
@@ -31,6 +55,14 @@ export interface EggRecord {
   /** Ordinary is the default under the user's 2026-11-16 circulation policy. */
   kind?: 'ordinary' | 'shiny' | 'special';
   status: 'available' | 'reserved' | 'transferred';
+  /** 蛋所在位置；旧记录没有 = 背包。 */
+  location?: 'bag' | 'home';
+  /** 最近一次在采集快照里看到它的时间（ms）。 */
+  lastConfirmedAt?: number;
+  /** 标注来源：system = 采集快照自动标注；manual = 用户手动标注。 */
+  labelSource?: 'system' | 'manual' | 'unknown';
+  /** 家园蛋的实际（当前候选）父母。 */
+  parents?: EggParentsInfo;
 }
 
 export interface EggTrade {

@@ -116,7 +116,7 @@ function HomeRefreshBar({ refresh }: { refresh: HomeRefreshController }) {
           <p className="mt-0.5 text-[11px] text-slate-500" data-testid="home-refresh-hint">
             {available
               ? '点开始后进游戏打开一次家园即可；只更新家园，宠物和蛋不动。'
-              : '当前环境没有本机采集（只在安卓工具箱安装包内可用）。'}
+              : '当前环境没有本机采集（只在安卓版小布助手安装包内可用）。'}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">

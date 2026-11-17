@@ -49,10 +49,10 @@ import com.localdatatool.toolbox.capture.BattleOverlayController;
 import com.localdatatool.toolbox.update.UpdateController;
 
 /**
- * 「洛克工具箱」的原生壳。只做三件事：
+ * 「小布助手」的原生壳。只做三件事：
  *
  * 1. 用 WebView 打开线上网页 —— 所以以后改网页只要重新部署，不需要重装这个 APK；
- * 2. 注册成系统分享目标，让采集器的「分享」面板里出现「洛克工具箱」；
+ * 2. 注册成系统分享目标，让采集器的「分享」面板里出现「小布助手」；
  *    微信 / QQ 的「用其他应用打开」是 VIEW 意图（文件挂在 intent.data 上），也一并接住；
  * 3. 把分享进来的内容交给网页：JSON 直接把文本塞进去；抓包（PCAP）是二进制，
  *    走拦截请求让网页自己取字节，交给网页里已有的解析与导入流程。
@@ -599,7 +599,7 @@ public class MainActivity extends Activity {
         String html = "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
             + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head>"
             + "<body style=\"margin:0;padding:24px;font-family:sans-serif;line-height:1.8;color:#334155\">"
-            + "<h1 style=\"font-size:18px\">洛克工具箱</h1>"
+            + "<h1 style=\"font-size:18px\">小布助手</h1>"
             + "<p>" + escapeHtml(message) + "</p>"
             + "<p><a href=\"" + serverConfig.baseUrl() + "/\">点这里重试</a></p>"
             + "</body></html>";
@@ -761,7 +761,7 @@ public class MainActivity extends Activity {
             });
         }
 
-        /** 网页调用：text 是完整备份 JSON，fileName 如「洛克工具箱备份-2026-10-04.json」。 */
+        /** 网页调用：text 是完整备份 JSON，fileName 如「小布助手备份-2026-10-04.json」。 */
         @JavascriptInterface
         public void shareBackup(String text, String fileName) {
             if (text == null || text.length() == 0) return;

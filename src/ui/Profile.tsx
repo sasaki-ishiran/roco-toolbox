@@ -22,7 +22,7 @@ export interface ProfileProps {
 }
 
 const SECTIONS = [
-  { value: 'identity', label: '工具箱身份' },
+  { value: 'identity', label: '我的身份' },
   { value: 'data', label: '游戏数据' },
   { value: 'sync', label: '私有同步' },
 ];
@@ -136,7 +136,7 @@ export function Profile({
       {section === 'identity' ? (
         <StateNotice
           kind="unknown"
-          title="工具箱身份"
+          title="我的身份"
           description="用来跨设备同步同一份数据。游戏账号（UID）是游戏里的角色，在「游戏数据」里单独管理。"
           testId="profile-identity-intro"
         />

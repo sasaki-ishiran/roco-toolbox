@@ -31,3 +31,8 @@ test('captured egg weight determines its body grade using the game egg threshold
   const result=inventoryFromSnapshot({...snapshot,eggs:[{petName:'菊花梨',speciesPetId:3227,externalEggId:'1',weightGrams:2320,obtainedAt:''},{petName:'菊花梨',speciesPetId:3227,externalEggId:'2',weightGrams:2303,obtainedAt:''}]},'a');
   expect(result.eggs.map(e=>e.body)).toEqual(['满体重','大块头']);
 });
+
+test('captured obtained time is forwarded to the stock sync payload',()=>{
+  const result=inventoryFromSnapshot({...snapshot,eggs:[{petName:'菊花梨',speciesPetId:3227,externalEggId:'1',weightGrams:2320,obtainedAt:'2026-11-17T22:31:00Z'}]},'a');
+  expect(result.eggs[0].obtainedAt).toBe('2026-11-17T22:31:00Z');
+});

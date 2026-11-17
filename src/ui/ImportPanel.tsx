@@ -209,7 +209,7 @@ export function ImportPanel() {
    * - 采集器抓包（.pcap / 抓包 JSON）→ 按账号替换该账号的快照（「重新抓了一次」的正确语义）
    * - 工具箱备份（自己导出的）→ **合并**，多设备同步靠它
    *
-   * 之所以不分成两个按钮：微信收到备份后「分享给洛克工具箱」时走的就是这条入口，
+   * 之所以不分成两个按钮：微信收到备份后「分享给小布助手」时走的就是这条入口，
    * 那时用户没机会选按钮，只能靠内容自己认。
    */
   const handleImport = async (
@@ -363,7 +363,7 @@ export function ImportPanel() {
     const confirmed = window.confirm(
       '确定清空本机已导入的所有账号数据吗？此操作不可撤销。\n\n' +
         '会清空：导入的账号、导入历史、本次新增、种公推荐里勾选的「已换到」、母本计划、账号与清单筛选。\n' +
-        '会保留：目标档位与母本达标条件、工具箱身份、已发布的小组资源（要撤回请到小组页停止共享）。',
+        '会保留：目标档位与母本达标条件、我的身份、已发布的小组资源（要撤回请到小组页停止共享）。',
     );
     if (!confirmed) return;
     await resetImportedData();
@@ -393,7 +393,7 @@ export function ImportPanel() {
       if (typeof navigator !== 'undefined' && navigator.share) {
         const file = new File([text], fileName, { type: 'application/json' });
         if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file], title: '洛克工具箱数据备份' });
+          await navigator.share({ files: [file], title: '小布助手数据备份' });
           setActionError(null);
           setImportMessage(`已分享 ${snapshots.length} 个账号的数据`);
           return;
@@ -461,7 +461,7 @@ export function ImportPanel() {
       // JSON.parse 的 SyntaxError 是英文原文（"Unexpected token..."），换成用户能看懂的提示
       setActionError(
         error instanceof SyntaxError
-          ? '备份文件不是有效的 JSON：请确认选的是工具箱导出的备份'
+          ? '备份文件不是有效的 JSON：请确认选的是小布助手导出的备份'
           : error instanceof Error
             ? error.message
             : '合并导入失败',
@@ -482,7 +482,7 @@ export function ImportPanel() {
         {importing ? '导入中…' : '导入游戏数据'}
       </button>
       <p className="-mt-1 text-center text-xs text-slate-400">
-        采集器里点「分享」选「洛克工具箱」会自动导入；也可以在这里手选文件（抓包 .pcap / 备份 .json，可多选）
+        采集器里点「分享」选「小布助手」会自动导入；也可以在这里手选文件（抓包 .pcap / 备份 .json，可多选）
       </p>
       <input
         ref={fileInputRef}
@@ -607,7 +607,7 @@ export function ImportPanel() {
             />
             <p className="mt-1 text-xs text-slate-400">
               导出的是你自己的账号数据（几个账号打包成一个文件）。换设备首选上面的「云同步」；没开云同步时再用它：
-              两台设备各导出一份、互相合并导入一次。收到的备份也可以直接在微信/QQ 里「分享给洛克工具箱」。
+              两台设备各导出一份、互相合并导入一次。收到的备份也可以直接在微信/QQ 里「分享给小布助手」。
             </p>
             {snapshots.length > 0 ? (
               <button

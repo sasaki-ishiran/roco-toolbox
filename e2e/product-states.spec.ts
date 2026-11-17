@@ -12,7 +12,7 @@ test('我的：身份 / 游戏数据 / 私有同步三个分区各自可达', as
   await expect(page.getByTestId('import-button')).toBeVisible();
 
   await page.getByTestId('profile-section-identity').click();
-  await expect(page.getByTestId('profile-identity-intro')).toContainText('工具箱身份');
+  await expect(page.getByTestId('profile-identity-intro')).toContainText('我的身份');
   await expect(page.getByTestId('account-register')).toBeVisible();
 
   await page.getByTestId('profile-section-sync').click();

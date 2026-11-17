@@ -107,9 +107,9 @@ export function buildBackup(
   };
 }
 
-/** 备份文件名，例如 洛克工具箱备份-2026-09-26.json */
+/** 备份文件名，例如 小布助手备份-2026-09-26.json */
 export function backupFileName(exportedAt: string): string {
-  return `洛克工具箱备份-${exportedAt.slice(0, 10)}.json`;
+  return `小布助手备份-${exportedAt.slice(0, 10)}.json`;
 }
 
 export function isToolboxBackup(raw: unknown): boolean {
@@ -123,7 +123,7 @@ export function isToolboxBackup(raw: unknown): boolean {
  */
 export function parseToolboxBackup(raw: unknown): ToolboxBackup {
   if (!isToolboxBackup(raw)) {
-    throw new Error('这不是洛克工具箱的备份文件（缺少 type 标记）');
+    throw new Error('这不是小布助手的备份文件（缺少 type 标记）');
   }
   const backup = raw as Partial<ToolboxBackup>;
   if (!Array.isArray(backup.accounts)) {

@@ -36,7 +36,7 @@ test('看板首页展示两块进度卡与署名', async ({ page }) => {
   // 无数据时默认落在「导入数据」页，这里切到看板看进度卡
   await openTab(page, '看板');
 
-  await expect(page.getByRole('heading', { name: '洛克工具箱' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '小布助手' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '种公全收集' })).toBeVisible();
   // 母本卡与下方筛选标题前缀相同，必须限定在各自的容器里（避免 strict mode 撞上）
   await expect(
@@ -153,7 +153,7 @@ test('导出全部数据 → 清空 → 导入备份，数据完整恢复（"共
     page.waitForEvent('download'),
     page.getByTestId('export-button').click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/洛克工具箱备份-\d{4}-\d{2}-\d{2}\.json/);
+  expect(download.suggestedFilename()).toMatch(/小布助手备份-\d{4}-\d{2}-\d{2}\.json/);
   const backupPath = await download.path();
   expect(backupPath).not.toBeNull();
 
@@ -268,7 +268,7 @@ test('把备份文件从「导入抓包数据」入口塞进去，也能按合�
   // 导入后停在导入页（不再自动跳看板），导出/导入入口都在这里
   await waitImported(page);
 
-  // 导出一份真备份，模拟「微信收到备份 → 分享给洛克工具箱」：走的就是这条入口。
+  // 导出一份真备份，模拟「微信收到备份 → 分享给小布助手」：走的就是这条入口。
   // 以前这里会被当成抓包解析而报错，现在按合并导入处理。
   await openMoreData(page);
   const [download] = await Promise.all([
@@ -288,7 +288,7 @@ test('用「合并导入」选抓包文件时给出可读错误', async ({ page 
   await page.goto('/');
   await openMoreData(page);
   await page.getByTestId('backup-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
-  await expect(page.getByText(/不是洛克工具箱的备份文件/)).toBeVisible();
+  await expect(page.getByText(/不是小布助手的备份文件/)).toBeVisible();
 });
 
 test('母本按代表档位查看：四档分开计数，切换档位换列表', async ({ page }) => {
