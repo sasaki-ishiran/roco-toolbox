@@ -2,14 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { species } from '../data/catalog';
 import type { AccountSnapshot } from '../domain/parseBackup';
 import type { HomeResident, HomeSnapshot, OwnedPet } from '../domain/types';
-import { useAccountFilter } from './accountFilterStore';
-import { AccountFilterBar } from './AccountFilterBar';
 import { EmptyState } from './EmptyState';
 import { HomeDemandPlacements } from './HomeDemandPlacements';
 import { HomePairDiagram, buildHomePairClusters } from './HomePairDiagram';
 import { PetCompactCard } from './PetCompactCard';
 import { BODY, CARD, HINT, INSET, PAGE, TITLE } from './primitives/styles';
-import { SegmentedControl } from './primitives/SegmentedControl';
 import { useSnapshots } from './useSnapshots';
 import { labelerFor } from './useOwnedPets';
 import { useHomeRefresh, type HomeRefreshController } from './useHomeRefresh';
@@ -22,9 +19,8 @@ import { useHomeRefresh, type HomeRefreshController } from './useHomeRefresh';
  * - 游戏给出的实际配对（layEggCouples）
  * - 家园地上有没有蛋（sceneEggs）
  *
- * 配窝卡片用「摆位图」画法（2026-11-01 用户口径，与看板配窝建议一致）：按配对关系紧凑排，
- * 学院小窝那只绿底；抓包里的窝坐标大多为空，所以不按真实坐标画。没采集过家园时，
- * 明确告诉用户采集时要进家园走一圈。
+ * 配窝卡片按公母数量紧凑排布，学院小窝那只绿底；抓包里的窝坐标大多为空，
+ * 所以不按真实坐标画。没采集过家园时，明确告诉用户采集时要进家园走一圈。
  */
 export interface HomeLandProps {
   onGoImport?: () => void;
@@ -76,6 +72,7 @@ function HomePetCard({ pet, resident }: { pet?: OwnedPet; resident: HomeResident
     <PetCompactCard
       gameId={avatarGameId}
       name={name}
+      number={entry?.number}
       gender={gender}
       nature={nature}
       medalBody={pet?.medalBody}
@@ -93,11 +90,15 @@ function HomePetCard({ pet, resident }: { pet?: OwnedPet; resident: HomeResident
 
 /**
  * 「刷新家园」：起一次短采集，回来只更新家园（2026-11-01 用户拍板）。
- * 浏览器里没有采集桥，按钮不可用并说明只能在安卓工具箱内刷。
+ * 浏览器里没有采集桥；说明文案收进右侧问号帮助卡。
  */
 function HomeRefreshBar({ refresh }: { refresh: HomeRefreshController }) {
   const { available, stage, message, start, finish, cancel } = refresh;
+  const [helpOpen, setHelpOpen] = useState(false);
   const busy = stage === 'starting' || stage === 'saving';
+  const hint = available
+    ? '点开始后进游戏打开一次家园即可；只更新家园，宠物和蛋不动。'
+    : '当前环境没有本机采集（只在安卓工具箱安装包内可用）。';
   const label =
     stage === 'starting'
       ? '正在开始…'
@@ -109,38 +110,49 @@ function HomeRefreshBar({ refresh }: { refresh: HomeRefreshController }) {
             ? '重试'
             : '刷新家园';
   return (
-    <section className="rounded-xl bg-white px-2.5 py-2 shadow-sm" data-testid="home-refresh">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-slate-700">刷新家园</p>
-          <p className="mt-0.5 text-[11px] text-slate-500" data-testid="home-refresh-hint">
-            {available
-              ? '点开始后进游戏打开一次家园即可；只更新家园，宠物和蛋不动。'
-              : '当前环境没有本机采集（只在安卓工具箱安装包内可用）。'}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {available && stage === 'waiting' ? (
-            <button
-              type="button"
-              onClick={finish}
-              className="min-h-[28px] rounded-lg border border-emerald-500 bg-emerald-50 px-2 text-[11px] font-medium text-emerald-700"
-              data-testid="home-refresh-finish"
-            >
-              完成刷新
-            </button>
-          ) : null}
+    <div className="relative flex flex-col items-end" data-testid="home-refresh">
+      <div className="flex shrink-0 items-center gap-1">
+        {available && stage === 'waiting' ? (
           <button
             type="button"
-            onClick={stage === 'waiting' ? cancel : start}
-            disabled={!available || busy}
-            className="min-h-[28px] rounded-lg border border-slate-200 px-2 text-[11px] font-medium text-slate-600 disabled:text-slate-300"
-            data-testid="home-refresh-start"
+            onClick={finish}
+            className="min-h-[28px] rounded-lg border border-emerald-500 bg-emerald-50 px-2 text-[11px] font-medium text-emerald-700"
+            data-testid="home-refresh-finish"
           >
-            {stage === 'waiting' ? '取消' : label}
+            完成刷新
           </button>
-        </div>
+        ) : null}
+        <button
+          type="button"
+          onClick={stage === 'waiting' ? cancel : start}
+          disabled={!available || busy}
+          className="min-h-[28px] rounded-lg border border-slate-200 px-2 text-[11px] font-medium text-slate-600 disabled:text-slate-300"
+          data-testid="home-refresh-start"
+        >
+          {stage === 'waiting' ? '取消' : label}
+        </button>
+        <button
+          type="button"
+          onClick={() => setHelpOpen((open) => !open)}
+          aria-label="刷新家园说明"
+          aria-expanded={helpOpen}
+          aria-controls={helpOpen ? 'home-refresh-hint' : undefined}
+          title={hint}
+          className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-xs font-semibold text-slate-500 hover:border-emerald-400 hover:text-emerald-700"
+          data-testid="home-refresh-help"
+        >
+          ?
+        </button>
       </div>
+      {helpOpen ? (
+        <p
+          id="home-refresh-hint"
+          role="note"
+          className="absolute right-0 top-full z-30 mt-1 w-56 rounded-lg border border-slate-200 bg-white p-2 text-[11px] text-slate-600 shadow-lg"
+        >
+          {hint}
+        </p>
+      ) : null}
       {message ? (
         <p
           className={`mt-1 text-[11px] ${stage === 'failed' ? 'text-rose-600' : 'text-emerald-700'}`}
@@ -149,7 +161,7 @@ function HomeRefreshBar({ refresh }: { refresh: HomeRefreshController }) {
           {message}
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -339,20 +351,22 @@ export function saveHomeView(view: HomeView): void {
   for (const listener of homeViewListeners) listener(view);
 }
 
-/**
- * 家园页（2026-10-30 加分页）：
- * - 家园现状：抓包里的住户、实际配对、地上的蛋；
- * - 接单上窝：需求中心里我接的单，按账号给出母本 / 种公名单。
- */
+/** 家园现状默认展示首个账号；接单上窝可从页头切换。 */
 export function HomeLand({ onGoImport }: HomeLandProps = {}) {
   const { snapshots, loaded } = useSnapshots();
-  const { excluded } = useAccountFilter();
   const homeRefresh = useHomeRefresh();
   const labelOf = useMemo(() => labelerFor(snapshots), [snapshots]);
-  const accounts = snapshots.map(labelOf);
-  const visible = snapshots.filter((snapshot) => !excluded.has(labelOf(snapshot)));
-  const withHome = visible.filter((snapshot) => snapshot.home);
+  const accounts = useMemo(() => snapshots.map(labelOf), [snapshots, labelOf]);
   const [view, setView] = useState<HomeView>(() => readHomeView());
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  const [accountPickerOpen, setAccountPickerOpen] = useState(false);
+  const activeAccount = accounts.includes(selectedAccount ?? '')
+    ? selectedAccount
+    : accounts[0] ?? null;
+  const activeSnapshot = snapshots.find((snapshot) => labelOf(snapshot) === activeAccount);
+  useEffect(() => {
+    if (selectedAccount !== activeAccount) setSelectedAccount(activeAccount);
+  }, [activeAccount, selectedAccount]);
   // 新手引导等外部调用 saveHomeView 时，已挂载的家园页要立刻跟着切分页
   useEffect(() => {
     homeViewListeners.add(setView);
@@ -364,41 +378,111 @@ export function HomeLand({ onGoImport }: HomeLandProps = {}) {
   const changeView = (next: string) => {
     const target: HomeView = next === 'demands' ? 'demands' : 'nests';
     setView(target);
+    setAccountPickerOpen(false);
     saveHomeView(target);
   };
 
   return (
     <div className={PAGE}>
-      <div data-tour="home-tabs">
-        <SegmentedControl
-          label="家园视图"
-          value={view}
-          options={[
-            { value: 'nests', label: '家园现状' },
-            { value: 'demands', label: '接单上窝' },
-          ]}
-          onValueChange={changeView}
-          optionTestId={(value) => `home-view-${value}`}
-        />
-      </div>
-      {snapshots.length > 0 ? <AccountFilterBar accounts={accounts} /> : null}
-      {loaded && view === 'nests' && snapshots.length > 0 ? (
-        <HomeRefreshBar refresh={homeRefresh} />
-      ) : null}
+      <header
+        className="flex items-center justify-between gap-2"
+        data-tour="home-tabs"
+        data-testid="home-header"
+      >
+        {view === 'nests' && loaded && activeAccount ? (
+          <section className="relative min-w-0 flex-1" data-testid="home-account-switcher">
+            <button
+              type="button"
+              onClick={() => setAccountPickerOpen((open) => !open)}
+              aria-expanded={accountPickerOpen}
+              aria-controls={accountPickerOpen ? 'home-account-options' : undefined}
+              title={activeAccount}
+              className="flex min-h-[36px] w-full items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 text-left text-sm text-slate-700 shadow-sm"
+              data-testid="home-account-summary"
+            >
+              <span className="truncate">{activeAccount}</span>
+              <span aria-hidden className="shrink-0 text-xs text-slate-400">
+                {accountPickerOpen ? '⌃' : '⌄'}
+              </span>
+            </button>
+            {accountPickerOpen ? (
+              <div
+                id="home-account-options"
+                role="group"
+                aria-label="切换家园账号"
+                className="absolute left-0 top-full z-20 mt-1 grid w-[calc(100vw-2rem)] max-w-[24rem] grid-cols-2 gap-1 rounded-xl border border-slate-100 bg-white p-2 shadow-lg"
+                data-testid="home-account-options"
+              >
+                {accounts.map((account) => {
+                  const selected = account === activeAccount;
+                  return (
+                    <button
+                      key={account}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        setSelectedAccount(account);
+                        setAccountPickerOpen(false);
+                      }}
+                      title={account}
+                      className={`min-h-[32px] min-w-0 truncate rounded-lg border px-2 text-left text-xs ${
+                        selected
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-200 bg-white text-slate-600'
+                      }`}
+                      data-testid={`home-account-option-${account}`}
+                    >
+                      {account}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </section>
+        ) : view === 'demands' ? (
+          <h1 className={`${TITLE} min-w-0 flex-1`} data-testid="home-title">
+            接单上窝
+          </h1>
+        ) : (
+          <div className="min-w-0 flex-1" aria-hidden="true" />
+        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {view === 'nests' ? (
+            <button
+              type="button"
+              onClick={() => changeView('demands')}
+              className="min-h-[28px] rounded-lg border border-slate-200 px-2 text-xs font-medium text-slate-600"
+              data-testid="home-view-demands"
+            >
+              接单上窝
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => changeView('nests')}
+              className="min-h-[28px] rounded-lg border border-slate-200 px-2 text-xs font-medium text-slate-600"
+              data-testid="home-view-nests"
+            >
+              返回家园
+            </button>
+          )}
+          {loaded && view === 'nests' && snapshots.length > 0 ? (
+            <HomeRefreshBar refresh={homeRefresh} />
+          ) : null}
+        </div>
+      </header>
       {!loaded ? (
         <p className={`${HINT}`}>正在读取本地数据…</p>
       ) : view === 'demands' ? (
         snapshots.length === 0 ? (
           <EmptyState onGoImport={onGoImport} />
         ) : (
-          // 账号筛选只影响「家园现状」；上窝按全部账号计算，保证可用产线与同组其他人一致（R2-2-U01）
+          // 接单上窝按全部账号计算，不受家园页的当前账号选择影响。
           <HomeDemandPlacements snapshots={snapshots} labelOf={labelOf} />
         )
       ) : snapshots.length === 0 ? (
         <EmptyState onGoImport={onGoImport} />
-      ) : visible.length === 0 ? (
-        <p className={`${HINT}`}>未选择游戏账号：上面点「全选」可恢复。</p>
-      ) : withHome.length === 0 ? (
+      ) : !activeSnapshot?.home ? (
         <section className={CARD} data-testid="home-no-capture">
           <h2 className={TITLE}>这份数据里没有家园记录</h2>
           <p className={`${HINT} mt-1`}>
@@ -407,13 +491,11 @@ export function HomeLand({ onGoImport }: HomeLandProps = {}) {
           </p>
         </section>
       ) : (
-        withHome.map((snapshot) => (
-          <AccountHome
-            key={snapshot.accountKey || snapshot.gameId}
-            snapshot={snapshot}
-            label={labelOf(snapshot)}
-          />
-        ))
+        <AccountHome
+          key={activeSnapshot.accountKey || activeSnapshot.gameId}
+          snapshot={activeSnapshot}
+          label={labelOf(activeSnapshot)}
+        />
       )}
     </div>
   );

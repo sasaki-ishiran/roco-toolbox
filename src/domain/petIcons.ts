@@ -37,16 +37,24 @@ export function petBodyMedalIcon(
   return null;
 }
 
+/**
+ * 声音奖牌：满分 ±100 用带 MAX 缎带的图；双牌档（≥96 / ≤-96）用普通奖牌图。
+ * 2026-11-17 用户口径：-96dB 以下、+96dB 及以上都算有奖牌，之前只认 ±100 所以「缺图」。
+ */
 export function petVoiceMedalIcon(voiceDb: number | null | undefined): string | null {
-  if (voiceDb === 100) return '/ui/medals/1026-max.png';
-  if (voiceDb === -100) return '/ui/medals/1025-max.png';
+  if (typeof voiceDb !== 'number' || !Number.isFinite(voiceDb)) return null;
+  if (voiceDb >= 100) return '/ui/medals/1026-max.png';
+  if (voiceDb <= -100) return '/ui/medals/1025-max.png';
+  if (voiceDb >= 96) return '/ui/medals/1026.png';
+  if (voiceDb <= -96) return '/ui/medals/1025.png';
   return null;
 }
 
-/** 声音奖牌的名字，用于 title / alt */
+/** 声音奖牌的名字，用于 title / alt（双牌档同样有名字） */
 export function voiceMedalName(voiceDb: number | null | undefined): string | null {
-  if (voiceDb === 100) return '婉转声';
-  if (voiceDb === -100) return '粗嗓门';
+  if (typeof voiceDb !== 'number' || !Number.isFinite(voiceDb)) return null;
+  if (voiceDb >= 96) return '婉转声';
+  if (voiceDb <= -96) return '粗嗓门';
   return null;
 }
 

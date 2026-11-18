@@ -41,7 +41,7 @@ async function register(label: string): Promise<Identity> {
 
 const resourceOf = (uid: number, eggGameId: number) => ({
   schemaVersion: 1,
-  criteriaId: 'all-mothers-v3-perfect',
+  criteriaId: 'all-mothers-v4-perfect',
   catalogVersion: CATALOG_VERSION,
   accounts: [
     {

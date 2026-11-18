@@ -1,12 +1,17 @@
-import { matchesVoiceOption, type MotherGroup, type TargetMode } from './petFilters';
+import {
+  classifyGrade,
+  matchesVoiceOption,
+  type MotherGroup,
+  type PetGrade,
+  type TargetMode,
+} from './petFilters';
 import { bodyGradeOf } from '../shared/bodySize.js';
 import type { OwnedPet } from './types';
 
 /**
  * 「母本达标」的统一口径（2026-10-06 抽出）。
  *
- * 达标 = 该蛋（进化血脉）**有母本**同时命中「选中的体型」和「选中的声音」；
- * 某一维度一个都不选 = 该维度不限。
+ * 新版按所选体型 + 声音组合档位判断；缺少组合字段的旧数据仍按体型 / 声音维度解释。
  *
  * 之所以要抽到领域层：「看板 · 母本全收集」卡的分子与「我的精灵 · 母本」页的
  * 「已收集」必须是**同一口径**——此前看板卡按单一档位算、母本页按达标条件算，
@@ -18,6 +23,10 @@ export type MotherBody = '大块头' | '小不点';
 export interface MotherCriteria {
   voices: MotherVoice[];
   bodies: MotherBody[];
+  /** 精确组合选择；缺失时按旧版体型 / 声音条件解释，空数组表示没有选中组合。 */
+  grades?: PetGrade[];
+  /** 计算 grades 时使用的全局档位模式，仅作为计算参数，不持久化。 */
+  targetMode?: TargetMode;
   /**
    * 是否要求母本性格为「推荐性格」（2026-10-25）。个人页与小组同一开关：
    * 小组由组长在目标里开启，组员按组长那份推荐性格表判定。
@@ -60,9 +69,8 @@ export const matchesMotherVoice = (voiceDb: number, voices: readonly string[]): 
 /**
  * 该精灵是否命中选中的体型。
  *
- * 口径与档位 / 种公完全一致（2026-10-28 用户确认）：奖牌优先；没有奖牌时
- * **身高 100% / 0% 且体重 ≥95% / ≤5% 同时满足**才算大块头 / 小不点。
- * 奖牌显示仍按体重 98% / 2%，这里只影响「够不够格当合格母本」。
+ * 口径与档位 / 种公完全一致：奖牌优先；没有奖牌时，身高 100% / 0%
+ * 分别等效大块头 / 小不点，不再要求体重阈值。
  */
 export function matchesMotherBody(pet: OwnedPet, bodies: readonly MotherBody[]): boolean {
   if (bodies.length === 0) return true;
@@ -77,8 +85,13 @@ export function isQualifiedMother(
   naturesOf?: (gameId: number) => readonly string[],
 ): boolean {
   if (pet.gender !== '母') return false;
-  if (!matchesMotherBody(pet, criteria.bodies)) return false;
-  if (criteria.voices.length > 0 && !matchesMotherVoice(pet.voiceDb, criteria.voices)) return false;
+  if (criteria.grades !== undefined) {
+    const grade = classifyGrade(pet, criteria.targetMode ?? 'perfect');
+    if (!grade || !criteria.grades.includes(grade)) return false;
+  } else {
+    if (!matchesMotherBody(pet, criteria.bodies)) return false;
+    if (criteria.voices.length > 0 && !matchesMotherVoice(pet.voiceDb, criteria.voices)) return false;
+  }
   if (criteria.recommendedNatures) {
     const allowed = naturesOf ? naturesOf(pet.gameId) : [];
     if (allowed.length === 0 || !allowed.includes(pet.nature)) return false;

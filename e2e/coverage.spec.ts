@@ -102,20 +102,18 @@ test('覆盖度页：分母只随蛋组变化（14 → 13），档位不再改�
   await expect(page.getByTestId('coverage-group-row')).toHaveCount(13);
   await expect(page.getByTestId('coverage-total')).toHaveText(/\/ 13 组/);
 
-  // 档位是**全局口径**（2026-10-06 起入口只在看板的「当前模式」）：去看板从「调整目标」加一个档位
+  // 体型和声音目标仍是全局口径：在看板直接选择小不点婉转声
   await page.getByRole('button', { name: '看板', exact: true }).click();
-  await page.getByTestId('target-mode').getByRole('button', { name: '调整', exact: true }).click();
-  await page.getByTestId('editor-target-grade-小婉').click();
-  await page.getByTestId('target-editor').getByRole('button', { name: '完成' }).click();
+  await page.getByTestId('dashboard-target-grade-小婉').click();
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-studs').click();
   await openFilter(page);
   // 覆盖度页只显示当前档位（只读、不再自己控制）
   await expect(page.getByTestId('coverage-grade-readonly')).toContainText('满分小婉');
   await expect(page.getByTestId('coverage-total')).toHaveText(/\/ 13 组/);
-  // 展开的那一行槽位翻倍（3 → 6）
+  // 单一体型 × 声音组合，每种性格只生成一个目标槽位
   await page.getByTestId('coverage-group-toggle').first().click();
-  await expect(page.getByTestId('coverage-nature-cell')).toHaveCount(6);
+  await expect(page.getByTestId('coverage-nature-cell')).toHaveCount(3);
 
   // 恢复默认
   await page.getByTestId('coverage-filter-reset').click();

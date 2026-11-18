@@ -12,17 +12,35 @@ const base = {
 };
 
 describe('紧凑精灵卡', () => {
-  test('家园 160×115、需求中心 160×120', () => {
+  test('家园与需求中心复用统一的 160×98 卡片和 44px 居中头像', () => {
     render(<PetCompactCard {...base} variant="home" />);
     const home = screen.getByTestId('pet-compact-card');
     expect(home.className).toContain('w-[160px]');
-    expect(home.className).toContain('h-[115px]');
+    expect(home.className).toContain('h-[98px]');
+    expect(screen.getByTestId('pet-card-avatar')).toHaveClass('left-1/2', 'top-1/2');
+    expect(screen.getByTestId('pet-avatar').className).toContain('h-11');
+    expect(screen.getByTestId('pet-avatar').parentElement).toHaveClass('items-center', 'justify-center');
+    expect(screen.getByRole('heading', { level: 3 })).toHaveClass('text-[6px]');
 
     cleanup();
     render(<PetCompactCard {...base} variant="demand" />);
     const demand = screen.getByTestId('pet-compact-card');
     expect(demand.className).toContain('w-[160px]');
-    expect(demand.className).toContain('h-[120px]');
+    expect(demand.className).toContain('h-[98px]');
+    expect(screen.getByTestId('pet-avatar').className).toContain('h-11');
+  });
+
+  test('编号与蛋组纵向显示在左上角，性格纵向显示在右上角', () => {
+    render(
+      <PetCompactCard
+        {...base}
+        number="123"
+        eggGroups={[6, 9]}
+      />,
+    );
+    expect(screen.getByText('No.123')).toBeInTheDocument();
+    expect(screen.getByTestId('pet-card-egg-groups')).toHaveClass('flex-col');
+    expect(screen.getByTestId('pet-card-natures')).toHaveClass('flex-col', 'items-end');
   });
 
   test('footer 只在家园之外（需求中心）显示', () => {
@@ -52,29 +70,22 @@ describe('紧凑精灵卡', () => {
     expect(card.className).toContain('bg-emerald-50');
   });
 
-  test('身高 / 体重保留两位小数，缺数据写 —', () => {
+  test('身高 / 体重去掉多余的末尾零，缺数据写 —', () => {
     render(<PetCompactCard {...base} heightPercent={50} weightPercent={99.5} />);
-    expect(screen.getByText('50.00%')).toBeTruthy();
-    expect(screen.getByText('99.50%')).toBeTruthy();
+    expect(screen.getByTestId('pet-compact-card')).toHaveTextContent('50%');
+    expect(screen.getByTestId('pet-compact-card')).toHaveTextContent('99.5%');
 
     cleanup();
     render(<PetCompactCard {...base} voiceDb={100} heightPercent={null} weightPercent={undefined} />);
-    expect(screen.getAllByText('—')).toHaveLength(2);
+    expect(screen.getByTestId('pet-compact-card')).toHaveTextContent('100dB · — · —');
   });
 
-  test('六字基础名完整显示，不再压右上角性格徽标（方案 D）', () => {
+  test('统一布局可完整显示六字名字，性格位于右上角', () => {
     render(<PetCompactCard {...base} name="睡铃雪影娃娃" />);
     const name = screen.getByText('睡铃雪影娃娃');
     expect(name).toHaveAttribute('title', '睡铃雪影娃娃');
-    expect(name.className).toContain('truncate');
-    // 84px × scale 0.75 = 63px，右缘 64 + 63 = 127px < 性格徽标 left 129
-    expect(name.style.maxWidth).toBe('84px');
-    expect(name.style.left).toBe('64px');
-    expect(name.style.transform).toBe('scale(0.75)');
-
-    const nature = screen.getByText('固执');
-    expect(nature.style.left).toBe('129px');
-    expect(nature.style.top).toBe('17px');
+    expect(name.tagName.toLowerCase()).toBe('h3');
+    expect(screen.getByTestId('pet-card-natures')).toHaveClass('items-end');
   });
 
   test('多形态只显示基础名，完整名字放 title', () => {

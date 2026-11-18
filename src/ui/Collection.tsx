@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react';
-import { buildEggSearchIndex, TARGET_MODE_LABELS } from '../domain/petFilters';
+import { useCallback, useMemo, useState } from 'react';
+import { buildEggSearchIndex } from '../domain/petFilters';
 import { eggGroupNames, species } from '../data/catalog';
 import type { CollectionLocation, NavigationIntent } from './navigation';
-import { MotherGradeInventory } from './MotherGradeInventory';
 import { MyPets } from './MyPets';
 import { MotherView } from './MotherView';
 import { StudCollection } from './StudCollection';
 import { useCollectionSummary } from './useCollectionSummary';
-import { useTargetMode } from './targetModeStore';
+import { AccountFilterBar } from './AccountFilterBar';
+import { useOwnedPets } from './useOwnedPets';
 
 export interface CollectionProps {
   location: CollectionLocation;
@@ -18,14 +18,16 @@ export interface CollectionProps {
 
 type Kind = CollectionLocation['kind'];
 
-/**
- * 三个入口卡（2026-10-29 用户拍板）：每张卡写清「这一页干什么」，
- * 不再用一排分段按钮让人猜「精灵库」和「种公」有什么区别。
- */
-const KINDS: Array<{ value: Kind; label: string; hint: string }> = [
-  { value: 'inventory', label: '精灵背包', hint: '看全部精灵' },
-  { value: 'mothers', label: '母本', hint: '看我的所有母本' },
-  { value: 'studs', label: '种公', hint: '挑种公去孵蛋' },
+function CollectionAccountSlot() {
+  const { accounts } = useOwnedPets();
+  return <AccountFilterBar accounts={accounts} compact />;
+}
+
+/** 收集页的三类视图入口，仅显示居中的名称。 */
+const KINDS: Array<{ value: Kind; label: string }> = [
+  { value: 'inventory', label: '精灵背包' },
+  { value: 'mothers', label: '母本' },
+  { value: 'studs', label: '种公' },
 ];
 
 /**
@@ -55,13 +57,6 @@ function MothersBranch({
   );
 }
 
-/** 按代表档位查看母本：只在展开时才挂载并算摘要，收起状态不花这份计算（R2-4-L07）。 */
-function GradeInventorySection() {
-  const { owned, motherGroups, mode } = useCollectionSummary();
-
-  return <MotherGradeInventory motherGroups={motherGroups} owned={owned} mode={mode} />;
-}
-
 /**
  * 收集（2026-10-24 重构任务 7）：精灵背包 / 母本 / 种公三类目标工具。
  *
@@ -74,9 +69,9 @@ export function Collection({
   expandedGroupId,
   onToggleGroup,
 }: CollectionProps) {
-  const [showGradeInventory, setShowGradeInventory] = useState(false);
-  const mode = useTargetMode();
   const searchIndex = useMemo(() => buildEggSearchIndex(species), []);
+  const [inventoryCount, setInventoryCount] = useState(0);
+  const reportInventoryCount = useCallback((count: number) => setInventoryCount(count), []);
 
   const kind: Kind = location.kind;
 
@@ -93,7 +88,12 @@ export function Collection({
   return (
     <>
       <nav className="mx-auto max-w-md px-3 pt-2" aria-label="收集视图">
-        <div className="grid grid-cols-3 gap-1.5" data-testid="collection-kinds" data-tour="collection-kinds">
+        <div
+          className="grid grid-cols-[minmax(76px,0.8fr)_repeat(3,minmax(0,1fr))] gap-1.5"
+          data-testid="collection-kinds"
+          data-tour="collection-kinds"
+        >
+          <CollectionAccountSlot />
           {KINDS.map((item) => {
             const active = item.value === kind;
             return (
@@ -103,7 +103,7 @@ export function Collection({
                 aria-pressed={active}
                 onClick={() => switchKind(item.value)}
                 data-testid={`collection-kind-${item.value}`}
-                className={`min-h-[44px] rounded-xl border px-2 py-1.5 text-left shadow-sm ${
+                className={`min-h-[48px] rounded-xl border px-1.5 py-1 text-center shadow-sm ${
                   active
                     ? 'border-emerald-500 bg-emerald-50'
                     : 'border-slate-200 bg-white'
@@ -116,9 +116,11 @@ export function Collection({
                 >
                   {item.label}
                 </span>
-                <span className="mt-0.5 block text-[10px] leading-tight text-slate-400">
-                  {item.hint}
-                </span>
+                {active && item.value === 'inventory' ? (
+                  <span className="block text-[10px] font-normal leading-tight text-slate-500">
+                    共 {inventoryCount} 只
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -135,27 +137,10 @@ export function Collection({
         />
       ) : (
         <>
-          {/* 当前模式与「按代表档位查看母本」并成一行：精灵背包上半部分不再堆四行（2026-10-30） */}
-          <div className="mx-auto flex max-w-md items-center justify-between gap-2 px-4 pt-1">
-            <button
-              type="button"
-              aria-expanded={showGradeInventory}
-              onClick={() => setShowGradeInventory((open) => !open)}
-              className="min-h-[28px] text-xs font-medium text-emerald-700"
-              data-testid="inventory-grade-toggle"
-            >
-              按代表档位查看母本{showGradeInventory ? ' ▲' : ' ▼'}
-            </button>
-            <span className="shrink-0 text-[10px] text-slate-400" data-testid="mypets-mode">
-              当前模式 · {TARGET_MODE_LABELS[mode]}
-            </span>
-          </div>
-          {showGradeInventory ? (
-            <div className="mx-auto max-w-md px-4 pt-2">
-              <GradeInventorySection />
-            </div>
-          ) : null}
-          <MyPets onGoImport={() => onNavigate({ type: 'open-profile', section: 'data' })} />
+          <MyPets
+            onGoImport={() => onNavigate({ type: 'open-profile', section: 'data' })}
+            onVisibleCountChange={reportInventoryCount}
+          />
         </>
       )}
     </>

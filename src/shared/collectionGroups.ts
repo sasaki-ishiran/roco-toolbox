@@ -70,7 +70,7 @@ export function motherCriteriaIdOf(input: {
   const natures = requireNatures
     ? `|natures|${natureOverridesSignature(input.natureOverrides)}`
     : '';
-  return `mother-v2-${fnv1a(`${input.mode}|${bodies}|${voices}${natures}`)}`;
+  return `mother-v3-${fnv1a(`${input.mode}|${bodies}|${voices}${natures}`)}`;
 }
 
 /** 推荐性格覆盖表的稳定签名：键排序、值去重排序，空值忽略。 */
@@ -118,8 +118,8 @@ export const studTargetKey = (slot: Pick<StudTargetSlot, 'groupId' | 'natureId' 
 export interface MotherTargetConfig {
   kind: 'mother';
   /**
-   * 组目标口径（旧命名空间 `female-huge-voice100-v2` / `mother-v2-<hash>`）。
-   * 与资源摘要的 `all-mothers-v3-*` **不是同一命名空间**，不要拿它当资源 `criteriaId` 用。
+   * 组目标口径（`female-huge-voice100-v3` / `mother-v3-<hash>`）。
+   * 与资源摘要的 `all-mothers-v4-*` **不是同一命名空间**，不要拿它当资源 `criteriaId` 用。
    */
   criteriaId: string;
   mode: CollectionTargetMode;

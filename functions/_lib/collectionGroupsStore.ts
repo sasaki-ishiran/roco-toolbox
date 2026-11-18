@@ -1107,8 +1107,8 @@ export interface CollectionTasksView {
 
 const expectedCriteriaOf = (config: CollectionGroupConfig): string => {
   // 2026-10-28：母本组不再有口径，所有成员统一按「全部母本」摘要比较；
-  // 2026-10-29：产线口径（目标模式）编进 criteriaId，必须按组目标模式算期望值，
-  // 否则 v3 摘要会被一律判成不可比（共同寻找永远无法确认）。
+  // 产线口径（目标模式与体型规则）编进 criteriaId，必须按组目标模式算期望值，
+  // 否则 v4 摘要会被一律判成不可比（共同寻找永远无法确认）。
   if (config.groupType === 'mother' || config.target?.kind === 'mother') {
     return motherResourceCriteriaIdOf(
       config.target?.kind === 'mother' ? config.target.mode : 'perfect',

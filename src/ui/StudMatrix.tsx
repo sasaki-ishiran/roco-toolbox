@@ -343,12 +343,12 @@ export function StudMatrix({
       {grades.length === 0 ? (
         <p className="mt-2 text-xs text-slate-400" data-testid="stud-matrix-empty">
           {filterPanel
-            ? '覆盖度里还没选目标档位与性格：先点右上角「筛选」勾选要追的档位与性格。'
-            : '覆盖度里还没选目标档位与性格：先到「覆盖度」勾选要追的档位与性格。'}
+            ? '覆盖度里还没选目标组合与性格：到看板选择体型和声音，再在这里选择性格。'
+            : '覆盖度里还没选目标组合与性格：先到看板选择体型和声音。'}
         </p>
       ) : matrix.natures.length === 0 ? (
         <p className="mt-2 text-xs text-slate-400" data-testid="stud-matrix-no-nature">
-          当前档位下没有选中的目标性格。
+          当前奖牌组合下没有选中的目标性格。
         </p>
       ) : (
         <div className="mt-2 overflow-x-auto overscroll-x-contain" data-testid="stud-matrix-scroll">

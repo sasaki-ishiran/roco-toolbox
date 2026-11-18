@@ -1,91 +1,49 @@
-import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { OwnedPet, SpeciesEntry } from '../domain/types';
 import { PetCard } from './PetCard';
-
-/** 每页条数可选档位（用户要求：20 / 50 / 100） */
-export const PAGE_SIZES = [20, 50, 100] as const;
-export type PageSize = (typeof PAGE_SIZES)[number];
-export const DEFAULT_PAGE_SIZE: PageSize = 20;
-const PAGE_SIZE_STORAGE_KEY = 'roco.petPageSize';
-
-/**
- * 2026-10-06 修复（M4）：部分安卓 WebView（隐私模式 / 关存储）访问
- * window.localStorage 会直接抛 SecurityError，一次抛错就把整页精灵列表崩掉。
- * 这里降级成「不记住偏好」：读写都吞掉存储异常，列表照常工作。
- */
-const safeGetItem = (key: string): string | null => {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-};
-
-const safeSetItem = (key: string, value: string): void => {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // 存储被禁时静默放弃：只影响「记住每页条数」这一个偏好
-  }
-};
 
 export interface PetListProps {
   pets: OwnedPet[];
   speciesByGameId: Map<number, SpeciesEntry>;
   eggGroupNames: Record<number, string>;
-  /** 筛选条件变化时用它把页码重置回第 1 页 */
-  resetKey?: string;
+  showCount?: boolean;
+  /** 卡片网格列数（2026-11-18 用户口径：三列时卡片内容整体放大、一行铺满） */
+  columns?: 3 | 4;
 }
 
-export function PetList({ pets, speciesByGameId, eggGroupNames, resetKey = '' }: PetListProps) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSize>(() => {
-    const saved = Number(safeGetItem(PAGE_SIZE_STORAGE_KEY));
-    return (PAGE_SIZES as readonly number[]).includes(saved) ? (saved as PageSize) : DEFAULT_PAGE_SIZE;
-  });
+/**
+ * 三列模式的缩放倍数：
+ * 四列时卡片宽度 ≈ (W - 3*gap)/4，三列时 ≈ (W - 2*gap)/3，两者之比约 1.35，
+ * 用 CSS zoom 让字号、头像、奖牌、圆角一起等比放大（不用改卡片里的每一处尺寸）。
+ */
+const THREE_COLUMN_ZOOM = 1.35;
 
-  useEffect(() => {
-    setPage(1);
-  }, [resetKey, pageSize]);
-
-  useEffect(() => {
-    safeSetItem(PAGE_SIZE_STORAGE_KEY, String(pageSize));
-  }, [pageSize]);
-
-  const totalPages = Math.max(1, Math.ceil(pets.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * pageSize;
-  const visible = pets.slice(start, start + pageSize);
+export function PetList({
+  pets,
+  speciesByGameId,
+  eggGroupNames,
+  showCount = true,
+  columns = 4,
+}: PetListProps) {
+  const zoomStyle: CSSProperties | undefined =
+    columns === 3 ? { zoom: THREE_COLUMN_ZOOM } : undefined;
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-slate-500" data-testid="page-indicator">
-        共 {pets.length} 只 · 第 {safePage} / {totalPages} 页（每页 {pageSize} 只）
-      </p>
+      {showCount ? (
+        <p className="text-xs text-slate-500" data-testid="pet-count">
+          共 {pets.length} 只
+        </p>
+      ) : null}
 
-      <div className="flex items-center gap-1.5 text-xs text-slate-500">
-        <span>每页</span>
-        {PAGE_SIZES.map((size) => (
-          <button
-            key={size}
-            type="button"
-            onClick={() => setPageSize(size)}
-            aria-pressed={pageSize === size}
-            className={`min-h-[28px] rounded-md border px-2 text-xs ${
-              pageSize === size
-                ? 'border-emerald-600 bg-emerald-600 text-white'
-                : 'border-slate-200 bg-white text-slate-600'
-            }`}
-          >
-            {size}
-          </button>
-        ))}
-      </div>
-
-      {/* 一行四张（2026-10-27 用户拍板）：手机宽度下一张约 85px，头像 56px 当主体 */}
-      <ul className="grid grid-cols-4 gap-1.5">
-        {visible.map((pet, index) => (
-          <li key={`${pet.account}-${pet.gameId}-${start + index}`}>
+      {/* 一行四张 / 三张：移动端保持紧凑卡片网格 */}
+      <ul
+        className={`grid gap-1.5 ${columns === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}
+        data-testid="pet-list-items"
+        data-columns={columns}
+      >
+        {pets.map((pet, index) => (
+          <li key={`${pet.account}-${pet.gameId}-${index}`} style={zoomStyle}>
             <PetCard
               pet={pet}
               species={speciesByGameId.get(pet.gameId)}
@@ -94,27 +52,6 @@ export function PetList({ pets, speciesByGameId, eggGroupNames, resetKey = '' }:
           </li>
         ))}
       </ul>
-
-      {totalPages > 1 ? (
-        <nav className="flex items-center justify-between gap-2 pt-1" aria-label="分页">
-          <button
-            type="button"
-            disabled={safePage === 1}
-            onClick={() => setPage(safePage - 1)}
-            className="min-h-[32px] flex-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
-          >
-            上一页
-          </button>
-          <button
-            type="button"
-            disabled={safePage === totalPages}
-            onClick={() => setPage(safePage + 1)}
-            className="min-h-[32px] flex-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 disabled:text-slate-300"
-          >
-            下一页
-          </button>
-        </nav>
-      ) : null}
     </div>
   );
 }

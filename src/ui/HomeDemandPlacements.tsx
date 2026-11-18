@@ -84,11 +84,11 @@ const conditionTags = (demand: DemandPlacementDemand): Array<{ text: string; cla
  *
  * 行内可用宽 = 屏宽 - 页面 32 - 区块 32 - 行边框 2 - 行内边距 16 = 屏宽 - 82；
  * 375 宽下只有 293px，两张卡 + 8px 间距必须 ≤ 293，所以每张 142。
- * 卡本体 160×120，按 0.885 缩到 141.6×106.2，正好放进 142×107。
+ * 卡本体 160×98，按 0.885 缩到 141.6×86.7。
  * 更窄的机型（如 360）让第二张换行，不用滚动、也不裁内容。
  */
 const PARENT_CARD_W = 142;
-const PARENT_CARD_H = 107;
+const PARENT_CARD_H = 87;
 const PARENT_CARD_SCALE = 0.885;
 
 function ParentCard({
@@ -132,6 +132,7 @@ function ParentCard({
           footer={`${accountLabel} · ${box || '位置未知'}`}
           gameId={pet.gameId}
           name={pet.name}
+          number={entry?.number}
           gender={pet.gender}
           nature={pet.nature}
           medalBody={pet.medalBody}
@@ -147,12 +148,12 @@ function ParentCard({
       {/*
         「已在家园」的绿描边单独画一层、盖在卡片上面：卡片本身带 border + shadow-sm，
         无论 ring 还是底衬都会被它压住一部分（2026-10-30 用户两次反馈）。
-        尺寸 = 卡片缩放后的 141.6×106.2，向外各扩 2px，描边刚好贴着卡片外沿。
+        尺寸 = 卡片缩放后的 141.6×86.7，向外各扩 2px，描边刚好贴着卡片外沿。
       */}
       {inHome ? (
         <div
           className="pointer-events-none absolute -left-0.5 -top-0.5 z-10 rounded-xl border-2 border-emerald-300"
-          style={{ width: 146, height: 110 }}
+          style={{ width: 146, height: 91 }}
           data-testid="home-demand-parent-frame"
         />
       ) : null}
@@ -610,9 +611,8 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
         <p className={`${HINT} mt-0.5`} data-testid="home-demand-summary">
           {summary}
         </p>
-        {/* 账号筛选只影响「家园现状」；这里按全部账号算，免得「少排了几单」看起来像 bug（R2-2-U01） */}
         <p className={`${HINT} mt-0.5 text-slate-400`} data-testid="home-demand-scope">
-          按全部 {snapshots.length} 个账号计算；账号筛选只影响「家园现状」，不影响这里。
+          按全部 {snapshots.length} 个账号计算。
         </p>
       </div>
 

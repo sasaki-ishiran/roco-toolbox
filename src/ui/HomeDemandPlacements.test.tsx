@@ -367,9 +367,9 @@ describe('家园 · 接单上窝', () => {
     const frame = frames[0];
     expect(frame.className).toContain('border-emerald-300');
     expect(frame.className).toContain('pointer-events-none');
-    // 尺寸盖住卡片缩放后的外沿（141.6×106.2 + 2px×2）
+    // 尺寸盖住卡片缩放后的外沿（141.6×86.7 + 2px×2）
     expect(frame.style.width).toBe('146px');
-    expect(frame.style.height).toBe('110px');
+    expect(frame.style.height).toBe('91px');
   });
 
   test('两张亲本卡在 375 宽的行内并排放得下，不再需要横向滚动（2026-11-01 用户反馈）', () => {

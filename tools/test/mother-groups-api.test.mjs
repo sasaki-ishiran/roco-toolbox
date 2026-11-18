@@ -17,7 +17,7 @@ if (!/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(BASE)) {
   );
 }
 
-const CRITERIA_ID = 'all-mothers-v3-perfect';
+const CRITERIA_ID = 'all-mothers-v4-perfect';
 const TIME = '2026-10-23T00:00:00.000Z';
 const LATER = '2026-10-24T00:00:00.000Z';
 const READ_LIMIT_PER_HOUR = 1800;

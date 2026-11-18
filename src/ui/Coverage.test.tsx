@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { allNatureNames, targetNatureNames } from '../data/catalog';
 import { Coverage } from './Coverage';
 import { getCoverageFilter, resetCoverageFilter, toggleFilterGrade } from './coverageFilterStore';
+import { getTargetMode, setTargetMode } from './targetModeStore';
 
 /**
  * 覆盖度页的关键路径（R2-4-M05）：本批把筛选项、性格两排与「更多」都搬进了这一页，
  * 之前只有说明卡与筛选 store 有单测，页面级没有护栏。
  *
- * 只锁 5 件事：筛选折叠、自选 0 勾空态、全选/全部取消、恢复默认、收起「更多」后仍能看到已勾的池外性格。
+ * 只锁筛选折叠、目标选择、自选空态、性格批量切换，以及已勾池外性格的可见性。
  * 种公阵列用轻壳替换（本页只负责把筛选内容塞进去），阵列/矩阵自身不在本用例范围。
  */
 vi.mock('./useCollectionSummary', () => ({
@@ -16,7 +17,7 @@ vi.mock('./useCollectionSummary', () => ({
     loaded: true,
     owned: [],
     motherGroups: [],
-    mode: 'medal',
+    mode: 'perfect',
     mother: { collected: 0, total: 0 },
     stud: { cells: [], groupCount: 14, passedGroups: 0, total: 0, covered: 0, groupSummary: [] },
     plans: [],
@@ -47,16 +48,15 @@ vi.mock('./StudMatrix', () => ({
     </div>
   ),
 }));
-vi.mock('./AccountFilterBar', () => ({ AccountFilterBar: () => <div /> }));
 vi.mock('./SourceNotice', () => ({ SourceNotice: () => <div /> }));
 vi.mock('./CoverageIntroCard', () => ({ CoverageIntroCard: () => <div /> }));
-vi.mock('./CollectionTargetEditor', () => ({ CollectionTargetEditor: () => null }));
 
 const openFilter = () => fireEvent.click(screen.getByTestId('stud-matrix-filter-toggle'));
 
 describe('覆盖度页（筛选项收进种公阵列右上角）', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    setTargetMode('perfect');
     resetCoverageFilter();
     // 档位是全局口径、覆盖度的「恢复默认」刻意不动它 → 用例里显式复位，保证隔离
     if (!getCoverageFilter().grades.includes('大婉')) toggleFilterGrade('大婉');
@@ -71,8 +71,29 @@ describe('覆盖度页（筛选项收进种公阵列右上角）', () => {
 
     openFilter();
     expect(screen.getByTestId('coverage-filter')).toBeTruthy();
-    expect(screen.getByTestId('coverage-grade-readonly')).toBeTruthy();
+    expect(screen.getByRole('group', { name: '种公目标模式' })).toBeTruthy();
+    expect(screen.getByTestId('coverage-target-grade-大婉')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('coverage-groups-toggle')).toHaveTextContent('蛋组（14/14）');
+    expect(screen.queryByText('奖牌目标')).toBeNull();
+    expect(screen.queryByTestId('coverage-open-target-editor')).toBeNull();
+    expect(screen.queryByTestId('coverage-filter-reset')).toBeNull();
+  });
+
+  test('奖牌目标使用母本同款模式且强制单选，并更新种公档位', () => {
+    render(<Coverage />);
+    openFilter();
+
+    fireEvent.click(screen.getByTestId('coverage-target-grade-小婉'));
+    expect(getCoverageFilter().grades).toEqual(['小婉']);
+    expect(screen.getByTestId('coverage-target-grade-小婉')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('coverage-target-grade-大婉')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+
+    fireEvent.click(screen.getByTestId('coverage-target-mode-medal'));
+    expect(getTargetMode()).toBe('medal');
+    expect(screen.getByTestId('coverage-target-mode-medal')).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('自选性格一个都没勾：给提示且不白屏', () => {
@@ -117,21 +138,6 @@ describe('覆盖度页（筛选项收进种公阵列右上角）', () => {
 
     fireEvent.click(selectAll());
     expect(screen.getByTestId('custom-nature-固执')).toHaveAttribute('aria-pressed', 'false');
-  });
-
-  test('恢复默认：蛋组回到 14/14，档位保持不变', () => {
-    render(<Coverage />);
-    openFilter();
-    const gradeBefore = screen.getByTestId('coverage-grade-readonly').textContent;
-
-    fireEvent.click(screen.getByTestId('coverage-groups-toggle'));
-    fireEvent.click(screen.getByTestId('coverage-group-2'));
-    expect(screen.getByTestId('coverage-group-2')).toHaveAttribute('aria-pressed', 'false');
-
-    fireEvent.click(screen.getByTestId('coverage-filter-reset'));
-    expect(screen.getByTestId('coverage-group-2')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('coverage-groups-toggle')).toHaveTextContent('蛋组（14/14）');
-    expect(screen.getByTestId('coverage-grade-readonly').textContent).toBe(gradeBefore);
   });
 
   test('收起「更多」后，已勾的池外性格仍然可见（不能只看得到它生效）', () => {

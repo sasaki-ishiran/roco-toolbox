@@ -195,11 +195,11 @@ describe('findBreedableSupply', () => {
     expect(supply.kind).toBe('none');
   });
 
-  test('身高到顶且体重 ≥95% 才能当大块头：父母双方都要同时满足', () => {
+  test('身高到顶直接等效大块头：父母双方都要同时满足', () => {
     const snapshots = [
       snapshot(1001, '甲', [
-        mother(201, { medalBody: '', heightPercent: 100, weightPercent: 95 }),
-        mother(701, { gender: '公', nature: '固执', medalBody: '', heightPercent: 100, weightPercent: 95 }),
+        mother(201, { medalBody: '', heightPercent: 100, weightPercent: 1 }),
+        mother(701, { gender: '公', nature: '固执', medalBody: '', heightPercent: 100, weightPercent: 1 }),
       ]),
     ];
     const supply = findBreedableSupply(
@@ -212,10 +212,10 @@ describe('findBreedableSupply', () => {
     expect(supply.maleGameId).toBe(701);
   });
 
-  test('身高 100% 但体重不足 95% 时不算大块头', () => {
+  test('身高不足 100% 时不等效大块头', () => {
     const snapshots = [
       snapshot(1001, '甲', [
-        mother(201, { medalBody: '', heightPercent: 100, weightPercent: 94.9 }),
+        mother(201, { medalBody: '', heightPercent: 99.9, weightPercent: 100 }),
         mother(701, { gender: '公', nature: '固执' }),
       ]),
     ];

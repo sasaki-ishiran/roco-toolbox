@@ -28,9 +28,6 @@ import {
 } from './CoverageMatrix';
 import { EmptyState } from './EmptyState';
 import { SourceNotice } from './SourceNotice';
-import {
-  useAccountFilter,
-} from './accountFilterStore';
 import { StudMatrix, type StudDemandPublishInput } from './StudMatrix';
 import { useCoverageSlots } from './useCoverageSlots';
 
@@ -47,20 +44,7 @@ const DEMAND_GROUPS_TTL_MS = 60_000;
 export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: CoverageProps = {}) {
   // 与看板同一份摘要（2026-10-24）：覆盖矩阵不再自己算一遍
   const { loaded, owned, mode, stud, recommendations } = useCollectionSummary();
-  const { accounts, all } = useOwnedPets();
-  const { excluded } = useAccountFilter();
-  /**
-   * 跨号补缺（2026-11-02）：只在**单账号视角**下算其他号能不能出这颗蛋。
-   * 其他号即使被筛选条排除，也仍然在 `all` 里，所以这里直接从全量里取。
-   */
-  const transferTarget = useMemo(() => {
-    const selected = accounts.filter((account) => !excluded.has(account));
-    return selected.length === 1 ? selected[0] : undefined;
-  }, [accounts, excluded]);
-  const transferPets = useMemo(() => {
-    if (!transferTarget) return undefined;
-    return all.filter((pet) => pet.account !== transferTarget);
-  }, [transferTarget, all]);
+  const { accounts } = useOwnedPets();
   const [editorOpen, setEditorOpen] = useState(false);
   /** 筛选收在种公阵列右上角（2026-10-29 用户要求），默认收起省空间。 */
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -202,13 +186,11 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
           {/* 新用户第一次进来给一次极简说明（3 条），点「知道了」后不再出现 */}
           <CoverageIntroCard />
 
-          {/* 种公阵列（2026-10-28）：蛋组 × 目标性格，档位做 tab；
+          {/* 种公阵列（2026-10-28，参考蛋神）：蛋组 × 目标性格，档位做 tab；
               筛选收进卡片右上角（2026-10-29 用户要求），下方保留按蛋组缺口明细 */}
           <StudMatrix
             slots={slots}
             owned={owned}
-            transferPets={transferPets}
-            transferTarget={transferTarget}
             species={species}
             speciesByGameId={speciesByGameId}
             eggGroupNames={eggGroupNames}

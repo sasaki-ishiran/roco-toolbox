@@ -363,7 +363,7 @@ export function ImportPanel() {
     const confirmed = window.confirm(
       '确定清空本机已导入的所有账号数据吗？此操作不可撤销。\n\n' +
         '会清空：导入的账号、导入历史、本次新增、种公推荐里勾选的「已换到」、母本计划、账号与清单筛选。\n' +
-        '会保留：目标档位与母本达标条件、工具箱身份、已发布的小组资源（要撤回请到小组页停止共享）。',
+        '会保留：种公奖牌目标与母本达标条件、工具箱身份、已发布的小组资源（要撤回请到小组页停止共享）。',
     );
     if (!confirmed) return;
     await resetImportedData();

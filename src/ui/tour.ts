@@ -92,8 +92,8 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
   dashboard: [
     {
       id: 'dashboard-target',
-      title: '先定目标档位',
-      body: '全站都按这里的「当前模式 + 档位」算。想追满分或双牌，在这里切换，覆盖度和配窝会一起变。',
+      title: '先定种公目标',
+      body: '全站按这里的当前模式和奖牌组合计算。四种组合选一项；追满分时声音须达到 +100 / -100，追双牌时按对应声音奖牌判定。',
       page: 'dashboard',
       anchor: 'dashboard-target',
     },

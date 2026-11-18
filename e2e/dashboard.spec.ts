@@ -63,7 +63,7 @@ test('导入抓包数据后看板给出进度与建议', async ({ page }) => {
   await expect(
     page.getByTestId('progress-card-action-mother').getByRole('heading', { name: '母本全收集' }),
   ).toBeVisible();
-  await expect(page.getByRole('heading', { name: '优质种公推荐' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '种公推荐' })).toBeVisible();
   await expect(page.getByTestId('recommend-item').first()).toBeVisible();
 });
 
@@ -84,7 +84,7 @@ test('母本进度：看板卡与点进去的母本页是同一口径（数字�
   await expect(page.getByTestId('mother-chain-summary')).toContainText(`已收集 ${cardNum}`);
 });
 
-test('优质种公推荐：勾选移入已换到折叠区，可展开还原', async ({ page }) => {
+test('种公推荐：勾选移入已换到折叠区，可展开还原', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);

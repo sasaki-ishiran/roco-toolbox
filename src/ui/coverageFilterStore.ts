@@ -111,6 +111,11 @@ export function toggleFilterGrade(grade: PetGrade): void {
   store.set({ ...filter, grades });
 }
 
+/** 目标编辑器选择单一体型 × 声音组合时使用；null 表示清空目标档位。 */
+export function setTargetGrade(grade: PetGrade | null): void {
+  store.set({ ...store.get(), grades: grade ? [grade] : [] });
+}
+
 /** 某个蛋组自己的性格加减（展开蛋组行时用，仅推荐模式有意义）。 */
 export function toggleGroupNature(groupId: number, natureName: string): void {
   const filter = store.get();

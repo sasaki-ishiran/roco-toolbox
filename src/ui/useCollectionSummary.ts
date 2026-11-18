@@ -71,6 +71,8 @@ export function useCollectionSummary(): CollectionSummary {
         {
           bodies: motherCriteria.bodies,
           voices: effectiveMotherVoices(motherCriteria.voices, mode),
+          grades: motherCriteria.grades,
+          targetMode: mode,
           recommendedNatures: motherCriteria.recommendedNatures === true,
         },
         naturesOf,

@@ -132,8 +132,8 @@ describe('家园页', () => {
     expect(screen.getAllByTestId('home-pet-card')).toHaveLength(2);
     // 配窝卡片改成摆位图画法，不再带小头像：头像只有上面两张精灵卡
     expect(screen.getAllByTestId('pet-avatar')).toHaveLength(2);
-    expect(screen.getByTestId('home-residents')).toHaveTextContent('50.00%');
-    expect(screen.getByTestId('home-residents')).toHaveTextContent('99.00%');
+    expect(screen.getByTestId('home-residents')).toHaveTextContent('50%');
+    expect(screen.getByTestId('home-residents')).toHaveTextContent('99%');
     expect(screen.getByTestId('home-pair-cards')).toHaveTextContent('公本乙');
     expect(screen.getByTestId('home-pair-cards')).toHaveTextContent('母本甲');
     expect(screen.getAllByTestId('home-pair-node')).toHaveLength(2);
@@ -255,13 +255,33 @@ describe('家园页', () => {
     expect(screen.getByText(/这份是增量快照/)).toBeTruthy();
   });
 
-  test('账号全不选时说明怎么恢复，而不是当成没有家园记录', () => {
-    h.snapshots = [snapshotWithHome()];
-    toggleAccount('测试甲');
+  test('默认只展示首个账号；从二级卡切换后只展示选中的家园', () => {
+    const first = snapshotWithHome();
+    const second = snapshotWithHome();
+    second.accountName = '测试乙';
+    second.gameId = 151911;
+    second.accountKey = 'uid:151911';
+    second.home!.gameId = '151911';
+    second.home!.residents[0].name = '母本乙';
+    second.home!.residents[1].name = '公本丙';
+    h.snapshots = [first, second];
     render(<HomeLand />);
 
-    expect(screen.getByText('未选择游戏账号：上面点「全选」可恢复。')).toBeTruthy();
-    expect(screen.queryByTestId('home-no-capture')).toBeNull();
+    expect(screen.getByTestId('home-account-summary')).toHaveTextContent('测试甲');
+    expect(screen.getByTestId('home-account-switcher').parentElement).toBe(
+      screen.getByTestId('home-header'),
+    );
+    expect(screen.getByTestId('home-account-151910')).toBeTruthy();
+    expect(screen.queryByTestId('home-account-151911')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('home-account-summary'));
+    expect(screen.getByTestId('home-account-options')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('home-account-option-测试乙'));
+
+    expect(screen.getByTestId('home-account-summary')).toHaveTextContent('测试乙');
+    expect(screen.queryByTestId('home-account-151910')).toBeNull();
+    expect(screen.getByTestId('home-account-151911')).toBeTruthy();
+    expect(screen.getByTestId('home-residents')).toHaveTextContent('母本乙');
   });
 
   test('配窝方块同样只写基础名，完整名字放 title', () => {
@@ -286,24 +306,39 @@ describe('家园页', () => {
     expect(screen.getByTestId('home-pair-diagram')).toHaveTextContent('公本未知');
   });
 
-  test('浏览器里「刷新家园」不可用，并说明只在安卓工具箱内可刷', () => {
+  test('刷新说明默认收在问号按钮中，点击后显示并可收起', () => {
     h.snapshots = [snapshotWithHome()];
     render(<HomeLand />);
 
-    expect(screen.getByTestId('home-refresh-hint')).toHaveTextContent('只在安卓工具箱安装包内可用');
+    expect(screen.queryByRole('button', { name: '家园现状' })).toBeNull();
+    expect(screen.queryByTestId('home-title')).toBeNull();
+    expect(screen.getByTestId('home-account-summary')).toHaveTextContent('测试甲');
     expect(screen.getByTestId('home-refresh-start')).toBeDisabled();
+    expect(screen.queryByRole('note')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('home-refresh-help'));
+    expect(screen.getByRole('note')).toHaveTextContent('只在安卓工具箱安装包内可用');
+    fireEvent.click(screen.getByTestId('home-refresh-help'));
+    expect(screen.queryByRole('note')).toBeNull();
+
+    expect(screen.getByTestId('home-view-demands').parentElement).toBe(
+      screen.getByTestId('home-refresh').parentElement,
+    );
   });
 
   test('家园分页：默认家园现状，可切到接单上窝并记住选择', () => {
     h.snapshots = [snapshotWithHome()];
     render(<HomeLand />);
 
-    expect(screen.getByTestId('home-view-nests')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('home-title')).toBeNull();
+    expect(screen.getByTestId('home-account-summary')).toHaveTextContent('测试甲');
+    expect(screen.queryByTestId('home-view-nests')).toBeNull();
     expect(screen.getByTestId('home-residents')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('home-view-demands'));
     expect(screen.getByTestId('home-demand-placements')).toBeTruthy();
     expect(screen.queryByTestId('home-residents')).toBeNull();
+    expect(screen.getByTestId('home-title')).toHaveTextContent('接单上窝');
     expect(window.localStorage.getItem('roco.homeView')).toBe('demands');
 
     fireEvent.click(screen.getByTestId('home-view-nests'));
@@ -318,7 +353,7 @@ describe('家园页', () => {
     expect(screen.queryByTestId('home-demand-placements')).toBeNull();
   });
 
-  test('账号全不选时接单上窝照常按全部账号计算（R2-2-U01：筛选只影响家园现状）', () => {
+  test('全局账号筛选不影响接单上窝，照常按全部账号计算', () => {
     h.snapshots = [snapshotWithHome()];
     toggleAccount('测试甲');
     render(<HomeLand />);
@@ -335,7 +370,8 @@ describe('家园页', () => {
 
     expect(screen.getByTestId('home-residents')).toBeTruthy();
     act(() => saveHomeView('demands'));
-    expect(screen.getByTestId('home-view-demands')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('home-title')).toHaveTextContent('接单上窝');
+    expect(screen.getByTestId('home-view-nests')).toBeTruthy();
     expect(screen.getByTestId('home-demand-placements')).toBeTruthy();
     expect(screen.queryByTestId('home-residents')).toBeNull();
   });

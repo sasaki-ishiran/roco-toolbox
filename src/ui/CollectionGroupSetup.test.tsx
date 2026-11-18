@@ -13,7 +13,7 @@ const preview = {
     bodies: ['大块头'],
     voices: ['+100'],
     catalogVersion: 'v1',
-    criteriaId: 'female-huge-voice100-v2',
+    criteriaId: 'female-huge-voice100-v3',
   },
 };
 

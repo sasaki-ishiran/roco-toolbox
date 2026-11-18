@@ -181,8 +181,8 @@ describe('buildMotherResource：共享全部母本（2026-10-28 去掉小组口�
       catalogVersion: FIXTURE_CATALOG_VERSION,
       mode: 'medal',
     });
-    expect(perfect.criteriaId).toBe('all-mothers-v3-perfect');
-    expect(medal.criteriaId).toBe('all-mothers-v3-medal');
+    expect(perfect.criteriaId).toBe('all-mothers-v4-perfect');
+    expect(medal.criteriaId).toBe('all-mothers-v4-medal');
     expect(diffMotherResources(perfect, medal).unchanged).toBe(false);
   });
 
