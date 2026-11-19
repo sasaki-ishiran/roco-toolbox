@@ -5,6 +5,7 @@ import { EggLineSummary } from './plan/EggLineSummary';
 import { MotherGroupsApiError } from '../api/motherGroups';
 import { eggGroupNames, species } from '../data/catalog';
 import { boxLabel } from '../domain/coverageDetail';
+import { genderShareOf } from '../domain/genderRatio';
 import {
   buildDemandPlacements,
   studPlacementOptions,
@@ -14,8 +15,16 @@ import {
   type DemandPlacementSkip,
 } from '../domain/demandPlacement';
 import { accountKeyOf, type AccountSnapshot } from '../domain/parseBackup';
-import { GREEN_NEST_ICON } from '../domain/petIcons';
+import { isBreedableGroup } from '../domain/eggs';
+import {
+  bodyMedalIconByLabel,
+  GREEN_NEST_ICON,
+  voiceMedalIconByLabel,
+  voiceMedalLabel,
+} from '../domain/petIcons';
 import { speciesDisplayName } from '../domain/speciesName';
+import { averageVoiceOf, groupName, PairingPetCard, type PairCardPet } from './NestPlanCard';
+import { GenderMark } from './GenderMark';
 import {
   placementRowKey,
   readCollapsedAccounts,
@@ -30,7 +39,6 @@ import {
 import { demandPickKey, pickEggIdOf, readDemandPicks } from './demandPickStore';
 import { useNatureOverrides } from './natureOverrideStore';
 import { PetAvatar } from './PetAvatar';
-import { PetCompactCard } from './PetCompactCard';
 import { CARD, HINT, TITLE } from './primitives/styles';
 import { useClaimedDemands } from './useClaimedDemands';
 
@@ -70,35 +78,115 @@ const eggNameOf = (eggGameId: number): string => {
   return speciesDisplayName(speciesByGameId.get(eggGameId), '未知的蛋');
 };
 
-const conditionTags = (demand: DemandPlacementDemand): Array<{ text: string; className: string }> => {
-  const tags: Array<{ text: string; className: string }> = [];
-  if (demand.nature) tags.push({ text: demand.nature, className: 'bg-violet-50 text-violet-700' });
-  if (demand.gender) tags.push({ text: demand.gender, className: 'bg-pink-50 text-pink-700' });
-  if (demand.body) tags.push({ text: demand.body, className: 'bg-emerald-50 text-emerald-700' });
-  if (demand.voice) tags.push({ text: demand.voice, className: 'bg-sky-50 text-sky-700' });
-  return tags;
-};
+/** 需求的目标蛋卡（2026-11-19 用户口径）：复用补全计划那张紧凑卡的结构，只放需求里有的字段。 */
+function DemandEggCard({
+  demand,
+  demanderLabel,
+}: {
+  demand: DemandPlacementDemand;
+  demanderLabel: string;
+}) {
+  const eggGameId = demand.eggGameId;
+  const entry = eggGameId > 0 ? speciesByGameId.get(eggGameId) : undefined;
+  const groups =
+    eggGameId > 0 ? (entry?.eggGroups ?? []).filter(isBreedableGroup) : [-eggGameId];
+  const bodyIcon = bodyMedalIconByLabel(demand.body);
+  const voiceIcon = voiceMedalIconByLabel(demand.voice);
+  const name = eggNameOf(eggGameId);
+  const gender = demand.gender === '公' || demand.gender === '母' ? demand.gender : '未知';
+  const tone =
+    gender === '母'
+      ? 'border-pink-200 bg-pink-50'
+      : gender === '公'
+        ? 'border-sky-200 bg-sky-50'
+        : 'border-slate-200 bg-slate-50';
+  return (
+    <article
+      className={`relative h-[86px] min-w-0 overflow-hidden rounded-xl border p-1.5 shadow-sm ${tone}`}
+      data-testid="home-demand-target"
+    >
+      <header className="absolute inset-x-1.5 top-1.5 z-10 grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] items-start gap-0.5 overflow-hidden">
+        <div className="flex min-w-0 flex-col items-start gap-px">
+          {groups.map((groupId) => (
+            <span
+              key={groupId}
+              className="max-w-full truncate rounded bg-sky-100 px-1 py-px text-[9px] leading-3 text-sky-800"
+              title={groupName(groupId)}
+            >
+              {groupName(groupId)}
+            </span>
+          ))}
+          {bodyIcon || voiceIcon ? (
+            <span className="mt-0.5 flex items-center gap-1" data-testid="home-demand-target-medals">
+              {bodyIcon ? (
+                <img
+                  src={bodyIcon}
+                  alt={demand.body ?? ''}
+                  title={demand.body ?? undefined}
+                  className="h-3.5 w-3.5 drop-shadow-sm"
+                />
+              ) : null}
+              {voiceIcon ? (
+                <img
+                  src={voiceIcon}
+                  alt=""
+                  title={voiceMedalLabel(demand.voice)}
+                  className="h-3.5 w-3.5 drop-shadow-sm"
+                />
+              ) : null}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-col items-end gap-px text-[10px] leading-[13px] text-slate-500">
+          <span className="flex min-w-0 items-center justify-end gap-0.5">
+            {gender !== '未知' ? <GenderMark gender={gender} /> : null}
+            {demand.nature ? (
+              <span
+                className="inline-flex max-w-full items-center truncate rounded bg-amber-100 px-1 text-[10px] leading-3 font-medium text-amber-900"
+                title={demand.nature}
+              >
+                {demand.nature}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      </header>
+      <div className="absolute left-1/2 top-[6px] flex h-11 w-11 -translate-x-1/2 items-center justify-center">
+        {eggGameId > 0 ? (
+          <PetAvatar gameId={eggGameId} name={name} size={44} />
+        ) : (
+          <span
+            aria-hidden="true"
+            data-testid="home-demand-group-badge"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-[11px] font-semibold text-emerald-700"
+          >
+            {name.slice(0, 1)}
+          </span>
+        )}
+      </div>
+      <h4
+        className="absolute inset-x-1 top-[52px] truncate text-center text-[11px] leading-4 font-bold text-slate-900"
+        title={name}
+      >
+        {name}
+      </h4>
+      <p
+        className="absolute inset-x-1 top-[70px] truncate text-center text-[9px] leading-3 text-slate-400"
+        data-testid="home-demand-source"
+      >
+        来自「{demand.groupName ?? '收集小组'}」 · {demanderLabel}
+      </p>
+    </article>
+  );
+}
 
-/**
- * 亲本小卡的外框尺寸（2026-11-01 用户反馈：卡片下面不该有横向滚动条）。
- *
- * 行内可用宽 = 屏宽 - 页面 32 - 区块 32 - 行边框 2 - 行内边距 16 = 屏宽 - 82；
- * 375 宽下只有 293px，两张卡 + 8px 间距必须 ≤ 293，所以每张 142。
- * 卡本体 160×98，按 0.885 缩到 141.6×86.7。
- * 更窄的机型（如 360）让第二张换行，不用滚动、也不裁内容。
- */
-const PARENT_CARD_W = 142;
-const PARENT_CARD_H = 87;
-const PARENT_CARD_SCALE = 0.885;
-
+/** 亲本卡：复用补全计划的紧凑精灵卡；接单特有的「进学院小窝 / 已在家园」标记画在外层。 */
 function ParentCard({
-  role,
   parent,
   accountLabel,
   inHome,
   academyNest,
 }: {
-  role: '母本' | '种公';
   parent: DemandPlacementParent;
   accountLabel: string;
   inHome: boolean;
@@ -106,54 +194,36 @@ function ParentCard({
   academyNest: boolean;
 }) {
   const pet = parent.pet;
-  const entry = speciesByGameId.get(pet.gameId);
   const box = boxLabel(pet);
+  const cardPet: PairCardPet = {
+    key: pet.captureId ?? '?',
+    gameId: pet.gameId,
+    name: pet.name.split('_')[0] || pet.name,
+    fullName: pet.name,
+    gender: pet.gender,
+    nature: pet.nature,
+    voiceDb: pet.voiceDb,
+    medalBody: pet.medalBody,
+    heightPercent: pet.heightPercent,
+    weightPercent: pet.weightPercent,
+    box: `${accountLabel} · ${box || '位置未知'}`,
+  };
   return (
-    <div
-      className="relative shrink-0"
-      style={{ width: PARENT_CARD_W, height: PARENT_CARD_H }}
-      data-testid="home-demand-parent-box"
-    >
+    <div className="relative min-w-0">
       {academyNest ? (
         <span className="absolute -top-2 left-1 z-20 inline-flex items-center gap-[2px] rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
           <img src={GREEN_NEST_ICON} alt="" className="h-[11px] w-auto" />
           进学院小窝
         </span>
       ) : null}
-      {inHome ? (
-        <span className="absolute -top-2 right-1 z-20 rounded-full bg-emerald-100 px-1 text-[9px] font-bold text-emerald-700">
-          已在家园
-        </span>
-      ) : null}
-      <div className="origin-top-left" style={{ transform: `scale(${PARENT_CARD_SCALE})` }}>
-        <PetCompactCard
-          variant="demand"
-          roleLabel={role}
-          footer={`${accountLabel} · ${box || '位置未知'}`}
-          gameId={pet.gameId}
-          name={pet.name}
-          number={entry?.number}
-          gender={pet.gender}
-          nature={pet.nature}
-          medalBody={pet.medalBody}
-          voiceDb={pet.voiceDb}
-          heightPercent={pet.heightPercent}
-          weightPercent={pet.weightPercent}
-          eggGroups={entry?.eggGroups ?? []}
-          isShiny={pet.isShiny}
-          isColorful={pet.isColorful}
-          testId="home-demand-parent"
-        />
-      </div>
+      <PairingPetCard pet={cardPet} collectedGroupIds={new Set()} testId="home-demand-parent" />
       {/*
         「已在家园」的绿描边单独画一层、盖在卡片上面：卡片本身带 border + shadow-sm，
         无论 ring 还是底衬都会被它压住一部分（2026-10-30 用户两次反馈）。
-        尺寸 = 卡片缩放后的 141.6×86.7，向外各扩 2px，描边刚好贴着卡片外沿。
       */}
       {inHome ? (
         <div
-          className="pointer-events-none absolute -left-0.5 -top-0.5 z-10 rounded-xl border-2 border-emerald-300"
-          style={{ width: 146, height: 91 }}
+          className="pointer-events-none absolute -inset-0.5 z-10 rounded-xl border-2 border-emerald-300"
           data-testid="home-demand-parent-frame"
         />
       ) : null}
@@ -162,7 +232,7 @@ function ParentCard({
 }
 
 export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacementsProps) {
-  const { accountId, items, loading, error, reload } = useClaimedDemands();
+  const { accountId, items, names, loading, error, reload } = useClaimedDemands();
   const [collapsedAccounts, setCollapsedAccounts] = useState<string[]>(() =>
     readCollapsedAccounts(accountId),
   );
@@ -368,7 +438,6 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
 
   const renderRow = (placement: DemandPlacement) => {
     const rowKey = rowKeyOf(placement);
-    const tags = conditionTags(placement.demand);
     const accountLabel = labelByAccountKey.get(placement.accountKey) ?? placement.accountKey;
     const open = openOptions.includes(rowKey);
     const preferred = preferredPairs[rowKey] ?? null;
@@ -378,61 +447,29 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
       !preferred ||
       (active.mother.pet.captureId === preferred.motherCaptureId &&
         active.father.pet.captureId === preferred.fatherCaptureId);
-    /**
-     * 这对亲本大概能孵出多少符合要求的蛋（用户 2026-10-30 口径）：
-     * 性格概率（学院 100% / 双亲同性格 60% / 单方 30%，不挑性格算 100%）× 性别概率（挑性别 50%）。
-     * 50% 绿、30% 黄、15% 红。
-     */
-    const chance =
-      (placement.demand.nature ? active.natureChance : 1) * (placement.demand.gender ? 0.5 : 1);
+    // 概率头（2026-11-19 用户口径）：性格概率 × 性别比例，写法对齐补全计划卡头。
+    const genderChance =
+      placement.demand.gender === '公' || placement.demand.gender === '母'
+        ? genderShareOf(speciesByGameId.get(active.mother.pet.gameId), placement.demand.gender)
+        : 1;
+    const chance = (placement.demand.nature ? active.natureChance : 1) * genderChance;
     const chancePercent = Math.round(chance * 100);
-    const chanceTone =
-      chance >= 0.5 ? 'text-emerald-700' : chance >= 0.3 ? 'text-amber-600' : 'text-rose-600';
+    const demandVoice = averageVoiceOf([
+      { gender: active.mother.pet.gender, voiceDb: active.mother.pet.voiceDb },
+      { gender: active.father.pet.gender, voiceDb: active.father.pet.voiceDb },
+    ]);
+    const demanderLabel = names.get(placement.demand.demanderAccountId) ?? '已退出成员';
+    const motherInHome = isInHome(active.mother);
+    const fatherInHome = isInHome(active.father);
     return (
       <article
         key={rowKey}
         className="rounded-xl border border-slate-200 p-2"
         data-testid="home-demand-row"
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              {placement.demand.eggGameId > 0 ? (
-                <PetAvatar gameId={placement.demand.eggGameId} name={eggNameOf(placement.demand.eggGameId)} size={24} />
-              ) : (
-                // 种公需求的编号是负数蛋组号，没有蛋头像可用：给蛋组首字徽标（R2-2-L08）
-                <span
-                  aria-hidden="true"
-                  data-testid="home-demand-group-badge"
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-[11px] font-semibold text-emerald-700"
-                >
-                  {eggNameOf(placement.demand.eggGameId).slice(0, 1)}
-                </span>
-              )}
-              <span className="truncate text-sm font-medium text-slate-900">
-                {eggNameOf(placement.demand.eggGameId)}
-              </span>
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]" data-testid="home-demand-tags">
-              {tags.length > 0 ? (
-                tags.map((tag) => (
-                  <span key={tag.text} className={`rounded px-1 py-0.5 ${tag.className}`}>
-                    {tag.text}
-                  </span>
-                ))
-              ) : (
-                <span className="rounded bg-slate-100 px-1 py-0.5 text-slate-500">不挑</span>
-              )}
-            </div>
-            <p className="mt-1 text-[10px] text-slate-400">来自「{placement.demand.groupName ?? '收集小组'}」</p>
-            <p
-              className={`mt-0.5 text-[10px] font-medium ${chanceTone}`}
-              data-testid="home-demand-chance"
-            >
-              约 {chancePercent}% 概率孵出满足需求的蛋
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
+        <div className="mt-0.5 grid grid-cols-2 gap-x-2 gap-y-0.5">
+          <DemandEggCard demand={placement.demand} demanderLabel={demanderLabel} />
+          <div className="flex flex-col items-end justify-center gap-1.5">
             {placement.options.length > 1 ? (
               <button
                 type="button"
@@ -461,24 +498,50 @@ export function HomeDemandPlacements({ snapshots, labelOf }: HomeDemandPlacement
               已上窝
             </label>
           </div>
-        </div>
-
-        {/* 两张卡 142×2 + 8 间距 = 292，375 宽下放得下；不设横向滚动，顶部留出徽标位置。 */}
-        <div className="mt-0.5 flex flex-wrap gap-2 pb-1.5 pt-2.5" data-testid="home-demand-parent-row">
-          <ParentCard
-            role="母本"
-            parent={active.mother}
-            accountLabel={accountLabel}
-            inHome={isInHome(active.mother)}
-            academyNest={active.tier === 'academy' && active.academyResident === 'mother'}
-          />
-          <ParentCard
-            role="种公"
-            parent={active.father}
-            accountLabel={accountLabel}
-            inHome={isInHome(active.father)}
-            academyNest={active.tier === 'academy' && active.academyResident === 'father'}
-          />
+          <div className="flex flex-wrap items-center gap-1" data-testid="home-demand-chance">
+            {placement.demand.nature || placement.demand.gender ? (
+              <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] leading-none font-semibold text-amber-700">
+                {chancePercent}%{placement.demand.nature}
+                {placement.demand.gender ? <GenderMark gender={placement.demand.gender} /> : null}
+              </span>
+            ) : null}
+            {demandVoice !== null ? (
+              <span className="text-[10px] leading-none text-slate-500">{demandVoice}dB</span>
+            ) : null}
+          </div>
+          <span aria-hidden="true" />
+          <div className="flex min-w-0 flex-col gap-1">
+            <ParentCard
+              parent={active.mother}
+              accountLabel={accountLabel}
+              inHome={motherInHome}
+              academyNest={active.tier === 'academy' && active.academyResident === 'mother'}
+            />
+            {motherInHome ? (
+              <span
+                className="mx-auto rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700"
+                data-testid="home-demand-inhome"
+              >
+                已在家园
+              </span>
+            ) : null}
+          </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <ParentCard
+              parent={active.father}
+              accountLabel={accountLabel}
+              inHome={fatherInHome}
+              academyNest={active.tier === 'academy' && active.academyResident === 'father'}
+            />
+            {fatherInHome ? (
+              <span
+                className="mx-auto rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700"
+                data-testid="home-demand-inhome"
+              >
+                已在家园
+              </span>
+            ) : null}
+          </div>
         </div>
 
         {preferred && !prefHonored ? (

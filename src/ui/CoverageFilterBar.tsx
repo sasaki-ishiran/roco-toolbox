@@ -23,20 +23,20 @@ const CHIP_BASE = 'min-h-[28px] rounded-md border px-2 text-xs';
 const chipClass = (active: boolean): string => `${CHIP_BASE} ${active ? CHIP_ON : CHIP_OFF}`;
 
 /**
- * 覆盖矩阵的筛选内容（2026-10-29 起收进「种公阵列」卡片的右上角，自己不再是一张卡）。
+ * 覆盖矩阵的筛选内容（2026-11-19 起提成种公页的一级卡片，常显在覆盖度卡上方）。
  *
  * **体型 × 声音目标 2026-10-06 起是全局口径**（用户拍板）：看板 / 覆盖度 / 母本 / 配窝共用一份，
  * 本处与母本使用相同的模式切换和奖牌组合选择控件。
  *
- * 性格不在这里——「每组推荐前 3」这个预设只在**组内**有意义（部分性格在部分组几乎没用），
- * 所以它下沉到蛋组展开区，由 CoverageMatrix 渲染，不再有「对所有组一起加减」的全局开关。
+ * 性格模式（推荐 / 八大 / 自选）由 Coverage 页放在本组件下面，不在这里；
+ * 推荐模式下每组性格的增减仍在蛋组展开区（CoverageMatrix）。
  */
 export function CoverageFilterBar({ filter, onToggleGroup, onReset, onOpenTargetEditor }: CoverageFilterBarProps) {
   const [groupsOpen, setGroupsOpen] = useState(false);
   const mode = useTargetMode();
   const groupCount = filter.groupIds.length;
-  // 蛋组被取消过才算「筛选已改动」，默认全选时不摆重置入口（2026-10-29 用户口径）
-  const filterDirty = groupCount !== ALL_EGG_GROUP_IDS.length;
+  // 蛋组被取消过、或性格模式不是默认的八大性格，才算「筛选已改动」（2026-11-19）
+  const filterDirty = groupCount !== ALL_EGG_GROUP_IDS.length || filter.natureMode !== 'eight';
 
   const emptyDimensions = [
     groupCount === 0 ? '蛋组' : null,

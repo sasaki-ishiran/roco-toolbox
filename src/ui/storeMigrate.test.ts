@@ -48,7 +48,20 @@ describe('store migrate', () => {
     expect(filter.grades).toEqual(DEFAULT_GRADES);
     expect(filter.groupIds).toEqual(ALL_EGG_GROUP_IDS);
     expect(filter.customNatures).toEqual(['急躁']);
-    expect(filter.natureMode).toBe('recommended');
+    // 2026-11-19：无法识别的值回落到新的默认模式「八大性格」
+    expect(filter.natureMode).toBe('eight');
+  });
+
+  test('覆盖筛选：旧的「推荐性格」是上一版默认值，迁到八大', async () => {
+    localStorage.setItem('roco.coverageFilter', JSON.stringify({ natureMode: 'recommended' }));
+    const store = await import('./coverageFilterStore');
+    expect(store.getCoverageFilter().natureMode).toBe('eight');
+  });
+
+  test('覆盖筛选：显式选的「自选性格」保留', async () => {
+    localStorage.setItem('roco.coverageFilter', JSON.stringify({ natureMode: 'custom' }));
+    const store = await import('./coverageFilterStore');
+    expect(store.getCoverageFilter().natureMode).toBe('custom');
   });
 
   test('覆盖筛选：用户主动清空的蛋组与档位保留（不是「缺字段」）', async () => {

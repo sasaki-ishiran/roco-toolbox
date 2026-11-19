@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-Hans-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>悬浮窗复用 · 种公推荐 / 收集母本 / 收集种公</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #eef2f6; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; color: #0f172a; -webkit-font-smoothing: antialiased; }
+  button { font-family: inherit; }
+  .page { padding: 22px 16px 48px; }
+  .review { max-width: 860px; margin: 0 auto 16px; }
+  .review h1 { margin: 0 0 6px; font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+  .review p { margin: 0; max-width: 860px; font-size: 12.5px; line-height: 1.85; color: #475569; }
+  .review b { color: #047857; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 14px 0 18px; }
+  .group { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0; }
+  .group > span { padding: 0 6px; font-size: 10px; color: #94a3b8; }
+  .group button { border: 0; border-radius: 7px; background: none; padding: 6px 9px; font-size: 11px; color: #475569; }
+  .group button.on { background: #ecfdf5; color: #047857; font-weight: 700; }
+  .stage { display: flex; justify-content: center; }
+  .device { background: #0f172a; border-radius: 28px; padding: 7px; box-shadow: 0 20px 44px rgba(15, 23, 42, .2); }
+  .phone { position: relative; width: 375px; height: 812px; overflow: hidden; border-radius: 22px; background: #f1f5f9; }
+  .phone[data-width="390"] { width: 390px; }
+  .appbar { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 12px; background: #fff; border-bottom: 1px solid #f1f5f9; }
+  .appbar b { font-size: 15px; font-weight: 800; }
+  .appbar .actions { display: flex; gap: 6px; }
+  .appbar .actions button { border: 0; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 11px; padding: 4px 10px; }
+  .tabs6 { display: flex; height: 40px; background: #fff; border-bottom: 1px solid #f1f5f9; }
+  .tabs6 button { flex: 1; border: 0; border-bottom: 2px solid transparent; background: none; color: #64748b; font-size: 13px; }
+  .tabs6 button.on { color: #047857; border-color: #059669; font-weight: 600; }
+  .screen { height: 728px; overflow-y: auto; padding: 10px 10px 26px; scrollbar-width: none; }
+  .screen::-webkit-scrollbar { width: 0; }
+  .panel { border-radius: 16px; background: #fff; padding: 9px 8px 10px; box-shadow: 0 1px 3px rgba(15, 23, 42, .07); }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 1px 7px; }
+  .panel-head b { font-size: 12px; color: #334155; }
+  .panel-head span { font-size: 10px; color: #94a3b8; }
+
+  /* 种公推荐：四列蓝底 */
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .stud-card { position: relative; height: 120px; min-width: 0; overflow: hidden; border: 1px solid #bae6fd; border-radius: 11px; background: linear-gradient(180deg, #f0f9ff 0%, #fff 78%); padding: 0; text-align: center; cursor: pointer; }
+  .stud-card .no { position: absolute; left: 5px; top: 5px; font-size: 8px; font-weight: 600; color: #64748b; }
+  .stud-card .nat { position: absolute; right: 4px; top: 5px; border-radius: 3px; background: #fef3c7; color: #92400e; padding: 0 3px; font-size: 8.5px; line-height: 11px; font-weight: 600; }
+  .stud-card .ava { position: absolute; left: 50%; top: 24px; width: 52px; height: 52px; transform: translateX(-50%); object-fit: contain; }
+  .stud-card .name { position: absolute; left: 3px; right: 3px; top: 80px; height: 16px; font-size: 12px; line-height: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stud-card .groups { position: absolute; left: 3px; right: 3px; bottom: 4px; display: flex; justify-content: center; gap: 2px; overflow: hidden; }
+  .stud-card .groups span { border-radius: 3px; background: #e0f2fe; color: #075985; padding: 0 2px; font-size: 8px; line-height: 11px; white-space: nowrap; }
+
+  /* 收集母本：两列绿底 */
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .mother-card { position: relative; height: 100px; min-width: 0; overflow: hidden; border: 1px solid #a7f3d0; border-radius: 12px; background: linear-gradient(180deg, #f0fdf4 0%, #fff 78%); padding: 0; text-align: center; cursor: pointer; }
+  .mother-card .no { position: absolute; left: 6px; top: 5px; font-size: 8.5px; font-weight: 600; color: #64748b; }
+  .mother-card .nat { position: absolute; right: 5px; top: 5px; border-radius: 3px; background: #fef3c7; color: #92400e; padding: 0 3px; font-size: 9px; line-height: 12px; font-weight: 600; }
+  .mother-card .ava { position: absolute; left: 50%; top: 20px; width: 52px; height: 52px; transform: translateX(-50%); object-fit: contain; }
+  .mother-card .name { position: absolute; left: 4px; right: 4px; top: 72px; height: 16px; font-size: 12px; line-height: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mother-card .footer { position: absolute; left: 8px; right: 8px; bottom: 5px; height: 12px; border-radius: 999px; background: #d1fae5; color: #047857; font-size: 8px; line-height: 12px; }
+
+  /* 收集种公：覆盖矩阵 */
+  .segment { display: flex; gap: 3px; margin: 0 0 8px; padding: 3px; border-radius: 10px; background: #e2e8f0; }
+  .segment button { flex: 1; height: 30px; border: 0; border-radius: 8px; background: none; font-size: 12px; color: #475569; }
+  .segment button.on { background: #fff; color: #047857; font-weight: 700; box-shadow: 0 1px 2px rgba(15, 23, 42, .08); }
+  .matrix { width: 100%; border-collapse: separate; border-spacing: 3px; table-layout: fixed; }
+  .matrix th { font-size: 9px; font-weight: 600; color: #64748b; padding: 2px 0; }
+  .matrix tbody th { text-align: left; font-size: 9px; color: #334155; padding-left: 2px; }
+  .matrix td { height: 34px; border-radius: 7px; text-align: center; font-size: 9px; font-weight: 600; }
+  .matrix .covered { background: #ecfdf5; color: #047857; }
+  .matrix .rec { background: #fffbeb; color: #b45309; border: 1px dashed #f59e0b; cursor: pointer; }
+  .matrix .miss { background: #f8fafc; color: #94a3b8; }
+  .matrix .off { background: #fff; color: #e2e8f0; }
+  .matrix-hint { margin: 7px 1px 0; font-size: 10px; color: #94a3b8; }
+
+  /* 悬浮窗 */
+  .modal-layer { position: absolute; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 14px; }
+  .modal-layer[hidden] { display: none; }
+  .backdrop { position: absolute; inset: 0; border: 0; background: rgba(15, 23, 42, .5); }
+  .modal { position: relative; display: flex; flex-direction: column; width: 100%; max-height: 92%; min-height: 30%; overflow: hidden; border-radius: 18px; background: #fff; box-shadow: 0 24px 60px rgba(15, 23, 42, .3); animation: pop .18s ease-out; }
+  @keyframes pop { from { transform: scale(.96); opacity: .65; } to { transform: scale(1); opacity: 1; } }
+  .modal-head { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px 0; }
+  .modal-head .eyebrow { margin: 0 0 1px; font-size: 10px; font-weight: 600; letter-spacing: .04em; color: #059669; }
+  .modal-head h2 { margin: 0; font-size: 19px; line-height: 25px; font-weight: 800; letter-spacing: -.01em; }
+  .modal-head h2 small { margin-left: 4px; font-size: 10px; font-weight: 500; color: #94a3b8; letter-spacing: 0; }
+  .close { position: absolute; top: 9px; right: 9px; z-index: 5; width: 30px; height: 30px; border: 0; border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 17px; line-height: 1; }
+  .modal-scroll { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 12px 16px; scrollbar-width: none; }
+  .modal-scroll::-webkit-scrollbar { width: 0; }
+  .modal-body { margin: 0; }
+  .top-row { display: flex; gap: 8px; margin-top: 7px; }
+  .top-row .petcard { width: 160px; flex-shrink: 0; }
+  .help-card { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 10px; background: #fffbeb; padding: 6px 7px; }
+  .hc-type { font-size: 13px; font-weight: 800; color: #92400e; }
+  .hc-main { margin: 2px 0 0; font-size: 10.5px; line-height: 1.4; font-weight: 700; color: #92400e; }
+  .hc-action { margin-top: 3px; align-self: flex-end; min-height: 22px; border: 0; background: none; padding: 0; color: #b45309; font-size: 10px; font-weight: 700; }
+
+  /* 配窝卡同款 */
+  .petcard { position: relative; height: 86px; overflow: hidden; border-radius: 10px; border: 1px solid #fbcfe8; background: #fdf2f8; padding: 4px; }
+  .petcard.male { border-color: #bae6fd; background: #f0f9ff; }
+  .petcard.target { border-color: #fbcfe8; background: #fdf2f8; }
+  .petcard.stud-target { border-color: #bae6fd; background: #f0f9ff; }
+  .petcard .left { position: absolute; left: 5px; top: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; max-width: 54%; }
+  .petcard .g { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 3px; background: #e0f2fe; color: #075985; padding: 0 3px; font-size: 8px; line-height: 11px; }
+  .petcard .medals { display: flex; align-items: center; gap: 2px; margin-top: 1px; }
+  .petcard .medals img { width: 13px; height: 13px; object-fit: contain; filter: drop-shadow(0 1px 1px rgba(15, 23, 42, .12)); }
+  .petcard .right { position: absolute; right: 5px; top: 5px; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: 9px; line-height: 11px; color: #64748b; }
+  .petcard .right .nat { display: flex; align-items: center; gap: 1px; }
+  .petcard .right .natb { display: inline-flex; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 2px; background: #fef3c7; color: #78350f; padding: 0 2px; font-size: 9px; line-height: 11px; font-weight: 600; }
+  .petcard .gm { display: inline-flex; width: 11px; height: 11px; align-items: center; justify-content: center; border-radius: 999px; font-size: 8px; line-height: 1; }
+  .petcard .gm.f { background: #fce7f3; color: #db2777; }
+  .petcard .gm.m { background: #e0f2fe; color: #0369a1; }
+  .petcard .tag { border-radius: 2px; padding: 0 3px; font-size: 8.5px; line-height: 11px; }
+  .petcard .tag.amber { background: #fef3c7; color: #92400e; font-weight: 600; }
+  .petcard .tag.rose { background: #fff1f2; color: #be123c; font-weight: 600; }
+  .petcard .tag.sky { background: #e0f2fe; color: #075985; font-weight: 600; }
+  .petcard .ava-wrap { position: absolute; left: 50%; top: 6px; width: 44px; height: 44px; transform: translateX(-50%); }
+  .petcard .ava-wrap img, .petcard .ava-wrap .fb { width: 44px; height: 44px; }
+  .petcard .ava-wrap .fb { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; border-radius: 8px; background: #e2e8f0; color: #64748b; font-weight: 700; font-size: 15px; }
+  .petcard .ava-wrap img { object-fit: contain; }
+  .petcard .name { margin: 0; position: absolute; left: 4px; right: 4px; top: 55px; font-size: 11px; line-height: 14px; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #0f172a; }
+  .petcard .box { margin: 0; position: absolute; left: 4px; right: 4px; top: 71px; font-size: 8.5px; line-height: 11px; text-align: center; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .route-list { margin-top: 8px; }
+  .route-block { border-left: 4px solid #059669; border-radius: 12px; background: #f8fafc; padding: 7px 8px 6px; }
+  .route-block + .route-block { margin-top: 8px; }
+  .route-block.transfer { border-left-color: #0284c7; }
+  .rb-top { display: flex; align-items: center; gap: 6px; }
+  .rb-name { font-size: 11px; font-weight: 700; color: #047857; }
+  .route-block.transfer .rb-name { color: #0369a1; }
+  .rb-flow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; color: #64748b; }
+  .rb-pct { margin-left: auto; font-size: 18px; line-height: 18px; font-weight: 800; color: #047857; }
+  .route-block.transfer .rb-pct { color: #0369a1; }
+  .route-block .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 5px; }
+  .rb-foot { display: flex; justify-content: flex-end; margin-top: 5px; }
+  .rb-add { min-height: 28px; padding: 0 10px; border: 1px solid #a7f3d0; border-radius: 8px; background: #fff; color: #047857; font-size: 10.5px; font-weight: 700; }
+  .route-block.transfer .rb-add { border-color: #bae6fd; color: #0369a1; }
+  .rb-add:active { background: #f8fafc; }
+  .done-btn { width: 100%; min-height: 34px; margin-top: 9px; border: 1px solid #bae6fd; border-radius: 9px; background: #f0f9ff; color: #0369a1; font-size: 11px; font-weight: 700; }
+  .toast { position: absolute; left: 50%; bottom: 34px; z-index: 80; transform: translate(-50%, 8px); max-width: 82%; border-radius: 999px; background: rgba(15, 23, 42, .9); color: #fff; padding: 8px 14px; font-size: 11px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="review">
+    <h1>同一个悬浮窗，复用到种公推荐 / 收集母本 / 收集种公</h1>
+    <p>
+      三处共用同一套：上方目标卡 + 小组求助卡；下方只留 <b>本号直配 / 跨号传蛋</b> 的概率和配窝卡，「加入配窝建议」在卡下右侧。
+      区别只在<b>目标卡底色</b>（母本粉 / 种公蓝）和所属页面。下面切换场景和 375 / 390 看。
+    </p>
+  </header>
+
+  <div class="toolbar">
+    <div class="group" id="sceneGroup">
+      <span>场景</span>
+      <button type="button" data-scene="stud-rec">看板 · 种公推荐</button>
+      <button type="button" data-scene="mother">收集 · 母本</button>
+      <button type="button" data-scene="stud-matrix">收集 · 种公</button>
+    </div>
+    <div class="group" id="widthGroup">
+      <span>宽度</span>
+      <button type="button" data-w="375">375</button>
+      <button type="button" data-w="390">390</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="device"><div class="phone" id="phone" data-width="375"></div></div>
+  </div>
+</div>
+
+<script>
+  const EGG = { 2: '巨灵组', 3: '两栖组', 4: '昆虫组', 5: '天空组', 6: '动物组', 7: '妖精组', 8: '植物组', 9: '拟人组', 10: '软体组', 11: '大地组', 12: '魔力组', 13: '海洋组', 14: '飞龙组', 15: '机械组' };
+  const AVATAR = (id) => `https://game.gtimg.cn/images/rocom/rocodata/jingling/${id}/icon.png`;
+  const MEDAL = (file) => `../../public/ui/medals/${file}`;
+
+  const pet = (name, id, gender, nature, groups, box) => ({ name, id, gender, nature, groups, box, db: 100, medalBody: '大块头', height: 100, weight: 100 });
+
+  const MOM_TARGET = { id: 3002, name: '水蓝蓝', no: '008', natures: ['聪明'], groups: [12], kind: 'mother', tag: '未收集' };
+  const STUD_TARGET = { id: 3006, name: '火神', no: '007', natures: ['固执'], groups: [12, 2], kind: 'stud', tag: '推荐' };
+  const CELL_TARGET = { ...STUD_TARGET, tag: '缺口' };
+
+  const MOM_SELF = { type: 'self', pct: 30, mother: pet('水蓝蓝', 3002, '母', '大胆', [12], '昭昭 · 盒子 03 第 1 位'), father: pet('果冻', 3118, '公', '聪明', [13, 12], '昭昭 · 盒子 07 第 2 位') };
+  const MOM_TRANSFER = { type: 'transfer', pct: 30, source: '云舟', target: '昭昭', mother: pet('水蓝蓝', 3002, '母', '大胆', [12], '云舟 · 盒子 02 第 1 位'), father: pet('果冻', 3118, '公', '聪明', [13, 12], '云舟 · 盒子 07 第 2 位') };
+  const STUD_SELF = { type: 'self', pct: 30, mother: pet('火花', 3003, '母', '固执', [12, 2], '昭昭 · 盒子 02 第 3 位'), father: pet('火神', 3006, '公', '固执', [12, 2], '昭昭 · 盒子 05 第 1 位') };
+  const STUD_TRANSFER = { type: 'transfer', pct: 30, source: '云舟', target: '昭昭', mother: pet('火花', 3003, '母', '固执', [12, 2], '云舟 · 盒子 01 第 3 位'), father: pet('火神', 3006, '公', '固执', [12, 2], '云舟 · 盒子 05 第 1 位') };
+
+  const SCENES = {
+    'stud-rec': { tab: '看板', eyebrow: '种公推荐 · 怎么补', target: STUD_TARGET, help: '已有 2 条 30% 的线', routes: [STUD_SELF, STUD_TRANSFER], bottom: null },
+    'mother': { tab: '收集', eyebrow: '母本缺口 · 怎么补', target: MOM_TARGET, help: '已有 2 条 30% 的线', routes: [MOM_SELF, MOM_TRANSFER], bottom: null },
+    'stud-matrix': { tab: '收集', eyebrow: '种公缺口 · 怎么补', target: CELL_TARGET, help: '已有 1 条 30% 的线', routes: [STUD_SELF, STUD_TRANSFER], bottom: null },
+  };
+
+  const STUD_CARDS = [
+    ['火神', 3006, '007', '固执', [12, 2]], ['果冻', 3118, '313', '聪明', [13, 12]],
+    ['火豆丁', 3754, '393', '固执', [2, 9]], ['可立鸡', 3086, '266', '固执', [5, 9]],
+    ['白发懒人', 3049, '073', '平和', [9, 2]], ['喵喵', 3001, '002', '踏实', [6, 9]],
+    ['恶魔叮', 3010, '030', '平和', [7]], ['地鼠', 3020, '277', '平和', [6]],
+  ];
+  const MOTHER_CARDS = [
+    ['水蓝蓝', 3002, '008', '聪明', [12]], ['火花', 3003, '005', '固执', [12, 2]],
+    ['恶魔叮', 3010, '030', '开朗', [7]], ['地鼠', 3020, '277', '平和', [6]],
+    ['喵喵', 3001, '002', '踏实', [6, 9]], ['白发懒人', 3049, '073', '平和', [9, 2]],
+  ];
+
+  function avatar(id, name) {
+    const first = (name || '?').slice(0, 1);
+    return `<span class="ava-wrap"><img src="${AVATAR(id)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="fb">${first}</span></span>`;
+  }
+  function groupTags(groups) { return groups.map((g) => `<span class="g">${EGG[g] || '未分组'}</span>`).join(''); }
+  function medalIcons(p) {
+    const body = p.weight >= 100 ? '1001-max.png' : '1001.png';
+    const voice = p.db >= 100 ? '1026-max.png' : p.db >= 96 ? '1026.png' : null;
+    return `<span class="medals"><img src="${MEDAL(body)}" alt="大块头" title="大块头">${voice ? `<img src="${MEDAL(voice)}" alt="" title="声音 ${p.db}dB">` : ''}</span>`;
+  }
+
+  function petCardHtml(p) {
+    return `<article class="petcard ${p.gender === '母' ? 'female' : 'male'}">
+      <div class="left">${groupTags(p.groups)}${medalIcons(p)}</div>
+      <div class="right"><span class="nat"><i class="gm ${p.gender === '母' ? 'f' : 'm'}">${p.gender === '母' ? '♀' : '♂'}</i><b class="natb">${p.nature}</b></span><span>${p.db}dB</span><span>高${p.height}%</span><span>重${p.weight}%</span></div>
+      ${avatar(p.id, p.name)}<h4 class="name" title="${p.name}">${p.name}</h4><p class="box" title="${p.box}">${p.box}</p>
+    </article>`;
+  }
+
+  function targetCardHtml(t) {
+    const cls = t.kind === 'stud' ? 'petcard target stud-target' : 'petcard target';
+    return `<article class="${cls}">
+      <div class="left">${groupTags(t.groups)}<span class="medals"><img src="${MEDAL('1001-max.png')}" alt="大块头" title="大块头"><img src="${MEDAL('1026-max.png')}" alt="婉转声" title="婉转声"></span></div>
+      <div class="right">${t.natures.slice(0, 2).map((n) => `<span class="tag amber">${n}</span>`).join('')}<span class="tag ${t.kind === 'stud' ? 'sky' : 'rose'}">${t.tag}</span></div>
+      ${avatar(t.id ?? 0, t.name)}<h4 class="name" title="${t.name}">${t.name}</h4><p class="box">目标 大块头 · 婉转声</p>
+    </article>`;
+  }
+
+  function helpCardHtml(main) {
+    return `<div class="help-card"><div class="hc-top"><span class="hc-type">小组求助</span></div><p class="hc-main">${main}</p><button type="button" class="hc-action" data-toast="示意：打开小组求助">去求蛋 ›</button></div>`;
+  }
+
+  function routeBlockHtml(route) {
+    const self = route.type === 'self';
+    const flow = self ? '' : `<span class="rb-flow">${route.source} → ${route.target}</span>`;
+    return `<section class="route-block ${route.type}">
+      <div class="rb-top"><span class="rb-name">${self ? '本号直配' : '跨号传蛋'}</span>${flow}<span class="rb-pct">${route.pct}%</span></div>
+      <div class="pair">${petCardHtml(route.mother)}${petCardHtml(route.father)}</div>
+      <div class="rb-foot"><button type="button" class="rb-add" data-toast="示意：加入配窝建议">加入配窝建议</button></div>
+    </section>`;
+  }
+
+  function modalHtml(scene) {
+    return `<div class="modal-head"><div><p class="eyebrow">${scene.eyebrow}</p><h2>${scene.target.name}<small>No.${scene.target.no}</small></h2></div><button type="button" class="close" data-close aria-label="关闭">×</button></div>
+      <div class="modal-scroll"><div class="modal-body">
+        <div class="top-row">${targetCardHtml(scene.target)}${helpCardHtml(scene.help)}</div>
+        <div class="route-list">${scene.routes.map(routeBlockHtml).join('')}</div>
+        ${scene.bottom ? `<button type="button" class="done-btn" data-toast="示意：${scene.bottom}">${scene.bottom}</button>` : ''}
+      </div></div>`;
+  }
+
+  function appbar() {
+    return `<header class="appbar"><b>小布助手</b><span class="actions"><button type="button">刷新</button><button type="button">教程</button></span></header>`;
+  }
+  function tabs(active) {
+    return `<nav class="tabs6" aria-label="主导航">${['看板', '家园', '收集', '附近', '小组', '我的'].map((tab) => `<button type="button" class="${tab === active ? 'on' : ''}">${tab}</button>`).join('')}</nav>`;
+  }
+
+  function studRecPage() {
+    return `<section class="panel"><div class="panel-head"><b>种公推荐</b><span>点卡片看怎么补</span></div><div class="grid4">${STUD_CARDS.map(([name, id, no, nature, groups]) => `<button type="button" class="stud-card" data-open="${name}"><span class="no">No.${no}</span><span class="nat">${nature}</span><img class="ava" src="${AVATAR(id)}" alt="" onerror="this.style.display='none'"><span class="name">${name}</span><span class="groups">${groups.slice(0, 2).map((g) => `<span>${EGG[g]}</span>`).join('')}</span></button>`).join('')}</div></section>`;
+  }
+
+  function motherPage() {
+    return `<div class="segment"><button type="button">精灵背包</button><button type="button" class="on">母本</button><button type="button">种公</button></div>
+      <section class="panel"><div class="panel-head"><b>母本 · 未收集</b><span>点卡片看怎么补</span></div><div class="grid2">${MOTHER_CARDS.map(([name, id, no, nature, groups]) => `<button type="button" class="mother-card" data-open="${name}"><span class="no">No.${no}</span><span class="nat">${nature}</span><img class="ava" src="${AVATAR(id)}" alt="" onerror="this.style.display='none'"><span class="name">${name}</span><span class="footer">计划</span></button>`).join('')}</div></section>`;
+  }
+
+  function matrixPage() {
+    const rows = [['巨灵组', ['covered', 'rec', 'miss', 'off']], ['魔力组', ['covered', 'covered', 'rec', 'off']], ['动物组', ['rec', 'miss', 'off', 'off']], ['妖精组', ['covered', 'off', 'off', 'rec']]];
+    return `<div class="segment"><button type="button">母本</button><button type="button" class="on">种公</button></div>
+      <section class="panel"><div class="panel-head"><b>种公 · 覆盖矩阵</b><span>点缺口格看怎么补</span></div>
+      <table class="matrix"><thead><tr><th>蛋组</th><th>固执</th><th>开朗</th><th>胆小</th><th>平和</th></tr></thead><tbody>
+      ${rows.map(([name, cells]) => `<tr><th>${name}</th>${cells.map((state) => `<td class="${state}" ${state === 'rec' ? 'data-open="火神"' : ''}>${state === 'covered' ? '有' : state === 'rec' ? '荐' : state === 'miss' ? '缺' : '—'}</td>`).join('')}</tr>`).join('')}
+      </tbody></table><p class="matrix-hint">绿色=已收齐 · 黄色「荐」=还能补 · 灰色=缺口</p></section>`;
+  }
+
+  const params = new URLSearchParams(location.search);
+  let currentScene = params.get('scene') || 'stud-rec';
+  let currentW = params.get('w') || '375';
+  let autoOpen = params.get('open') !== '0';
+  const phone = document.getElementById('phone');
+
+  function scenePage() {
+    if (currentScene === 'mother') return motherPage();
+    if (currentScene === 'stud-matrix') return matrixPage();
+    return studRecPage();
+  }
+
+  function render() {
+    const scene = SCENES[currentScene];
+    phone.dataset.width = currentW;
+    phone.innerHTML = `${appbar()}${tabs(scene.tab)}<div class="screen">${scenePage()}</div><div class="modal-layer" hidden><button type="button" class="backdrop" data-close aria-label="关闭悬浮窗"></button><section class="modal" role="dialog" aria-modal="true" aria-label="怎么补"></section></div><div class="toast" role="status"></div>`;
+    bind();
+    if (autoOpen) openModal();
+    document.querySelectorAll('#sceneGroup button').forEach((button) => button.classList.toggle('on', button.dataset.scene === currentScene));
+    document.querySelectorAll('#widthGroup button').forEach((button) => button.classList.toggle('on', button.dataset.w === currentW));
+  }
+
+  function bind() {
+    const layer = phone.querySelector('.modal-layer');
+    const modal = phone.querySelector('.modal');
+    const toast = phone.querySelector('.toast');
+    let timer = 0;
+    const showToast = (text) => { toast.textContent = text; toast.classList.add('show'); clearTimeout(timer); timer = setTimeout(() => toast.classList.remove('show'), 1500); };
+    phone.onclick = (event) => {
+      if (event.target.closest('[data-open]')) { openModal(); return; }
+      if (event.target.closest('[data-close]')) { layer.hidden = true; return; }
+      const t = event.target.closest('[data-toast]');
+      if (t) showToast(t.dataset.toast);
+    };
+    phone.onkeydown = (event) => { if (event.key === 'Escape') layer.hidden = true; };
+    window.__openModal = () => { modal.innerHTML = modalHtml(SCENES[currentScene]); layer.hidden = false; };
+  }
+
+  function openModal() { if (window.__openModal) window.__openModal(); }
+
+  document.querySelectorAll('#sceneGroup button').forEach((button) => button.addEventListener('click', () => { currentScene = button.dataset.scene; autoOpen = true; render(); }));
+  document.querySelectorAll('#widthGroup button').forEach((button) => button.addEventListener('click', () => { currentW = button.dataset.w; autoOpen = true; render(); }));
+  document.querySelectorAll('#sceneGroup button, #widthGroup button').forEach((button) => button.classList.toggle('on', button.dataset.scene === currentScene || button.dataset.w === currentW));
+  render();
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { CollectionDemand, CollectionGroupSummary } from '../shared/collectionGroups';
-import { getCollectionDemands, listCollectionGroups } from '../api/collectionGroups';
+import { getCollectionDemands, getCollectionGroup, listCollectionGroups } from '../api/collectionGroups';
 import { markSynced } from '../api/session';
 import { useClaimedDemands } from './useClaimedDemands';
 import { getEggMatching, type EggMatchingResponse } from '../api/eggMatching';
@@ -10,12 +10,14 @@ import { emptyEggWorkflow } from '../shared/eggWorkflow';
 vi.mock('../api/collectionGroups', () => ({
   listCollectionGroups: vi.fn(),
   getCollectionDemands: vi.fn(),
+  getCollectionGroup: vi.fn(),
 }));
 vi.mock('../api/eggMatching',()=>({getEggMatching:vi.fn()}));
 const matchingMock=vi.mocked(getEggMatching);
 
 const listMock = vi.mocked(listCollectionGroups);
 const demandMock = vi.mocked(getCollectionDemands);
+const groupMock = vi.mocked(getCollectionGroup);
 
 const group = (id: string): CollectionGroupSummary => ({
   id,
@@ -49,7 +51,9 @@ beforeEach(() => {
   listMock.mockReset();
   demandMock.mockReset();
   matchingMock.mockReset();
+  groupMock.mockReset();
   matchingMock.mockResolvedValue({version:0,state:emptyEggWorkflow()});
+  groupMock.mockResolvedValue({ members: [] } as never);
 });
 
 afterEach(() => {
@@ -156,5 +160,29 @@ describe('useClaimedDemands', () => {
 
     expect(view.result.current.items).toHaveLength(1);
     expect(view.result.current.error).toContain('1 个小组读取失败');
+  });
+
+  test('解析需求方昵称，未出现在成员表里的账号查不到', async () => {
+    window.localStorage.setItem('roco.accountId', 'name-lookup');
+    listMock.mockResolvedValue([group('g1')]);
+    matchingMock.mockResolvedValue(workflow([claimed({ claimerAccountId: 'name-lookup', demanderAccountId: 'm1' })]));
+    groupMock.mockResolvedValue({ members: [{ accountId: 'm1', displayName: '阿乙' }] } as never);
+
+    const view = renderHook(() => useClaimedDemands());
+    await waitFor(() => expect(view.result.current.items).toHaveLength(1));
+    expect(view.result.current.names.get('m1')).toBe('阿乙');
+    expect(view.result.current.names.get('nobody')).toBeUndefined();
+  });
+
+  test('成员详情读失败不影响接单列表，昵称回退', async () => {
+    window.localStorage.setItem('roco.accountId', 'name-fail');
+    listMock.mockResolvedValue([group('g1')]);
+    matchingMock.mockResolvedValue(workflow([claimed({ claimerAccountId: 'name-fail', demanderAccountId: 'm1' })]));
+    groupMock.mockRejectedValue(new Error('无权限'));
+
+    const view = renderHook(() => useClaimedDemands());
+    await waitFor(() => expect(view.result.current.items).toHaveLength(1));
+    expect(view.result.current.names.get('m1')).toBeUndefined();
+    expect(view.result.current.error).toBe('');
   });
 });

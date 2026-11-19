@@ -9,6 +9,11 @@ import { createModuleStore } from './createModuleStore';
 export interface StudTransferTask {
   id: string;
   createdAt: number;
+  /**
+   * 补什么：`stud` = 补种公（原逻辑）；`mother` = 补母本（2026-11-18）。
+   * 老任务没有这个字段，按 `stud` 处理。
+   */
+  kind?: 'stud' | 'mother';
   targetAccount: string;
   sourceAccount: string;
   /** 蛋物种（母本蛋血脉）。 */
@@ -25,6 +30,10 @@ export interface StudTransferTask {
   grade: PetGrade;
   groupIds: number[];
   chance: number;
+  /** 补母本时：对性母概率（推荐性格 × 出母率）；界面写「对性母 6%」 */
+  femaleChance?: number;
+  /** 补母本时：目标号已有同种（同一颗蛋）的目标档位公，到手就能和它配窝 */
+  sameSpecies?: boolean;
 }
 
 const KEY = 'roco.studTransferTask.v1';
@@ -33,7 +42,7 @@ const store = createModuleStore<StudTransferTask[]>([], { persistKey: KEY });
 
 /** 同一个目标号 + 同一个源号 + 同一颗蛋 + 同一性格/档位，只记一条。 */
 const taskKey = (task: Omit<StudTransferTask, 'id' | 'createdAt'>): string =>
-  `${task.targetAccount}|${task.sourceAccount}|${task.eggGameId}|${task.natureName}|${task.grade}`;
+  `${task.kind ?? 'stud'}|${task.targetAccount}|${task.sourceAccount}|${task.eggGameId}|${task.natureName}|${task.grade}`;
 
 export function addStudTransferTask(input: Omit<StudTransferTask, 'id' | 'createdAt'>): void {
   const key = taskKey(input);

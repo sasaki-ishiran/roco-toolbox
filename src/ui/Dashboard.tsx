@@ -1,16 +1,16 @@
 import { useMemo, useState } from 'react';
-import {
-  TARGET_MODE_LABELS,
-  type TargetMode,
-} from '../domain/petFilters';
-import { effectiveMotherVoices, isChainCollected, type MotherCriteria } from '../domain/motherCriteria';
+import { TARGET_MODE_LABELS, type TargetMode } from '../domain/petFilters';
+import { isChainCollected } from '../domain/motherCriteria';
 import { findUncataloguedCount, studEmptyNote } from '../domain/suggestions';
-import { createNaturesResolver } from '../domain/recommendedNatures';
 import { eggGroupNames, species } from '../data/catalog';
 import { ImportAdditionCard } from './ImportAdditionCard';
 import { ProgressCard } from './ProgressCard';
 import { SuggestionCard } from './SuggestionCard';
 import { NestPlanCard } from './NestPlanCard';
+import { findMotherGapFill, findStudGapFill, type GapFill } from '../domain/gapFill';
+import { GapFillDialog, type GapTargetView } from './GapFillDialog';
+import { toggleMotherPlan } from './motherPlanStore';
+import { useMotherSuggestions } from './useMotherSuggestions';
 import { PetAvatar } from './PetAvatar';
 import { PetCardLayout } from './PetCardLayout';
 import { SourceNotice } from './SourceNotice';
@@ -18,11 +18,9 @@ import { SegmentedControl } from './primitives/SegmentedControl';
 import { useOwnedPets } from './useOwnedPets';
 import { useCollectionSummary } from './useCollectionSummary';
 import { setTargetGrade, useCoverageFilter } from './coverageFilterStore';
-import { useMotherCriteria } from './motherCriteriaStore';
-import { useNatureOverrides } from './natureOverrideStore';
 import { setTargetMode } from './targetModeStore';
 import { toggleAccount, toggleAllAccounts, useAccountFilter } from './accountFilterStore';
-import { removeStudTransferTask, useStudTransferTasks } from './studTransferTaskStore';
+import { useStudTransferTasks } from './studTransferTaskStore';
 import type { NavigationIntent } from './navigation';
 import { TargetGradeSelector } from './TargetGradeSelector';
 
@@ -40,32 +38,44 @@ export interface DashboardProps {
 export function Dashboard({ onNavigate }: DashboardProps) {
   const [actionPanel, setActionPanel] = useState<'mothers' | 'studs'>('studs');
   const [accountSelectorOpen, setAccountSelectorOpen] = useState(false);
+  /**
+   * 「母本缺口怎么补」悬浮窗（2026-11-19 用户口径）：点缺口卡打开，
+   * 内容是目标卡 + 小组求助卡 + 本号直配 / 跨号传蛋两段。
+   */
+  const [gapDialog, setGapDialog] = useState<{
+    chainKey: string;
+    eyebrow: string;
+    target: GapTargetView;
+    fill: GapFill;
+    /** 只有母本缺口能把这条链加入「计划收集」；种公推荐没有对应的落库动作 */
+    canAddToPlan: boolean;
+  } | null>(null);
 
-  const { owned, motherGroups, mode, stud, plans, recommendations } = useCollectionSummary();
+  const { owned, motherGroups, mode, stud, coverageByAccount, plans, recommendations } =
+    useCollectionSummary();
   const { accounts } = useOwnedPets();
   const { excluded } = useAccountFilter();
   const selectedAccountNames = accounts.filter((name) => !excluded.has(name));
   const selectedAccountCount = selectedAccountNames.length;
   const noSelectedAccounts = accounts.length > 0 && selectedAccountCount === 0;
   const coverageFilter = useCoverageFilter();
-  const motherCriteria = useMotherCriteria();
-
-  const selectedGrade = coverageFilter.grades[coverageFilter.grades.length - 1] ?? null;
-
-  const effectiveCriteria: MotherCriteria = {
-    bodies: motherCriteria.bodies,
-    voices: effectiveMotherVoices(motherCriteria.voices, mode),
-    grades: selectedGrade ? [selectedGrade] : motherCriteria.grades,
-    targetMode: mode,
-    recommendedNatures: motherCriteria.recommendedNatures === true,
-  };
-  const natureOverrides = useNatureOverrides();
+  /**
+   * 目标条件、母本建议与目标卡文案都和收集页共用一份（2026-11-19）：
+   * 同一个缺口在看板与收集页给的概率必须一致。
+   */
+  const {
+    selectedGrade,
+    effectiveCriteria,
+    naturesOf,
+    suggestions: motherSuggestions,
+    targetLabel: gapTargetLabel,
+    bodyMedal: gapTargetBody,
+    voiceTarget: gapTargetVoiceTarget,
+    voiceDb: gapTargetVoiceDb,
+    weightPercent: gapTargetWeight,
+  } = useMotherSuggestions({ owned, mode, coverageByAccount, plans });
   /** 种公阵列里手动加入的跨号补种公任务（2026-11-03） */
   const transferTasks = useStudTransferTasks();
-  const naturesOf = useMemo(
-    () => createNaturesResolver({ species, overrides: natureOverrides }),
-    [natureOverrides],
-  );
   /** 母本缺口只报**个人事实**；小组未加载时不在看板声称某成员拥有 */
   const missingMothers = useMemo(
     () => motherGroups.filter((group) => !isChainCollected(group, owned, effectiveCriteria, naturesOf)),
@@ -73,15 +83,62 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   );
   const collectedMothers = motherGroups.length - missingMothers.length;
 
-  const remainingTargets = stud.cells.filter((cell) => cell.state !== 'covered').length;
-  const iterableTargets = stud.cells.filter((cell) => cell.state === 'breedable').length;
-  const missingTargets = remainingTargets - iterableTargets;
-  const firstIterableGroupId =
-    stud.cells.find((cell) => cell.state === 'breedable')?.groupId ?? undefined;
+  /**
+   * 缺口按号各算（2026-11-18 修正）：种公是成体、不能传，合并所有号算出来的「还差几个」
+   * 会把别的号的种公误算成本号的进度，数字偏小。看板按每个号自己的覆盖度报缺口。
+   */
+  const gapsByAccount = useMemo(
+    () =>
+      selectedAccountNames.map((name) => {
+        const coverage = coverageByAccount.get(name);
+        const remaining = (coverage?.cells ?? []).filter((cell) => cell.state !== 'covered');
+        return {
+          account: name,
+          gap: remaining.length,
+          iterable: remaining.filter((cell) => cell.state === 'breedable').length,
+          known: coverage != null,
+        };
+      }),
+    [selectedAccountNames, coverageByAccount],
+  );
+  const gapTotal = gapsByAccount.reduce((sum, item) => sum + item.gap, 0);
+  const allGapsKnown = gapsByAccount.every((item) => item.known);
+  /** 单号直接报数；多号逐个写「甲 4 · 乙 7」，不把几个号加成一个总数 */
+  const gapOfSingleAccount = gapsByAccount.length === 1 ? gapsByAccount[0] : null;
+  const gapsByAccountMap = useMemo(
+    () => new Map(gapsByAccount.map((item) => [item.account, item.gap])),
+    [gapsByAccount],
+  );
+  /** 每个号已经收齐的蛋组：配窝卡里的蛋组标签标绿（2026-11-18 用户口径） */
+  const collectedGroupsByAccount = useMemo(() => {
+    const map = new Map<string, Set<number>>();
+    for (const [account, coverage] of coverageByAccount) {
+      const collected = new Set<number>();
+      for (const row of coverage.groupSummary) {
+        if (row.total > 0 && row.covered === row.total) collected.add(row.groupId);
+      }
+      map.set(account, collected);
+    }
+    return map;
+  }, [coverageByAccount]);
+  /** 补全计划汇总（2026-11-18）：双组条数 + 母本建议 + 跨号传蛋待办（档位已在卡片上用概率表示） */
+  const planPills = useMemo(() => {
+    const pairings = plans.flatMap((plan) => plan.pairings);
+    return {
+      dual: pairings.filter((pairing) => pairing.groupIds.length >= 2).length,
+      transfers: transferTasks.length,
+      /** 母本建议条数（本号内 + 跨号 + 求助），与配窝卡里的母本段一致 */
+      mother: [...motherSuggestions.values()].reduce(
+        (sum, account) =>
+          sum + account.pairings.length + account.tasks.length + account.helps.length,
+        0,
+      ),
+    };
+  }, [plans, transferTasks, motherSuggestions]);
   const nestEmptyNote =
     stud.groupCount === 0
       ? '未设置种公目标，请先调整体型、声音目标、蛋组和性格。'
-      : remainingTargets === 0
+      : gapTotal === 0 && allGapsKnown
         ? '种公目标已全部收集，没有要补的缺口。'
         : '没有能自己孵的方案：缺可配对的母本 / 公本，先去覆盖度看每个缺口的判定。';
   const suggestionEmptyNote = noSelectedAccounts
@@ -89,6 +146,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     : studEmptyNote({ hasData: accounts.length > 0, stud });
 
   const speciesGameIds = useMemo(() => new Set(species.map((entry) => entry.gameId)), []);
+  const speciesByGameId = useMemo(() => new Map(species.map((entry) => [entry.gameId, entry])), []);
   const uncataloguedCount = useMemo(
     () => findUncataloguedCount(owned.map((pet) => pet.gameId), speciesGameIds),
     [owned, speciesGameIds],
@@ -295,8 +353,37 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                       eggGroups={eggGroups.length > 0 ? eggGroups : ['未分组']}
                       natures={natures.length > 0 ? natures : ['暂无推荐性格']}
                       naturesTestId="mother-action-nature"
-                      title={`${name} · ${natureLabel} · 还没有达标母本`}
-                      avatar={<PetAvatar gameId={group.eggGameId} name={name} size={44} />}
+                      title={`${name} · ${natureLabel} · 点卡片看怎么补`}
+                      size="gap"
+                      fitName
+                      avatar={<PetAvatar gameId={group.eggGameId} name={name} size={52} />}
+                      onClick={() =>
+                        setGapDialog({
+                          chainKey: group.chainKey,
+                          eyebrow: '母本缺口 · 怎么补',
+                          canAddToPlan: true,
+                          target: {
+                            kind: 'mother',
+                            name,
+                            number: group.number,
+                            gameId: group.eggGameId,
+                            natures: natures.length > 0 ? natures : ['暂无推荐性格'],
+                            eggGroupLabels:
+                              eggGroups.length > 0 ? eggGroups : ['未分组'],
+                            tag: '未收集',
+                            targetLabel: gapTargetLabel,
+                            bodyMedal: gapTargetBody,
+                            voiceTarget: gapTargetVoiceTarget,
+                            voiceDb: gapTargetVoiceDb,
+                            weightPercent: gapTargetWeight,
+                          },
+                          fill: findMotherGapFill(
+                            group.eggGameId,
+                            motherSuggestions,
+                            selectedAccountNames,
+                          ),
+                        })
+                      }
                     />
                   </li>
                 );
@@ -318,6 +405,38 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <SuggestionCard
           items={recommendations}
           emptyNote={suggestionEmptyNote}
+          onOpenGap={(group) => {
+            // 一张推荐卡 = 一只精灵（可能带多个性格 / 蛋组）：按第一条推荐定位到具体那一格
+            const first = group.records[0];
+            const groupId = first.groupIds[0];
+            setGapDialog({
+              chainKey: `stud:${group.gameId}`,
+              eyebrow: '种公推荐 · 怎么补',
+              canAddToPlan: false,
+              target: {
+                kind: 'stud',
+                name: group.displayName,
+                number: speciesByGameId.get(group.gameId)?.number,
+                gameId: group.gameId,
+                natures: group.natureNames,
+                eggGroupLabels: group.groupLabels,
+                tag: '推荐',
+                targetLabel: gapTargetLabel,
+                bodyMedal: gapTargetBody,
+                voiceTarget: gapTargetVoiceTarget,
+                voiceDb: gapTargetVoiceDb,
+                weightPercent: gapTargetWeight,
+              },
+              fill:
+                groupId == null
+                  ? { self: null, transfer: null, helpChance: null }
+                  : findStudGapFill(
+                      { groupId, natureName: first.natureName, grade: first.grade },
+                      plans,
+                      selectedAccountNames,
+                    ),
+            });
+          }}
         />
       )}
 
@@ -329,53 +448,59 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           data-testid="nest-summary"
           data-tour="dashboard-nest"
         >
-          <h2 className="text-sm font-medium text-slate-500">配窝建议</h2>
+          <h2 className="text-sm font-medium text-slate-500">补全计划</h2>
           <p className="mt-1 text-sm text-slate-600" data-testid="nest-summary-line">
             {stud.groupCount === 0 ? (
               '未设置种公目标，请先调整体型、声音目标、蛋组和性格。'
-            ) : remainingTargets === 0 ? (
+            ) : gapTotal === 0 && allGapsKnown ? (
               '种公目标已全部收集，没有要补的缺口。'
+            ) : gapsByAccount.length > 1 ? (
+              <>
+                每个号各差种公目标：
+                <br />
+                {gapsByAccount.map((item, index) => (
+                  <span key={item.account} data-testid="nest-gap-account">
+                    {index > 0 ? <span className="text-slate-300"> · </span> : null}
+                    <span className="text-slate-700">{item.account}</span>{' '}
+                    <b className={item.gap > 0 ? 'text-rose-600' : 'text-emerald-700'}>
+                      {item.known ? item.gap : '—'}
+                    </b>
+                  </span>
+                ))}
+              </>
             ) : (
               <>
-                还差 {remainingTargets} 个目标：
+                还差 {gapTotal} 个种公目标：
                 <br />
-                能自己迭代 {iterableTargets} · 未收集 {missingTargets}
+                能自己迭代 {gapOfSingleAccount?.iterable ?? 0} · 未收集{' '}
+                {gapTotal - (gapOfSingleAccount?.iterable ?? 0)}
               </>
             )}
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() =>
-                onNavigate({
-                  type: 'open-collection',
-                  location:
-                    firstIterableGroupId == null
-                      ? { kind: 'studs', view: 'coverage' }
-                      : { kind: 'studs', view: 'coverage', groupId: firstIterableGroupId },
-                })
-              }
-              data-testid="nest-open-coverage"
-              className="min-h-[28px] text-xs font-medium text-emerald-700"
-            >
-              看缺口 ›
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                onNavigate({ type: 'open-collection', location: { kind: 'studs', view: 'eggs' } })
-              }
-              data-testid="nest-open-swap"
-              className="min-h-[28px] text-xs font-medium text-emerald-700"
-            >
-              看推荐种公 ›
-            </button>
-          </div>
+          {planPills.dual + planPills.mother + planPills.transfers > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5" data-testid="nest-plan-pills">
+              <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700">
+                双组 <b>{planPills.dual}</b>
+              </span>
+              {planPills.mother > 0 ? (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                  母本 <b>{planPills.mother}</b>
+                </span>
+              ) : null}
+              {planPills.transfers > 0 ? (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                  需传蛋 <b>{planPills.transfers}</b>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <NestPlanCard
             plans={plans}
             emptyNote={nestEmptyNote}
-            transferTasks={transferTasks}
-            onRemoveTransferTask={removeStudTransferTask}
+            gapsByAccount={gapsByAccountMap}
+            collectedGroupIdsByAccount={collectedGroupsByAccount}
+            motherSuggestions={motherSuggestions}
+            onSeekHelp={() => onNavigate({ type: 'open-groups', groupType: 'mother' })}
           />
         </section>
       ) : null}
@@ -390,6 +515,26 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       ) : null}
 
       <SourceNotice />
+
+      <GapFillDialog
+        target={gapDialog?.target ?? null}
+        fill={gapDialog?.fill ?? null}
+        onClose={() => setGapDialog(null)}
+        eyebrow={gapDialog?.eyebrow}
+        targetReady={selectedGrade != null}
+        onSeekHelp={() => {
+          setGapDialog(null);
+          onNavigate({ type: 'open-groups', groupType: 'mother' });
+        }}
+        onAddToPlan={
+          gapDialog?.canAddToPlan
+            ? () => {
+                toggleMotherPlan(gapDialog.chainKey);
+                setGapDialog(null);
+              }
+            : undefined
+        }
+      />
     </main>
   );
 }

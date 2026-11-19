@@ -69,6 +69,7 @@ describe('myPetsFilterStore 持久化读取', () => {
     expect([...store.getMyPetsSelected()]).toEqual([
       'gender:母',
       'body:大块头',
+      'body:满身高',
       'voice:+100',
       'voice:-100',
       'nature:开朗',
@@ -76,6 +77,32 @@ describe('myPetsFilterStore 持久化读取', () => {
       'shiny:异色',
     ]);
     expect(store.getMyPetsHeightRange()).toEqual({ min: 0, max: 0 });
+  });
+
+  test('奖牌 + 满身高并集标签重启后保留，不退化回身高范围', async () => {
+    // 点已收集母本卡会同时写「奖牌 + 满身高」两个 body 标签（并集）；无身高范围字段。
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ selected: ['body:大块头', 'body:满身高', 'voice:+100'] }),
+    );
+
+    const store = await import('./myPetsFilterStore');
+
+    expect([...store.getMyPetsSelected()]).toEqual(['body:大块头', 'body:满身高', 'voice:+100']);
+    // 并集口径下不再迁移成身高范围：默认全区间，筛选仍由两个标签的并集承担
+    expect(store.getMyPetsHeightRange()).toEqual({ min: 0, max: 100 });
+  });
+
+  test('奖牌 + 零身高并集标签重启后保留', async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ selected: ['body:小不点', 'body:零身高'] }),
+    );
+
+    const store = await import('./myPetsFilterStore');
+
+    expect([...store.getMyPetsSelected()]).toEqual(['body:小不点', 'body:零身高']);
+    expect(store.getMyPetsHeightRange()).toEqual({ min: 0, max: 100 });
   });
 
   test('迁移旧版极限聚合筛选为对应的独立奖牌', async () => {

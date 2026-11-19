@@ -59,6 +59,7 @@ const demoPlan: NestPlan = {
     fatherPosition: { x: 8, y: 0 },
     motherPosition: { x: 0, y: 0 },
     expected: { species: '母兽', nature: '固执', body: '大块头', voice: '100' },
+    expectedValue: 0.6,
   }],
   blockedLinks: [],
   slots: [
@@ -69,6 +70,7 @@ const demoPlan: NestPlan = {
   nestsTotal: 11,
   clusters: [[{ x: 0, y: 0 }, { x: 8, y: 0 }]],
   unfilled: [],
+  delegated: [],
   alternatives: [],
 };
 
@@ -92,6 +94,22 @@ beforeEach(() => {
       covered: 2,
       groupSummary: [],
     },
+    coverageByAccount: new Map([
+      [
+        '测试甲',
+        {
+          cells: [
+            { groupId: 3, state: 'breedable' } as never,
+            { groupId: 4, state: 'empty' } as never,
+          ],
+          groupCount: 14,
+          passedGroups: 0,
+          total: 2,
+          covered: 0,
+          groupSummary: [],
+        },
+      ],
+    ]),
     plans: [],
     recommendations: [
       {
@@ -351,7 +369,7 @@ describe('Dashboard（看板）', () => {
     expect(within(screen.getByTestId('mother-actions')).getAllByTestId('pet-avatar')).toHaveLength(5);
     expect(screen.getAllByTestId('mother-action-nature')).toHaveLength(5);
     expect(within(items[0]).getByTestId('mother-action-nature').textContent).toBeTruthy();
-    expect(within(items[0]).getByTestId('pet-avatar').className).toContain('h-11');
+    expect(within(items[0]).getByTestId('pet-avatar').className).toContain('h-[52px]');
     expect(screen.getByTestId('mother-actions').className).not.toContain('p-4');
     expect(screen.queryByRole('heading', { name: '母本缺口' })).toBeNull();
     expect(items[0]).toHaveAttribute('aria-label', expect.stringContaining('还没有达标母本'));
@@ -360,6 +378,30 @@ describe('Dashboard（看板）', () => {
       type: 'open-collection',
       location: { kind: 'mothers', status: 'missing' },
     });
+  });
+
+  test('种公推荐卡点开「种公推荐 · 怎么补」悬浮窗，目标卡是种公蓝', () => {
+    render(<Dashboard onNavigate={vi.fn()} />);
+    fireEvent.click(within(screen.getByTestId('recommend-item')).getByRole('button'));
+    expect(screen.getByTestId('gap-fill-eyebrow').textContent).toBe('种公推荐 · 怎么补');
+    expect(screen.getByTestId('gap-target-tag').textContent).toBe('推荐');
+    expect(screen.queryByTestId('gap-add-to-plan')).toBeNull();
+    fireEvent.click(screen.getByTestId('gap-fill-close'));
+    expect(screen.queryByTestId('gap-fill-dialog')).toBeNull();
+  });
+
+  test('点母本缺口卡打开「怎么补」悬浮窗，没有可配的线时写本号跨号都无法配对', () => {
+    const onNavigate = vi.fn();
+    render(<Dashboard onNavigate={onNavigate} />);
+    fireEvent.click(screen.getByTestId('dashboard-action-mothers'));
+
+    fireEvent.click(within(screen.getAllByTestId('mother-action-item')[0]).getByRole('button'));
+    expect(screen.getByRole('dialog', { name: '怎么补' })).toBeTruthy();
+    expect(screen.getByTestId('gap-fill-eyebrow').textContent).toBe('母本缺口 · 怎么补');
+    expect(screen.getByTestId('gap-unpairable').textContent).toContain('本号、跨号都无法配对');
+
+    fireEvent.click(screen.getByTestId('gap-fill-close'));
+    expect(screen.queryByTestId('gap-fill-dialog')).toBeNull();
   });
 
   test('进度卡与行动都发明确导航意图', () => {
@@ -378,26 +420,64 @@ describe('Dashboard（看板）', () => {
       location: { kind: 'mothers', status: 'missing' },
     });
 
-    fireEvent.click(screen.getByTestId('nest-open-coverage'));
-    expect(onNavigate).toHaveBeenCalledWith({
-      type: 'open-collection',
-      location: { kind: 'studs', view: 'coverage', groupId: 3 },
-    });
-
-    fireEvent.click(screen.getByTestId('nest-open-swap'));
-    expect(onNavigate).toHaveBeenCalledWith({
-      type: 'open-collection',
-      location: { kind: 'studs', view: 'eggs' },
-    });
+    // 2026-11-19 用户口径：补全计划不再放「看缺口 / 看推荐种公」入口
+    expect(screen.queryByTestId('nest-open-coverage')).toBeNull();
+    expect(screen.queryByTestId('nest-open-swap')).toBeNull();
   });
 
-  test('看板直接展示配窝建议的摆位图与配对', () => {
+  test('看板直接展示配窝建议的配对（标题已改为补全计划，摆位图已移除）', () => {
     h.summary = { ...h.summary, plans: [demoPlan] };
     render(<Dashboard onNavigate={vi.fn()} />);
 
+    expect(screen.getByText('补全计划')).toBeTruthy();
+    // 2026-11-18：汇总只剩双组 / 母本 / 需传蛋；这份方案三者都是 0，不再渲染空胶囊行
+    expect(screen.queryByTestId('nest-plan-pills')).toBeNull();
     expect(screen.getByTestId('breed-list')).toBeTruthy();
-    expect(screen.getByTestId('nest-layout')).toBeTruthy();
+    // 2026-11-19 用户口径：补全计划不再画小窝摆位图
+    expect(screen.queryByTestId('nest-layout')).toBeNull();
     expect(screen.getAllByTestId('breed-suggestion').length).toBeGreaterThan(0);
+  });
+
+  test('补全计划汇总不再写学院 / 性格档位，只剩双组 / 母本 / 需传蛋', () => {
+    const dualPlan: NestPlan = {
+      ...demoPlan,
+      pairings: [{ ...demoPlan.pairings[0], groupIds: [2, 7] }],
+    };
+    h.summary = { ...h.summary, plans: [dualPlan] };
+    render(<Dashboard onNavigate={vi.fn()} />);
+
+    const pills = screen.getByTestId('nest-plan-pills');
+    expect(pills).toHaveTextContent('双组');
+    expect(pills).not.toHaveTextContent('学院');
+    expect(pills).not.toHaveTextContent('性格');
+  });
+
+  test('补全计划按号各报缺口，不把几个号加成一个总数（2026-11-18 修正）', () => {
+    h.accounts = ['测试甲', '测试乙'];
+    const coverageOf = (states: Array<'breedable' | 'empty'>) =>
+      ({
+        cells: states.map((state, index) => ({ groupId: 3 + index, state }) as never),
+        groupCount: 14,
+        passedGroups: 0,
+        total: states.length,
+        covered: 0,
+        groupSummary: [],
+      }) as never;
+    h.summary = {
+      ...h.summary,
+      coverageByAccount: new Map([
+        ['测试甲', coverageOf(['breedable', 'empty'])],
+        ['测试乙', coverageOf(['breedable'])],
+      ]),
+    };
+    render(<Dashboard onNavigate={vi.fn()} />);
+
+    const line = screen.getByTestId('nest-summary-line');
+    // 甲号差 2、乙号差 1：分别写出来，不合成「还差 3 个」
+    expect(line).toHaveTextContent('测试甲 2');
+    expect(line).toHaveTextContent('测试乙 1');
+    expect(line).not.toHaveTextContent('还差 3');
+    expect(screen.getAllByTestId('nest-gap-account')).toHaveLength(2);
   });
 
   test('没有可自己孵的方案时明确解释，不制造空推荐', () => {
@@ -416,6 +496,19 @@ describe('Dashboard（看板）', () => {
     h.summary = {
       ...h.summary,
       stud: { ...h.summary.stud, cells: [], groupCount: 14, passedGroups: 14 },
+      coverageByAccount: new Map([
+        [
+          '测试甲',
+          {
+            cells: [],
+            groupCount: 14,
+            passedGroups: 14,
+            total: 0,
+            covered: 0,
+            groupSummary: [],
+          },
+        ],
+      ]),
       recommendations: [],
     };
     render(<Dashboard onNavigate={vi.fn()} />);

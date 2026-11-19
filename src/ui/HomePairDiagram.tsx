@@ -113,6 +113,14 @@ export interface HomePairNode {
   academy: boolean;
   /** 配对里提到、但这次快照里找不到住户 */
   missing: boolean;
+  /** 住户所在小窝的显示名（大卡的卡底小字） */
+  nest?: string;
+  /** 住户自己的性格：背包里没找到这只时也能显示 */
+  nature?: string;
+  /** 实例基础 id：背包里没找到时用它取头像 */
+  baseId?: string;
+  /** 背包里对应的那只：有就带分贝 / 身高 / 体重 / 奖牌 */
+  pet?: OwnedPet;
 }
 
 export interface HomePairCluster {
@@ -152,6 +160,9 @@ export function buildHomePairClusters(
       return { actorId, name: '公本未知', gender: '未知', academy: false, missing: true };
     }
     const pet = petOf(resident);
+    const nestName = resident.nest
+      ? resident.nest.nestName || (resident.nest.nestType === 'academy' ? '学院小窝' : '普通小窝')
+      : '';
     return {
       actorId,
       name: resident.name || pet?.name || `精灵 ${actorId}`,
@@ -163,6 +174,10 @@ export function buildHomePairClusters(
             : '未知',
       academy: resident.nest?.nestType === 'academy',
       missing: false,
+      nest: resident.nest?.roomName ? `${nestName} · ${resident.nest.roomName}` : nestName,
+      nature: resident.nature || pet?.nature,
+      baseId: resident.baseId,
+      pet,
     };
   };
 
@@ -183,11 +198,17 @@ export function buildHomePairClusters(
   }
 
   const clusters = new Map<string, HomePairCluster>();
-  const indexOf = (cluster: HomePairCluster, actorId: string): number => {
-    const index = cluster.nodes.findIndex((node) => node.actorId === actorId);
-    if (index >= 0) return index;
-    cluster.nodes.push(nodeOf(actorId));
-    return cluster.nodes.length - 1;
+  const indexOf = (cluster: HomePairCluster, actorId: string, asMother = false): number => {
+    let index = cluster.nodes.findIndex((node) => node.actorId === actorId);
+    if (index < 0) {
+      cluster.nodes.push(nodeOf(actorId));
+      index = cluster.nodes.length - 1;
+    }
+    // 游戏配对里的 `femaleActorId` 本身就是母本：背包里没有这只（或没有性别）时，
+    // 也要按母本排到左列，不能当成种公（2026-11-19 莱茵家园反馈）。
+    const node = cluster.nodes[index];
+    if (asMother && node.gender === '未知') node.gender = '母';
+    return index;
   };
 
   for (const couple of couples) {
@@ -196,7 +217,7 @@ export function buildHomePairClusters(
     const root = find(couple.femaleActorId);
     const cluster = clusters.get(root) ?? { key: root, nodes: [], edges: [] };
     clusters.set(root, cluster);
-    const femaleIndex = indexOf(cluster, couple.femaleActorId);
+    const femaleIndex = indexOf(cluster, couple.femaleActorId, true);
     for (const maleActorId of maleActorIds) {
       const maleIndex = indexOf(cluster, maleActorId);
       if (!cluster.edges.some(([a, b]) => a === femaleIndex && b === maleIndex)) {

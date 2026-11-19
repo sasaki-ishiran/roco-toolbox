@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>接单上窝 · 复用补全计划紧凑卡（预览）</title>
+<style>
+  body { background:#f1f5f9; font-family: system-ui, sans-serif; margin:0; }
+  .stage { display:flex; gap:24px; padding:24px; flex-wrap:wrap; align-items:flex-start; }
+  .label { font-size:12px; color:#64748b; margin:0 0 8px 2px; }
+  .screen { background:#f1f5f9; padding:16px; box-sizing:border-box; border-radius:16px; }
+  .card { background:#fff; border-radius:16px; padding:16px; box-shadow:0 1px 2px rgba(15,23,42,.08); }
+
+  /* 单行（一单） */
+  .row { border:1px solid #e2e8f0; border-radius:12px; padding:8px; }
+  .rowhead { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .eggname { font-size:14px; font-weight:500; color:#0f172a; }
+  .tags { margin-top:4px; display:flex; flex-wrap:wrap; gap:4px; font-size:10px; }
+  .tag { border-radius:4px; padding:2px 4px; }
+  .t-nature { background:#f5f3ff; color:#6d28d9; } .t-gender { background:#fdf2f8; color:#be185d; }
+  .from { margin-top:4px; font-size:10px; color:#94a3b8; }
+  .chance { margin-top:2px; font-size:10px; font-weight:500; color:#047857; }
+  .actions { display:flex; gap:4px; flex-shrink:0; }
+  .swap { background:#0f172a; color:#fff; border:none; border-radius:999px; padding:4px 8px; font-size:10px; font-weight:700; }
+  .placed { display:flex; align-items:center; gap:4px; border:1px solid #e2e8f0; border-radius:8px; padding:4px 6px; font-size:11px; color:#475569; min-height:28px; box-sizing:border-box; }
+  .pairhead { margin-top:6px; display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+  .nchip { display:inline-flex; align-items:center; gap:2px; border-radius:4px; background:#fffbeb; color:#b45309; padding:2px 6px; font-size:10px; line-height:1; font-weight:600; }
+  .pairvoice { font-size:10px; line-height:1; color:#64748b; }
+  .actions-col { display:flex; flex-direction:column; gap:4px; align-items:flex-end; justify-content:center; }
+  .parents2 { margin-top:2px; padding-bottom:6px; display:grid; grid-template-columns:1fr 1fr; gap:3px 8px; align-items:start; }
+  .colL { display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .badge-below { align-self:center; font-size:9px; line-height:1; background:#d1fae5; color:#047857; border-radius:999px; padding:2px 6px; font-weight:700; }
+
+  /* ===== 紧凑精灵卡（复用补全计划 PairingPetCard，86px，按现行画法 0.885 缩放成 142 宽） ===== */
+  .petwrap { position:relative; width:142px; height:87px; flex-shrink:0; }
+  .pet { position:absolute; left:0; top:0; width:160px; height:86px; transform:scale(.885); transform-origin:top left;
+         border-radius:12px; padding:6px; box-sizing:border-box; overflow:hidden; box-shadow:0 1px 2px rgba(15,23,42,.06); }
+  .pet.f { background:#fdf2f8; border:1px solid #fbcfe8; }
+  .pet.m { background:#f0f9ff; border:1px solid #bae6fd; }
+  .pet.home::after { content:""; position:absolute; inset:-2px; border:2px solid #6ee7b7; border-radius:14px; pointer-events:none; }
+  .hd { position:absolute; left:6px; right:6px; top:6px; display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:2px; }
+  .hd .l { display:flex; flex-direction:column; align-items:flex-start; gap:1px; min-width:0; }
+  .grp { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border-radius:2px; padding:0 4px; font-size:9px; line-height:12px; background:#e0f2fe; color:#075985; }
+  .medals { margin-top:2px; display:flex; gap:4px; }
+  .medal { width:14px; height:14px; object-fit:contain; border-radius:3px; background:#fef3c7; font-size:8px; line-height:14px; text-align:center; color:#92400e; }
+  .hd .r { display:flex; flex-direction:column; align-items:flex-end; gap:1px; font-size:10px; line-height:13px; color:#64748b; min-width:0; }
+  .nat { display:flex; align-items:center; gap:2px; }
+  .gmark { display:inline-flex; width:12px; height:12px; align-items:center; justify-content:center; border-radius:999px; font-size:9px; flex-shrink:0; }
+  .g-f { background:#fce7f3; color:#db2777; } .g-m { background:#e0f2fe; color:#0369a1; }
+  .natb { display:inline-flex; border-radius:2px; background:#fef3c7; color:#78350f; padding:0 4px; font-size:10px; line-height:12px; font-weight:500; white-space:nowrap; }
+  .ava { position:absolute; left:50%; top:6px; transform:translateX(-50%); width:44px; height:44px; object-fit:contain; }
+  .nm { position:absolute; left:4px; right:4px; top:52px; margin:0; font-size:11px; line-height:16px; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#0f172a; }
+  .boxline { position:absolute; left:4px; right:4px; top:70px; margin:0; font-size:9px; line-height:12px; text-align:center; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* 接单特有：角标（位置沿用现行画法：压在卡上沿，不参与缩放） */
+  .badge-academy { position:absolute; top:-8px; left:4px; z-index:20; display:inline-flex; align-items:center; gap:2px; background:#059669; color:#fff; border-radius:999px; padding:1px 4px; font-size:9px; font-weight:700; }
+  .badge-home { position:absolute; top:-8px; right:4px; z-index:20; background:#d1fae5; color:#047857; border-radius:999px; padding:1px 4px; font-size:9px; font-weight:700; }
+</style>
+</head>
+<body>
+<h1 style="margin:24px 24px 0;font-size:17px;font-weight:700;color:#0f172a">接单上窝 · 复用补全计划紧凑卡（预览）</h1>
+<p style="margin:8px 24px 0;max-width:760px;font-size:12px;line-height:1.8;color:#64748b">
+  每单的母本 / 种公两张卡换成补全计划那张 86px 紧凑卡（375 下按现行 0.885 缩放成 142 宽）：蛋组左上、奖牌在其下、
+  右列 性格 / dB / 高 / 重、头像 44、名字加粗、卡底一行「账号 · 盒位」（角色靠卡片左右位置区分，不再写「母本/种公」）。接单特有标记保留：
+  <b>进学院小窝</b>（左上绿标）、<b>已在家园</b>（右上标 + 绿描边）；稀有度图标与编号按紧凑卡口径去掉。数字 / 精灵为示例。
+</p>
+<div class="stage">
+  <div>
+    <p class="label">375</p>
+    <div class="screen" style="width:375px">
+      <div class="card">
+        <h2 style="margin:0;font-size:14px;font-weight:500;color:#64748b">接单上窝</h2>
+        <p style="margin:2px 0 8px;font-size:11px;color:#64748b">1 个账号 · 1 单待上窝 · 2 只精灵</p>
+        <article class="row">
+          <div class="parents2" style="margin-top:0">
+            <div class="petwrap">
+              <article class="pet f">
+                <div class="hd">
+                  <div class="l">
+                    <span class="grp">龙组</span><span class="grp">不死组</span>
+                    <span class="medals"><img class="medal" src="../../public/ui/medals/1001-max.png" alt="满体重" title="满体重"><img class="medal" src="../../public/ui/medals/1026-max.png" alt="婉转声 +100" title="婉转声 +100"></span>
+                  </div>
+                  <div class="r">
+                    <span class="nat"><span class="gmark g-f">♀</span><span class="natb">固执</span></span>
+                  </div>
+                </div>
+                <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="">
+                <h4 class="nm">恶魔红钻</h4>
+                <p class="boxline">来自「收集小组」 · 阿乙</p>
+              </article>
+            </div>
+            <div class="actions-col">
+              <button class="swap">换配对 2 ▾</button>
+              <label class="placed"><input type="checkbox">已上窝</label>
+            </div>
+            <div class="pairhead">
+              <span class="nchip">30%固执 <i class="gmark g-f">♀</i></span>
+              <span class="pairvoice">100dB</span>
+            </div>
+            <div></div>
+            <div class="colL">
+              <div class="petwrap">
+                <article class="pet f home">
+                <div class="hd">
+                  <div class="l">
+                    <span class="grp">天空组</span><span class="grp">拟人组</span>
+                    <span class="medals"><span class="medal">大</span><span class="medal">婉</span></span>
+                  </div>
+                  <div class="r">
+                    <span class="nat"><span class="gmark g-f">♀</span><span class="natb">固执</span></span>
+                    <span>100dB</span><span>高100%</span><span>重98.6%</span>
+                  </div>
+                </div>
+                <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3001/icon.png" alt="">
+                <h4 class="nm">可立鸡</h4>
+                <p class="boxline">菠萝吹雪 · 盒子8 第5位</p>
+              </article>
+              </div>
+              <span class="badge-below">已在家园</span>
+            </div>
+            <div class="petwrap">
+              <span class="badge-academy"><i style="width:7px;height:7px;border-radius:999px;background:#a7f3d0;display:inline-block"></i>进学院小窝</span>
+              <article class="pet m">
+                <div class="hd">
+                  <div class="l">
+                    <span class="grp">机械组</span><span class="grp">拟人组</span>
+                    <span class="medals"><span class="medal">大</span><span class="medal">婉</span></span>
+                  </div>
+                  <div class="r">
+                    <span class="nat"><span class="gmark g-m">♂</span><span class="natb">固执</span></span>
+                    <span>100dB</span><span>高100%</span><span>重98.6%</span>
+                  </div>
+                </div>
+                <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3200/icon.png" alt="">
+                <h4 class="nm">机械方方</h4>
+                <p class="boxline">菠萝吹雪 · 盒子12 第8位</p>
+              </article>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">390</p>
+    <div class="screen" style="width:390px">
+      <div class="card">
+        <h2 style="margin:0;font-size:14px;font-weight:500;color:#64748b">接单上窝</h2>
+        <p style="margin:2px 0 8px;font-size:11px;color:#64748b">1 个账号 · 1 单待上窝 · 2 只精灵</p>
+        <article class="row">
+          <div class="parents2" style="margin-top:0">
+            <div class="petwrap">
+              <article class="pet f">
+                <div class="hd">
+                  <div class="l">
+                    <span class="grp">龙组</span><span class="grp">不死组</span>
+                    <span class="medals"><img class="medal" src="../../public/ui/medals/1001-max.png" alt="满体重" title="满体重"><img class="medal" src="../../public/ui/medals/1026-max.png" alt="婉转声 +100" title="婉转声 +100"></span>
+                  </div>
+                  <div class="r">
+                    <span class="nat"><span class="gmark g-f">♀</span><span class="natb">固执</span></span>
+                  </div>
+                </div>
+                <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3043/icon.png" alt="">
+                <h4 class="nm">恶魔红钻</h4>
+                <p class="boxline">来自「收集小组」 · 阿乙</p>
+              </article>
+            </div>
+            <div class="actions-col">
+              <button class="swap">换配对 2 ▾</button>
+              <label class="placed"><input type="checkbox">已上窝</label>
+            </div>
+            <div class="pairhead">
+              <span class="nchip">30%固执 <i class="gmark g-f">♀</i></span>
+              <span class="pairvoice">100dB</span>
+            </div>
+            <div></div>
+            <div class="colL">
+              <div class="petwrap">
+                <article class="pet f home">
+                <div class="hd">
+                  <div class="l">
+                    <span class="grp">天空组</span><span class="grp">拟人组</span>
+                    <span class="medals"><span class="medal">大</span><span class="medal">婉</span></span>
+                  </div>
+                  <div class="r">
+                    <span class="nat"><span class="gmark g-f">♀</span><span class="natb">固执</span></span>
+                    <span>100dB</span><span>高100%</span><span>重98.6%</span>
+                  </div>
+                </div>
+                <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3001/icon.png" alt="">
+                <h4 class="nm">可立鸡</h4>
+                <p class="boxline">菠萝吹雪 · 盒子8 第5位</p>
+              </article>
+              </div>
+              <span class="badge-below">已在家园</span>
+            </div>
+            <div class="petwrap">
+              <span class="badge-academy"><i style="width:7px;height:7px;border-radius:999px;background:#a7f3d0;display:inline-block"></i>进学院小窝</span>
+              <article class="pet m">
+                <div class="hd">
+                  <div class="l">
+                    <span class="grp">机械组</span><span class="grp">拟人组</span>
+                    <span class="medals"><span class="medal">大</span><span class="medal">婉</span></span>
+                  </div>
+                  <div class="r">
+                    <span class="nat"><span class="gmark g-m">♂</span><span class="natb">固执</span></span>
+                    <span>100dB</span><span>高100%</span><span>重98.6%</span>
+                  </div>
+                </div>
+                <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3200/icon.png" alt="">
+                <h4 class="nm">机械方方</h4>
+                <p class="boxline">菠萝吹雪 · 盒子12 第8位</p>
+              </article>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

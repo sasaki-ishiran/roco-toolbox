@@ -1,6 +1,7 @@
 import { breedingBodyGradeOf } from '../shared/bodySize.js';
 import type { DemandBody, DemandCriteria, DemandVoice } from '../shared/collectionGroups';
 import { isBreedableGroup } from './eggs';
+import { genderShareOf } from './genderRatio';
 import { matchesVoiceOption } from './petFilters';
 import type { AccountSnapshot } from './parseBackup';
 import { defaultEggNatures } from './recommendedNatures';
@@ -336,7 +337,7 @@ export interface StudHatchOption extends DemandPairOption {
   name: string;
   /** 这颗蛋的可配蛋组 id（双蛋组时有两个）。 */
   groupIds: number[];
-  /** 命中需求的整体概率 = 性格概率 × 性别概率（挑性别 50%）。 */
+  /** 命中需求的整体概率 = 性格概率 × 出目标性别的比例（按蛋物种性别比例，缺数据 5:5）。 */
   chance: number;
 }
 
@@ -368,9 +369,12 @@ export function studHatchOptions(
       entry.maleCapable === true &&
       (entry.eggGroups ?? []).some((group) => group === groupId && isBreedableGroup(group)),
   );
-  const genderFactor = demand.gender ? 0.5 : 1;
   const options: StudHatchOption[] = [];
   for (const egg of eggs) {
+    const genderFactor =
+      demand.gender === '公' || demand.gender === '母'
+        ? genderShareOf(egg, demand.gender)
+        : 1;
     const [best] = pairOptionsForEgg(
       snapshots,
       {

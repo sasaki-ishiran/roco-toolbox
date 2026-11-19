@@ -72,7 +72,7 @@ describe('家园配窝图（摆位图画法）', () => {
     expect(academyNode?.getAttribute('data-academy')).toBe('true');
   });
 
-  test('一对里母在左、公在右（和「配窝建议」的配对行、下面的家园精灵卡一致）', () => {
+  test('一对里母在左、公在右（和「配窝建议」的配对行一致）', () => {
     const residents = [
       resident({ actorId: 'f1', name: '可立鸡', gender: '母' }),
       resident({ actorId: 'm1', name: '锤头鹅', gender: '公' }),

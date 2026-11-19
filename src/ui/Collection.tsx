@@ -6,8 +6,15 @@ import { MyPets } from './MyPets';
 import { MotherView } from './MotherView';
 import { StudCollection } from './StudCollection';
 import { useCollectionSummary } from './useCollectionSummary';
+import { useMotherSuggestions } from './useMotherSuggestions';
+import { useAccountFilter } from './accountFilterStore';
 import { AccountFilterBar } from './AccountFilterBar';
 import { useOwnedPets } from './useOwnedPets';
+import {
+  clearInventoryFilters,
+  setMyPetsSelected,
+} from './myPetsFilterStore';
+import { setPersonalQuery } from './listViewStore';
 
 export interface CollectionProps {
   location: CollectionLocation;
@@ -37,11 +44,20 @@ const KINDS: Array<{ value: Kind; label: string }> = [
 function MothersBranch({
   searchIndex,
   status,
+  onNavigate,
 }: {
   searchIndex: ReturnType<typeof buildEggSearchIndex>;
   status: Extract<CollectionLocation, { kind: 'mothers' }>['status'];
+  onNavigate: (intent: NavigationIntent) => void;
 }) {
-  const { owned, motherGroups, mode } = useCollectionSummary();
+  const summary = useCollectionSummary();
+  const { owned, motherGroups, mode } = summary;
+  const { accounts } = useOwnedPets();
+  const { excluded } = useAccountFilter();
+  const accountNames = accounts.filter((name) => !excluded.has(name));
+  /** 悬浮窗与看板共用同一份母本建议（2026-11-19） */
+  const { suggestions, targetLabel, bodyMedal, voiceTarget, voiceDb, weightPercent } =
+    useMotherSuggestions(summary);
 
   return (
     <main className="mx-auto max-w-md space-y-2 p-3">
@@ -52,6 +68,17 @@ function MothersBranch({
         motherGroups={motherGroups}
         mode={mode}
         status={status}
+        motherSuggestions={suggestions}
+        accountNames={accountNames}
+        gapTarget={{ label: targetLabel, bodyMedal, voiceTarget, voiceDb, weightPercent }}
+        onSeekHelp={() => onNavigate({ type: 'open-groups', groupType: 'mother' })}
+        onOpenInventory={(jump) => {
+          // 点已收集卡 = 去精灵背包按这条进化链搜，带上奖牌 / 身高 / 性格条件
+          clearInventoryFilters();
+          setMyPetsSelected(new Set(jump.tags));
+          setPersonalQuery('inventory-all', jump.name);
+          onNavigate({ type: 'open-collection', location: { kind: 'inventory' } });
+        }}
       />
     </main>
   );
@@ -128,7 +155,7 @@ export function Collection({
       </nav>
 
       {location.kind === 'mothers' ? (
-        <MothersBranch searchIndex={searchIndex} status={location.status} />
+        <MothersBranch searchIndex={searchIndex} status={location.status} onNavigate={onNavigate} />
       ) : location.kind === 'studs' ? (
         <StudCollection
           expandedGroupId={expandedGroupId}

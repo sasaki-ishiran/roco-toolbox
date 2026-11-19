@@ -29,6 +29,8 @@ describe('PetCard 头像', () => {
     render(<PetCard pet={pet} species={species} eggGroupNames={{ 6: '动物组', 9: '植物组' }} />);
     const card = screen.getByRole('article');
     expect(card.className).toContain('h-[104px]');
+    expect(card.className).toContain('border-pink-200');
+    expect(card.className).toContain('bg-pink-50');
     expect(screen.getByTestId('pet-card-avatar')).toHaveClass(
       'absolute',
       'left-1/2',
@@ -41,6 +43,21 @@ describe('PetCard 头像', () => {
     expect(screen.getByTestId('pet-card-egg-groups')).toHaveClass('flex-col');
     expect(screen.getByTestId('pet-card-natures')).toHaveClass('flex-col', 'items-end');
     expect(card).not.toHaveTextContent('已收集');
+  });
+
+  test('底色和边框按性别：母粉、公蓝、未知灰，与配窝卡一致', () => {
+    render(<PetCard pet={pet} species={species} eggGroupNames={{}} />);
+    expect(screen.getByRole('article').className).toContain('bg-pink-50');
+    cleanup();
+    render(<PetCard pet={{ ...pet, gender: '公' }} species={species} eggGroupNames={{}} />);
+    const male = screen.getByRole('article');
+    expect(male.className).toContain('border-sky-200');
+    expect(male.className).toContain('bg-sky-50');
+    cleanup();
+    render(<PetCard pet={{ ...pet, gender: '未知' }} species={species} eggGroupNames={{}} />);
+    const unknown = screen.getByRole('article');
+    expect(unknown.className).toContain('border-slate-200');
+    expect(unknown.className).toContain('bg-slate-50');
   });
 
   test('有图鉴条目时按 gameId 显示官方头像', () => {

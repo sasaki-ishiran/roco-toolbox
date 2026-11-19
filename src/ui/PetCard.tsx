@@ -59,6 +59,7 @@ export function PetCard({ pet, species, eggGroupNames }: PetCardProps) {
     <PetCardLayout
       name={displayName}
       size="tall"
+      gender={pet.gender}
       number={species?.number}
       eggGroups={eggGroups}
       natures={pet.nature ? [pet.nature] : []}

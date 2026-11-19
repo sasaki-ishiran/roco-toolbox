@@ -153,6 +153,30 @@ describe('filterByTags', () => {
     const result = buildTagIndex(owned, speciesByGameId, eggGroupNames);
     expect(filterByTags(result.index, ['eggGroup:5', 'eggGroup:6'])).toEqual([1]);
   });
+
+  test('母本跳转的体型并集：奖牌与身高到顶 / 到底都能命中', () => {
+    // 有奖牌但身高不是极端的（真实数据里存在），以及无奖牌但身高 100% / 0% 的，
+    // 都要被同一组筛选（大块头 + 满身高）收进来。
+    const medalNear = pet({
+      gender: '母',
+      voiceDb: 100,
+      medalBody: '大块头',
+      heightPercent: 98.48,
+      weightPercent: 98.4,
+    });
+    const heightFull = pet({
+      gender: '母',
+      voiceDb: 100,
+      medalBody: '',
+      heightPercent: 100,
+      weightPercent: 95,
+    });
+    const result = buildTagIndex([medalNear, heightFull], speciesByGameId, eggGroupNames);
+
+    expect(
+      filterByTags(result.index, ['gender:母', 'body:大块头', 'body:满身高', 'voice:+100']),
+    ).toEqual([0, 1]);
+  });
 });
 
 describe('computeFacetCounts（动态标签数量）', () => {

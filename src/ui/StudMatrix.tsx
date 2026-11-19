@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { GRADE_BODY, gradeLabel, type PetGrade, type TargetMode } from '../domain/petFilters';
 import {
   buildStudMatrix,
@@ -20,6 +20,11 @@ import type { DemandBody, DemandVoice } from '../shared/collectionGroups';
 import { PetAvatar } from './PetAvatar';
 import { ModalSurface } from './primitives/ModalSurface';
 import { clearStudMatrixPick, setStudMatrixPick, useStudMatrixPicks } from './studMatrixStore';
+import { GapFillDialog } from './GapFillDialog';
+import type { NestPlan } from '../domain/nestPlan';
+import { buildStudCandidates } from '../domain/studCandidates';
+import { findStudGapFill } from '../domain/gapFill';
+
 
 const GRADE_LABEL: Record<PetGrade, string> = {
   大婉: '大婉',
@@ -61,12 +66,10 @@ export interface StudMatrixProps {
   demandGroupsError?: string;
   onLoadDemandGroups?: () => void;
   onPublishStudDemand?: (input: StudDemandPublishInput) => Promise<void>;
-  /** 筛选内容收在卡片右上角（2026-10-29 用户要求）：传了才有「筛选」按钮与折叠面板。 */
-  filterPanel?: ReactNode;
-  filterOpen?: boolean;
-  onToggleFilter?: () => void;
-  /** 筛选与默认值不同：右上角小圆点提示。 */
-  filterActive?: boolean;
+  /** 配窝方案（按号）：算这一格谁家能配、谁家能传蛋 */
+  plans?: readonly NestPlan[];
+  /** 当前选中的号（不在里面的号算「跨号」） */
+  accountNames?: readonly string[];
 }
 
 export interface StudDemandGroup {
@@ -135,10 +138,8 @@ export function StudMatrix({
   demandGroupsError = '',
   onLoadDemandGroups,
   onPublishStudDemand,
-  filterPanel,
-  filterOpen = false,
-  onToggleFilter,
-  filterActive = false,
+  plans = [],
+  accountNames = [],
 }: StudMatrixProps) {
   const grades = useMemo(() => {
     const order: PetGrade[] = ['大婉', '小婉', '大粗', '小粗'];
@@ -224,6 +225,8 @@ export function StudMatrix({
     return map;
   }, [matrix.rows, recommendationByCell, species, speciesByGameId, owned]);
   const [picker, setPicker] = useState<PickerState | null>(null);
+  /** 点缺口格看「怎么补」：堆叠卡切换种公（性格由格子锁定） */
+  const [gapCell, setGapCell] = useState<{ grade: PetGrade; cell: StudMatrixCell } | null>(null);
   /** 点缺口格（淡黄「荐」或灰「缺」）→ 选小组，把这条种公需求发到小组需求中心。 */
   const [publishCell, setPublishCell] = useState<{
     eggGroupId: number;
@@ -276,39 +279,15 @@ export function StudMatrix({
   };
 
   return (
-    <section className="rounded-2xl bg-white p-2.5 shadow-sm" data-testid="stud-matrix">
-      <header className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-sm font-medium text-slate-500">种公阵列</h2>
-          <p className="mt-0.5 truncate text-[10px] text-slate-400">
-            跟随「覆盖度」目标 · 点带数字的格子换代表
-          </p>
-        </div>
-        {filterPanel ? (
-          <button
-            type="button"
-            aria-expanded={filterOpen}
-            onClick={onToggleFilter}
-            data-testid="stud-matrix-filter-toggle"
-            className={`relative min-h-[28px] shrink-0 rounded-md border px-2 text-[11px] ${
-              filterOpen
-                ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
-                : 'border-slate-200 text-slate-500'
-            }`}
-          >
-            筛选<span aria-hidden className="ml-0.5 text-[9px]">{filterOpen ? '▲' : '▼'}</span>
-            {filterActive ? (
-              // 状态不能只靠颜色（docs/产品交互规范.md 第 64 行）：用文字「已改」标出，读屏也能读到
-              <span className="ml-0.5 text-[9px] font-medium" data-testid="stud-matrix-filter-state">
-                已改
-              </span>
-            ) : null}
-          </button>
-        ) : null}
-      </header>
+    <section
+      className="rounded-2xl bg-white p-2.5 shadow-sm"
+      data-testid="stud-matrix"
+      aria-label="种公阵列"
+    >
+      {/* 卡片标题与副标题去掉（2026-11-19 用户口径）：导航已经是「收集 · 种公」 */}
 
       {grades.length > 0 ? (
-        <div className="mt-1.5 flex items-center gap-1" role="group" aria-label="阵列档位">
+        <div className="flex items-center gap-1" role="group" aria-label="阵列档位">
           {grades.map((item) => (
             <button
               key={item}
@@ -330,21 +309,10 @@ export function StudMatrix({
         </div>
       ) : null}
 
-      {filterPanel && filterOpen ? (
-        <div
-          className="mt-2 rounded-xl bg-slate-50 p-2"
-          data-testid="stud-matrix-filter"
-        >
-          {filterPanel}
-        </div>
-      ) : null}
-
       {/* 2026-10-28：表格只做横向滚动；不要加 touch-pan-x，否则触摸表格区域时整页上下也滑不动 */}
       {grades.length === 0 ? (
         <p className="mt-2 text-xs text-slate-400" data-testid="stud-matrix-empty">
-          {filterPanel
-            ? '覆盖度里还没选目标组合与性格：到看板选择体型和声音，再在这里选择性格。'
-            : '覆盖度里还没选目标组合与性格：先到看板选择体型和声音。'}
+          覆盖度里还没选目标组合与性格：到看板选择体型和声音，再到上面的筛选里选性格。
         </p>
       ) : matrix.natures.length === 0 ? (
         <p className="mt-2 text-xs text-slate-400" data-testid="stud-matrix-no-nature">
@@ -402,7 +370,8 @@ export function StudMatrix({
                           recommendation={
                             recommendationByCell.get(cellKey) ?? fallbackByCell.get(cellKey)
                           }
-                          onOpen={() => setPicker({ grade, cell })}
+                                          onOpen={() => setPicker({ grade, cell })}
+                          onGap={() => setGapCell({ grade, cell })}
                           onRecommend={
                             onPublishStudDemand ? () => openPublish(cell) : undefined
                           }
@@ -417,6 +386,56 @@ export function StudMatrix({
           </table>
         </div>
       )}
+
+      {gapCell ? (() => {
+        const key = {
+          groupId: gapCell.cell.groupId,
+          natureName: gapCell.cell.natureName,
+          grade: gapCell.grade,
+        };
+        const label = eggGroupNames[gapCell.cell.groupId] ?? `蛋组${gapCell.cell.groupId}`;
+        return (
+          <GapFillDialog
+            target={{
+              kind: 'stud',
+              name: `${label} · ${gapCell.cell.natureName}`,
+              gameId: null,
+              natures: [gapCell.cell.natureName],
+              eggGroupLabels: [label],
+              tag: '缺口',
+              targetLabel: gradeLabel(gapCell.grade, mode),
+            }}
+            fill={findStudGapFill(key, plans, accountNames)}
+            eyebrow="种公缺口 · 怎么补"
+            studCandidates={buildStudCandidates({
+              cell: key,
+              plans,
+              accounts: accountNames,
+              owned,
+              species,
+            })}
+            onSeekHelp={
+              onPublishStudDemand
+                ? () => {
+                    // 小组求蛋 = 把这个缺口发到小组需求中心（选小组 → 发需求）
+                    const cell = gapCell?.cell;
+                    setGapCell(null);
+                    if (cell) openPublish(cell);
+                  }
+                : undefined
+            }
+            onSelectStud={(candidate) => {
+              if (!candidate.petKey) return;
+              setStudMatrixPick(
+                studMatrixPickKey(gapCell.grade, gapCell.cell.groupId, gapCell.cell),
+                candidate.petKey,
+              );
+              setGapCell(null);
+            }}
+            onClose={() => setGapCell(null)}
+          />
+        );
+      })() : null}
 
       {picker ? (
         <PickerSheet
@@ -572,6 +591,7 @@ function MatrixCell({
   recommendation,
   transferFill,
   onOpen,
+  onGap,
   onRecommend,
 }: {
   cell: StudMatrixCell;
@@ -581,7 +601,9 @@ function MatrixCell({
   /** 其他号能出这个格子需要的蛋（2026-11-02，单账号视角才可能为真）。 */
   transferFill?: boolean;
   onOpen: () => void;
-  /** 点了缺口格：发到小组需求中心（没传就只展示、不可点）。 */
+  /** 点缺口格开「怎么补」悬浮窗（2026-11-19 用户口径）。 */
+  onGap?: () => void;
+  /** 点了缺口格：发到小组需求中心（没有悬浮窗入口时才退回它）。 */
   onRecommend?: () => void;
 }) {
   if (!cell.targeted) {
@@ -637,11 +659,11 @@ function MatrixCell({
       return (
         <button
           type="button"
-          onClick={onRecommend}
+          onClick={onGap ?? onRecommend}
           className={shell}
           style={{ height: CELL_HEIGHT }}
           data-testid={`stud-cell-recommend-${cell.groupId}-${cell.natureName}`}
-          title={`推荐种公：${recommendation.displayName}；点击加到需求中心`}
+          title={`推荐种公：${recommendation.displayName}；点击看怎么补`}
         >
           {body}
         </button>
@@ -666,11 +688,11 @@ function MatrixCell({
     return (
       <button
         type="button"
-        onClick={onRecommend}
+        onClick={onGap ?? onRecommend}
         className={grayShell}
         style={{ height: CELL_HEIGHT }}
         data-testid={`stud-cell-empty-${cell.groupId}-${cell.natureName}`}
-        title="缺少这只种公；点击加到需求中心"
+        title="缺少这只种公；点击看怎么补"
       >
         {grayBody}
       </button>

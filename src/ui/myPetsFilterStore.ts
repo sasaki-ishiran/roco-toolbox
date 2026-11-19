@@ -87,6 +87,14 @@ const toStringSet = <T extends string>(value: unknown): Set<T> =>
   new Set(Array.isArray(value) ? value.filter((item): item is T => typeof item === 'string') : []);
 
 const legacySelected = toStringSet<string>(persisted.selected);
+/**
+ * 并集口径（2026-11-20）：点已收集母本卡会同时写「奖牌标签 + 满/零身高标签」，
+ * 两者同属 body 类、筛选时取并集（有奖牌 或 身高到顶/到底）。这里把它们当成 live 标签
+ * 保留，不再迁移成身高范围，否则重启后并集退化成「奖牌 ∧ 身高100%」，无奖牌但身高到顶
+ * 的母本又会被漏掉。单独出现的满/零身高标签（旧数据）仍按下面的 heightRange 迁移。
+ */
+const hasUnionFullHeight = legacySelected.has('body:满身高') && legacySelected.has('body:大块头');
+const hasUnionZeroHeight = legacySelected.has('body:零身高') && legacySelected.has('body:小不点');
 const normalizedSelected = new Set<string>();
 for (const tagId of legacySelected) {
   if (tagId === 'body:极限') {
@@ -95,6 +103,11 @@ for (const tagId of legacySelected) {
   } else if (tagId === 'voice:极限' || tagId === 'voice:满声') {
     normalizedSelected.add('voice:+100');
     normalizedSelected.add('voice:-100');
+  } else if (
+    (tagId === 'body:满身高' && hasUnionFullHeight) ||
+    (tagId === 'body:零身高' && hasUnionZeroHeight)
+  ) {
+    normalizedSelected.add(tagId);
   } else if (isLiveTag(tagId)) {
     normalizedSelected.add(tagId);
   }
@@ -102,8 +115,8 @@ for (const tagId of legacySelected) {
 
 /** 全部视角：已选的标签 + 面板是否展开（展开态不持久化；2026-10-05 拍板默认打开） */
 let selected: ReadonlySet<string> = normalizedSelected;
-const hasLegacyZeroHeight = legacySelected.has('body:零身高');
-const hasLegacyFullHeight = legacySelected.has('body:满身高');
+const hasLegacyZeroHeight = legacySelected.has('body:零身高') && !hasUnionZeroHeight;
+const hasLegacyFullHeight = legacySelected.has('body:满身高') && !hasUnionFullHeight;
 let eggGroupMatchMode: EggGroupMatchMode =
   persisted.eggGroupMatchMode === 'dual' ? 'dual' : 'multi';
 let heightRange =

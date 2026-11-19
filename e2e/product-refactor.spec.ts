@@ -43,10 +43,10 @@ test('看板两类进度一步直达目标，种公求蛋已迁到小组', async
   await expect(page.getByTestId('mother-chain-filter-uncollected')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('mother-search')).toBeVisible();
 
-  // 收集 · 种公只剩种公阵列 + 覆盖度；求蛋入口在小组 · 个人求种公
+  // 收集 · 种公只剩筛选 + 覆盖度 + 种公阵列；求蛋入口在小组 · 个人求种公
   await page.getByTestId('collection-kind-studs').click();
   await expect(page.getByTestId('stud-matrix')).toBeVisible();
-  await page.getByTestId('stud-matrix-filter-toggle').click();
+  await expect(page.getByTestId('coverage-filter-card')).toBeVisible();
   await expect(page.getByTestId('coverage-groups-toggle')).toBeVisible();
   await expect(page.getByTestId('stud-tool-eggs')).toHaveCount(0);
   await page.getByRole('button', { name: '小组', exact: true }).click();

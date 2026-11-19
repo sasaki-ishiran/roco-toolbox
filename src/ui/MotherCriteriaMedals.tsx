@@ -10,6 +10,7 @@ import {
   type MotherVoice,
 } from '../domain/motherCriteria';
 import { getMotherCriteria, setMotherCriteria, useMotherCriteria } from './motherCriteriaStore';
+import { setTargetGrade, useCoverageFilter } from './coverageFilterStore';
 import { SegmentedControl } from './primitives/SegmentedControl';
 import { setTargetMode, useTargetMode } from './targetModeStore';
 import { TargetGradeSelector } from './TargetGradeSelector';
@@ -21,13 +22,25 @@ const DEFAULT_GRADE: PetGrade = '大婉';
 
 export interface MotherCriteriaMedalsProps {
   testIdPrefix: string;
+  /**
+   * 母本页（收集 · 母本）打开时，奖牌组合跟**全局目标**（看板「目标奖牌组合（公母共用）」）
+   * 走同一个 store，点选时两处一起写。否则母本页选了「满分大粗」，悬浮窗和
+   * 母本全收集还按旧的「满分大婉」算。
+   *
+   * 目标编辑器（编辑母本标准）不传：那一处是母本自己的口径，不能顺带改种公目标。
+   */
+  syncTargetGrade?: boolean;
 }
 
 /** 母本按体型 + 声音组合选择达标奖牌，**强制单选**：点一个换一个，不累加、也不会清空。 */
-export function MotherCriteriaMedals({ testIdPrefix }: MotherCriteriaMedalsProps) {
+export function MotherCriteriaMedals({ testIdPrefix, syncTargetGrade }: MotherCriteriaMedalsProps) {
   const mode = useTargetMode();
   const criteria = useMotherCriteria();
-  const selectedGrades = selectedGradesFor(criteria, mode);
+  const coverageGrades = useCoverageFilter().grades;
+  const selectedGrades =
+    syncTargetGrade && coverageGrades.length > 0
+      ? coverageGrades
+      : selectedGradesFor(criteria, mode);
 
   const saveGrades = (current: MotherCriteria, grades: PetGrade[], targetMode: TargetMode) => {
     const bodies = [...new Set(grades.map((grade) => GRADE_BODY[grade]))];
@@ -49,6 +62,8 @@ export function MotherCriteriaMedals({ testIdPrefix }: MotherCriteriaMedalsProps
 
   const selectGrade = (grade: PetGrade) => {
     const current = getMotherCriteria();
+    // 母本页：全局目标跟着一起换；目标编辑器不传，母本标准自己存
+    if (syncTargetGrade) setTargetGrade(grade);
     const selected = selectedGradesFor(current, mode);
     if (selected.length === 1 && selected[0] === grade) return; // 已经是它：保持选中，不清空
     saveGrades(current, [grade], mode);
@@ -78,7 +93,7 @@ export function MotherCriteriaMedals({ testIdPrefix }: MotherCriteriaMedalsProps
 }
 
 /** 当前选中的档位：永远只返回一个（强制单选），旧数据里的多选值只取第一个。 */
-function selectedGradesFor(criteria: MotherCriteria, mode: TargetMode): PetGrade[] {
+export function selectedGradesFor(criteria: MotherCriteria, mode: TargetMode): PetGrade[] {
   if (criteria.grades !== undefined) {
     return [criteria.grades[0] ?? DEFAULT_GRADE];
   }

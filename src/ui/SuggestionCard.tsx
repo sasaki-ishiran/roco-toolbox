@@ -11,7 +11,7 @@ import {
 
 const speciesByGameId = new Map(species.map((entry) => [entry.gameId, entry]));
 
-interface GroupedRecommendation {
+export interface GroupedRecommendation {
   gameId: number;
   displayName: string;
   records: StudRecommendation[];
@@ -21,6 +21,11 @@ interface GroupedRecommendation {
 
 export interface SuggestionCardProps {
   items: StudRecommendation[];
+  /**
+   * 点卡片看「怎么补」（2026-11-19 用户口径）：传了就改成开悬浮窗，
+   * 不再用点卡标记「已换到」；不传保留旧的标记行为（小屏列表仍可用）。
+   */
+  onOpenGap?: (group: GroupedRecommendation) => void;
   /**
    * 清单为空时的提示语：由页面按「有没有数据 / 目标是否全收齐」给出，
    * 组件不自己猜（2026-10-24：以前写死「导入抓包数据后给出建议」，
@@ -37,7 +42,7 @@ export interface SuggestionCardProps {
  *   点折叠区展开可还原（再点卡片）。
  * - 同一精灵的多条推荐合并为一张卡；完成时整组标记或还原。
  */
-export function SuggestionCard({ items, emptyNote }: SuggestionCardProps) {
+export function SuggestionCard({ items, emptyNote, onOpenGap }: SuggestionCardProps) {
   // 完成时间戳 / 折叠态都在模块级 store：切页签回来不丢（见 suggestionCardStore）
   const { doneAt, doneOpen } = useSuggestionCard();
 
@@ -95,13 +100,13 @@ export function SuggestionCard({ items, emptyNote }: SuggestionCardProps) {
           {visiblePending.length > 0 && (
             <ul className="grid grid-cols-4 gap-1" data-testid="recommend-items">
               {visiblePending.map((group) => (
-                <SuggestionItem key={group.gameId} group={group} done={false} />
+                <SuggestionItem key={group.gameId} group={group} done={false} onOpenGap={onOpenGap} />
               ))}
             </ul>
           )}
 
-          {/* 已换到折叠区：默认收起，点击展开可还原 */}
-          {doneItems.length > 0 && (
+          {/* 已换到折叠区：默认收起，点击展开可还原（改开悬浮窗后不再产生新记录） */}
+          {!onOpenGap && doneItems.length > 0 && (
             <div className="mt-2 px-1 pb-1" data-testid="recommend-done">
               <button
                 type="button"
@@ -115,7 +120,7 @@ export function SuggestionCard({ items, emptyNote }: SuggestionCardProps) {
               {doneOpen && (
                 <ul className="mt-1 grid grid-cols-4 gap-1">
                   {doneItems.map((group) => (
-                    <SuggestionItem key={group.gameId} group={group} done />
+                    <SuggestionItem key={group.gameId} group={group} done onOpenGap={onOpenGap} />
                   ))}
                 </ul>
               )}
@@ -127,7 +132,15 @@ export function SuggestionCard({ items, emptyNote }: SuggestionCardProps) {
   );
 }
 
-function SuggestionItem({ group, done }: { group: GroupedRecommendation; done: boolean }) {
+function SuggestionItem({
+  group,
+  done,
+  onOpenGap,
+}: {
+  group: GroupedRecommendation;
+  done: boolean;
+  onOpenGap?: (group: GroupedRecommendation) => void;
+}) {
   const detail = `${group.natureNames.join('、')}${group.displayName}（${group.groupLabels.join(' × ')}）`;
   return (
     <li title={detail} data-testid="recommend-item">
@@ -139,19 +152,27 @@ function SuggestionItem({ group, done }: { group: GroupedRecommendation; done: b
         naturesTestId="recommend-item-nature"
         title={detail}
         ariaLabel={
-          done
-            ? `还原 ${detail} 已换到`
-            : `标记 ${detail} 已换到`
+          onOpenGap
+            ? `看 ${detail} 怎么补`
+            : done
+              ? `还原 ${detail} 已换到`
+              : `标记 ${detail} 已换到`
         }
         className="w-full"
+        size="suggest"
+        fitName
+        fitNameBase={9}
+        fitNameMin={8}
         avatar={<PetAvatar gameId={group.gameId} name={group.displayName} size={44} />}
         onClick={() =>
-          setSuggestionGroupDone(
-            group.records.map((item) => item.id),
-            !done,
-          )
+          onOpenGap
+            ? onOpenGap(group)
+            : setSuggestionGroupDone(
+                group.records.map((item) => item.id),
+                !done,
+              )
         }
-        ariaPressed={done}
+        ariaPressed={onOpenGap ? undefined : done}
       />
     </li>
   );

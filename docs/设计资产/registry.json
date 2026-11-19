@@ -143,7 +143,7 @@
       "files": [
         {
           "path": "收集计划-方案B-卡片布局编辑器.html",
-          "sha256": "73d6a44ad16950d6d9d33002d120852ff3ec0582e25b893b50dd03fa6a86605f"
+          "sha256": "ed18f566bb2fa2ffde6812dbcbf9c7545ba0e844e018edc18e9c2fa3f4758987"
         }
       ],
       "evidence": [
@@ -172,7 +172,7 @@
       "files": [
         {
           "path": "docs/preview/组内广场-改版-预览.html",
-          "sha256": "0ce5ec65454d81cf63a91e21a008704e5f82824ab764c8756dbaacf936f94798"
+          "sha256": "9038fd9329c1c27e2fe105b6f8489288eced315cddf8d83bf2b47b2b2990c4ad"
         }
       ],
       "evidence": [
@@ -222,7 +222,7 @@
       "files": [
         {
           "path": "手机悬浮窗原型.html",
-          "sha256": "7e1ce9c1b68fd98726dd5da8c1b88171291dab65102c361558937a1372f23aae"
+          "sha256": "3e332b677c3fb82c16ea77b699ad0b1bddaceab0268588f705fcf28569bb2a3a"
         }
       ],
       "evidence": [
@@ -247,7 +247,7 @@
       "files": [
         {
           "path": "docs/prototypes/overlay-panel-scale.html",
-          "sha256": "0b880411d22949c3d9eed7786566911330bab8c57355ddb3baa0869e78686ca6"
+          "sha256": "6e73a9249909274524d643dcb0005598315332b096057ff439c66c35e151636c"
         }
       ],
       "evidence": [
@@ -301,7 +301,7 @@
       "files": [
         {
           "path": "docs/prototypes/battle-card-scale.html",
-          "sha256": "d76c97bc5bc828365c0cbe85419b4bef0af424f0978b9d529c45ce9bea4476a0"
+          "sha256": "91f48598d47f1de001801d26b33fdfaaf7dc9a9a5f54ce7d28ba6f6d6513c45e"
         }
       ],
       "evidence": [
@@ -326,7 +326,7 @@
       "files": [
         {
           "path": "docs/prototypes/nearby-target-species-filter.html",
-          "sha256": "526343523a768017c12d5f6c6f9cb772e74cda3225638383fb12c8c329ee8fe5"
+          "sha256": "8ba84ec3b827370cc0520929e343e540be3bfc723c7407425446439b079884dd"
         }
       ],
       "evidence": [
@@ -376,7 +376,7 @@
       "files": [
         {
           "path": "悬浮球外框-预览.html",
-          "sha256": "96f257c4ca8c3edbeed2a2db9574ed6563fbf07c5166ed3c608ab55be9568d17"
+          "sha256": "6508992e0cd14cf7a0aacbefd95f52412bec4173a8b9e012d2f753d9a926e1bb"
         }
       ],
       "evidence": [
@@ -426,7 +426,7 @@
       "files": [
         {
           "path": "检查更新入口-预览.html",
-          "sha256": "01fd2af881ff74c551a4f98874a2486d3c58ddfffae1732f20845e4f2a2e8235"
+          "sha256": "aa9682ab6258f7e77e5edcb56b10e7ff9edc2297aa9cca97445addd15447d116"
         }
       ],
       "evidence": [
@@ -447,7 +447,7 @@
       "files": [
         {
           "path": "docs/prototypes/release-page-prototype.html",
-          "sha256": "96a2676ed1c57af555b90d1d82d47ed7fa38a834d73a18d9b3b583bd64bbc5c1"
+          "sha256": "6f314e1fb464ed7233de4ebf0dfd46de5615f3914c8885c5c85f26a6bae9d0f3"
         }
       ],
       "evidence": [
@@ -570,6 +570,185 @@
         {
           "path": "docs/superpowers/specs/2026-11-16-家园巡查与QQ提醒-design.md",
           "detail": "用户确认群关联码、多UID绑定、半小时巡查与00–08静默。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "nest-plan-layout-draft",
+      "title": "补全计划 · 布局预稿（375 / 390）",
+      "status": "已被替代",
+      "releaseScope": "仅原型",
+      "scope": "看板「补全计划」卡的第一版布局预稿：账号滑条、摆位图与配对行；后续由配窝卡片预览替代。",
+      "files": [
+        {
+          "path": "docs/prototypes/配窝补全计划-预览.html",
+          "sha256": "4e007a05c6b9a081faa9dc1813596f37af8eed954d0b3af8fd6817a7f1edb6f1"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/superpowers/plans/2026-11-18-配窝补全计划.md",
+          "detail": "2026-11-18 配窝补全计划与后续卡片口径。"
+        }
+      ],
+      "supersededBy": [
+        "nest-card-preview"
+      ]
+    },
+    {
+      "id": "nest-card-preview",
+      "title": "补全计划 · 配窝卡片（方案 A）",
+      "status": "已采用",
+      "releaseScope": "开发/内测实现",
+      "scope": "放大版配对卡（头像 64、卡高 124、蛋组标绿、奖牌收进卡内、dB / 高 / 重纵排）；用户 2026-11-18 选方案 A，已落本地 NestPlanCard。",
+      "remaining": "尚未打包 / 发布；母本配窝段另见 nest-mother-pairing。",
+      "files": [
+        {
+          "path": "docs/prototypes/补全计划-配窝卡片-预览.html",
+          "sha256": "93bc66828ce0fb6699dfef6bc161f40ba424b534e5f53586f831d69ca88193dd"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/superpowers/plans/2026-11-18-配窝补全计划.md",
+          "detail": "第 8 节：用户选方案 A 与卡片放大口径。"
+        },
+        {
+          "path": "src/ui/NestPlanCard.tsx",
+          "detail": "PairingPetCard 已落本地代码。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "nest-mother-pairing",
+      "title": "补全计划 · 母本配窝建议",
+      "status": "评审中",
+      "releaseScope": "仅原型",
+      "scope": "看板补全计划卡新增「母本配窝」段：本号内母本 × 公（同种双收）与跨号传蛋补母本；母本进度仍全设备合并，只按号给建议。",
+      "remaining": "待用户审核 375 / 390 预览与收益口径；未改业务代码。",
+      "files": [
+        {
+          "path": "docs/prototypes/补全计划-母本配窝-预览.html",
+          "sha256": "090bdda175d175433a4268f61561f01ff17e644e619583de3655523415428f98"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/superpowers/plans/2026-11-18-配窝补全计划.md",
+          "detail": "第 9 节：两者都要 / 一窝双收益 / 母本进度仍合并算。"
+        },
+        {
+          "path": "docs/prototypes/补全计划-母本配窝-375.png",
+          "detail": "375 预览截图。"
+        },
+        {
+          "path": "docs/prototypes/补全计划-母本配窝-390.png",
+          "detail": "390 预览截图。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "nest-mother-dual-channel",
+      "title": "补全计划 · 跨号传蛋与小组求助并存",
+      "status": "已采用",
+      "releaseScope": "开发/内测实现",
+      "scope": "母本缺口同时给内外两条路：内求（跨号传蛋/本号自配）的每条卡片右下角加「问小组」，外求（向小组求助）只列没有内求的缺口；一只精灵占一个窝，不到 30%（性格 × 出母）的线不占窝。",
+      "remaining": "种公缺口（跨号补种公）尚未并同样双入口；小组匹配度暂未回算。",
+      "files": [
+        {
+          "path": "docs/prototypes/跨号传蛋-内外求并存-预览.html",
+          "sha256": "bcaf8d1d2a8c8b0ce3e289cc5e2b7cf89d6f9493f617b320a82245183c56582e"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/prototypes/跨号传蛋-内外求并存-375.png",
+          "detail": "375 实机数据截图：每条内求线卡底「问小组」，下方只剩无内求缺口的求助段。"
+        },
+        {
+          "path": "docs/prototypes/跨号传蛋-内外求并存-390.png",
+          "detail": "390 实机数据截图。"
+        },
+        {
+          "path": "src/ui/NestPlanCard.tsx",
+          "detail": "SeekGroupButton：MotherPairingCard / MotherTaskCard 各挂一个「问小组」，走 onSeekHelp。"
+        },
+        {
+          "path": "src/domain/motherNest.ts",
+          "detail": "MIN_MOTHER_CHANCE = 0.3（性格 × 出母比例）；低于门槛进 helps（向小组求助）。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "gap-fill-dialog",
+      "title": "缺口「怎么补」悬浮窗（看板种公推荐 / 收集母本 / 收集种公复用）",
+      "status": "已采用",
+      "releaseScope": "开发/内测实现",
+      "scope": "点缺口卡弹居中悬浮窗：上方目标卡（母本粉 / 种公蓝）+ 小组求助卡，下方本号直配 / 跨号传蛋两段（概率 + 配窝卡 + 右下「加入配窝建议」）；少一截给虚框，两段都没有写红框「本号、跨号都无法配对」；没选奖牌档时改提示先选目标。看板母本缺口四列卡按本稿改成头像 52 / 名字 12。",
+      "remaining": "收集种公矩阵格入口未接：点格原本是「选种公 / 筛选性格」，用户要求改点格开悬浮窗、在精灵卡上切换种公（优先多格公），具体交互待确认。",
+      "files": [
+        {
+          "path": "docs/prototypes/母本悬浮窗-复用到种公-预览.html",
+          "sha256": "098bb6aff00780a948db9e8b4c2ee3648a31776d03863cc6d0a62182ab89b958"
+        },
+        {
+          "path": "docs/prototypes/看板-母本缺口-悬浮窗-预览.html",
+          "sha256": "0334772413fc253749453013eab067ced8b5a2899796f8004895ee83ff94ba7d"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "src/ui/GapFillDialog.tsx",
+          "detail": "共用悬浮窗：目标卡 / 求助卡 / 两段路线 / 无法配对 / 未选目标四态。"
+        },
+        {
+          "path": "src/domain/gapFill.ts",
+          "detail": "从母本建议与配窝方案里找同一颗蛋、同一格的线（概率与配窝卡同口径）。"
+        },
+        {
+          "path": "src/ui/useMotherSuggestions.ts",
+          "detail": "看板与收集页共用同一份母本建议与目标卡文案，避免两页概率不一致。"
+        },
+        {
+          "path": "src/ui/Dashboard.tsx",
+          "detail": "母本缺口四列卡：点击开悬浮窗，头像 52、名字 12px。"
+        },
+        {
+          "path": "src/ui/MotherView.tsx",
+          "detail": "收集-母本未收集卡复用同一块悬浮窗；底部「计划」按钮不触发悬浮窗。"
+        },
+        {
+          "path": "src/ui/SuggestionCard.tsx",
+          "detail": "种公推荐卡主点击改为开悬浮窗（传 onOpenGap 时不再标记已换到）。"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "stud-stack-switch",
+      "title": "种公卡堆叠 · 悬浮窗内点卡切换同蛋组种公",
+      "status": "评审中",
+      "releaseScope": "未实现（等确认）",
+      "scope": "悬浮窗里目标卡改成堆叠卡：默认展示权重最高的一只（本号能配 > 跨号能传 > 只能求助，再看真实蛋组数与手里公的只数），点卡片展开该蛋组全部公（依次进场动画），展开后左上仍是一只完整精灵卡（公＝蓝底）可收起；点某只公即选中并收起。性格由格子上方锁定、不参与分档；边框四档：双组多公红、双组单公紫、单组多公蓝、单组单公绿；卡上带体型/声音奖牌与真实蛋组名，右下写本号可配 / 跨号 · 账号名 / 只能求助；右侧保留小组求助卡。",
+      "remaining": "多组少公归紫、单组正常归蓝两条仍是我补的；确认后接收集·种公矩阵格。",
+      "files": [
+        {
+          "path": "docs/prototypes/种公卡堆叠-预览.html",
+          "sha256": "a908f72a4e3f4ef6707e0654d693f1ed2383b4f54b828f06e61a364fddf15d6c"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "docs/prototypes/种公堆叠-收起-375.png",
+          "detail": "收起态：三层堆叠 + 角标「6 只公」。"
+        },
+        {
+          "path": "docs/prototypes/种公堆叠-展开-390.png",
+          "detail": "展开态：同蛋组 6 只公两列，红/蓝/白三档边框。"
         }
       ],
       "supersededBy": []

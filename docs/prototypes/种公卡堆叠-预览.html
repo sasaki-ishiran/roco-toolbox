@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-Hans-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>种公卡堆叠 · 悬浮窗内切换（预览）</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #eef2f6; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; color: #0f172a; -webkit-font-smoothing: antialiased; }
+  button { font-family: inherit; }
+  .page { padding: 22px 16px 48px; }
+  .review { max-width: 860px; margin: 0 auto 12px; }
+  .review h1 { margin: 0 0 6px; font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+  .review p { margin: 0; max-width: 860px; font-size: 12.5px; line-height: 1.85; color: #475569; }
+  .review b { color: #047857; }
+  .review .warn { color: #b45309; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 14px 0 18px; }
+  .group { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0; }
+  .group > span { padding: 0 6px; font-size: 10px; color: #94a3b8; }
+  .group button { border: 0; border-radius: 7px; background: none; padding: 6px 9px; font-size: 11px; color: #475569; }
+  .group button.on { background: #ecfdf5; color: #047857; font-weight: 700; }
+  .stage { display: flex; flex-wrap: wrap; gap: 26px; justify-content: center; }
+  .device { background: #0f172a; border-radius: 28px; padding: 7px; box-shadow: 0 20px 44px rgba(15, 23, 42, .2); }
+  .device-label { margin: 2px 0 6px; text-align: center; font-size: 10px; letter-spacing: .05em; color: #94a3b8; }
+  .phone { position: relative; width: 375px; height: 812px; overflow: hidden; border-radius: 22px; background: #f1f5f9; }
+  .phone[data-width="390"] { width: 390px; }
+
+  .appbar { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 12px; background: #fff; border-bottom: 1px solid #f1f5f9; }
+  .appbar b { font-size: 15px; font-weight: 800; }
+  .appbar .actions { display: flex; gap: 6px; }
+  .appbar .actions button { border: 0; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 11px; padding: 4px 10px; }
+  .tabs6 { display: flex; height: 40px; background: #fff; border-bottom: 1px solid #f1f5f9; }
+  .tabs6 button { flex: 1; border: 0; border-bottom: 2px solid transparent; background: none; color: #64748b; font-size: 13px; }
+  .tabs6 button.on { color: #047857; border-color: #059669; font-weight: 600; }
+  .screen { height: 728px; overflow-y: auto; padding: 10px 10px 26px; scrollbar-width: none; }
+  .screen::-webkit-scrollbar { width: 0; }
+  .fake-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .fake-row i { flex: 1; height: 44px; border-radius: 8px; background: #fff; border: 1px solid #e2e8f0; }
+
+  /* 悬浮窗 */
+  .modal-layer { position: absolute; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 14px; }
+  .backdrop { position: absolute; inset: 0; border: 0; background: rgba(15, 23, 42, .5); }
+  .modal { position: relative; display: flex; flex-direction: column; width: 100%; max-height: 92%; overflow: hidden; border-radius: 18px; background: #fff; box-shadow: 0 24px 60px rgba(15, 23, 42, .3); }
+  .modal-head { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px 0; }
+  .modal-head .eyebrow { margin: 0 0 1px; font-size: 10px; font-weight: 600; letter-spacing: .04em; color: #059669; }
+  .modal-head h2 { margin: 0; font-size: 16px; font-weight: 800; }
+  .modal-head h2 small { margin-left: 4px; font-size: 11px; font-weight: 400; color: #94a3b8; }
+  .modal-head .close { margin-left: auto; display: flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 0; border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 15px; }
+  .modal-scroll { padding: 8px 12px 12px; overflow-y: auto; }
+
+  /* 堆叠卡 */
+  .stack-block { position: relative; }
+  .stack-block:not([data-open="true"]) { margin-bottom: 20px; }
+  .stack { position: relative; display: block; width: 100%; height: 128px; border: 0; background: none; padding: 0; cursor: pointer; transition: height .3s ease; }
+  .face { position: absolute; left: 0; right: 0; top: 0; height: 96px; border-radius: 14px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 4px 10px rgba(15, 23, 42, .06); transition: transform .34s cubic-bezier(.2, .8, .25, 1), opacity .26s ease; }
+  .face.f2 { transform: translateY(10px) scale(.972); z-index: 2; background: #fff; }
+  .face.f1 { transform: translateY(20px) scale(.945); z-index: 1; background: #fff; }
+  .face.f3 { transform: translateY(0) scale(1); z-index: 3; border-color: #fca5a5; }
+  .face.f3 .card { background: linear-gradient(180deg, #fef2f2 0%, #fff 82%); border: 0; height: 100%; }
+  .stack-block[data-open="true"] .stack { height: 0; overflow: hidden; }
+  .gap-grid { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 8px; align-items: start; }
+  .help-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 96px; border-radius: 12px; border: 1px solid #e2e8f0; background: #fff; padding: 6px; }
+  .help-card .hc-type { font-size: 10px; font-weight: 500; color: #64748b; }
+  .help-card .hc-main { margin: 4px 0 0; font-size: 11px; font-weight: 600; line-height: 1.45; color: #334155; }
+  .help-card .hc-action { margin-top: 6px; min-height: 24px; border-radius: 8px; border: 1px solid #a7f3d0; background: #ecfdf5; color: #047857; font-size: 11px; font-weight: 500; }
+  .route-pill { position: absolute; right: 6px; bottom: 7px; border-radius: 999px; padding: 0 5px; font-size: 8.5px; line-height: 13px; font-weight: 700; }
+  .route-pill.self { background: #d1fae5; color: #047857; }
+  .route-pill.transfer { background: #e0f2fe; color: #0369a1; }
+  .route-pill.none { background: #f1f5f9; color: #64748b; }
+  .stack-badge { position: absolute; right: 8px; top: 6px; z-index: 6; transition: opacity .2s ease; border-radius: 999px; background: #0f172a; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 7px; }
+  .stack-hint { position: absolute; left: 50%; top: 120px; transform: translateX(-50%); z-index: 6; white-space: nowrap; font-size: 10.5px; color: #64748b; transition: opacity .2s ease; }
+  .stack-block[data-open="true"] .face { opacity: 0; transform: translateY(10px) scale(.9); pointer-events: none; }
+  .stack-block[data-open="true"] .stack-hint { opacity: 0; }
+  .stack-block[data-open="true"] .expand { padding-top: 2px; }
+  .stack-block[data-open="true"] .stack-badge { opacity: 0; pointer-events: none; }
+
+  .expand { max-height: 0; overflow: hidden; opacity: 0; transition: max-height .36s ease, opacity .24s ease; }
+  .expand[data-open="true"] { max-height: 470px; opacity: 1; margin-top: 6px; }
+  .expand[data-open="true"] .expand-inner .card { opacity: 1; transform: none; }
+  .open-head { display: none; flex-direction: column; justify-content: space-between; }
+  .stack-block[data-open="true"] .open-head { display: flex; }
+    .open-head button { margin-top: 4px; align-self: flex-start; min-height: 22px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; color: #475569; font-size: 10px; padding: 0 8px; }
+  .expand-inner { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 2px 2px 4px; }
+  .expand-inner .card { opacity: 0; transform: translateY(10px) scale(.94); transition: opacity .26s ease, transform .3s cubic-bezier(.2, .8, .25, 1); transition-delay: calc(var(--i) * 45ms); }
+  .stack-block[data-open="true"] .expand-inner .card { opacity: 1; transform: none; }
+  .expand-head { display: flex; align-items: baseline; justify-content: space-between; padding: 2px 2px 4px; font-size: 10px; color: #94a3b8; }
+  .expand-head b { color: #334155; font-size: 11px; }
+
+  /* 精灵卡 */
+  .card { position: relative; display: block; height: 96px; overflow: hidden; border-radius: 11px; border: 1px solid #bae6fd; background: linear-gradient(180deg, #f0f9ff 0%, #fff 84%); padding: 0; text-align: left; }
+  .card.many { border: 1.5px solid #f87171; }
+  .card.ok { border: 1.5px solid #c4b5fd; }
+  .card.single { border: 1.5px solid #7dd3fc; }
+  .card.few { border: 1.5px solid #86efac; }
+  .card .no { position: absolute; left: 6px; top: 4px; font-size: 8.5px; font-weight: 600; color: #64748b; }
+  .card .medals { position: absolute; right: 5px; top: 3px; display: flex; gap: 2px; }
+  .card .medals img { width: 13px; height: 13px; object-fit: contain; }
+  .card .nat { position: absolute; right: 5px; top: 4px; border-radius: 3px; background: #fef3c7; color: #92400e; padding: 0 3px; font-size: 9px; line-height: 12px; font-weight: 600; }
+  .card .ava { position: absolute; left: 9px; top: 18px; width: 42px; height: 42px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; color: #fff; }
+  .card .name { position: absolute; left: 58px; right: 6px; top: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .meta { position: absolute; left: 58px; right: 6px; top: 38px; font-size: 9.5px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .tags { position: absolute; left: 58px; right: 6px; top: 52px; display: flex; gap: 3px; overflow: hidden; }
+  .card .tags span { border-radius: 3px; background: #e0f2fe; color: #075985; padding: 0 3px; font-size: 8.5px; line-height: 11px; }
+  .sel-card { min-height: 0; }
+  .sel-card .card { height: 100px; }
+  .open-head .collapse { margin-top: 4px; min-height: 22px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; color: #475569; font-size: 10px; padding: 0 8px; align-self: flex-start; }
+          .face.f3 .stack-inner { position: absolute; inset: 0; }
+  .face.f3 .name { top: 20px; }
+
+  /* 路线段（占位，本轮不改） */
+  .route { margin-top: 8px; border-radius: 12px; border-left: 4px solid #fbbf24; background: #f8fafc; padding: 6px 8px; }
+  .route.transfer { border-left-color: #38bdf8; }
+  .route .rb-top { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #475569; }
+  .route .rb-pct { margin-left: auto; color: #0f172a; }
+  .route.missing { border-left: 0; border: 1px dashed #e2e8f0; background: #fff; color: #94a3b8; font-weight: 400; font-size: 11px; }
+  .legend { display: flex; gap: 10px; justify-content: center; margin: 10px 0 0; font-size: 10.5px; color: #64748b; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="review">
+    <h1>种公卡堆叠 · 在悬浮窗里点卡展开同蛋组全部公</h1>
+    <p>
+      点一下堆叠卡，卡片向上抽走、下方展开该蛋组全部种公（<b>依次进场动画</b>），点某只公即选中并收起。
+      性格由格子上方锁定，卡片不再拿性格数当权重；颜色只看<b>这只公占几个真实蛋组 × 手里有几只同种公</b>：
+      <b>双组多公＝红</b>、<b>双组单公＝紫</b>、<b>单组多公＝蓝</b>、<b>单组单公＝绿</b>。卡上带体型 / 声音奖牌，组别写真实蛋组名。
+      右边保留<b>小组求助卡</b>；每只公卡右下角写明<b>本号可配</b>还是<b>跨号传蛋</b>（两处都做不出的写「只能求助」）。
+    </p>
+    <div class="legend">
+      <span><i style="background:#fef2f2;border:1.5px solid #f87171"></i>双组 · 多公</span>
+      <span><i style="background:#f5f3ff;border:1.5px solid #c4b5fd"></i>双组 · 单公</span>
+      <span><i style="background:#f0f9ff;border:1.5px solid #7dd3fc"></i>单组 · 多公</span>
+      <span><i style="background:#f0fdf4;border:1.5px solid #86efac"></i>单组 · 单公</span>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="device">
+      <p class="device-label">375 · 收集 · 种公缺口</p>
+      <div class="phone" data-width="375" data-phone></div>
+    </div>
+    <div class="device">
+      <p class="device-label">390 · 收集 · 种公缺口</p>
+      <div class="phone" data-width="390" data-phone></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /** groups = 真实可孵蛋组；males = 手里这只精灵的公有几只（性格已在格子上锁定，不参与权重） */
+  const STUDS = [
+    { name: '火神', no: '007', groups: ['魔力组', '巨灵组'], males: 3, tint: '#f87171', route: 'self' },
+    { name: '果冻', no: '313', groups: ['海洋组', '魔力组'], males: 1, tint: '#fb923c', route: 'transfer', source: '云舟' },
+    { name: '喵喵', no: '002', groups: ['动物组', '拟人组'], males: 1, tint: '#facc15', route: 'self' },
+    { name: '火花', no: '005', groups: ['魔力组'], males: 3, tint: '#38bdf8', route: 'transfer', source: '洛丝' },
+    { name: '小夜', no: '085', groups: ['拟人组'], males: 2, tint: '#a78bfa', route: 'self' },
+    { name: '地鼠', no: '277', groups: ['动物组'], males: 1, tint: '#94a3b8', route: 'none' },
+  ];
+  const ROUTE_RANK = { self: 3, transfer: 2, none: 1 };
+  /** 权重：本号能配 > 跨号能传 > 只能求助，再看能覆盖几个真实蛋组、手里有几只公 */
+  const weightOf = (stud) => ROUTE_RANK[stud.route] * 100 + stud.groups.length * 10 + Math.min(stud.males, 3);
+  const sorted = [...STUDS].sort((a, b) => weightOf(b) - weightOf(a));
+  const toneOf = (stud) => {
+    if (stud.groups.length >= 2) return stud.males >= 2 ? 'many' : 'ok';
+    return stud.males >= 2 ? 'single' : 'few';
+  };
+  const MEDAL = (file) => `../../public/ui/medals/${file}`;
+  /** 跨号那档必须写清是哪个号能传，否则用户不知道该去找谁 */
+  const routeLabel = (stud) =>
+    stud.route === 'self' ? '本号可配' : stud.route === 'transfer' ? `跨号 · ${stud.source}` : '只能求助';
+
+  function cardHtml(stud, index) {
+    return `<article class="card ${toneOf(stud)}" style="--i:${index}" data-name="${stud.name}">
+      <span class="no">No.${stud.no}</span>
+      <span class="medals"><img src="${MEDAL('1001-max.png')}" alt="大块头" title="大块头"><img src="${MEDAL('1026-max.png')}" alt="婉转声" title="婉转声"></span>
+      <span class="ava" style="background:${stud.tint}">${stud.name.slice(0, 1)}</span>
+      <span class="name">${stud.name} <span style="font-size:9px;color:#94a3b8">♂</span></span>
+      <span class="meta">100dB · 身高 100%</span>
+      <span class="tags">${stud.groups.map((g) => `<span>${g}</span>`).join('')}</span>
+      <span class="route-pill ${stud.route}">${routeLabel(stud)}</span>
+    </article>`;
+  }
+
+  function phoneHtml() {
+    return `
+      <header class="appbar"><b>小布助手</b><span class="actions"><button>刷新</button><button>教程</button></span></header>
+      <nav class="tabs6"><button>看板</button><button>家园</button><button class="on">收集</button><button>附近</button><button>小组</button><button>我的</button></nav>
+      <div class="screen">
+        <div class="fake-row"><i></i><i></i><i></i><i></i></div>
+        <div class="fake-row"><i></i><i></i><i></i><i></i></div>
+        <div class="fake-row"><i></i><i></i><i></i><i></i></div>
+        <div class="fake-row"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="modal-layer">
+        <button class="backdrop" data-close aria-label="关闭悬浮窗"></button>
+        <section class="modal" role="dialog" aria-modal="true" aria-label="怎么补">
+          <div class="modal-head">
+            <div>
+              <p class="eyebrow">种公缺口 · 怎么补</p>
+              <h2>魔力组 · 固执<small>缺口 1 格</small></h2>
+            </div>
+            <button class="close" data-close aria-label="关闭">×</button>
+          </div>
+          <div class="modal-scroll">
+            <div class="gap-grid">
+              <div class="stack-block" data-open="false">
+                <button class="stack" aria-expanded="false" aria-label="展开魔力组全部种公">
+                  <article class="face f1"></article>
+                  <article class="face f2"></article>
+                  <article class="face f3">${cardHtml(sorted[0], 0)}</article>
+                </button>
+                <span class="stack-hint">魔力组 ${sorted.length} 只公 · 点卡片换一只</span>
+                <div class="open-head">
+                  <div class="sel-card">${cardHtml(sorted[0], 0)}</div>
+                  <button class="collapse">收起 ▲</button>
+                </div>
+              </div>
+              <aside class="help-card">
+                <span class="hc-type">小组求助</span>
+                <p class="hc-main">已有 2 条 30% 的线</p>
+                <button class="hc-action">去求蛋 ›</button>
+              </aside>
+            </div>
+            <div class="expand" data-open="false">
+              <div class="expand-inner">${sorted.map(cardHtml).join('')}</div>
+            </div>
+
+            <section class="route"><div class="rb-top">本号直配 <span class="rb-pct">30%</span></div></section>
+            <section class="route transfer missing">跨号传蛋 · 别的号也没有过线的配法</section>
+          </div>
+        </section>
+      </div>`;
+  }
+
+  document.querySelectorAll('[data-phone]').forEach((phone) => {
+    phone.innerHTML = phoneHtml();
+    const block = phone.querySelector('.stack-block');
+    const expand = phone.querySelector('.expand');
+    const stack = phone.querySelector('.stack');
+    const toggle = (open) => {
+      block.dataset.open = String(open);
+      expand.dataset.open = String(open);
+      stack.setAttribute('aria-expanded', String(open));
+    };
+    stack.addEventListener('click', () => toggle(block.dataset.open !== 'true'));
+    phone.querySelector('.collapse').addEventListener('click', () => toggle(false));
+    phone.querySelectorAll('[data-close]').forEach((btn) => btn.addEventListener('click', () => toggle(false)));
+    // 展开后点某张卡 = 选它：堆叠正面与展开后的选中卡都换成这只，然后收起
+    phone.querySelectorAll('.expand-inner .card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const stud = sorted.find((item) => item.name === card.dataset.name);
+        phone.querySelector('.face.f3').innerHTML = cardHtml(stud, 0);
+        phone.querySelector('.sel-card').innerHTML = cardHtml(stud, 0);
+        toggle(false);
+      });
+    });
+  });
+</script>
+</body>
+</html>

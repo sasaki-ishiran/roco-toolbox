@@ -39,3 +39,9 @@ playwright-report/
 .trae/
 # IDE 导出的 HTML 分享包（本地产物）
 .trae-html-share-packages/
+
+# IDE 工作区（本地配置与 shelf 补丁）
+.idea/
+
+# 本地导出/备份（含个人游戏数据，默认不入版本库）
+洛克工具箱备份-*.json

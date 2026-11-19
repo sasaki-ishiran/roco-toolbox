@@ -173,7 +173,7 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
     {
       id: 'home-tabs',
       title: '家园分两页',
-      body: '「家园现状」看窝、配对和地上的蛋；「接单上窝」看你在需求中心接的单该怎么上窝。',
+      body: '「家园现状」看窝和实际配对；「接单上窝」看你在需求中心接的单该怎么上窝。',
       page: 'home',
       homeView: 'nests',
       anchor: 'home-tabs',

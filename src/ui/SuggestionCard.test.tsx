@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { species as catalog } from '../data/catalog';
 import type { StudRecommendation } from '../domain/suggestions';
 import { SuggestionCard } from './SuggestionCard';
@@ -52,10 +52,24 @@ describe('SuggestionCard', () => {
     expect(within(displayedItems[0]).getByText(`No.${recommendationSpecies.number}`)).toBeInTheDocument();
     expect(within(displayedItems[0]).getByRole('button')).toHaveAttribute('aria-pressed', 'false');
     expect(within(displayedItems[0]).getByTestId('pet-avatar').className).toContain('h-11');
+    // 名字 9px（以前 6px 太小），长名字再逐档缩到 8px
+    expect(within(displayedItems[0]).getByRole('heading', { level: 3 })).toHaveClass('text-[9px]');
     expect(within(displayedItems[0]).getByTestId('recommend-item-nature')).toHaveClass('items-end');
     expect(screen.getByTestId('recommend-list').className).not.toContain('p-4');
     expect(screen.queryByTestId('recommend-quantity')).toBeNull();
     expect(screen.queryByRole('heading', { name: '种公推荐' })).toBeNull();
+  });
+
+  test('传了 onOpenGap 时点卡片开悬浮窗，不再标记已换到', () => {
+    const onOpenGap = vi.fn();
+    render(<SuggestionCard items={[ITEM]} emptyNote="不该出现" onOpenGap={onOpenGap} />);
+    const card = screen.getByTestId('recommend-item');
+    const button = within(card).getByRole('button', { name: /怎么补/ });
+    expect(button).not.toHaveAttribute('aria-pressed');
+    fireEvent.click(button);
+    expect(onOpenGap).toHaveBeenCalledTimes(1);
+    expect(onOpenGap.mock.calls[0][0]).toMatchObject({ gameId: ITEM.gameId, displayName: ITEM.displayName });
+    expect(screen.queryByTestId('recommend-done')).toBeNull();
   });
 
   test('同一精灵合并推荐并批量标记已换到或还原，不使用复选框', () => {

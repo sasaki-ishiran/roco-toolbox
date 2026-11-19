@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { species } from '../data/catalog';
 import type { AccountSnapshot } from '../domain/parseBackup';
-import type { HomeResident, HomeSnapshot, OwnedPet } from '../domain/types';
+import type { OwnedPet } from '../domain/types';
 import { EmptyState } from './EmptyState';
 import { HomeDemandPlacements } from './HomeDemandPlacements';
-import { HomePairDiagram, buildHomePairClusters } from './HomePairDiagram';
-import { PetCompactCard } from './PetCompactCard';
-import { BODY, CARD, HINT, INSET, PAGE, TITLE } from './primitives/styles';
+import { HomePairCards } from './HomePairCards';
+import { CARD, HINT, PAGE, TITLE } from './primitives/styles';
 import { useSnapshots } from './useSnapshots';
 import { labelerFor } from './useOwnedPets';
 import { useHomeRefresh, type HomeRefreshController } from './useHomeRefresh';
@@ -32,11 +30,6 @@ function formatCapturedAt(value: string): string {
   return new Date(time).toLocaleString('zh-CN', { hour12: false });
 }
 
-const GENDER_OF = (value: string | undefined): '公' | '母' | '未知' =>
-  value === '公' || value === '母' ? value : '未知';
-
-const speciesByGameId = new Map(species.map((entry) => [entry.gameId, entry]));
-
 /** 背包精灵按家园实例 id 建索引：避免每个住户都把配对的 pets 扫一遍 */
 function petsByInstance(snapshot: AccountSnapshot): Map<string, OwnedPet> {
   const map = new Map<string, OwnedPet>();
@@ -47,45 +40,6 @@ function petsByInstance(snapshot: AccountSnapshot): Map<string, OwnedPet> {
     map.set(pet.captureId.slice(index + 1), pet);
   }
   return map;
-}
-
-function nestLabel(home: HomeSnapshot, furnitureGuid: string): string {
-  const nest = home.nests.find((item) => item.furnitureGuid === furnitureGuid);
-  if (!nest) return furnitureGuid ? `小窝 ${furnitureGuid}` : '未知位置';
-  const name = nest.nestName || (nest.nestType === 'academy' ? '学院小窝' : '普通小窝');
-  return nest.roomName ? `${name} · ${nest.roomName}` : name;
-}
-
-/**
- * 家园精灵卡（2026-10-29 用户口径）：直接复用紧凑精灵卡，
- * 头像 + 名称 + 性别 + 奖牌 + 蛋组 + 性格，底部一行声音 / 身高 / 体重。
- */
-function HomePetCard({ pet, resident }: { pet?: OwnedPet; resident: HomeResident }) {
-  const name = resident.name || pet?.name || `精灵 ${resident.instanceId}`;
-  const gender = GENDER_OF(resident.gender || pet?.gender);
-  const nature = resident.nature || pet?.nature || '';
-  const nest = resident.nest;
-  const avatarGameId = pet?.gameId ?? (Number(resident.baseId) || null);
-  const entry = avatarGameId != null ? speciesByGameId.get(avatarGameId) : undefined;
-
-  return (
-    <PetCompactCard
-      gameId={avatarGameId}
-      name={name}
-      number={entry?.number}
-      gender={gender}
-      nature={nature}
-      medalBody={pet?.medalBody}
-      voiceDb={pet?.voiceDb}
-      heightPercent={pet?.heightPercent}
-      weightPercent={pet?.weightPercent}
-      eggGroups={entry?.eggGroups ?? []}
-      isShiny={pet?.isShiny}
-      isColorful={pet?.isColorful}
-      academy={nest?.nestType === 'academy'}
-      testId="home-pet-card"
-    />
-  );
 }
 
 /**
@@ -172,55 +126,9 @@ function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: st
     () => (home ? petsByInstance(snapshot) : new Map<string, OwnedPet>()),
     [snapshot, home],
   );
-  /**
-   * 家园住户 → 背包精灵：先按实例 id，找不到再按名字兜底（同名唯一时才算）。
-   * 换过采集 / 短采集刷新家园后，住户的实例 id 可能不在旧背包快照里，
-   * 不兜底的话性别会显示「未知」（2026-11-01 用户反馈兽花蕾 / 恶魔叮）。
-   */
-  const petOf = useMemo(() => {
-    const byName = new Map<string, OwnedPet[]>();
-    for (const pet of pets.values()) {
-      const list = byName.get(pet.name) ?? [];
-      list.push(pet);
-      byName.set(pet.name, list);
-    }
-    return (resident: HomeResident): OwnedPet | undefined => {
-      const exact = pets.get(resident.instanceId);
-      if (exact) return exact;
-      const sameName = byName.get(resident.name);
-      return sameName?.length === 1 ? sameName[0] : undefined;
-    };
-  }, [pets]);
   if (!home) return null;
   const academy = home.nests.filter((nest) => nest.nestType === 'academy').length;
   const eggCount = home.sceneEggs.length;
-  /**
-   * 家园精灵按配对顺序排（2026-11-01 用户口径）：同一簇（一对 / 学院 1:2）的精灵挨在一起；
-   * 1:2 那种三个人共享一只的簇整簇排到后面，保证「配对的精灵都排到一起」。
-   * 没参与配对的住户保持原顺序排在最后。
-   */
-  const orderedResidents = (() => {
-    const clusters = buildHomePairClusters(home.layEggCouples, home.residents, pets);
-    const byActor = new Map(home.residents.map((resident) => [resident.actorId, resident]));
-    const sorted = [...clusters].sort(
-      (a, b) => Number(a.nodes.length > 2) - Number(b.nodes.length > 2),
-    );
-    const seen = new Set<string>();
-    const list: HomeResident[] = [];
-    for (const cluster of sorted) {
-      for (const node of cluster.nodes) {
-        const resident = byActor.get(node.actorId);
-        if (!resident || seen.has(resident.instanceId)) continue;
-        list.push(resident);
-        seen.add(resident.instanceId);
-      }
-    }
-    for (const resident of home.residents) {
-      if (!seen.has(resident.instanceId)) list.push(resident);
-    }
-    return list;
-  })();
-
   return (
     <section className="rounded-2xl bg-white p-1.5 shadow-sm" data-testid={`home-account-${snapshot.gameId}`}>
       <div className="flex items-start justify-between gap-2">
@@ -284,47 +192,11 @@ function AccountHome({ snapshot, label }: { snapshot: AccountSnapshot; label: st
           </p>
         ) : (
           <div className="mt-1.5">
-            <HomePairDiagram couples={home.layEggCouples} residents={home.residents} pets={pets} />
+            <HomePairCards couples={home.layEggCouples} residents={home.residents} pets={pets} />
           </div>
         )}
       </div>
 
-      <div className="mt-3">
-        <div className="flex items-baseline justify-between gap-2">
-          <div className="text-xs font-medium text-slate-500">家园精灵</div>
-          <div className="text-[10px] text-slate-400">声音、身高与体重</div>
-        </div>
-        {home.residents.length === 0 ? (
-          <p className={HINT}>当前家园没有精灵。</p>
-        ) : (
-          <div className="mt-1.5 flex flex-wrap justify-center gap-2" data-testid="home-residents">
-            {orderedResidents.map((resident) => (
-              <HomePetCard
-                key={resident.instanceId}
-                pet={petOf(resident)}
-                resident={resident}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className={`${INSET} mt-3`}>
-        <div className="text-xs font-medium text-slate-500">地上的蛋</div>
-        {eggCount === 0 ? (
-          <p className={HINT} data-testid="home-no-eggs">
-            当前家园没有蛋。
-          </p>
-        ) : (
-          <ul className="mt-1 space-y-1" data-testid="home-eggs">
-            {home.sceneEggs.map((egg, index) => (
-              <li key={`${egg.actorId}-${index}`} className={BODY}>
-                第 {index + 1} 枚 · {nestLabel(home, egg.furnitureGuid)}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </section>
   );
 }

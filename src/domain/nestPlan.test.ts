@@ -179,7 +179,9 @@ describe('buildNestPlans（第一期：可配建议 / 补齐种公，M1 多路�
     expect(plan.unfilled).toEqual([{ groupId: 2, natureName: '固执', grade: '大婉', reason: 'to-collect' }]);
   });
 
-  test('窝位不够时先保普通 60%，剩下的缺口进 unfilled', () => {
+  test('窝位只够一窝时按期望取舍：学院 100% 单组(1.0) 先于普通 60%(0.6)', () => {
+    // 2026-11-18 口径改动（配窝补全计划）：原来固定「60% 主力先排」，即使窝位只够一窝。
+    // 现在学院线先算净收益（1.0 × 组数 − 挤掉的普通线），100% 那窝比 60% 那窝更值就先占。
     const [plan] = buildNestPlans({
       species,
       owned: [fA, mA, mB, fC],
@@ -188,12 +190,62 @@ describe('buildNestPlans（第一期：可配建议 / 补齐种公，M1 多路�
       nestCount: 2,
     });
     expect(plan.pairings).toHaveLength(1);
-    expect(plan.pairings[0].tier).toBe('normal60');
+    expect(plan.pairings[0].tier).toBe('academy');
+    expect(plan.pairings[0].natureName).toBe('认真');
     expect(plan.nestsUsed).toBe(2);
-    expect(plan.unfilled).toEqual([{ groupId: 2, natureName: '认真', grade: '大婉', reason: 'no-room' }]);
+    expect(plan.unfilled).toEqual([{ groupId: 2, natureName: '固执', grade: '大婉', reason: 'no-room' }]);
   });
 
-  test('两个账号分工：同一格只让一个账号补，不重复劳动', () => {
+  test('母方物种少公（2:8）→ 不进种公路线（2026-11-18 口径）', () => {
+    const speciesScarce = [
+      ...species,
+      {
+        key: 'scarce',
+        gameId: 810,
+        name: '少公兽',
+        number: '810',
+        eggGroups: [2],
+        maleCapable: true,
+        genderRatio: { male: 2, female: 8 },
+      },
+    ];
+    const [plan] = buildNestPlans({
+      species: speciesScarce,
+      owned: [mk(810, '少公兽', '母', '固执'), mk(801, '母方兽', '公', '固执')],
+      coverage: coverage(cell(2, '固执')),
+      mode: 'perfect',
+    });
+    expect(plan.pairings).toEqual([]);
+    expect(plan.unfilled).toEqual([
+      { groupId: 2, natureName: '固执', grade: '大婉', reason: 'male-scarce' },
+    ]);
+  });
+
+  test('学院窝优先补低概率双组：抢在 60% 前面，把两组 30% 一起抬到 100%', () => {
+    // 只有一只公（固执）能当配对方：旧顺序会先拿他去配 60% 的固执格，
+    // 胆小的两个组（2/7）就再也补不上；新口径按净收益先让学院占。
+    const motherDual = mk(803, '双组兽', '母', '胆小');
+    const fatherStubborn = mk(803, '双组兽', '公', '固执');
+    const motherStubborn = mk(803, '双组兽', '母', '固执');
+    const [plan] = buildNestPlans({
+      species,
+      owned: [motherDual, fatherStubborn, motherStubborn],
+      coverage: coverage(cell(2, '胆小'), cell(7, '胆小'), cell(2, '固执')),
+      mode: 'perfect',
+    });
+    const academy = plan.pairings.filter((pairing) => pairing.tier === 'academy');
+    expect(academy).toHaveLength(1);
+    expect(academy[0].natureName).toBe('胆小');
+    expect(academy[0].academyParent?.name).toContain('双组兽');
+    expect(academy[0].groupIds).toEqual([2, 7]);
+    expect(plan.unfilled).toEqual([
+      { groupId: 2, natureName: '固执', grade: '大婉', reason: 'no-room' },
+    ]);
+  });
+
+  test('两个账号各自补同一格（成体不能传，每个号都要自己补全）', () => {
+    // 2026-11-18 用户口径改动：取消「一格只让一个号补」的分工——
+    // 种公只能在自己家园出，缺了就是缺了，所以每个号都要排自己的。
     const fA2 = mk(801, '母方兽', '公', '固执', '账号乙');
     const mA2 = mk(801, '母方兽', '母', '固执', '账号乙');
     const plans = buildNestPlans({
@@ -203,11 +255,50 @@ describe('buildNestPlans（第一期：可配建议 / 补齐种公，M1 多路�
       mode: 'perfect',
     });
     expect(plans).toHaveLength(2);
-    // 同一格只被一个账号接走
-    expect(plans.flatMap((plan) => plan.pairings)).toHaveLength(1);
-    expect(plans.filter((plan) => plan.pairings.length > 0)).toHaveLength(1);
-    // 认领之后另一半也不用再报「没排上」
+    expect(plans.flatMap((plan) => plan.pairings)).toHaveLength(2);
     expect(plans.flatMap((plan) => plan.unfilled)).toEqual([]);
+    expect(plans.flatMap((plan) => plan.delegated)).toEqual([]);
+  });
+
+  test('缺口按号各算：别的号已有这格的种公，不能把这个号的缺口藏掉（2026-11-18 修正）', () => {
+    // 账号甲有「固执」公 → 全局合并看这一格是 covered；账号乙只有母带固执 + 一只胆小公，
+    // 自己配能出 30%。按号算就必须给账号乙排这一窝，不能因为甲有就当作乙也齐了。
+    const motherYi = mk(801, '母方兽', '母', '固执', '账号乙');
+    const fatherYi = mk(801, '母方兽', '公', '胆小', '账号乙');
+    const plans = buildNestPlans({
+      species,
+      owned: [fA, mA, motherYi, fatherYi],
+      coverage: coverage(cell(2, '固执', 'covered')),
+      coverageByAccount: new Map([
+        ['账号甲', coverage(cell(2, '固执', 'covered'))],
+        ['账号乙', coverage(cell(2, '固执', 'breedable'))],
+      ]),
+      mode: 'perfect',
+    });
+    const yi = plans.find((plan) => plan.account === '账号乙')!;
+    expect(yi.pairings.length).toBeGreaterThan(0);
+    expect(yi.pairings[0].natureName).toBe('固执');
+    // 甲已有公，不用再排
+    expect(plans.find((plan) => plan.account === '账号甲')?.pairings).toEqual([]);
+  });
+
+  test('自己配不出、别的号能配的缺口 → 记成「由 X 号出蛋，孵好传过来」', () => {
+    // 账号乙只有母、没有公 → 这一格它自己出不了；账号甲有公母，能出蛋
+    const mA2 = mk(801, '母方兽', '母', '固执', '账号乙');
+    const plans = buildNestPlans({
+      species,
+      owned: [fA, mA, mA2],
+      coverage: coverage(cell(2, '固执')),
+      mode: 'perfect',
+    });
+    const yi = plans.find((plan) => plan.account === '账号乙')!;
+    expect(yi.pairings).toEqual([]);
+    expect(yi.unfilled).toEqual([
+      { groupId: 2, natureName: '固执', grade: '大婉', reason: 'has-mother' },
+    ]);
+    expect(yi.delegated).toEqual([
+      { groupId: 2, natureName: '固执', grade: '大婉', byAccount: '账号甲' },
+    ]);
   });
 
   test('孵蛋不能跨账号：另一个账号的精灵不参与', () => {
@@ -548,8 +639,9 @@ describe('buildNestPlans（第一期：可配建议 / 补齐种公，M1 多路�
     });
     expect(plan.pairings).toEqual([]);
     expect(plan.slots).toEqual([]);
+    // 2026-11-18：原因细分成 male-scarce（有母、但这个组的母方物种出不了公）
     expect(plan.unfilled).toEqual([
-      { groupId: 2, natureName: '固执', grade: '大婉', reason: 'to-collect' },
+      { groupId: 2, natureName: '固执', grade: '大婉', reason: 'male-scarce' },
     ]);
   });
 });

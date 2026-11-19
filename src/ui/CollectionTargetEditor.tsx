@@ -42,7 +42,7 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
   const filter = useCoverageFilter();
 
   const toggleNatureMode = (next: string) =>
-    setNatureMode(next === 'custom' ? 'custom' : 'recommended');
+    setNatureMode(next === 'custom' ? 'custom' : next === 'recommended' ? 'recommended' : 'eight');
 
   return (
     <ModalSurface
@@ -101,6 +101,7 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
                 value={filter.natureMode}
                 options={[
                   { value: 'recommended', label: '推荐性格' },
+                  { value: 'eight', label: '八大性格' },
                   { value: 'custom', label: '自选性格' },
                 ]}
                 onValueChange={toggleNatureMode}
@@ -134,6 +135,10 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
                       : '全选八大'}
                   </button>
                 </div>
+              ) : filter.natureMode === 'eight' ? (
+                <p className="mt-1 text-xs text-slate-400">
+                  八大性格全集（{targetNaturePool.length} 个）：所有蛋组都按同一组性格算。
+                </p>
               ) : (
                 <p className="mt-1 text-xs text-slate-400">每组用图鉴推荐的前 3 个性格；组内增减在覆盖度页。</p>
               )}
