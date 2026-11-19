@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>附近页 · 目标精灵筛选（交互预览）</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px 12px 40px; background: #0b1220; color: #cbd5e1;
+    font: 13px/1.55 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #e2e8f0; }
+  .sub { font-size: 11px; color: #7c8ea3; margin: 0 0 12px; line-height: 1.7; }
+  .controls {
+    background: #111c30; border: 1px solid #1e2c44; border-radius: 10px;
+    padding: 10px 11px; margin-bottom: 14px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+  }
+  .ctl { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #94a3b8; }
+  .segbtn {
+    background: #16233a; border: 1px solid #2a3a55; color: #94a3b8; border-radius: 7px;
+    padding: 4px 10px; font-size: 11px; cursor: pointer; font-family: inherit;
+  }
+  .segbtn.on { background: #059669; border-color: #059669; color: #fff; font-weight: 600; }
+  .stages { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+  .stage { }
+  .cap { font-size: 11px; color: #93a4b5; margin-bottom: 6px; }
+  .cap b { color: #e2e8f0; }
+
+  /* ---------- 手机画布 ---------- */
+  .phone {
+    width: 375px; height: 780px; border-radius: 30px; background: #fff; overflow: hidden;
+    border: 8px solid #1b2432; box-shadow: 0 18px 44px rgba(0,0,0,.5);
+    display: flex; flex-direction: column; position: relative;
+  }
+  .phone.w390 { width: 390px; }
+  .statusbar {
+    height: 26px; flex: none; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px; font-size: 10px; color: #475569; background: #fff;
+  }
+  .appbar {
+    height: 38px; flex: none; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; border-bottom: 1px solid #f1f5f9; background: #fff;
+  }
+  .appbar b { font-size: 14px; color: #0f172a; font-weight: 600; }
+  .appbar .acts { display: flex; gap: 6px; }
+  .tabbar {
+    height: 40px; flex: none; display: flex; border-bottom: 1px solid #f1f5f9; background: #fff; padding: 0 6px;
+  }
+  .tabbar span {
+    flex: 1; display: grid; place-items: center; font-size: 12px; color: #64748b;
+    border-bottom: 2px solid transparent;
+  }
+  .tabbar span.on { color: #047857; font-weight: 600; border-bottom-color: #059669; }
+  .vpwrap { position: relative; flex: 1; min-height: 0; background: #f7f9fc; }
+  .viewport { position: absolute; inset: 0; overflow-y: auto; padding: 10px 12px 16px; }
+  .viewport::-webkit-scrollbar { width: 0; }
+
+  /* ---------- 页面卡片 ---------- */
+  .card {
+    background: #fff; border-radius: 16px; padding: 12px; margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .07);
+  }
+  .card.tight { padding: 4px 4px 6px; }
+  .card h2 { font-size: 13px; margin: 0; color: #0f172a; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 6px; }
+  .between { justify-content: space-between; }
+  .btnrow { display: flex; gap: 4px; flex: none; }
+  .pill {
+    min-height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid #e2e8f0;
+    background: #fff; color: #475569; font-size: 11px; font-family: inherit; cursor: pointer;
+  }
+  .pill.primary { background: #059669; border-color: #059669; color: #fff; font-weight: 500; }
+  .pill.sm { min-height: 24px; padding: 0 7px; font-size: 10.5px; }
+  .meta { font-size: 11px; color: #64748b; margin: 4px 0 0; }
+  .meta.dim { color: #94a3b8; }
+  .tiny { font-size: 10px; }
+  .dim { color: #94a3b8; }
+
+  .seg { display: flex; gap: 2px; background: #f1f5f9; border-radius: 8px; padding: 2px; }
+  .seg button {
+    flex: 1; min-height: 30px; border: 0; background: transparent; border-radius: 6px;
+    font-size: 12px; color: #64748b; font-family: inherit; cursor: pointer; padding: 0 4px;
+    white-space: nowrap;
+  }
+  .seg button.on { background: #fff; color: #047857; font-weight: 600; box-shadow: 0 1px 2px rgba(15,23,42,.10); }
+  .seg .tgt { display: inline-flex; align-items: center; gap: 3px; justify-content: center; width: 100%; }
+  .seg .cnt {
+    display: inline-grid; place-items: center; min-width: 14px; height: 14px; padding: 0 3px;
+    border-radius: 7px; background: #059669; color: #fff; font-size: 9px; font-weight: 700;
+  }
+  .mt6 { margin-top: 6px; }
+
+  .trow { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 7px; padding-top: 7px; border-top: 1px dashed #e2e8f0; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 3px; min-height: 22px; padding: 0 6px;
+    border-radius: 6px; background: #f1f5f9; color: #475569; font-size: 10.5px; white-space: nowrap;
+  }
+  .chip.target { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-weight: 500; }
+  .chip i { font-style: normal; color: #059669; font-weight: 700; padding-left: 2px; }
+
+  .swrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; }
+  .sw { width: 34px; height: 20px; border-radius: 10px; background: #cbd5e1; position: relative; flex: none; cursor: pointer; transition: background .15s; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .15s; }
+  .sw.on { background: #059669; }
+  .sw.on::after { left: 16px; }
+
+  /* ---------- 地图 ---------- */
+  .maptitle { font-size: 11px; color: #475569; font-weight: 500; margin: 4px 0 0 4px; }
+  .mapmock {
+    position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden; margin-top: 4px;
+    background:
+      radial-gradient(circle at 22% 18%, #dbeedd 0%, rgba(219,238,221,0) 46%),
+      radial-gradient(circle at 78% 74%, #d7e8f3 0%, rgba(215,232,243,0) 50%),
+      linear-gradient(150deg, #e5efe4, #dfeade 60%, #e8f1ea);
+  }
+  .mapmock .grid { position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(148,163,184,.14) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.14) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  .mapmock .road { position: absolute; background: rgba(255,255,255,.75); border-radius: 4px; }
+  .dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; transform: translate(-50%, -50%); }
+  .dot.normal { background: #94a3b8; }
+  .dot.rare { background: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,.25); }
+  .dot.demand { background: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,.22); }
+  .dot.target { background: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,.28); }
+  .dotlabel {
+    position: absolute; transform: translate(-50%, 10px); font-size: 9px; color: #047857;
+    background: rgba(255,255,255,.9); border-radius: 4px; padding: 0 3px; font-weight: 600; white-space: nowrap;
+  }
+  .self {
+    position: absolute; left: 50%; top: 52%; width: 0; height: 0;
+    border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 13px solid #0284c7;
+    transform: translate(-50%, -50%) rotate(18deg); filter: drop-shadow(0 1px 2px rgba(2,132,199,.35));
+  }
+  .selfring { position: absolute; left: 50%; top: 52%; width: 62px; height: 62px; border-radius: 50%;
+    border: 1px dashed rgba(2,132,199,.35); transform: translate(-50%, -50%); }
+  .maptip { font-size: 10px; color: #94a3b8; text-align: center; margin: 5px 0 2px; }
+  .notice {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    background: rgba(15,23,42,.86); color: #e2e8f0; border-radius: 10px; padding: 7px 10px;
+    font-size: 10.5px; text-align: center; line-height: 1.5; white-space: nowrap;
+  }
+  .notice b { color: #fff; }
+  .banner {
+    display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+    background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857;
+    border-radius: 8px; padding: 5px 8px; margin: 5px 2px 0; font-size: 10.5px;
+  }
+  .banner b { font-weight: 600; }
+
+  /* ---------- 列表 ---------- */
+  .prow { border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.07); padding: 7px 10px; margin-bottom: 6px; }
+  .prow.left { opacity: .72; }
+  .pname { font-size: 13px; color: #334155; }
+  .pname em { font-style: normal; font-size: 10.5px; color: #94a3b8; }
+  .pname.hot { font-weight: 600; color: #0f172a; }
+  .tag { display: inline-block; border-radius: 4px; padding: 0 4px; font-size: 10px; line-height: 16px; }
+  .tag.grey { background: #f1f5f9; color: #64748b; }
+  .tag.sky { background: #f0f9ff; color: #0369a1; }
+  .tag.violet { background: #f5f3ff; color: #6d28d9; }
+  .tag.green { background: #ecfdf5; color: #047857; }
+  .tag.amber { background: #fffbeb; color: #b45309; }
+
+  /* ---------- 选择面板 ---------- */
+  .sheetwrap { position: absolute; inset: 0; z-index: 30; display: flex; align-items: flex-end; }
+  .backdrop { position: absolute; inset: 0; background: rgba(15,23,42,.42); }
+  .sheet {
+    position: relative; width: 100%; height: 78%; background: #fff; border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 30px rgba(15,23,42,.28); display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sheethead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 14px 6px; }
+  .sheethead b { font-size: 13px; color: #0f172a; }
+  .sheethead .x { border: 0; background: transparent; font-size: 16px; color: #94a3b8; cursor: pointer; padding: 0 4px; font-family: inherit; }
+  .searchwrap { padding: 0 14px 6px; }
+  .search {
+    width: 100%; min-height: 36px; border-radius: 9px; border: 1px solid #e2e8f0; padding: 0 10px;
+    font-size: 12px; font-family: inherit; color: #0f172a; background: #fff; outline: none;
+  }
+  .search:focus { border-color: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,.12); }
+  .chipsline { padding: 0 14px 6px; font-size: 10.5px; color: #047857; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .plist { flex: 1; overflow-y: auto; padding: 0 8px 6px; }
+  .srow { display: flex; align-items: center; gap: 8px; padding: 8px 6px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+  .cb {
+    width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid #cbd5e1; flex: none;
+    display: grid; place-items: center; color: #fff; font-size: 11px; line-height: 1;
+  }
+  .cb.on { background: #059669; border-color: #059669; }
+  .sname { font-size: 12.5px; color: #0f172a; }
+  .sheetfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px 12px; border-top: 1px solid #f1f5f9; }
+  .link { border: 0; background: transparent; font-size: 11px; color: #64748b; font-family: inherit; cursor: pointer; padding: 6px 0; }
+  .primary-btn {
+    min-height: 36px; padding: 0 14px; border-radius: 10px; border: 0; background: #059669; color: #fff;
+    font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer;
+  }
+  .primary-btn:disabled { background: #cbd5e1; }
+
+  /* ---------- 改动标记 ---------- */
+  .chg { position: relative; }
+  body.marks .chg { outline: 1.5px dashed #f97316; outline-offset: 2px; border-radius: 6px; }
+  body.marks .chg::after {
+    content: attr(data-n); position: absolute; top: -9px; right: -6px;
+    background: #f97316; color: #fff; font-size: 9px; font-weight: 700; line-height: 14px;
+    padding: 0 4px; border-radius: 7px; z-index: 5;
+  }
+  /* .chg 需要 position:relative 挂角标；空态提示本身是绝对定位，必须还原 */
+  .mapmock .notice { position: absolute; }
+
+  /* ---------- 结论 / 待确认 ---------- */
+  .panel-note { background: #111c30; border: 1px solid #1e2c44; border-radius: 10px; padding: 12px 13px; margin-top: 20px; }
+  .panel-note h2 { font-size: 12px; margin: 0 0 8px; color: #e2e8f0; }
+  .panel-note p, .panel-note li { font-size: 11px; color: #94a3b8; line-height: 1.75; }
+  .panel-note b { color: #e2e8f0; font-weight: 600; }
+  .panel-note table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .panel-note th, .panel-note td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #1e2c44; vertical-align: top; }
+  .panel-note th { color: #7dd3fc; font-weight: 600; white-space: nowrap; }
+  .panel-note td { color: #94a3b8; }
+  .panel-note td b { color: #e2e8f0; }
+  .def { color: #34d399; }
+  .stagewf { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+
+  /* ---------- 悬浮窗示意 ---------- */
+  .ovpanel { width: 274px; background: rgba(252,253,255,.97); border-radius: 12px; box-shadow: 0 8px 22px rgba(15,23,42,.18); padding: 8px; }
+  .ovtitle { display: flex; align-items: center; justify-content: space-between; font-size: 10.5px; font-weight: 600; color: #0f172a; margin-bottom: 5px; }
+  .ovbody { display: flex; gap: 6px; }
+  .ovmap { width: 120px; height: 120px; border-radius: 8px; position: relative; overflow: hidden; flex: none;
+    background: radial-gradient(circle at 50% 50%, #e6f2e8, #dfeade 70%); }
+  .ovlist { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .ovrow { border-radius: 6px; background: #f8fafc; padding: 3px 5px; font-size: 10px; color: #334155; }
+  .ovrow .r1 { display: flex; justify-content: space-between; gap: 4px; font-weight: 600; }
+  .ovrow .r2 { display: flex; gap: 4px; color: #64748b; font-size: 9px; }
+  .ovfoot { font-size: 9px; color: #94a3b8; margin-top: 4px; text-align: center; }
+</style>
+</head>
+<body class="marks">
+<div class="stages" style="display:block">
+  <h1>附近页 · 目标精灵筛选（交互预览）</h1>
+  <p class="sub">
+    375 / 390 真实宽度画布，1dp = 1px。每个画布上方可切换 5 种状态：关闭（现状）/ 选择面板 / 开启·地图 / 开启·列表 / 目标未出现。
+    右上角可切换入口方案 A / B，橙色虚线框为改动点（可关闭标记）。上方两张卡为现状内容，压缩展示以便看到改动区。<br>
+    改动点：<b>1</b> 入口（A：范围第 4 档 / B：独立目标行）· <b>2</b> 已选名单与编辑/清除 · <b>3</b> 目标横幅（视野内 N 只 / 已隐藏 M 只）·
+    <b>4</b> 常驻列表口径与「已离开视野」行 · <b>5</b> 目标未出现时的空态提示。<br>
+    怎么验证：点「目标」段进入选择面板 → 搜「草」→ 勾两只 → 完成；回来点「编辑 / 清除」看改名单与取消；切到「开启·列表」「目标未出现」看另外两种形态。
+  </p>
+
+  <div class="controls">
+    <div class="ctl"><span>入口方案</span>
+      <button class="segbtn on" data-scheme="A">A · 范围加第 4 档「目标」</button>
+      <button class="segbtn" data-scheme="B">B · 独立「目标精灵」行</button>
+    </div>
+    <div class="ctl"><label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+      <input type="checkbox" id="marks" checked /> 显示改动标记</label></div>
+    <div class="ctl"><span>已选目标：</span><span id="selSummary" style="color:#e2e8f0"></span></div>
+  </div>
+
+  <div class="stages" id="stages"></div>
+
+  <div class="panel-note">
+    <h2>现状链路（已核对代码）</h2>
+    <p>
+      · <b>数据来源</b>：地图与列表都取 <b>同一份解码快照</b>（<code>useNearbyFeed → snapshot.pets</code>，每秒级刷新）。
+      地图画「当前有坐标的精灵」，列表画「常驻条目」（只收高价值：稀有 / 可提醒 / 炫彩异色污染 / 命中需求，离开视野保留 10 分钟）。
+    </p>
+    <p>
+      · <b>三档范围</b>（全部 / 稀有 / 需求）：<code>nearbyFilterStore</code>，存 localStorage <code>roco.nearbyFilter</code>，
+      判定函数 <code>nearbyFilterAllows</code> 被「页内地图」「页内列表」「悬浮窗列表」共用；命中需求中心恒放行。
+    </p>
+    <p>
+      · <b>战斗维度筛选</b>（性格 / 公母 / 声音 / 体型）：<code>battleTargetStore</code>，存 localStorage <code>roco.battleTarget</code>，
+      只在<b>悬浮窗列表</b>上叠加（页内地图与列表不参与），某维度没勾 = 该维度全通过。
+    </p>
+    <p>
+      · <b>悬浮窗推送</b>：应用级 <code>useNearbyOverlayPush</code> → <code>buildNearbyOverlayPayload</code>：
+      列表 = 三档 + 战斗维度；<b>地图点位 mapPets 目前画全部附近精灵，不受任何筛选影响</b>（本次要改）。
+      桌面小窗走同一个 payload。
+    </p>
+    <p>
+      · <b>目标精灵怎么认</b>：快照里每只精灵带 <code>petId</code>（= 图鉴 gameId），直接用图鉴 gameId 作为目标标识，
+      与名单里的名字解耦（改名/形态不影响）。
+    </p>
+  </div>
+
+  <div class="panel-note">
+    <h2>口径结论与待确认项（每项给了默认建议）</h2>
+    <table>
+      <tr><th>项</th><th>默认建议</th><th>说明</th></tr>
+      <tr><td>多选</td><td class="def">支持多选（已确认）</td><td>入口 = 搜索 + 勾选，选中若干只；不做单选 / 标签切换。</td></tr>
+      <tr><td>与现有筛选的关系</td><td class="def">替换：目标开启时忽略三档与战斗维度，也不再「命中需求恒放行」</td><td>蹲某只时其余全是干扰；叠加会让不稀有 / 不符合维度的目标被筛掉，违背场景。关闭时零变化。</td></tr>
+      <tr><td>入口位置</td><td class="def">方案 A：并入范围控件成第 4 档「目标 · N」</td><td>语义清楚（范围 = 我蹲的那几只）；已选时下方给「编辑 / 清除」。方案 B（独立开关行）可对照。</td></tr>
+      <tr><td>持久化</td><td class="def">持久化，存 <code>roco.nearbyTargets</code>（gameId 数组）</td><td>跨局、重开都保留；空数组 = 关闭。换采集会话不重置。</td></tr>
+      <tr><td>悬浮窗</td><td class="def">列表与地图都只画目标</td><td>现状悬浮窗地图画全部附近精灵；开启目标后同步收窄，否则进游戏还是满屏干扰。</td></tr>
+      <tr><td>常驻列表</td><td class="def">目标精灵算「高价值」，离开视野仍保留 10 分钟</td><td>否则目标不在高价值名单里，列表根本进不来（这是必须改的一处）。</td></tr>
+      <tr><td>目标未出现</td><td class="def">地图只画自己 + 一条「目标的 N 只都不在视野内 · 已等待 mm:ss」</td><td>不发系统通知、不自动关闭、不弹窗打断；目标出现时恢复常规显示。</td></tr>
+      <tr><td>提醒</td><td class="def">目标开启时，非目标精灵不弹强提示</td><td>蹲某只时被别的稀有吵到，等于筛选没生效。</td></tr>
+      <tr><td>全屏视图</td><td class="def">全屏地图与列表都跟随目标筛选</td><td>全屏是「看清楚」，不是「绕过筛选」；现状全屏列表标着「不筛选」，开启目标后改为按目标列出。</td></tr>
+    </table>
+    <p style="margin-top:9px"><b>明确不做</b>：不改三档范围与战斗维度的现有判定语义（两处判定函数只在目标开启时被跳过）；
+      不改关闭状态下的任何表现；不改采集 / 解码 / 悬浮窗推送节流；不新增通知渠道。</p>
+  </div>
+
+  <div class="panel-note">
+    <h2>悬浮窗（安卓壳）开启目标后的样子</h2>
+    <div class="stagewf">
+      <div>
+        <div class="cap">现状：地图画全部附近精灵</div>
+        <div class="ovpanel" id="ovOff"></div>
+      </div>
+      <div>
+        <div class="cap">开启目标：地图与列表都只留目标</div>
+        <div class="ovpanel" id="ovOn"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SPECIES = [
+    { id: 3016, name: '罗隐',     group: '龙组',   rare: true,  present: true,  x: 32, y: 40, level: 32, nature: '固执', gender: '公', voice: '-12dB', kinds: ['炫彩'], dist: '18.4m', bearing: '↗' },
+    { id: 3034, name: '蒲公英',   group: '草组',   rare: false, present: false, x: 62, y: 30, level: 24, nature: '胆小', gender: '母', voice: '+96dB', kinds: [],      dist: '',      bearing: '',  last: '3 分钟前' },
+    { id: 3008, name: '草头鸭',   group: '飞行组', rare: false, present: true,  x: 44, y: 66, level: 18, nature: '',     gender: '',   voice: '+4dB',  kinds: [],      dist: '26.1m', bearing: '↙' },
+    { id: 3010, name: '恶魔叮',   group: '不死组', rare: false, present: true,  x: 70, y: 58, level: 21, nature: '',     gender: '公', voice: '-40dB', kinds: [],      dist: '33.7m', bearing: '↘' },
+    { id: 3017, name: '蹦蹦种子', group: '草组',   rare: true,  present: true,  x: 24, y: 58, level: 12, nature: '开朗', gender: '母', voice: '-99dB', kinds: ['稀有'], dist: '9.8m',  bearing: '↖' },
+    { id: 3020, name: '地鼠',     group: '虫组',   rare: false, present: true,  x: 55, y: 46, level: 15, nature: '',     gender: '',   voice: '+18dB', kinds: [],      dist: '7.2m',  bearing: '↑' },
+    { id: 3037, name: '岚鸟',     group: '飞行组', rare: false, present: true,  x: 78, y: 72, level: 27, nature: '',     gender: '母', voice: '-6dB',  kinds: [],      dist: '41.5m', bearing: '↘' },
+    { id: 3038, name: '小甲虫',   group: '虫组',   rare: false, present: true,  x: 38, y: 24, level: 9,  nature: '',     gender: '',   voice: '+2dB',  kinds: [],      dist: '22.3m', bearing: '↑' },
+    { id: 3028, name: '冬羽雀',   group: '飞行组', rare: true,  present: true,  x: 50, y: 80, level: 30, nature: '',     gender: '公', voice: '+100dB', kinds: ['稀有'], dist: '29.6m', bearing: '↓' },
+    { id: 3035, name: '魔草巫灵', group: '草组',   rare: false, present: true,  x: 66, y: 44, level: 35, nature: '保守', gender: '母', voice: '-24dB', kinds: [],      dist: '24.9m', bearing: '↗' },
+    { id: 3011, name: '恶魔狼',   group: '不死组', rare: false, present: true,  x: 20, y: 32, level: 26, nature: '',     gender: '公', voice: '-58dB', kinds: [],      dist: '37.4m', bearing: '↖' },
+    { id: 3012, name: '鸭吉吉',   group: '水组',   rare: false, present: true,  x: 84, y: 40, level: 20, nature: '',     gender: '母', voice: '+12dB', kinds: [],      dist: '44.1m', bearing: '→' }
+  ];
+  const byId = new Map(SPECIES.map((s) => [s.id, s]));
+
+  const state = { scheme: 'A', targets: [3016, 3034], search: '' };
+  const phones = [
+    { id: 'p375', width: 375, state: 'off' },
+    { id: 'p390', width: 390, state: 'off' }
+  ];
+
+  const STATE_TABS = [
+    ['off', '关闭（现状）'],
+    ['picker', '选择面板'],
+    ['onMap', '开启 · 地图'],
+    ['onList', '开启 · 列表'],
+    ['onEmpty', '目标未出现']
+  ];
+
+  const names = () => state.targets.map((id) => byId.get(id).name);
+  const targetOn = (st) => st === 'onMap' || st === 'onList' || st === 'onEmpty';
+
+  function statusCard() {
+    return `
+      <div class="card">
+        <div class="row between">
+          <h2>大世界采集 · 附近精灵</h2>
+          <div class="btnrow"><button class="pill">隐藏悬浮球</button><button class="pill primary">开始采集</button></div>
+        </div>
+        <p class="meta">场景 10003 · 附近 12 只 · 稀有 4 只 · 需求命中 1 只</p>
+        <p class="meta dim">更新于 14:02:31</p>
+        <p class="meta dim">需求中心共 5 条未完成需求参与匹配</p>
+      </div>`;
+  }
+
+  function battleCard() {
+    return `
+      <div class="card">
+        <div class="row between">
+          <h2>战斗采集 · 赛季奇遇</h2>
+          <span class="tiny dim">现状卡片（压缩展示）</span>
+        </div>
+        <p class="meta dim">强提醒目标：出现命中个体时，悬浮球变色提醒。</p>
+        <div class="row" style="flex-wrap:wrap;gap:4px;margin-top:6px">
+          <span class="chip">目标性格 · 不限</span>
+          <span class="chip">目标性别 · 不限</span>
+          <span class="chip">目标声音 · 不限</span>
+          <span class="chip">目标体型 · 不限</span>
+        </div>
+      </div>`;
+  }
+
+  function segRange(st) {
+    const on = targetOn(st);
+    const count = state.targets.length;
+    if (state.scheme === 'B') {
+      return `
+        <div class="seg" style="${on ? 'opacity:.45' : ''}">
+          <button class="${on ? '' : 'on'}">全部</button>
+          <button>稀有</button>
+          <button>需求</button>
+        </div>
+        <div class="swrow chg" data-n="1">
+          <div style="min-width:0">
+            <div style="font-size:11.5px;color:#334155">目标精灵${count ? '：' + names().join('、') : ''}</div>
+            <div class="tiny dim">${count ? '开启后只显示这 ' + count + ' 只' : '搜索精灵名，勾选想蹲的那几只'}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="sw ${on ? 'on' : ''}"></span>
+            <button class="pill sm">选择</button>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="seg chg" data-n="1">
+        <button class="${on ? '' : 'on'}">全部</button>
+        <button>稀有</button>
+        <button>需求</button>
+        <button class="${on ? 'on' : ''}"><span class="tgt">目标${count ? `<span class="cnt">${count}</span>` : ''}</span></button>
+      </div>`;
+  }
+
+  function filterCard(st) {
+    const on = targetOn(st);
+    return `
+      <div class="card">
+        ${segRange(st)}
+        <div class="seg mt6">
+          <button class="${st === 'onList' ? '' : 'on'}">地图</button>
+          <button class="${st === 'onList' ? 'on' : ''}">列表</button>
+        </div>
+        ${on && state.scheme === 'A' ? `
+          <div class="trow chg" data-n="2">
+            <span class="tiny dim">蹲守</span>
+            ${state.targets.map((id) => `<span class="chip target">${byId.get(id).name}<i>×</i></span>`).join('')}
+            <button class="pill sm">编辑</button>
+            <button class="pill sm">清除</button>
+          </div>` : ''}
+      </div>`;
+  }
+
+  function petDot(s, cls) {
+    return `<i class="dot ${cls}" style="left:${s.x}%;top:${s.y}%"></i>`;
+  }
+
+  function mapMock(st) {
+    const on = targetOn(st);
+    const dots = SPECIES.filter((s) => s.present && (!on || state.targets.includes(s.id)))
+      .map((s) => petDot(s, on ? 'target' : (s.rare ? 'rare' : 'normal')))
+      .join('');
+    const labels = on
+      ? SPECIES.filter((s) => s.present && state.targets.includes(s.id))
+          .map((s) => `<i class="dotlabel" style="left:${s.x}%;top:${s.y}%">${s.name}</i>`).join('')
+      : '';
+    const empty = st === 'onEmpty';
+    return `
+      <div class="mapmock">
+        <div class="grid"></div>
+        <div class="road" style="left:0;top:46%;width:100%;height:9px"></div>
+        <div class="road" style="left:36%;top:0;width:8px;height:100%"></div>
+        ${empty ? '' : dots}
+        ${empty ? '' : labels}
+        <div class="selfring"></div>
+        <div class="self"></div>
+        ${empty ? `<div class="notice chg" data-n="5"><b>目标的 ${state.targets.length} 只都不在视野内</b><br>已等待 0:42 · 出现后会直接画在这里</div>` : ''}
+      </div>`;
+  }
+
+  function mapCard(st) {
+    const on = targetOn(st);
+    const present = SPECIES.filter((s) => s.present);
+    const hit = st === 'onEmpty' ? [] : present.filter((s) => state.targets.includes(s.id));
+    const banner = on
+      ? `<div class="banner chg" data-n="3"><b>目标 ${state.targets.length} 只</b> · 视野内 ${hit.length} 只 · 已隐藏 ${present.length - hit.length} 只非目标精灵</div>`
+      : '';
+    return `
+      <div class="card tight">
+        <div class="row between" style="padding:0 4px">
+          <p class="maptitle">地图 · 洛克广场（10003）</p>
+          <div class="btnrow"><button class="pill sm">刷新</button><button class="pill sm">全屏</button></div>
+        </div>
+        ${banner}
+        ${mapMock(st)}
+        <p class="maptip">拖动 / 滚轮缩放；点位是世界坐标实测位置，不随视野裁剪</p>
+      </div>`;
+  }
+
+  function listCard() {
+    const rows = state.targets.map((id) => byId.get(id));
+    return `
+      <div class="card" style="box-shadow:none;background:transparent;padding:0">
+        <p class="meta dim chg" data-n="4" style="padding:0 2px 6px">蹲守 ${rows.length} 只 · 离开视野后保留 10 分钟</p>
+        ${rows.map((s) => `
+          <div class="prow ${s.present ? '' : 'left'}">
+            <div class="row between">
+              <span class="pname hot">${s.name} <em>${s.level}级</em></span>
+              <span class="tiny dim">${s.present ? s.dist + ' ' + s.bearing : '—'}</span>
+            </div>
+            <div class="row" style="flex-wrap:wrap;gap:4px;margin-top:3px">
+              ${s.present ? '' : '<span class="tag grey">已离开视野</span>'}
+              ${s.nature ? `<span class="tag sky">性格 ${s.nature}</span>` : ''}
+              ${s.gender ? `<span class="tag violet">${s.gender}</span>` : ''}
+              ${s.kinds.map((k) => `<span class="tag green">${k}</span>`).join('')}
+              <span class="tiny dim">${s.voice}</span>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  function pickerSheet() {
+    return `
+      <div class="sheetwrap">
+        <div class="backdrop"></div>
+        <div class="sheet">
+          <div class="sheethead">
+            <div><b>目标精灵</b><div class="tiny dim">输入名字搜索，勾选想蹲的那几只（可多选）</div></div>
+            <button class="x" data-act="closePicker">×</button>
+          </div>
+          <div class="searchwrap"><input class="search" id="searchInput" placeholder="输入精灵名搜索" value="${state.search}" /></div>
+          <div class="chipsline" id="pickChips"></div>
+          <div class="plist" id="pickList"></div>
+          <div class="sheetfoot">
+            <button class="link" data-act="clearAll">清除全部</button>
+            <button class="primary-btn" id="pickDone" data-act="donePicker"></button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function pickerBody() {
+    const chips = state.targets.length
+      ? `已选 ${state.targets.length} 只：` + state.targets.map((id) => `<span class="chip target">${byId.get(id).name}<i>×</i></span>`).join('')
+      : '还没选目标 · 关闭后不生效';
+    const kw = state.search.trim();
+    const rows = SPECIES.filter((s) => !kw || s.name.includes(kw));
+    const list = rows.length
+      ? rows.map((s) => `
+          <div class="srow" data-pick="${s.id}">
+            <span class="cb ${state.targets.includes(s.id) ? 'on' : ''}">${state.targets.includes(s.id) ? '✓' : ''}</span>
+            <span class="sname">${s.name}</span>
+            <span class="tag grey">${s.group}</span>
+            ${s.rare ? '<span class="tag amber">稀有</span>' : ''}
+          </div>`).join('')
+      : '<p class="tiny dim" style="padding:14px 8px">没有匹配的精灵，换个关键词试试</p>';
+    return { chips, list, done: state.targets.length ? `完成 · 蹲守 ${state.targets.length} 只` : '先勾选精灵' };
+  }
+
+  function viewportHTML(st) {
+    if (st === 'off' || st === 'picker') {
+      return statusCard() + battleCard() + filterCard(st) + mapCard(st) + (st === 'picker' ? pickerSheet() : '');
+    }
+    if (st === 'onMap') return statusCard() + battleCard() + filterCard(st) + mapCard(st);
+    if (st === 'onList') return statusCard() + battleCard() + filterCard(st) + listCard();
+    return statusCard() + battleCard() + filterCard(st) + mapCard(st);
+  }
+
+  function renderAll() {
+    phones.forEach((p) => {
+      const root = document.getElementById(p.id);
+      root.querySelector('.viewport').innerHTML = viewportHTML(p.state);
+      root.querySelectorAll('[data-state]').forEach((btn) => {
+        btn.classList.toggle('on', btn.dataset.state === p.state);
+      });
+      const cap = document.getElementById('cap-' + p.id);
+      const tab = STATE_TABS.find(([key]) => key === p.state);
+      if (cap && tab) cap.textContent = tab[1];
+      if (p.state === 'picker') {
+        const body = pickerBody();
+        const chips = root.querySelector('#pickChips');
+        const list = root.querySelector('#pickList');
+        const done = root.querySelector('#pickDone');
+        if (chips) chips.innerHTML = body.chips;
+        if (list) list.innerHTML = body.list;
+        if (done) { done.textContent = body.done; done.disabled = state.targets.length === 0; }
+      }
+    });
+    document.getElementById('selSummary').textContent = state.targets.length ? names().join('、') : '（无）';
+    renderOverlay();
+  }
+
+  function renderOverlay() {
+    const offDots = SPECIES.filter((s) => s.present)
+      .map((s) => `<i class="dot ${s.rare ? 'rare' : 'normal'}" style="left:${s.x}%;top:${s.y}%;background:${s.rare ? '#f59e0b' : '#64748b'}"></i>`).join('');
+    const onDots = SPECIES.filter((s) => s.present && state.targets.includes(s.id))
+      .map((s) => `<i class="dot target" style="left:${s.x}%;top:${s.y}%;background:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.25)"></i>`).join('');
+    const self = '<div style="position:absolute;left:50%;top:52%;width:10px;height:10px;border-radius:50%;background:#0284c7;transform:translate(-50%,-50%)"></div>';
+    const row = (s) => `
+      <div class="ovrow">
+        <div class="r1"><span>${s.name} <span style="font-weight:400;color:#94a3b8">${s.level}级</span></span>
+          <span style="font-weight:500;color:#0369a1">${s.present ? s.dist + ' ' + s.bearing : '—'}</span></div>
+        <div class="r2"><span>高:38.2%</span><span>重:61.4%</span><span>${s.voice}</span></div>
+      </div>`;
+    document.getElementById('ovOff').innerHTML = `
+      <div class="ovtitle"><span>附近 · 12 只</span><span class="tiny dim">地图：全部精灵</span></div>
+      <div class="ovbody">
+        <div class="ovmap">${offDots}${self}</div>
+        <div class="ovlist">
+          ${SPECIES.filter((s) => s.present).slice(0, 3).map(row).join('')}
+        </div>
+      </div>
+      <div class="ovfoot">列表按三档 + 战斗维度筛选；地图不筛选</div>`;
+    const onRows = SPECIES.filter((s) => state.targets.includes(s.id));
+    document.getElementById('ovOn').innerHTML = `
+      <div class="ovtitle"><span>附近 · 目标 ${state.targets.length} 只</span><span class="tiny dim">地图：只画目标</span></div>
+      <div class="ovbody">
+        <div class="ovmap">${onDots}${self}</div>
+        <div class="ovlist">${onRows.map(row).join('')}</div>
+      </div>
+      <div class="ovfoot">开启目标后列表与地图都只留目标</div>`;
+  }
+
+  function stageHTML(p) {
+    return `
+      <div class="stage">
+        <div class="cap"><b>${p.width} 宽</b> · 状态：<span id="cap-${p.id}"></span></div>
+        <div class="row" style="flex-wrap:wrap;gap:4px;margin-bottom:8px;max-width:${p.width}px">
+          ${STATE_TABS.map(([key, label]) => `<button class="segbtn" data-state="${key}" data-phone="${p.id}">${label}</button>`).join('')}
+        </div>
+        <div class="phone ${p.width === 390 ? 'w390' : ''}" id="${p.id}">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ ⌁ 100%</span></div>
+          <div class="appbar"><b>洛克工具箱</b><div class="acts"><button class="pill sm">刷新</button><button class="pill sm">教程</button></div></div>
+          <div class="tabbar"><span>看板</span><span>家园</span><span>收集</span><span class="on">附近</span><span>小组</span><span>我的</span></div>
+          <div class="vpwrap"><div class="viewport"></div></div>
+        </div>
+      </div>`;
+  }
+
+  function mount() {
+    document.getElementById('stages').innerHTML = phones.map(stageHTML).join('');
+    document.getElementById('stages').addEventListener('click', (event) => {
+      const stateBtn = event.target.closest('[data-state]');
+      if (stateBtn) {
+        const p = phones.find((item) => item.id === stateBtn.dataset.phone);
+        p.state = stateBtn.dataset.state;
+        renderAll();
+        return;
+      }
+      const pick = event.target.closest('[data-pick]');
+      if (pick) {
+        const id = Number(pick.dataset.pick);
+        state.targets = state.targets.includes(id)
+          ? state.targets.filter((x) => x !== id)
+          : [...state.targets, id];
+        refreshPickerOnly();
+        return;
+      }
+      const chip = event.target.closest('.chip.target');
+      if (chip) {
+        const name = chip.textContent.replace('×', '').replace('×', '').trim();
+        const found = SPECIES.find((s) => s.name === name);
+        if (found) {
+          state.targets = state.targets.filter((x) => x !== found.id);
+          renderAll();
+        }
+        return;
+      }
+      const act = event.target.closest('[data-act]');
+      if (!act) return;
+      if (act.dataset.act === 'closePicker' || act.dataset.act === 'donePicker') {
+        const p = phones.find((item) => item.id === act.closest('.phone').id);
+        p.state = state.targets.length ? 'onMap' : 'off';
+        renderAll();
+      }
+      if (act.dataset.act === 'clearAll') {
+        state.targets = [];
+        renderAll();
+      }
+      if (act.dataset.act === 'editTargets' || act.dataset.act === 'openPicker') {
+        const p = phones.find((item) => item.id === act.closest('.phone').id);
+        p.state = 'picker';
+        renderAll();
+      }
+    });
+
+    // 编辑 / 清除 / 入口按钮：按文案识别（与上面的分段控件共用一套点击）
+    document.getElementById('stages').addEventListener('click', (event) => {
+      const btn = event.target.closest('button');
+      if (!btn || btn.dataset.state || btn.dataset.act) return;
+      const phone = btn.closest('.phone');
+      if (!phone) return;
+      const p = phones.find((item) => item.id === phone.id);
+      if (btn.textContent.trim() === '编辑' || btn.textContent.trim() === '选择') {
+        p.state = 'picker';
+        renderAll();
+      } else if (btn.textContent.trim() === '清除') {
+        state.targets = [];
+        p.state = 'off';
+        renderAll();
+      } else if (btn.textContent.trim().startsWith('目标') || btn.textContent.trim() === '全部') {
+        // 分段控件：点「目标」进目标档（已在该档时再点 = 编辑名单）；点「全部」退出目标
+        if (btn.textContent.includes('目标')) {
+          p.state = targetOn(p.state) ? 'picker' : (state.targets.length ? 'onMap' : 'picker');
+        } else if (p.state !== 'off' && p.state !== 'picker') {
+          p.state = 'off';
+        }
+        renderAll();
+      }
+    });
+
+    document.getElementById('stages').addEventListener('input', (event) => {
+      if (!event.target.classList.contains('search')) return;
+      state.search = event.target.value;
+      refreshPickerOnly(true);
+    });
+
+    document.querySelectorAll('[data-scheme]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.scheme = btn.dataset.scheme;
+        document.querySelectorAll('[data-scheme]').forEach((b) => b.classList.toggle('on', b === btn));
+        renderAll();
+      });
+    });
+    document.getElementById('marks').addEventListener('change', (event) => {
+      document.body.classList.toggle('marks', event.target.checked);
+    });
+
+    renderAll();
+  }
+
+  /** 只刷新选择面板内部（保留搜索框焦点与光标） */
+  function refreshPickerOnly(restoreFocus) {
+    const body = pickerBody();
+    phones.filter((p) => p.state === 'picker').forEach((p) => {
+      const root = document.getElementById(p.id);
+      const chips = root.querySelector('#pickChips');
+      const list = root.querySelector('#pickList');
+      const done = root.querySelector('#pickDone');
+      if (chips) chips.innerHTML = body.chips;
+      if (list) list.innerHTML = body.list;
+      if (done) { done.textContent = body.done; done.disabled = state.targets.length === 0; }
+    });
+    if (restoreFocus) {
+      const input = document.querySelector('.phone .search');
+      if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+    }
+    document.getElementById('selSummary').textContent = state.targets.length ? names().join('、') : '（无）';
+    renderOverlay();
+  }
+
+  mount();
+</script>
+</body>
+</html>

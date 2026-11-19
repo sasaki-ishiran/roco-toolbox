@@ -1,9 +1,62 @@
 import type { OwnedPet, SpeciesEntry } from './types';
 import { isBreedableGroup } from './eggs';
 import { speciesDisplayName } from './speciesName';
-import { bodyGradeOf, heightBodyOf } from '../shared/bodySize.js';
+import { breedingBodyGradeOf, heightBodyOf } from '../shared/bodySize.js';
 
 export type TagKind = 'account' | 'body' | 'voice' | 'gender' | 'shiny' | 'eggGroup' | 'nature';
+
+export interface HeightRange {
+  min: number;
+  max: number;
+}
+
+export const DEFAULT_HEIGHT_RANGE: HeightRange = { min: 0, max: 100 };
+
+export function matchesHeightRange(
+  heightPercent: number | null | undefined,
+  range: HeightRange,
+): boolean {
+  if (range.min === 0 && range.max === 100) return true;
+  return (
+    typeof heightPercent === 'number' &&
+    Number.isFinite(heightPercent) &&
+    heightPercent >= range.min &&
+    heightPercent <= range.max
+  );
+}
+
+/** 体重百分位范围（与身高同一套 0~100 口径）。 */
+export type WeightRange = HeightRange;
+export const DEFAULT_WEIGHT_RANGE: WeightRange = { min: 0, max: 100 };
+
+/** 体型筛选的两个维度（2026-11-17 用户口径：身高 / 体重可切换）。 */
+export type SizeField = 'height' | 'weight';
+/** 体型筛选的两种单位：百分比（0~100）/ 数值（身高米、体重公斤）。 */
+export type SizeUnit = 'percent' | 'value';
+
+/** 数值档的默认区间（米 / 公斤），按图鉴里的实际跨度给一个略宽松的范围。 */
+export const DEFAULT_SIZE_VALUE_RANGES: Record<SizeField, HeightRange> = {
+  height: { min: 0, max: 1.2 },
+  weight: { min: 0, max: 20 },
+};
+
+/** 百分位 → 真实身高（米）；缺图鉴区间或百分位时返回 null。 */
+export function heightMetersOf(
+  size: { min: number; max: number } | null | undefined,
+  percent: number | null | undefined,
+): number | null {
+  if (!size || typeof percent !== 'number' || !Number.isFinite(percent)) return null;
+  return size.min + (size.max - size.min) * (percent / 100);
+}
+
+/** 百分位 → 真实体重（公斤）；缺图鉴区间或百分位时返回 null。 */
+export function weightKgOf(
+  size: { small: number; big: number } | null | undefined,
+  percent: number | null | undefined,
+): number | null {
+  if (!size || typeof percent !== 'number' || !Number.isFinite(percent)) return null;
+  return size.small + (size.big - size.small) * (percent / 100);
+}
 
 export interface PetTag {
   id: string;
@@ -47,12 +100,22 @@ const MEDAL_DB = 96;
  */
 export type PetGrade = '大婉' | '小婉' | '大粗' | '小粗';
 
-/** 每个档位对应的体型（判定用）。 */
-export const GRADE_BODY: Record<PetGrade, string> = {
+export type TargetBody = '大块头' | '小不点';
+export type TargetVoice = '婉转声' | '粗嗓门';
+
+/** 每个档位对应的体型与声音方向（判定 / 目标编辑用）。 */
+export const GRADE_BODY: Record<PetGrade, TargetBody> = {
   大婉: BIG_BODY,
   小婉: SMALL_BODY,
   大粗: BIG_BODY,
   小粗: SMALL_BODY,
+};
+
+export const GRADE_VOICE: Record<PetGrade, TargetVoice> = {
+  大婉: '婉转声',
+  小婉: '婉转声',
+  大粗: '粗嗓门',
+  小粗: '粗嗓门',
 };
 
 /** 档位在界面上的写法：追满分带「满分」前缀，追双牌直接用简名。 */
@@ -89,10 +152,8 @@ export function betterMotherClass(
 export function classifyGrade(pet: OwnedPet, mode: TargetMode): PetGrade | null {
   const threshold = mode === 'perfect' ? PERFECT_DB : MEDAL_DB;
   if (Math.abs(pet.voiceDb) < threshold) return null;
-  // 体型：奖牌（体重 98% / 2%）优先；没有奖牌时要求身高 100% / 0%
-  // **且**体重 ≥95% / ≤5% 同时满足（2026-10-28 用户确认）。
-  // 奖牌本身仍按体重 98% / 2% 判定并展示。
-  const body = bodyGradeOf(pet);
+  // 体型：奖牌（体重 98% / 2%）优先；无奖牌时身高 100% / 0% 等效大块头 / 小不点（孵蛋口径）。
+  const body = breedingBodyGradeOf(pet);
   const big = body === BIG_BODY;
   const small = body === SMALL_BODY;
   if (!big && !small) return null;
@@ -110,6 +171,8 @@ export function classifyMother(pet: OwnedPet, mode: TargetMode): MotherClass | n
 const FIXED_TAGS: Array<{ id: string; kind: TagKind; label: string }> = [
   { id: 'body:大块头', kind: 'body', label: '大块头' },
   { id: 'body:小不点', kind: 'body', label: '小不点' },
+  { id: 'body:满体重', kind: 'body', label: '满体重' },
+  { id: 'body:零体重', kind: 'body', label: '零体重' },
   // 身高到顶 / 到底单独两档（2026-10-29 用户要求）：奖牌按体重判，这两档按身高判
   { id: 'body:满身高', kind: 'body', label: '满身高' },
   { id: 'body:零身高', kind: 'body', label: '零身高' },
@@ -120,7 +183,9 @@ const FIXED_TAGS: Array<{ id: string; kind: TagKind; label: string }> = [
   { id: 'voice:粗嗓门', kind: 'voice', label: '粗嗓门' },
   { id: 'gender:公', kind: 'gender', label: '公' },
   { id: 'gender:母', kind: 'gender', label: '母' },
+  { id: 'shiny:炫彩', kind: 'shiny', label: '炫彩' },
   { id: 'shiny:异色', kind: 'shiny', label: '异色' },
+  { id: 'shiny:异色炫彩', kind: 'shiny', label: '异色炫彩' },
 ];
 
 const KIND_ORDER: Record<TagKind, number> = {
@@ -177,6 +242,17 @@ export function buildTagIndex(
 
     if (pet.medalBody === '大块头') addTag('body:大块头', 'body', '大块头', i);
     else if (pet.medalBody === '小不点') addTag('body:小不点', 'body', '小不点', i);
+    if (
+      (pet.medalBody === '大块头' && (pet.weightPercent ?? -Infinity) >= 100) ||
+      (pet.medalBody === '小不点' && (pet.weightPercent ?? Infinity) <= 0)
+    ) {
+      addTag(
+        pet.medalBody === '大块头' ? 'body:满体重' : 'body:零体重',
+        'body',
+        pet.medalBody === '大块头' ? '满体重' : '零体重',
+        i,
+      );
+    }
 
     // 身高正好到顶 / 到底（与合格口径同一个判定，100% / 0% 才算）
     const heightExtreme = heightBodyOf(pet.heightPercent);
@@ -259,13 +335,14 @@ export function filterByTags(index: BuildResult['index'], selectedTagIds: string
 export function computeFacetCounts(
   index: BuildResult['index'],
   selectedTagIds: string[],
+  withinIndices?: readonly number[],
 ): Record<string, number> {
   const byKind = groupSelectedByKind(selectedTagIds);
   const baseCache = new Map<string, Set<number> | null>();
 
   const baseFor = (excludeKind: string): Set<number> | null => {
     if (baseCache.has(excludeKind)) return baseCache.get(excludeKind) ?? null;
-    let base: Set<number> | null = null;
+    let base: Set<number> | null = withinIndices === undefined ? null : new Set(withinIndices);
     for (const [kind, ids] of byKind) {
       if (kind === excludeKind) continue;
       const union = unionOf(index, ids);

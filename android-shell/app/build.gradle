@@ -1,12 +1,23 @@
 apply plugin: 'com.android.application'
 
-// 蛋神助手云端采集只接受其公开 Android 客户端身份。凭据不属于源码，构建时从本机
-// local.properties 的 capture.token 注入；未配置时上传入口会明确报错，其余功能不受影响。
-def localProperties = new java.util.Properties()
-def localPropertiesFile = rootProject.file('local.properties')
-if (localPropertiesFile.exists()) localPropertiesFile.withInputStream { localProperties.load(it) }
-def captureToken = (localProperties.getProperty('capture.token') ?: '').trim()
-    .replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+// 发版通道（2026-11-11，唯一口径见 docs/发版与更新规范.md）：
+//   production：网页/包默认站 = 正式站，清单 = 主站 version-18 / version.json；
+//   internal  ：网页/包默认站 = 测试站，清单 = 独立内测清单（必须显式传地址）。
+// 一个包只属于一个通道，由 -PtestBuild=true 决定；默认是正式通道。
+def testBuild = project.hasProperty('testBuild') && project.property('testBuild') == 'true'
+def channel = testBuild ? 'internal' : 'production'
+def prodUrl = 'https://roco-toolbox.pages.dev'
+def testUrl = 'https://test.roco-toolbox.pages.dev'
+def internalManifestUrl = (project.findProperty('internalManifestUrl')
+    ?: 'https://roco-toolbox-downloads.pages.dev/internal/version.json').toString().trim()
+if (testBuild && internalManifestUrl.isEmpty()) {
+    throw new GradleException('内测通道必须提供内测清单地址：默认 https://roco-toolbox-downloads.pages.dev/internal/version.json，可用 -PinternalManifestUrl 覆盖。')
+}
+def channelDefaultUrl = testBuild ? testUrl : prodUrl
+def manifestUrl = testBuild ? internalManifestUrl : "${prodUrl}/android/version-18.json"
+def legacyManifestUrl = testBuild ? '' : "${prodUrl}/android/version.json"
+def downloadsManifestUrl = testBuild ? '' : 'https://roco-toolbox-downloads.pages.dev/android/version.json'
+def q = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
 
 android {
     namespace "com.localdatatool.toolbox"
@@ -14,17 +25,27 @@ android {
     ndkVersion '28.2.13676358'
 
     defaultConfig {
-        applicationId "com.localdatatool.toolbox"
+        // 内测通道独立包名：与正式包可共存、互不覆盖（2026-11-12）
+        applicationId testBuild ? 'com.localdatatool.toolbox.internal' : 'com.localdatatool.toolbox'
         minSdk 23
         // 故意停在 34：安卓 15 只对 targetSdk 35+ 的应用强制全屏铺满（edge-to-edge），
         // 那样网页会被铺到状态栏底下。停在 34 时系统会自动让窗口避开系统栏，不用自己算 insets。
         // 这个壳只自己安装、不上架商店，不受商店 targetSdk 新规影响。
         targetSdk 34
-        versionCode 26
-        versionName "1.3.5"
+        // 内测迭代：同一版本名用更高的 versionCode，客户端才会提示更新（2026-11-18 vc42）
+        versionCode 42
+        versionName "1.5.6"
+        // 应用名按通道区分，内测包在桌面上能和正式包一眼分开
+        manifestPlaceholders = [appLabel: testBuild ? '小布助手·内测' : '小布助手']
         ndk { abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64' }
         externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON' } }
-        buildConfigField 'String', 'CAPTURE_TOKEN', '"' + captureToken + '"'
+        // 通道与默认站：包默认站必须等于通道参数，构建期会再校验生成的 BuildConfig
+        buildConfigField 'String', 'CHANNEL', q(channel)
+        buildConfigField 'String', 'DEFAULT_SERVER_URL', q(channelDefaultUrl)
+        buildConfigField 'String', 'TEST_SERVER_URL', q(testBuild ? testUrl : '')
+        buildConfigField 'String', 'MANIFEST_URL', q(manifestUrl)
+        buildConfigField 'String', 'LEGACY_MANIFEST_URL', q(legacyManifestUrl)
+        buildConfigField 'String', 'DOWNLOADS_MANIFEST_URL', q(downloadsManifestUrl)
     }
 
     compileOptions {
@@ -34,9 +55,30 @@ android {
     buildFeatures { buildConfig true }
     externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
 
+    // 发行签名（2026-11-11）：必须沿用现网 APK 的证书（SHA-256 753AB95B…CEA4A，
+    // 即历史一直使用的 debug 证书），系统才会把 1.5.3 当成同一个应用的升级，
+    // 覆盖安装不要求卸载，网页身份与小组数据也就还在。证书文件不进版本库。
+    signingConfigs {
+        release {
+            def ks = project.findProperty('releaseKeystore')
+                ? file(project.property('releaseKeystore'))
+                : rootProject.file('keystore/roco-release.jks')
+            if (ks.exists()) {
+                storeFile ks
+                storePassword (project.findProperty('releaseKeystorePassword') ?: 'android')
+                keyAlias (project.findProperty('releaseKeyAlias') ?: 'androiddebugkey')
+                keyPassword (project.findProperty('releaseKeyPassword') ?: 'android')
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig signingConfigs.release
+            debuggable false
+            // 压缩 / 混淆先不开：先保证「能覆盖安装、功能一致」，再谈体积。
             minifyEnabled false
+            shrinkResources false
         }
     }
 }
@@ -47,4 +89,213 @@ dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20250517'
+}
+
+// 编译期守卫（2026-11-10）：1.3.6 ~ 1.3.8 的问题都是「打完包、装到真机才发现」，
+// 这里把关键不变量提到 preBuild，任一条不满足直接 fail，不允许带着旧值出包。
+tasks.register('verifyShellInvariants') {
+    group = 'verification'
+    description = '校验版本清单、地图 240/90、面板 214、长按隐藏、采集桥来源跟随'
+    doLast {
+        def problems = []
+        def read = { File f -> f.getText('UTF-8') }
+        def need = { String label, String text, String needle ->
+            if (!text.contains(needle)) problems << "${label} 缺少「${needle}」"
+        }
+
+        // 1. 版本号必须与对外版本清单一致（改一处漏一处直接拦下）
+        // 用 toRealPath 解析 junction：从 D:\roco-build\shell-authoritative 构建时也能回到仓库根
+        def repoRoot = rootProject.projectDir.toPath().toRealPath().toFile().parentFile
+        def manifestFile = new File(repoRoot, 'public/android/version.json')
+        // 测试包（2026-11-10）：只给单个用户验证的版本不对外发布，不能改 version.json，
+        // 否则所有用户都会被推到这个版本。用 -PtestOnlyBuild=true 区分：只要求版本号高于对外清单。
+        def testOnlyBuild = project.hasProperty('testOnlyBuild') && project.property('testOnlyBuild') == 'true'
+        if (!manifestFile.exists()) {
+            problems << "找不到版本清单 ${manifestFile}"
+        } else {
+            def manifest = new groovy.json.JsonSlurper().parse(manifestFile, 'UTF-8')
+            if (testOnlyBuild) {
+                if (android.defaultConfig.versionCode <= (manifest.versionCode as int)) {
+                    problems << "测试包 versionCode 必须高于对外清单：build.gradle=${android.defaultConfig.versionCode}，清单=${manifest.versionCode}"
+                }
+                println "测试包模式：跳过 versionName 与清单一致校验（build=${android.defaultConfig.versionName}，清单=${manifest.versionName}）"
+            } else {
+                if ((manifest.versionCode as int) != android.defaultConfig.versionCode) {
+                    problems << "versionCode 与清单不一致：build.gradle=${android.defaultConfig.versionCode}，清单=${manifest.versionCode}"
+                }
+                if (manifest.versionName != android.defaultConfig.versionName) {
+                    problems << "versionName 与清单不一致：build.gradle=${android.defaultConfig.versionName}，清单=${manifest.versionName}"
+                }
+            }
+        }
+
+        // 2. 地图：视野 240 米、点位半径 120 米、投影按 side_units、能画 mapPets
+        def mapHtml = read(file('src/main/assets/overlay-map.html'))
+        need('overlay-map.html', mapHtml, 'VIEW_METERS = 240')
+        need('overlay-map.html', mapHtml, 'DOT_RADIUS_METERS = 120')
+        need('overlay-map.html', mapHtml, '/ side')
+        need('overlay-map.html', mapHtml, 'mapPets')
+        // 2b. 精灵点裁剪按**当前自身坐标**（2026-11-10 事故：按进场锚点裁，
+        //     走离入口 120m 后地图上的精灵点被整批剔掉，列表却在实时更新）
+        need('overlay-map.html', mapHtml, 'Math.hypot(petX - selfX, petY - selfY)')
+
+        // 3. 附近面板宽度（2026-11-12 档位二：214）
+        need('NearbyOverlayModel.java',
+            read(file('src/main/java/com/localdatatool/toolbox/capture/NearbyOverlayModel.java')),
+            'PANEL_WIDTH = 214')
+
+        // 4. 悬浮球长按隐藏
+        def battle = read(file('src/main/java/com/localdatatool/toolbox/capture/BattleOverlayController.java'))
+        need('BattleOverlayController.java', battle, 'LONG_PRESS_MS')
+        need('BattleOverlayController.java', battle, 'longPressHide')
+
+        // 4b. 悬浮球外观与吸边（2026-11-10 用户定稿）：0.85 缩放、8dp 吸边阈值、
+        //     3 秒无操作半透明、右吸边时面板向左展开，避免以后哪次构建把这些丢掉
+        need('BattleOverlayController.java', battle, 'ORB_ICON_SCALE = 0.85f')
+        need('BattleOverlayController.java', battle, 'SNAP_THRESHOLD_DP = 8')
+        need('BattleOverlayController.java', battle, 'SNAP_FADE_DELAY_MS = 3000L')
+        need('BattleOverlayController.java', battle, 'snappedSide == 2')
+        def panelSource = read(file('src/main/java/com/localdatatool/toolbox/capture/NearbyPanelController.java'))
+        need('NearbyPanelController.java', panelSource, 'lastOrbSnappedRight')
+        need('NearbyPanelController.java', panelSource, 'lastOrbX - edge - panelParams.width')
+        need('NearbyPanelController.java', panelSource, 'lastOrbX + lastOrbSize + edge')
+
+        // 5. 采集桥来源必须跟随当前站点，否则测试站读不到本机采集
+        need('CaptureBridgePolicy.java',
+            read(file('src/main/java/com/localdatatool/toolbox/capture/CaptureBridgePolicy.java')),
+            'siteOrigin')
+        // 采集快照的 CORS 头也必须跟随当前站点（写死正式站 = 测试站 Failed to fetch）
+        need('CaptureController.java',
+            read(file('src/main/java/com/localdatatool/toolbox/capture/CaptureController.java')),
+            '"Access-Control-Allow-Origin", siteOrigin')
+
+        // 6. 长按隐藏必须有恢复入口：网页按钮 + 桥方法，缺一个就失败
+        //    （1.3.9 事故：longPressHide 在、capture-bridge.js 没暴露 readOrbHidden，
+        //     网页判定无此能力，按钮永远不渲染，球隐藏后找不回来）
+        def bridgeJs = read(file('src/main/assets/capture-bridge.js'))
+        need('capture-bridge.js', bridgeJs, 'readOrbHidden')
+        need('capture-bridge.js', bridgeJs, 'setOrbHidden')
+        need('MainActivity.java',
+            read(file('src/main/java/com/localdatatool/toolbox/MainActivity.java')),
+            'readOrbHidden')
+        need('src/ui/Nearby.tsx',
+            read(new File(repoRoot, 'src/ui/Nearby.tsx')),
+            'nearby-orb-toggle')
+        need('src/ui/Nearby.tsx',
+            read(new File(repoRoot, 'src/ui/Nearby.tsx')),
+            '显示悬浮球')
+
+        // 7. 通道模型：默认站必须来自 BuildConfig，不要在源码里写死测试站
+        def serverConfigSource = read(file('src/main/java/com/localdatatool/toolbox/ServerConfig.java'))
+        if (serverConfigSource.contains('https://test.roco-toolbox.pages.dev')) {
+            problems << 'ServerConfig 不允许写死测试站地址，必须用 BuildConfig.TEST_SERVER_URL'
+        }
+        if (!serverConfigSource.contains('BuildConfig.DEFAULT_SERVER_URL')) {
+            problems << 'ServerConfig 默认站必须来自 BuildConfig.DEFAULT_SERVER_URL（通道参数决定）'
+        }
+        def expectedAppId = testBuild ? 'com.localdatatool.toolbox.internal' : 'com.localdatatool.toolbox'
+        if (android.defaultConfig.applicationId != expectedAppId) {
+            problems << "applicationId 必须按通道固定：期望 ${expectedAppId}，实际 ${android.defaultConfig.applicationId}"
+        }
+        def manifestSource = read(file('src/main/AndroidManifest.xml'))
+        if (!manifestSource.contains('authorities="${applicationId}.fileprovider"')) {
+            problems << 'FileProvider authority 必须用 ${applicationId}.fileprovider，不能写死包名'
+        }
+
+        if (!problems.isEmpty()) {
+            throw new GradleException('壳不变量校验失败：\n - ' + problems.join('\n - '))
+        }
+        println '壳不变量校验通过（版本清单 / 地图 240·120·side_units / 面板 214 / 长按隐藏 / 采集桥来源 / 通道模型）'
+    }
+}
+
+// 通道校验（2026-11-11）：构建期断言「包默认站 == 通道参数」。
+// verifyShellInvariants 在 preBuild 跑，那时 BuildConfig 还没生成；这里挂到生成任务之后，
+// 直接检查真正编进包里的 BuildConfig.java，不一致就 fail，不允许带着错通道出包。
+// 只校验本次生成的那个 variant：构建目录里可能还留着上一次别的通道的 BuildConfig
+// （例如先打了内测 debug，再打正式 release），扫全目录会把旧文件当成新包误报。
+def verifyChannel = { String variant ->
+    def files = fileTree(new File(project.buildDir, "generated/source/buildConfig/${variant.toLowerCase()}")) {
+        include '**/com/localdatatool/toolbox/BuildConfig.java'
+    }.files
+    if (files.isEmpty()) {
+        throw new GradleException('通道校验失败：找不到生成的 BuildConfig.java')
+    }
+    def problems = []
+    files.each { File f ->
+        def text = f.getText('UTF-8')
+        if (!text.contains('CHANNEL = ' + q(channel) + ';')) problems << "CHANNEL 不是 ${channel}"
+        if (!text.contains('DEFAULT_SERVER_URL = ' + q(channelDefaultUrl) + ';')) {
+            problems << "默认站不是 ${channelDefaultUrl}"
+        }
+        if (!text.contains('MANIFEST_URL = ' + q(manifestUrl) + ';')) problems << "清单地址不是 ${manifestUrl}"
+        def expectedAppId = testBuild ? 'com.localdatatool.toolbox.internal' : 'com.localdatatool.toolbox'
+        if (!text.contains('APPLICATION_ID = ' + q(expectedAppId) + ';')) {
+            problems << "applicationId 不是 ${expectedAppId}"
+        }
+        if (testBuild) {
+            if (!text.contains('TEST_SERVER_URL = ' + q(testUrl) + ';')) problems << '内测包缺少测试站地址'
+        } else {
+            if (text.contains('test.roco-toolbox.pages.dev')) problems << '正式包 BuildConfig 里出现测试站地址'
+            if (text.toLowerCase().contains('internal')) problems << '正式包 BuildConfig 里出现内测清单'
+        }
+    }
+    if (!problems.isEmpty()) {
+        throw new GradleException('通道校验失败：\n - ' + problems.join('\n - '))
+    }
+    println "[通道校验] channel=${channel} appId=${android.defaultConfig.applicationId} version=${android.defaultConfig.versionName}(${android.defaultConfig.versionCode}) default=${channelDefaultUrl} manifest=${manifestUrl}"
+}
+
+tasks.register('verifyChannelBuildConfig') {
+    group = 'verification'
+    description = '校验生成的 BuildConfig：通道 / 默认站 / 清单地址一致'
+    dependsOn 'generateDebugBuildConfig'
+    doLast { verifyChannel.call('debug') }
+}
+tasks.matching { it.name ==~ /generate.*BuildConfig/ }.configureEach { t ->
+    // generateReleaseBuildConfig -> release
+    def variant = t.name - 'generate' - 'BuildConfig'
+    t.doLast { verifyChannel.call(variant) }
+}
+
+tasks.named('preBuild') { dependsOn 'verifyShellInvariants' }
+
+// 打包后签名校验（2026-11-11）：证书必须是现网一直用的那张，否则系统会拒绝覆盖安装，
+// 用户只能卸载重装，网页身份与小组数据就全丢了。不一致直接 fail，不允许出包。
+def expectedCertSha256 = '753ab95ba05db1a75d72723dccafa0f040d9de076a4e02519611c9fff7acea4a'
+def verifyReleaseSignature = {
+    def apkDir = new File(project.buildDir, 'outputs/apk/release')
+    def apk = (apkDir.listFiles() ?: [] as File[])
+        .findAll { it.isFile() && it.name.endsWith('.apk') && !it.name.contains('unsigned') }
+        .sort { a, b -> b.lastModified() <=> a.lastModified() }
+        ?.find { true }
+    if (apk == null) {
+        throw new GradleException('签名校验失败：release 没有产出已签名 APK（检查 android-shell/keystore/roco-release.jks 是否存在）')
+    }
+    def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+    def apksigner = new File(android.sdkDirectory,
+        "build-tools/${android.buildToolsVersion}/apksigner" + (isWindows ? '.bat' : ''))
+    if (!apksigner.exists()) throw new GradleException("签名校验失败：找不到 ${apksigner}")
+    def stdout = new ByteArrayOutputStream()
+    def stderr = new ByteArrayOutputStream()
+    def result = exec {
+        commandLine apksigner.absolutePath, 'verify', '--print-certs', apk.absolutePath
+        standardOutput = stdout
+        errorOutput = stderr
+        ignoreExitValue = true
+    }
+    def text = stdout.toString('UTF-8')
+    if (result.exitValue != 0) {
+        throw new GradleException("签名校验失败：apksigner 返回 ${result.exitValue}\n${stderr.toString('UTF-8')}")
+    }
+    def match = text =~ /Signer #1 certificate SHA-256 digest: ([0-9a-fA-F]+)/
+    if (!match.find()) throw new GradleException("签名校验失败：读不到证书 SHA-256\n${text}")
+    def actual = match.group(1).toLowerCase()
+    if (actual != expectedCertSha256) {
+        throw new GradleException("签名校验失败：证书 SHA-256 不一致\n  实际 ${actual}\n  期望 ${expectedCertSha256}")
+    }
+    println "[签名校验] ${apk.name} 证书 SHA-256 = ${actual}（与现网一致）"
+}
+tasks.matching { it.name == 'packageRelease' }.configureEach { t ->
+    t.doLast { verifyReleaseSignature.call() }
 }

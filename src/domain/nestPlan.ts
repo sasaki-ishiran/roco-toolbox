@@ -12,6 +12,7 @@ import {
 } from './nestGeometry';
 import { cellStateFor, type StudCoverageResult } from './studCoverage';
 import { buildCanBreedMale } from './breedAbility';
+import { canProduceGender, genderFactorOf } from './genderRatio';
 import { boxLabel } from './coverageDetail';
 import type { OwnedPet, SpeciesEntry } from './types';
 
@@ -35,6 +36,9 @@ import type { OwnedPet, SpeciesEntry } from './types';
  * 同级里仍按这条线的期望产出从高到低；「补新缺口」仍是硬门槛，只收能补新缺口的线，不为凑数硬加线。
  */
 export type NestTier = 'academy' | 'normal60' | 'normal30';
+
+/** 三档的遗传概率（学院 100% / 双方同性格 60% / 单方 30%）。 */
+const TIER_CHANCE: Record<NestTier, number> = { academy: 1, normal60: 0.6, normal30: 0.3 };
 
 /** 默认窝位：11 = 1 个学院小窝 + 10 个普通小窝。 */
 export const DEFAULT_NEST_COUNT = 11;
@@ -61,6 +65,9 @@ export interface NestPet {
   nature: string;
   voiceDb: number;
   medalBody: string;
+  /** 身高 / 体重百分位（背包卡同款展示用；缺数据时为 null） */
+  heightPercent?: number | null;
+  weightPercent?: number | null;
   /** 游戏里的位置（如「盒子29 第4位」），方便去背包找 */
   box: string;
 }
@@ -80,6 +87,11 @@ export interface NestPairing {
   partner: NestPet;
   /** 目标性格的遗传概率：学院 1 / 普通同性格 0.6 / 普通单方 0.3 */
   natureChance: number;
+  /**
+   * 期望补格数（2026-11-18）：`natureChance × 组数 × 母方性别折算`。
+   * 排序与界面「期望 x.x」都用它；母方 8:2 出公时 > natureChance × 组数。
+   */
+  expectedValue: number;
   distance: number;
   /** 两只精灵所在窝位的坐标（给可视化画连线用） */
   fatherPosition: NestPosition;
@@ -103,6 +115,14 @@ export interface BlockedLink {
   reason: string;
 }
 
+/** 这一格归别的号补（本号只是资源库）——界面写「由 X 号出蛋，孵好传过来」。 */
+export interface DelegatedItem {
+  groupId: number;
+  natureName: string;
+  grade: PetGrade;
+  byAccount: string;
+}
+
 export interface NestPlan {
   account: string;
   pairings: NestPairing[];
@@ -113,6 +133,8 @@ export interface NestPlan {
   clusters: NestPosition[][];
   /** 没能排上的缺口（**带原因**，直接告诉用户缺什么） */
   unfilled: UnfilledItem[];
+  /** 这一格已经分给别的号补：本号不用重复出窝，等蛋传过来孵就行（2026-11-18 多账号） */
+  delegated: DelegatedItem[];
   /** 候选配对：生成过但没进方案的组合，供用户自行替换（默认在界面上收起） */
   alternatives: CandidateOption[];
 }
@@ -122,8 +144,10 @@ export interface NestPlan {
  * - `no-room`：手里这对本来能配（或已通），只是**这轮没排上**（窝位/学院名额被占）→ 算配窝候选
  * - `has-mother`：有带这个性格的母、缺公 → **要去弄**一只公
  * - `to-collect`：连一只带这个性格的都没有 → **要去弄**（不弄一只进来，连迭代都启动不了）
+ * - `male-scarce`：有带性格的母，但那个蛋组里所有母方物种都 0 公 / 少公（2:8），孵不出种公
+ *   （2026-11-18 配窝补全计划：这种缺口不是「没排上」，是这个组本身没有能出公的母方）
  */
-export type UnfilledReason = 'no-room' | 'has-mother' | 'to-collect';
+export type UnfilledReason = 'no-room' | 'has-mother' | 'to-collect' | 'male-scarce';
 
 export interface UnfilledItem {
   groupId: number;
@@ -167,6 +191,11 @@ export interface NestPlanInput {
   species: SpeciesEntry[];
   owned: OwnedPet[];
   coverage: StudCoverageResult;
+  /**
+   * 按账号各算一份覆盖度（2026-11-18 修正）：种公是成体、不能传，
+   * 甲号已经有这一格的公，不代表乙号也齐了。缺这个字段时退回全局 `coverage`（老调用/测试）。
+   */
+  coverageByAccount?: ReadonlyMap<string, StudCoverageResult>;
   mode: TargetMode;
   nestCount?: number;
   /** 用户手动指定的配对（「换这条」）：这些缺口优先交给指定的那一对 */
@@ -209,6 +238,12 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
     groupsOf(a).some((groupId) => groupsOf(b).includes(groupId));
   // 母方物种能不能出公（后代随母方）：和覆盖度/换蛋收益同一口径
   const canBreedMale = buildCanBreedMale(species);
+  /** 种公路线母方门槛（2026-11-18）：0 公、少公（2:8）不参与；8:2 公多照常。 */
+  const motherProducesStud = (pet: OwnedPet): boolean =>
+    canProduceGender(speciesByGameId.get(pet.gameId), '公');
+  /** 母方物种的性别折算（相对 1:1）：5:5 / 缺数据 = 1，8:2 出公 1.6。 */
+  const studGenderFactor = (pet: OwnedPet): number =>
+    genderFactorOf(speciesByGameId.get(pet.gameId), '公');
 
   const byAccount = new Map<string, OwnedPet[]>();
   for (const pet of owned) {
@@ -222,7 +257,7 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
   // 先让「能力更强」的账号挑（能用的目标档位精灵多 = 更能补得动）。
   const capability = (pets: OwnedPet[]): number =>
     pets.filter((pet) => classifyGrade(pet, mode) !== null).length;
-  const claimedCells = new Set<string>();
+
   const pendingUnfilled: Array<{ account: string; item: UnfilledItem }> = [];
   const accountsByAbility = [...byAccount.entries()].sort(
     (a, b) => capability(b[1]) - capability(a[1]) || a[0].localeCompare(b[0]),
@@ -240,6 +275,8 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
       nature: pet.nature,
       voiceDb: pet.voiceDb,
       medalBody: pet.medalBody,
+      heightPercent: pet.heightPercent,
+      weightPercent: pet.weightPercent,
       box: boxLabel(pet),
     });
 
@@ -261,12 +298,13 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
     /** 用户指定过的格子：不再自动加别的线去补它 */
     const pinnedCells = new Set<string>();
 
-    // 只认领「还没被别的账号接走」的缺口（分工）
-    const cells = coverage.cells.filter(
-      (cell) =>
-        cell.state !== 'covered' &&
-        !claimedCells.has(cellKey(cell.natureName, cell.grade, cell.groupId)),
-    );
+    /**
+     * 2026-11-18 用户口径：**每个号都要自己补全种公**，所以每个号都看**本号**未覆盖的缺口
+     * （2026-11-18 修正：之前用的是全局合并覆盖度，别的号有这个种公就把本号的缺口藏掉了，
+     * 显示出来的「还差几个」因此偏小）。
+     */
+    const accountCoverage = input.coverageByAccount?.get(account) ?? coverage;
+    const cells = accountCoverage.cells.filter((cell) => cell.state !== 'covered');
 
     // —— 候选配对（用来决定「该放哪些精灵」；最终连线由几何决定）——
     const byPair = new Map<string, Candidate>();
@@ -296,7 +334,7 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
           if (!sharesGroup(partner, academy)) continue;
           const mother = academy.gender === '母' ? academy : partner;
           // 母方必须在目标蛋组，且**本身出得了公**（出不了公 → 永远孵不出种公，别白占窝）
-          if (!inGroup(mother, groupId) || !canBreedMale(mother)) continue;
+          if (!inGroup(mother, groupId) || !motherProducesStud(mother)) continue;
           push('academy', academy, academy, partner);
         }
       }
@@ -309,7 +347,7 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
           if (a.gender === '未知' || b.gender === '未知' || a.gender === b.gender) continue;
           if (!sharesGroup(a, b)) continue;
           const mother = a.gender === '母' ? a : b;
-          if (!inGroup(mother, groupId) || !canBreedMale(mother)) continue;
+          if (!inGroup(mother, groupId) || !motherProducesStud(mother)) continue;
           const aCarrier = a.nature === natureName;
           const bCarrier = b.nature === natureName;
           if (!aCarrier && !bCarrier) continue;
@@ -454,19 +492,22 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
         normalChanceByCell.set(key, Math.max(normalChanceByCell.get(key) ?? 0, chance));
       }
     }
-    /** 这条学院线比留在普通窝多赚多少（该线覆盖的每个缺口各算一份） */
-    const academyGain = (candidate: Candidate): number =>
-      candidate.groupIds.reduce(
+    /** 这条学院线比留在普通窝多赚多少（该线覆盖的每个缺口各算一份，再乘母方性别折算） */
+    const academyGain = (candidate: Candidate): number => {
+      const motherPet = candidate.p1.gender === '母' ? candidate.p1 : candidate.p2;
+      const gain = candidate.groupIds.reduce(
         (sum, groupId) =>
           sum +
           (1 -
             (normalChanceByCell.get(cellKey(candidate.natureName, candidate.grade, groupId)) ?? 0)),
         0,
       );
+      return gain * studGenderFactor(motherPet);
+    };
     /** 候选按「坐学院小窝的那只」分组，组内按收益排，组间也按总收益排 */
-    const academyByPet = (() => {
+    const groupAcademy = (list: Candidate[]) => {
       const byPet = new Map<OwnedPet, Candidate[]>();
-      for (const candidate of academyList) {
+      for (const candidate of list) {
         if (!candidate.academy) continue;
         const list = byPet.get(candidate.academy) ?? [];
         list.push(candidate);
@@ -494,7 +535,8 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
           list: [...list].sort((a, b) => academyGain(b) - academyGain(a) || byGroupsThenStable(a, b)),
         }))
         .sort((a, b) => scoreOf(b.list) - scoreOf(a.list));
-    })();
+    };
+    const academyByPet = groupAcademy(academyList);
 
     /** 每只精灵在**所有候选**里出现的次数：次数高 = 别的缺口也靠它，学院把它留着当配对方的机会成本大 */
     const candidateDegree = new Map<OwnedPet, number>();
@@ -579,8 +621,61 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
       }
     };
 
+    /**
+     * 2026-11-18（配窝补全计划）：学院窝**优先补低概率缺口**。
+     *
+     * 原实现里学院只能捡 60% 排完剩下的精灵；如果它唯一能配的那只公刚好被一条 60% 线占了，
+     * 这个「本来只能 30%」的缺口就永远补不上。这里先算一遍净收益：
+     *   学院这条线的期望（1.0 × 组数 × 性别折算） − 它独占配对方会挤掉的 60% 线值多少
+     * 净收益为正就先占；同一只学院精灵优先挑「挤掉得最少」的配对方。
+     * 判据仍是 `academyQualifies`（至少一组凑不出 60%），所以不会去抢本来就有 60% 的缺口。
+     */
+    const expectedValueOf = (candidate: Candidate): number => {
+      const motherPet = candidate.p1.gender === '母' ? candidate.p1 : candidate.p2;
+      return TIER_CHANCE[candidate.tier] * candidate.groupIds.length * studGenderFactor(motherPet);
+    };
+    /**
+     * 学院线独占配对方会挤掉多少普通线的期望（60% 与 30% 都算，按线去重）。
+     * 同一性格同一档位的线不算被挤掉——学院本来就是来把它从 30% 抬到 100% 的。
+     */
+    const blockedValueOf = (candidate: Candidate): number => {
+      let sum = 0;
+      for (const line of [...normal60List, ...normal30List]) {
+        if (line.natureName === candidate.natureName && line.grade === candidate.grade) continue;
+        const shares =
+          line.p1 === candidate.p1 ||
+          line.p1 === candidate.p2 ||
+          line.p2 === candidate.p1 ||
+          line.p2 === candidate.p2;
+        if (shares) sum += expectedValueOf(line);
+      }
+      return sum;
+    };
+    const earlyAcademy = academyList
+      .map((candidate) => ({
+        candidate,
+        net: expectedValueOf(candidate) - blockedValueOf(candidate),
+      }))
+      .filter((entry) => entry.net > 1e-9)
+      .sort((a, b) => b.net - a.net || byGroupsThenStable(a.candidate, b.candidate));
+    const earlyByPet = new Map<OwnedPet, Candidate[]>();
+    for (const { candidate } of earlyAcademy) {
+      if (!candidate.academy) continue;
+      const list = earlyByPet.get(candidate.academy) ?? [];
+      list.push(candidate);
+      earlyByPet.set(candidate.academy, list);
+    }
+    for (const list of earlyByPet.values()) {
+      for (const candidate of list) {
+        if (academyPartners >= MAX_ACADEMY_PARTNERS) break;
+        if (academyPet !== null && candidate.academy !== academyPet) break;
+        tryAccept(candidate);
+      }
+      if (academyPet !== null) break;
+    }
+
     // 一遍扫描：只收能补新缺口的线（**不再有「空窝就把线挂满」的第二遍**，见 tryAccept 注释）。
-    // 顺序：普通 60% 主力 → 学院补差 → 普通 30% 兜底；每档内部按「这条线的总期望产出」从高到低。
+    // 顺序：低概率双组 → 普通 60% 主力 → 学院补差 → 普通 30% 兜底；每档内部按期望产出从高到低。
     acceptTier(normal60List);
     // 学院小窝：按收益从高到低试，**被拒（那只已被普通配对占用）就换下一只**。
     // 已经定下学院那只时（含用户「换这条」pin 的）只补它自己，别被别的精灵挡掉。
@@ -753,6 +848,8 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
         // 学院档 = 非学院的那只；普通档 = 另一个亲本
         partner: academyParent && academyParent.key === mother.key ? father : academyParent ? mother : father,
         natureChance: chanceOf(candidate),
+        expectedValue:
+          chanceOf(candidate) * candidate.groupIds.length * studGenderFactor(motherPet),
         distance: centerDistance(motherPosition, fatherPosition),
         fatherPosition,
         motherPosition,
@@ -808,12 +905,16 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
       const matched = accountOwned.filter(
         (pet) => classifyGrade(pet, mode) === cell.grade && groupsOf(pet).includes(cell.groupId),
       );
+      if (matched.length === 0) return 'to-collect';
+      // 有带性格的母，但没有任何母方物种能出公（0 公 / 2:8）→ 这个组根本孵不出种公
+      const motherCarriers = matched.filter((pet) => pet.gender === '母');
+      if (motherCarriers.length > 0 && !motherCarriers.some((pet) => motherProducesStud(pet))) {
+        return 'male-scarce';
+      }
       const state = cellStateFor(matched, cell, canBreedMale);
       if (state === 'covered' || state === 'breedable') return 'no-room';
       return state === 'missingStud' ? 'has-mother' : 'to-collect';
     };
-    // 认领：本账号排上的格子，别的账号就不用再管了（分工）
-    for (const key of filledFromPairings) claimedCells.add(key);
     for (const cell of cells) {
       if (filledFromPairings.has(cellKey(cell.natureName, cell.grade, cell.groupId))) continue;
       pendingUnfilled.push({
@@ -911,19 +1012,46 @@ export function buildNestPlans(input: NestPlanInput): NestPlan[] {
       nestsTotal: nestCount,
       clusters: activeClusters,
       unfilled: [], // 收尾时按分工结果统一填（见函数末尾）
+      delegated: [], // 收尾时按「这格归哪个号」统一填
       alternatives,
     });
   }
 
-  // 收尾：没排上的只报「真的没人能补」的（已被任一账号认领的不再报）
+  // 收尾：每个号自己的缺口如实挂在自己名下（不再因为「别的号认领了」就不报）
   for (const plan of plans) {
     plan.unfilled = pendingUnfilled
-      .filter(
-        (entry) =>
-          entry.account === plan.account &&
-          !claimedCells.has(cellKey(entry.item.natureName, entry.item.grade, entry.item.groupId)),
-      )
+      .filter((entry) => entry.account === plan.account)
       .map((entry) => entry.item);
+  }
+  /**
+   * 跨号兜底（2026-11-18）：每个号自己补全，但有些格它手里确实没法出（缺母/缺公/少公）；
+   * 这时看别的号的方案能不能出这一格 → 写成「由 X 号出蛋，孵好传过来」。
+   * 只作为兜底提示，不影响各号自己的摆位。
+   */
+  for (const plan of plans) {
+    const others = plans.filter((other) => other !== plan);
+    plan.delegated = plan.unfilled
+      .map((item) => {
+        const key = cellKey(item.natureName, item.grade, item.groupId);
+        const donor = others.find((other) =>
+          other.pairings.some((pairing) =>
+            pairing.groupIds.includes(item.groupId) &&
+            pairing.natureName === item.natureName &&
+            pairing.grade === item.grade,
+          ),
+        );
+        return donor
+          ? {
+              groupId: item.groupId,
+              natureName: item.natureName,
+              grade: item.grade,
+              byAccount: donor.account,
+              key,
+            }
+          : null;
+      })
+      .filter((entry): entry is DelegatedItem & { key: string } => entry !== null)
+      .map(({ key: _key, ...item }) => item);
   }
   return plans.sort((a, b) => a.account.localeCompare(b.account));
 }

@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { JSDOM } from 'jsdom';
+const root = path.dirname(fileURLToPath(import.meta.url));
+const shellPath = path.resolve(root, '../../docs/prototypes/shared/toolbox-shell.js');
+assert.ok(fs.existsSync(shellPath), '缺少可复用的工具箱外壳文件');
+const dom = new JSDOM('<div id=app></div>', {runScripts:'outside-only',url:'http://localhost/'});
+dom.window.eval(fs.readFileSync(shellPath,'utf8'));
+const shell = dom.window.ToolboxShell.mount('#app', {groupName:'换蛋小组',memberCount:6});
+const d=dom.window.document;
+assert.deepEqual([...d.querySelectorAll('[data-app-tab]')].map(x=>x.textContent.trim()),['看板','家园','收集','附近','小组','我的']);
+assert.equal(d.querySelector('[data-app-tab][aria-current=page]').dataset.appTab,'groups');
+assert.deepEqual([...d.querySelectorAll('[data-hub-tab]')].map(x=>x.textContent.trim()),['我的收集','组内广场']);
+shell.selectHub('square');
+shell.openDetail({title:'需求详情',render:()=>'<p>阿岚的菊花梨需求</p>'});
+assert.equal(d.querySelector('[data-detail-title]').textContent,'需求详情');
+assert.equal(d.querySelector('[data-app-tab][aria-current=page]').dataset.appTab,'groups');
+assert.equal(d.querySelector('[data-hub-tab][aria-pressed=true]').dataset.hubTab,'square');
+assert.equal(d.querySelector('[data-detail]').hidden,false);
+shell.back();
+assert.equal(d.querySelector('[data-detail]').hidden,true);
+assert.equal(shell.state.hub,'square','详情返回不能跳到我的收集');
+shell.selectHub('mine');
+shell.openDetail({title:'我的需求',render:()=>'<p>菊花梨</p>'});
+shell.openDetail({title:'匹配供给',render:()=>'<p>组内现货</p>'});
+shell.back();
+assert.equal(d.querySelector('[data-detail-title]').textContent,'我的需求');
+shell.back();
+assert.equal(shell.state.hub,'mine');
+for (const file of ['editor/index.html','outputs/index.html']) {
+ const html=fs.readFileSync(path.join(root,file),'utf8');
+ assert.ok(html.includes('docs/prototypes/shared/toolbox-shell.js'),file+'未使用共用外壳');
+ assert.ok(!html.includes('data-tab="s0"'),file+'仍保留错误的平级小组导航');
+}
+console.log('PASS 共用外壳：六个主标签、两页签、需求详情、嵌套返回与来源保持');

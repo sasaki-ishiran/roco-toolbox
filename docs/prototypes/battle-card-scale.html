@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>战斗采集详情卡 · 放大与填满宽度</title>
+<style>
+  :root { --bg:#0b1220; --panel:#111b2e; --line:#24354f; --text:#e2e8f0; --sub:#8fa3bf; --accent:#38bdf8; --hot:#f59e0b; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px 16px 48px; background:var(--bg); color:var(--text);
+         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  h1 { font-size:17px; margin:0 0 4px; }
+  .sub { font-size:12px; color:var(--sub); margin-bottom:14px; line-height:1.6; }
+  .controls { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:18px; }
+  .row { display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:12px; color:var(--sub); }
+  .row input[type=range] { flex:1; max-width:260px; }
+  .row .num { width:64px; text-align:right; color:var(--text); font-variant-numeric: tabular-nums; }
+  .row label { display:flex; align-items:center; gap:5px; }
+  button { background:#1d4ed8; color:#fff; border:0; border-radius:6px; padding:5px 10px; font-size:12px; cursor:pointer; }
+  pre { background:#0a1526; border:1px solid var(--line); border-radius:8px; padding:10px; font-size:11px;
+        color:#9fd0ff; overflow:auto; max-height:186px; margin:8px 0 0; }
+  .stage { display:flex; gap:22px; flex-wrap:wrap; margin-bottom:22px; }
+  .col { }
+  .col h2 { font-size:12px; color:var(--sub); font-weight:600; margin:0 0 8px; letter-spacing:.4px; }
+  .screen { position:relative; background:linear-gradient(180deg,#16233a,#0f1b2d);
+            border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .screen .ball { position:absolute; width:34px; height:34px; border-radius:50%;
+                  background:radial-gradient(circle at 35% 30%, #7dd3fc, #1d4ed8); box-shadow:0 2px 10px rgba(0,0,0,.5); }
+  .card { position:absolute; background:#0f172a; border:1px solid #22314a; border-radius:16px;
+          padding:12px 14px; box-shadow:0 8px 24px rgba(0,0,0,.45); }
+  .card .title { font-size:12px; font-weight:700; color:#f8fafc; margin-bottom:6px; }
+  .card.after .title { font-size:14px; }
+  .rowchips { display:flex; align-items:center; }
+  .rowchips + .rowchips { margin-top:5px; }
+  .chip { background:#1e293b; color:#e2e8f0; border-radius:6px; padding:3px 6px; white-space:nowrap; }
+  .chip.primary { background:#059669; color:#fff; }
+  .chip.hot { background:#3b2a12; color:#fbbf24; }
+  .after .chip { border-radius:7px; padding:4px 8px; }
+  .gapfill { flex:1; }
+  .whitespace { position:absolute; background:repeating-linear-gradient(45deg,#f59e0b22,#f59e0b22 5px,transparent 5px,transparent 10px);
+                border:1px dashed #f59e0b88; pointer-events:none; }
+  .mark { position:absolute; border:1px dashed #38bdf8aa; pointer-events:none; }
+  .cap { font-size:11px; color:var(--sub); margin-top:6px; line-height:1.6; }
+  .note { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:12px; color:var(--sub); line-height:1.7; }
+  .note b { color:var(--text); }
+  .legend { display:flex; gap:16px; font-size:11px; color:var(--sub); margin-top:8px; }
+  .legend i { display:inline-block; width:10px; height:10px; margin-right:4px; vertical-align:-1px; border-radius:2px; }
+</style>
+</head>
+<body>
+  <h1>战斗采集详情卡 · 放大标签 + 填满可用宽度</h1>
+  <div class="sub">1dp = 1px 预览。琥珀虚线 = 右侧空白（卡片内空余）；蓝虚线 = 卡片宽度边界。改前：11sp / wrap_content；改后：13sp / 固定宽度 + 两排两端对齐。</div>
+
+  <div class="controls">
+    <div class="row"><span>字段字号</span><input id="fs" type="range" min="11" max="14" step="0.5" value="13" /><span class="num" id="fsText">13 sp</span></div>
+    <div class="row"><span>卡片宽度</span><input id="cw" type="range" min="220" max="340" step="2" value="320" /><span class="num" id="cwText">320 dp</span></div>
+    <div class="row"><span>标签内边距</span><input id="cp" type="range" min="6" max="12" step="1" value="8" /><span class="num" id="cpText">8 dp</span></div>
+    <div class="row"><label><input id="just" type="checkbox" checked /> 两排两端对齐（吃掉右侧空白）</label><button id="copy">复制 JSON</button></div>
+    <pre id="json"></pre>
+  </div>
+
+  <div class="stage" id="stage"></div>
+
+  <div class="note">
+    <b>为什么是 13sp / 320dp：</b>按 11sp 实测宽度线性换算，13sp 时第一排 5 枚标签自然宽约 242dp；320dp 卡片去掉左右各 12dp 内边距后
+    内容宽 296dp，还余约 54dp，用「两端对齐」摊到 5 个间隙（每处约 +10dp），排得开、不会换行。
+    不取 14sp 不是因为放不下，而是字号是 sp、会跟随系统字体缩放：13sp 在 1.3× 下相当于约 17sp，
+    名字到 5 个字时就快到 296dp 上限；14sp 在 1.3× 下约 18sp，更容易顶到 maxWidth 换行。
+    320dp 在 375 屏占 85.3%、390 屏占 82.1%，比现在的 222dp 多出近一半内容宽度，两侧仍留白、不贴屏幕边缘。
+  </div>
+
+<script>
+  const FIELDS_ROW1 = [
+    { text: '守护者', cls: 'primary' }, { text: '♂' }, { text: '32级' }, { text: '固执' }, { text: '+96dB', cls: 'hot' }
+  ];
+  const FIELDS_ROW2 = [{ text: '1.85m（92%）' }, { text: '68.50kg（99%）', cls: 'hot' }];
+  // 11sp 时实测自然宽度（每枚 = 文本宽 + 2×6dp，字间 1 个空格≈2.8dp），用于「改前」精确复现
+  const W11_ROW1 = [56, 23, 35, 34, 39];
+  const W11_ROW2 = [67, 82];
+  const PAD11 = 12, CPAD11 = 6, GAP11 = 2.8;
+
+  function rowWidths(texts, fs, cp, charRatio) {
+    // 以 11sp 实测宽度为基准，按字号线性缩放文本部分，内边距按当前值
+    return texts.map((t, i) => {
+      const base = (i < W11_ROW1.length ? W11_ROW1[i] : 0);
+      return base;
+    });
+  }
+
+  function chipHtml(f, measure) {
+    const cls = 'chip' + (f.cls ? ' ' + f.cls : '');
+    return `<span class="${cls}" data-w="${measure}">${f.text}</span>`;
+  }
+
+  function buildCard(opts) {
+    const { fs, width, cpad, justify, after } = opts;
+    const ratio = fs / 11;
+    const w1 = W11_ROW1.map(w => Math.round((w - CPAD11 * 2) * ratio + cpad * 2));
+    const w2 = W11_ROW2.map(w => Math.round((w - CPAD11 * 2) * ratio + cpad * 2));
+    const gap = Math.round(GAP11 * ratio);
+    const inner = width - PAD11 * 2;
+
+    const mk = (fields, widths) => fields.map((f, i) => `<span class="chip${f.cls ? ' ' + f.cls : ''}"
+        style="font-size:${fs}px;padding:${Math.round(cpad * 0.45)}px ${cpad}px;width:${after ? widths[i] + 'px' : 'auto'}">${f.text}</span>`);
+
+    const rowHtml = (fields, widths) => {
+      const chips = mk(fields, widths);
+      const natural = widths.reduce((a, b) => a + b, 0) + gap * (fields.length - 1);
+      const spare = Math.max(0, inner - natural);
+      if (!justify) return `<div class="rowchips">${chips.join(`<span style="display:inline-block;width:${gap}px"></span>`)}</div>`;
+      // 两端对齐：第一排均分到标签间 + 末尾；第二排左右各贴一边
+      if (fields.length >= 3) {
+        const extra = Math.floor(spare / fields.length);
+        return `<div class="rowchips">${chips.map((c, i) =>
+          c + (i < chips.length - 1 ? `<span style="display:inline-block;width:${gap + extra}px"></span>` : '')).join('')}</div>`;
+      }
+      return `<div class="rowchips">${chips[0]}<span class="gapfill"></span>${chips[1]}</div>`;
+    };
+
+    return `<div class="card ${after ? 'after' : ''}" style="width:${width}px;padding:10px ${PAD11}px 10px ${PAD11}px">
+        <div class="title">战斗采集 · 赛季奇遇</div>
+        ${rowHtml(FIELDS_ROW1, w1)}
+        ${rowHtml(FIELDS_ROW2, w2)}
+      </div>`;
+  }
+
+  function stageHtml(screenW, opts) {
+    const beforeW = 222;               // 11sp wrap_content 实测卡片宽
+    const afterW = opts.width;
+    const top = 150, left = 16;
+    const mk = (w, after, label) => {
+      const card = buildCard({ ...opts, width: w, after });
+      const inner = w - PAD11 * 2;
+      // 第二排右侧空白（改前按 11sp 实测：155dp 内容 vs inner）
+      const row2 = after
+        ? (opts.justify ? 0 : Math.max(0, inner - 191))
+        : Math.max(0, inner - (W11_ROW2.reduce((a, b) => a + b, 0) + GAP11));
+      const ws = row2 > 4
+        ? `<div class="whitespace" style="left:${left + PAD11}px;top:${top + 10 + 18 + 22}px;width:${row2}px;height:22px"></div>`
+        : '';
+      return `<div class="screen" style="width:${screenW}px;height:420px">
+          <div class="ball" style="left:${screenW - 52}px;top:96px"></div>
+          <div style="position:absolute;left:${left}px;top:${top}px">
+            <div class="mark" style="left:0;top:0;width:${w}px;height:104px"></div>
+            ${card}
+          </div>
+          ${ws}
+          <div style="position:absolute;left:${left}px;top:${top + 116}px;font-size:11px;color:#8fa3bf">${label} · 卡片 ${w}dp</div>
+        </div>`;
+    };
+    return `<div class="col"><h2>${screenW} × 812</h2>
+        <div style="display:flex;gap:14px">
+          ${mk(beforeW, false, '改前')}
+          ${mk(afterW, true, '改后')}
+        </div>
+        <div class="cap">左：现有实现（11sp，宽度随内容 ≈222dp，第二排右侧空 ${(222 - 24 - (W11_ROW2.reduce((a, b) => a + b, 0) + GAP11)).toFixed(1)}dp）。右：方案（${opts.fs}sp，${afterW}dp 固定宽，${opts.justify ? '两排两端对齐' : '自然宽度'}）。</div>
+      </div>`;
+  }
+
+  const FS = document.getElementById('fs'), CW = document.getElementById('cw'),
+        CP = document.getElementById('cp'), JU = document.getElementById('just');
+  const stage = document.getElementById('stage');
+  const json = document.getElementById('json');
+
+  function render() {
+    const fs = Number(FS.value), width = Number(CW.value), cpad = Number(CP.value), justify = JU.checked;
+    document.getElementById('fsText').textContent = fs + ' sp';
+    document.getElementById('cwText').textContent = width + ' dp';
+    document.getElementById('cpText').textContent = cpad + ' dp';
+    const only = new URLSearchParams(location.search).get('w');
+    const widths = only ? [Number(only)] : [375, 390];
+    stage.innerHTML = widths.map(w => stageHtml(w, { fs, width, cpad, justify })).join('');
+    json.textContent = JSON.stringify({
+      fieldFontSp: fs, titleFontSp: fs >= 13 ? 14 : 12, cardWidthDp: width,
+      chipPaddingHorizontalDp: cpad, chipPaddingVerticalDp: Math.round(cpad * 0.5),
+      chipRadiusDp: 7, rowGapDp: 5, justifyRows: justify,
+      screenSharePercent375: +(width / 375 * 100).toFixed(1),
+      screenSharePercent390: +(width / 390 * 100).toFixed(1)
+    }, null, 2);
+    window.__layout = JSON.parse(json.textContent);
+  }
+
+  [FS, CW, CP, JU].forEach(el => el.addEventListener('input', render));
+  document.getElementById('copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(json.textContent); document.getElementById('copy').textContent = '已复制'; }
+    catch (e) { document.getElementById('copy').textContent = '复制失败'; }
+    setTimeout(() => document.getElementById('copy').textContent = '复制 JSON', 1200);
+  });
+  render();
+</script>
+</body>
+</html>

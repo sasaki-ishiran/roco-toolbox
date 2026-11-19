@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { computeStudCoverage, type CoverageSlot } from './studCoverage';
+import { computeStudCoverage, computeStudCoverageByAccount, type CoverageSlot } from './studCoverage';
 import type { PetGrade } from './petFilters';
 import type { OwnedPet, SpeciesEntry } from './types';
 
@@ -207,5 +207,34 @@ describe('computeStudCoverage（槽位带满分档位）', () => {
     );
     expect(result.groupCount).toBe(2);
     expect(result.passedGroups).toBe(0);
+  });
+});
+
+describe('computeStudCoverageByAccount（缺口按号各算，2026-11-18）', () => {
+  test('甲号的种公不算乙号的进度', () => {
+    const result = computeStudCoverageByAccount(
+      [slot(2, '固执')],
+      species,
+      [
+        pet({ gameId: 101, gender: '公', nature: '固执', account: '账号甲' }),
+        pet({ gameId: 101, gender: '母', nature: '固执', account: '账号乙' }),
+      ],
+      eggGroupNames,
+      'perfect',
+    );
+    expect(result.get('账号甲')?.cells[0].state).toBe('covered');
+    // 乙号只有带性格的母、本号没有公 → 这一格对乙号仍是缺口
+    expect(result.get('账号乙')?.cells[0].state).toBe('missingStud');
+  });
+
+  test('没有精灵的号不出现在结果里', () => {
+    const result = computeStudCoverageByAccount(
+      [slot(2, '固执')],
+      species,
+      [pet({ gameId: 101, gender: '公', nature: '固执', account: '账号甲' })],
+      eggGroupNames,
+      'perfect',
+    );
+    expect([...result.keys()]).toEqual(['账号甲']);
   });
 });

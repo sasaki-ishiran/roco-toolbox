@@ -207,3 +207,29 @@ export function computeStudCoverage(
     groupCount: groupSummary.length,
   };
 }
+
+/**
+ * 按账号各算一份覆盖度（2026-11-18 修正）。
+ *
+ * 种公是**成体**、不能跨号传，所以「甲号有这只公」不等于「乙号这一格也齐了」。
+ * 配窝补全、看板缺口都按本号的判定算；合并算会把别的号的种公误算成本号的进度。
+ */
+export function computeStudCoverageByAccount(
+  slots: CoverageSlot[],
+  species: SpeciesEntry[],
+  owned: OwnedPet[],
+  eggGroupNames: Record<number, string>,
+  mode: TargetMode,
+): Map<string, StudCoverageResult> {
+  const byAccount = new Map<string, OwnedPet[]>();
+  for (const pet of owned) {
+    const list = byAccount.get(pet.account) ?? [];
+    list.push(pet);
+    byAccount.set(pet.account, list);
+  }
+  const result = new Map<string, StudCoverageResult>();
+  for (const [account, pets] of byAccount) {
+    result.set(account, computeStudCoverage(slots, species, pets, eggGroupNames, mode));
+  }
+  return result;
+}

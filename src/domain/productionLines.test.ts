@@ -87,10 +87,10 @@ describe('buildProductionLines', () => {
     expect(account.lines).toHaveLength(0);
   });
 
-  test('身高 100% 且体重 ≥95% 才认体型', () => {
+  test('无体型奖牌时身高 100% 单独等效大块头', () => {
     const account = build([
-      mother(201, { medalBody: '', heightPercent: 100, weightPercent: 95 }),
-      mother(701, { gender: '公', medalBody: '', heightPercent: 100, weightPercent: 95 }),
+      mother(201, { medalBody: '', heightPercent: 100, weightPercent: 1 }),
+      mother(701, { gender: '公', medalBody: '', heightPercent: 100, weightPercent: 1 }),
     ]);
     expect(account.lines).toHaveLength(1);
     expect(account.lines[0].grade).toBe('大婉');

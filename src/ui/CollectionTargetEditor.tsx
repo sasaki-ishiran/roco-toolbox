@@ -1,27 +1,21 @@
-import { useEffect, useState } from 'react';
 import { eggGroupNames, targetNaturePool } from '../data/catalog';
-import { ALL_EGG_GROUP_IDS, ALL_GRADES } from '../domain/coverageTargets';
-import {
-  DEFAULT_MOTHER_CRITERIA,
-  motherVoicesForMode,
-  type MotherBody,
-} from '../domain/motherCriteria';
-import { gradeLabel, TARGET_MODE_LABELS, type TargetMode } from '../domain/petFilters';
+import { ALL_EGG_GROUP_IDS } from '../domain/coverageTargets';
+import { DEFAULT_MOTHER_CRITERIA, motherVoicesForMode } from '../domain/motherCriteria';
 import {
   resetCoverageFilter,
   setNatureMode,
   toggleAllCustomNatures,
   toggleCustomNature,
-  toggleFilterGrade,
   toggleFilterGroup,
   useCoverageFilter,
 } from './coverageFilterStore';
-import { getMotherCriteria, setMotherCriteria, useMotherCriteria } from './motherCriteriaStore';
-import { setTargetMode, useTargetMode } from './targetModeStore';
+import { setMotherCriteria } from './motherCriteriaStore';
+import { useTargetMode } from './targetModeStore';
 import { Button } from './primitives/Button';
 import { ModalSurface } from './primitives/ModalSurface';
 import { ScopeSummary } from './primitives/ScopeSummary';
 import { SegmentedControl } from './primitives/SegmentedControl';
+import { MotherCriteriaMedals } from './MotherCriteriaMedals';
 
 export type CollectionTargetSection = 'studs' | 'mothers';
 
@@ -36,90 +30,35 @@ const CHIP_ON = 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700';
 const CHIP_OFF = 'border-slate-200 bg-white text-slate-500';
 
 /**
- * 唯一的目标编辑入口（2026-10-24 重构任务 5）。
+ * 种公目标与母本达标条件共用编辑表单，但由各自入口独立打开。
  *
- * - 种公目标：模式 / 档位 / 蛋组 / 性格模式（每组推荐性格仍在覆盖度里细化）
+ * - 种公目标：蛋组 / 性格模式（奖牌组合与目标模式在看板调整）
  * - 个人母本达标条件：体型 / 声音，空 = 该维度不限
  *
  * 读写原 store，不迁移键、不改领域算法；两个分区互不改对方条件。
  */
 export function CollectionTargetEditor({ open, section, onClose }: CollectionTargetEditorProps) {
-  const [active, setActive] = useState<CollectionTargetSection>(section);
-  useEffect(() => {
-    if (open) setActive(section);
-  }, [open, section]);
-
   const mode = useTargetMode();
   const filter = useCoverageFilter();
-  const criteria = useMotherCriteria();
-  const visibleGrades = ALL_GRADES;
 
   const toggleNatureMode = (next: string) =>
-    setNatureMode(next === 'custom' ? 'custom' : 'recommended');
+    setNatureMode(next === 'custom' ? 'custom' : next === 'recommended' ? 'recommended' : 'eight');
 
   return (
     <ModalSurface
       open={open}
-      title="调整目标"
+      title={section === 'studs' ? '调整目标' : '调整母本达标条件'}
       onClose={onClose}
       testId="target-editor"
       footer={<Button onClick={onClose}>完成</Button>}
     >
       <div className="space-y-3 p-4">
-        <SegmentedControl
-          label="编辑分区"
-          value={active}
-          options={[
-            { value: 'studs', label: '种公目标' },
-            { value: 'mothers', label: '母本达标条件' },
-          ]}
-          onValueChange={(next) => setActive(next as CollectionTargetSection)}
-          optionTestId={(value) => `editor-section-${value}`}
-        />
-
-        {active === 'studs' ? (
+        {section === 'studs' ? (
           <div className="space-y-3" data-testid="editor-studs">
             <ScopeSummary
               scope="个人种公目标"
               criteria="影响看板、覆盖度、配窝与小组求蛋；不影响个人母本进度"
             />
-
-            <div>
-              <p className="mb-1 text-xs font-medium text-slate-600">目标模式</p>
-              <SegmentedControl
-                label="目标模式"
-                value={mode}
-                options={(['perfect', 'medal'] as TargetMode[]).map((value) => ({
-                  value,
-                  label: TARGET_MODE_LABELS[value],
-                }))}
-                onValueChange={(next) => setTargetMode(next as TargetMode)}
-                optionTestId={(value) => `editor-target-mode-${value}`}
-              />
-            </div>
-
-            <div>
-              <p className="mb-1 text-xs font-medium text-slate-600">目标档位</p>
-              <div className="flex flex-wrap gap-1.5">
-                {visibleGrades.map((grade) => (
-                  <button
-                    key={grade}
-                    type="button"
-                    aria-pressed={filter.grades.includes(grade)}
-                    onClick={() => toggleFilterGrade(grade)}
-                    data-testid={`editor-target-grade-${grade}`}
-                    className={`${CHIP} ${
-                      filter.grades.includes(grade) ? CHIP_ON : CHIP_OFF
-                    }`}
-                  >
-                    {gradeLabel(grade, mode)}
-                  </button>
-                ))}
-              </div>
-              {filter.grades.length === 0 ? (
-                <p className="mt-1 text-xs text-amber-700">未选档位 = 没有种公目标槽位。</p>
-              ) : null}
-            </div>
 
             <div>
               <button
@@ -162,6 +101,7 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
                 value={filter.natureMode}
                 options={[
                   { value: 'recommended', label: '推荐性格' },
+                  { value: 'eight', label: '八大性格' },
                   { value: 'custom', label: '自选性格' },
                 ]}
                 onValueChange={toggleNatureMode}
@@ -195,6 +135,10 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
                       : '全选八大'}
                   </button>
                 </div>
+              ) : filter.natureMode === 'eight' ? (
+                <p className="mt-1 text-xs text-slate-400">
+                  八大性格全集（{targetNaturePool.length} 个）：所有蛋组都按同一组性格算。
+                </p>
               ) : (
                 <p className="mt-1 text-xs text-slate-400">每组用图鉴推荐的前 3 个性格；组内增减在覆盖度页。</p>
               )}
@@ -206,7 +150,7 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
               data-testid="editor-reset-studs"
               className="min-h-[28px] text-xs font-medium text-emerald-700"
             >
-              恢复默认蛋组与性格（档位保留）
+              恢复默认蛋组与性格
             </button>
           </div>
         ) : (
@@ -216,68 +160,20 @@ export function CollectionTargetEditor({ open, section, onClose }: CollectionTar
               criteria="影响个人母本进度与看板；不影响种公目标，也不改小组口径"
             />
 
-            <div>
-              <p className="mb-1 text-xs font-medium text-slate-600">体型（空 = 不限）</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(['大块头', '小不点'] as MotherBody[]).map((body) => (
-                  <button
-                    key={body}
-                    type="button"
-                    aria-pressed={criteria.bodies.includes(body)}
-                    onClick={() => {
-                      const current = getMotherCriteria();
-                      setMotherCriteria({
-                        ...current,
-                        bodies: current.bodies.includes(body)
-                          ? current.bodies.filter((item) => item !== body)
-                          : [...current.bodies, body],
-                      });
-                    }}
-                    data-testid={`editor-mother-body-${body}`}
-                    className={`${CHIP} ${criteria.bodies.includes(body) ? CHIP_ON : CHIP_OFF}`}
-                  >
-                    {body}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-1 text-xs font-medium text-slate-600">声音（空 = 不限）</p>
-              <div className="flex flex-wrap gap-1.5">
-                {motherVoicesForMode(mode).map((voice) => (
-                  <button
-                    key={voice}
-                    type="button"
-                    aria-pressed={criteria.voices.includes(voice)}
-                    onClick={() => {
-                      const current = getMotherCriteria();
-                      setMotherCriteria({
-                        ...current,
-                        voices: current.voices.includes(voice)
-                          ? current.voices.filter((item) => item !== voice)
-                          : [...current.voices, voice],
-                      });
-                    }}
-                    data-testid={`editor-mother-voice-${voice}`}
-                    className={`${CHIP} ${criteria.voices.includes(voice) ? CHIP_ON : CHIP_OFF}`}
-                  >
-                    {voice}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-1 text-xs text-slate-400">
-                追满分模式只列 +100 / -100；切到追双牌会列婉转声 / 粗嗓门。
-              </p>
-            </div>
+            <MotherCriteriaMedals testIdPrefix="editor-mother" />
 
             <button
               type="button"
-              onClick={() => setMotherCriteria({ ...DEFAULT_MOTHER_CRITERIA })}
+              onClick={() =>
+                setMotherCriteria({
+                  ...DEFAULT_MOTHER_CRITERIA,
+                  voices: motherVoicesForMode(mode),
+                })
+              }
               data-testid="editor-reset-mothers"
               className="min-h-[28px] text-xs font-medium text-emerald-700"
             >
-              恢复默认（大块头+小不点 × +100/-100）
+              恢复默认（大块头+小不点 × {mode === 'perfect' ? '+100/-100' : '婉转声/粗嗓门'}）
             </button>
           </div>
         )}

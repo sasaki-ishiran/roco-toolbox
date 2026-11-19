@@ -13,22 +13,25 @@ import java.net.URI;
 import java.net.URL;
 
 /**
- * 服务器地址（2026-11-09）：1.3 内测包默认进测试站，内测时可连点版本号在测试站 / 正式站之间互切。
+ * 服务器地址（2026-11-11）：公开包默认进正式站，内测包（{@code -PtestBuild=true}）才默认进测试站。
  *
- * <p>这个入口藏在「我的」页连点版本号后面，只给自己用：地址填错等于把采集数据交给那个站点，
- * 所以保存前必须真的探活（{@code /api/health} 的正文里要有 {@code "ok":true}），
- * 探不通就不写进去，避免把客户端指成白屏。</p>
+ * <p>为什么默认必须回正式站：网页把登录身份存在 localStorage，而 localStorage 按 origin 各存各的。
+ * 1.2.x 公开包打开的是正式站，如果新包默认测试站，老用户升级后就会「身份没了、小组空了」。
+ * 默认站与旧包保持一致，身份天然还在，不需要任何迁移。</p>
  *
- * <p>只看 HTTP 200 不算数：主站对不存在的路径会回退成网页（200 + HTML），
- * 更新清单已经被这种「200」坑过一次。</p>
+ * <p>「我的」页连点版本号 5 次的切服入口保留：内测包在测试站 / 正式站之间互切；
+ * 公开包没有内置测试站地址，连点会提示并打开「服务器地址」面板，允许手动填写。</p>
  */
 public final class ServerConfig {
 
-    /** 1.3 内测包默认地址：测试站（装上打开就是测试服）。 */
-    public static final String DEFAULT_BASE_URL = "https://test.roco-toolbox.pages.dev";
+    /** 当前构建的默认地址：公开包 = 正式站，内测包 = 测试站（编译期常量）。 */
+    public static final String DEFAULT_BASE_URL = BuildConfig.DEFAULT_SERVER_URL;
 
-    /** 正式站地址：连点版本号时在这两个地址之间互切。 */
+    /** 正式站地址：切服入口里「正式」的那一端。 */
     public static final String PRODUCTION_BASE_URL = "https://roco-toolbox.pages.dev";
+
+    /** 测试站地址：只有内测包才编进来；公开包是空串，dex 里不会出现测试站地址。 */
+    public static final String TEST_BASE_URL = BuildConfig.TEST_SERVER_URL;
 
     private static final String PREFS = "roco_server";
     private static final String KEY_BASE_URL = "baseUrl";
@@ -98,21 +101,33 @@ public final class ServerConfig {
     }
 
     /**
-     * 连点版本号的一键互切：正式 ⇄ 默认（测试）。
+     * 连点版本号的一键互切：内测包在「正式 ⇄ 测试」之间互切；
+     * 公开包没有内置测试站地址，在正式站连点会返回失败提示，网页侧据此打开「服务器地址」面板。
      *
      * <p>自家两个地址直接写，不探活：手机上冷启动 / VPN 下探活经常超过 5 秒，
      * 一旦超时网页就会弹「服务器地址」面板，看起来像要手输地址。
      * 切错也只是页面打不开，连点一次就能切回来。</p>
      */
     public Result toggle() {
-        String target = PRODUCTION_BASE_URL.equals(baseUrl()) ? DEFAULT_BASE_URL : PRODUCTION_BASE_URL;
+        String current = baseUrl();
+        if (PRODUCTION_BASE_URL.equals(current)) {
+            if (TEST_BASE_URL.isEmpty()) {
+                return Result.failure("当前已是正式服；这个版本没有内置内测服地址，可在「服务器地址」里手动填写。");
+            }
+            return save(TEST_BASE_URL);
+        }
+        return save(PRODUCTION_BASE_URL);
+    }
+
+    private Result save(String target) {
         prefs.edit().putString(KEY_BASE_URL, target).apply();
         return Result.success(target);
     }
 
-    /** 自家两个站点（测试 / 正式）：可信地址，保存时不再探活。 */
+    /** 自家两个站点（测试 / 正式）：可信地址，保存时不再探活。公开包只有正式站。 */
     public static boolean isFirstParty(String baseUrl) {
-        return DEFAULT_BASE_URL.equals(baseUrl) || PRODUCTION_BASE_URL.equals(baseUrl);
+        if (PRODUCTION_BASE_URL.equals(baseUrl)) return true;
+        return !TEST_BASE_URL.isEmpty() && TEST_BASE_URL.equals(baseUrl);
     }
 
     /**

@@ -80,4 +80,36 @@ describe('egg stock snapshots', () => {
     expect(() => reconcileEggStock(state, { accountId: 'me', capturedAt: 2, bag: part([egg(), egg()]) })).toThrow(/重复/);
     expect(state.eggs).toHaveLength(1);
   });
+
+  test('bag and home keep their own capture time; complete removes only its own location', () => {
+    const state = reconcileEggStock(emptyEggStock(), { accountId: 'me', gameAccountKey: 'uid:1', capturedAt: 20,
+      bag: { eggs: [egg({ gameAccountKey: 'uid:1' })], complete: true, capturedAt: 10 },
+      home: { eggs: [egg({ id: 'h1', gameAccountKey: 'uid:1' })], complete: true, capturedAt: 20 } });
+    expect(state.eggs.find(e => e.id === 'e1')?.lastConfirmedAt).toBe(10);
+    expect(state.eggs.find(e => e.id === 'h1')?.lastConfirmedAt).toBe(20);
+    const next = reconcileEggStock(state, { accountId: 'me', gameAccountKey: 'uid:1', capturedAt: 30,
+      home: { eggs: [], complete: true, capturedAt: 30 } });
+    expect(next.eggs.map(e => e.id)).toEqual(['e1']);
+    const kept = reconcileEggStock(state, { accountId: 'me', gameAccountKey: 'uid:1', capturedAt: 31,
+      bag: { eggs: [], complete: true, capturedAt: 31 } });
+    expect(kept.eggs.map(e => e.id)).toEqual(['h1']);
+  });
+
+  test('different game accounts keep separate watermarks and never delete each other', () => {
+    const one = reconcileEggStock(emptyEggStock(), { accountId: 'me', gameAccountKey: 'uid:1', capturedAt: 10,
+      bag: part([egg({ gameAccountKey: 'uid:1' })]) });
+    const two = reconcileEggStock(one, { accountId: 'me', gameAccountKey: 'uid:2', capturedAt: 5,
+      bag: part([egg({ id: 'b', gameAccountKey: 'uid:2' })]) });
+    expect(two.eggs).toHaveLength(2);
+    const cleared = reconcileEggStock(two, { accountId: 'me', gameAccountKey: 'uid:1', capturedAt: 11, bag: part([]) });
+    expect(cleared.eggs.map(e => e.id)).toEqual(['b']);
+  });
+
+  test('home parents and system source survive re-sync', () => {
+    const parents = { mother: { id: 'm', gameId: 3227, name: '菊花梨', nature: '保守', body: '大块头', voice: '+100', nestName: '普通小窝' },
+      fathers: [{ id: 'f', gameId: 3215, name: '海豹战士', nature: '胆小', body: '大块头', voice: '婉转声' }], confirmed: false };
+    const home = egg({ id: 'h1', nature: '', labelSource: 'system', parents });
+    const state = reconcileEggStock(emptyEggStock(), { accountId: 'me', gameAccountKey: 'uid:1', capturedAt: 1, home: part([home]) });
+    expect(state.eggs[0]).toMatchObject({ location: 'home', labelSource: 'system', parents });
+  });
 });

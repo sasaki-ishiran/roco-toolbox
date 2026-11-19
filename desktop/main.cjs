@@ -1,5 +1,5 @@
 /**
- * 洛克工具箱 · Windows 桌面版（Electron 主进程）
+ * 小布助手 · Windows 桌面版（Electron 主进程）
  *
  * 为什么不用 file:// 直接打开 dist/index.html：
  * 构建产物用的是绝对路径（/assets/...），而且要用 Service Worker 之外的
@@ -18,12 +18,13 @@ const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
 const { CaptureManager } = require('./capture/manager.cjs');
+const { migrateUserData } = require('./userdata.cjs');
 
 const API_ORIGIN = 'https://roco-toolbox.pages.dev';
 const DIST_DIR = path.join(__dirname, 'app-dist');
 const SMOKE = process.argv.includes('--smoke');
 
-/** 采集文件与设置放在 userData（%APPDATA%\洛克工具箱），升级 exe 不丢 */
+/** 采集文件与设置放在 userData（%APPDATA%\小布助手），升级 exe 不丢 */
 let captureManager = null;
 let captureOrigin = '';
 
@@ -479,7 +480,7 @@ function createWindow(origin) {
     minHeight: 560,
     show: false,
     backgroundColor: '#f8fafc',
-    title: '洛克工具箱',
+    title: '小布助手',
     icon: path.join(DIST_DIR, 'icon-512.png'),
     autoHideMenuBar: true,
     webPreferences: {
@@ -536,6 +537,19 @@ async function runSmoke(origin) {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  // 产品名改成「小布助手」后 userData 目录也跟着改名：首次启动把旧目录整体迁过来。
+  // 放在拿到单实例锁之后，保证同一时刻只有一个进程在搬；迁移失败就退回旧目录继续用（老数据都在），不让启动失败。
+  const userDataMigration = migrateUserData({
+    appData: app.getPath('appData'),
+    userData: app.getPath('userData'),
+  });
+  if (userDataMigration.status === 'migrated') {
+    console.log(`[userData] 已迁移：${userDataMigration.legacy} → ${userDataMigration.to}`);
+  } else if (userDataMigration.status === 'failed') {
+    console.warn('[userData] 迁移失败，继续使用旧目录：', userDataMigration.error);
+    if (fs.existsSync(userDataMigration.legacy)) app.setPath('userData', userDataMigration.legacy);
+  }
+
   app.on('second-instance', () => {
     const [win] = BrowserWindow.getAllWindows();
     if (!win) return;

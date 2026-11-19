@@ -16,8 +16,8 @@ const sizeLabel = (size: number) => `${(size / 1024 / 1024).toFixed(2)} MiB`;
  *  2026-11-07：自动停止 / 保存 / 导入的流程抽到模块级 autoImportFlow（附近页触发的是同一流程），这里只订阅展示。 */
 const AUTO_STAGE_LABEL: Partial<Record<AutoImportStage, string>> = {
   stopping: '正在保存本次采集…',
-  importing: '已保存，正在导入工具箱…',
-  syncing: '已导入工具箱，正在同步私有云…',
+  importing: '已保存，正在导入数据…',
+  syncing: '已导入，正在同步私有云…',
 };
 /** 导入后的云同步状态：自动导入也会顺手同步，弹窗里要能看到结果（2026-10-25） */
 const CLOUD_LABEL: Record<ImportOutcome['cloud'], string> = {
@@ -170,8 +170,8 @@ export function NativeCollectorPanel() {
         <h2 className="text-base font-semibold text-slate-900">本机采集</h2>
         <p className="mt-1 text-xs text-slate-500">
           {desktop
-            ? '桌面版采集组件没有加载成功，请重启工具箱；仍不行请更新到最新安装包。'
-            : '当前环境没有内置采集（只在安卓工具箱安装包内提供）。网页版请用下面的「导入游戏数据」手选抓包 / 备份文件；装了安卓版仍看不到，请更新安装包。'}
+            ? '桌面版采集组件没有加载成功，请重启小布助手；仍不行请更新到最新安装包。'
+            : '当前环境没有内置采集（只在安卓版小布助手安装包内提供）。网页版请用下面的「导入游戏数据」手选抓包 / 备份文件；装了安卓版仍看不到，请更新安装包。'}
         </p>
       </section>
     );
@@ -201,7 +201,7 @@ export function NativeCollectorPanel() {
       {state ? <>
         {!state.supported ? <StateNotice kind="unknown" title={desktop ? '没有找到 Npcap' : '内置采集需要 Android 8 或以上'}
           description={desktop
-            ? '实时采集依赖 Npcap 抓本机网卡。请先安装 Npcap（安装时勾选 WinPcap API 兼容模式），装完重启工具箱。'
+            ? '实时采集依赖 Npcap 抓本机网卡。请先安装 Npcap（安装时勾选 WinPcap API 兼容模式），装完重启小布助手。'
             : '当前手机仍可手动导入已有文件。'}
           action={desktop
             ? <a className="text-emerald-700 underline" href="https://npcap.com/#download" target="_blank" rel="noreferrer">下载 Npcap</a>
@@ -330,7 +330,7 @@ export function NativeCollectorPanel() {
         </>}
         <details className="text-xs text-slate-500">
           <summary className="flex min-h-[32px] cursor-pointer items-center">采集组件与开源许可</summary>
-          <p>基于蛋神助手采集器 1.2.9 的原生转发与 PCAP 代码；zdtun © Emanuele Faranda，LGPL-3.0-or-later；工具箱集成代码 GPL-3.0-only。</p>
+          <p>基于蛋神助手采集器 1.2.9 的原生转发与 PCAP 代码；zdtun © Emanuele Faranda，LGPL-3.0-or-later；小布助手集成代码 GPL-3.0-only。</p>
           <a className="inline-flex min-h-[32px] items-center text-emerald-700 underline" href="https://github.com/sasaki-ishiran/roco-toolbox/blob/codex/android-collector/android-shell/THIRD_PARTY.md" target="_blank" rel="noreferrer">查看来源、许可证与对应源码</a>
         </details>
       </> : null}
@@ -346,7 +346,7 @@ export function NativeCollectorPanel() {
               导入没有完成：{completionError ?? outcome.message ?? '请在文件列表里点「解析并导入」重试'}
             </p>
           ) : outcome.local === 'importing' ? (
-            <p className="text-xs text-slate-400" data-testid="capture-complete-outcome">正在导入工具箱…</p>
+            <p className="text-xs text-slate-400" data-testid="capture-complete-outcome">正在导入数据…</p>
           ) : (
             <p className="text-xs text-slate-600" data-testid="capture-complete-outcome">导入完成，游戏数据已保存到本机。</p>
           )}

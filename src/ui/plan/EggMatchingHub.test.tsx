@@ -26,6 +26,21 @@ test('uses approved hub levels and species names, with stock and tasks as utilit
   expect(screen.getAllByRole('img',{name:'大块头'}).length).toBeGreaterThan(1);
 });
 
+test('a home scene alone syncs its eggs with homeComplete',async()=>{
+  mutate.mockClear();mutate.mockResolvedValue(undefined);
+  const home={schemaVersion:1 as const,gameId:'1001',capturedAt:'2026-11-17T23:00:00+08:00',
+    residents:[{instanceId:'11',baseId:'b',confId:10009,furnitureGuid:'nest1',actorId:'a1',name:'菊花梨',gender:'母' as const}],
+    nests:[{furnitureGuid:'nest1',configId:1,nestType:'ordinary' as const,nestName:'普通小窝',residentIds:[]}],
+    layEggCouples:[],sceneEggs:[{actorId:'e1',furnitureGuid:'nest1'}],couplesStale:false,snapshotKind:'full' as const};
+  const snapshots=[{accountName:'甲',gameId:1001,exportedAt:'2026-11-17T14:00:00Z',importedAt:'2026-11-17T14:00:01Z',pets:[],eggs:[],eggInventoryComplete:true,home}];
+  render(<EggMatchingHub {...props} snapshots={snapshots}/>);
+  await waitFor(()=>expect(mutate).toHaveBeenCalledTimes(1));
+  const action=mutate.mock.calls[0][0];
+  expect(action).toMatchObject({type:'stock-sync',complete:true,homeComplete:true});
+  expect(action.eggs).toHaveLength(1);
+  expect(action.eggs[0]).toMatchObject({location:'home',eggGameId:3011,lastConfirmedAt:Date.parse('2026-11-17T23:00:00+08:00')});
+});
+
 test('a failed capture sync is attempted once until the user retries',async()=>{
   mutate.mockClear();mutate.mockRejectedValue(new Error('网络失败'));
   const snapshots=[{accountName:'甲',gameId:1001,exportedAt:'2026-11-16T00:00:00Z',importedAt:'2026-11-16T00:00:01Z',pets:[],eggs:[],eggInventoryComplete:true}];
@@ -37,16 +52,52 @@ test('a failed capture sync is attempted once until the user retries',async()=>{
   mutate.mockResolvedValue(undefined);
 });
 
-test('my demand shows published matching production lines without switching hub tabs',()=>{
+test('my demand lists who has eggs and who can hatch, then opens their needs',()=>{
   const line={id:'l',accountId:'b',eggGameId:3227,nature:'固执',body:'大块头' as const,voice:'婉转声' as const,gameAccountKey:'uid:2',motherId:'m',fatherId:'f'};
   const data=state as typeof state & {lines:typeof line[]};data.lines=[line];
   render(<EggMatchingHub {...props} members={[...props.members,{accountId:'b',displayName:'乙'}]}/>);
   fireEvent.click(screen.getByRole('button',{name:/菊花梨/}));
-  expect(screen.getByText('可现孵')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button',{name:'查看产线'}));
-  expect(screen.getByRole('dialog',{name:'选择换回'})).toBeTruthy();
+  expect(screen.getByText('组内现蛋')).toBeTruthy();
+  expect(screen.getByText('组内能帮我孵')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'看他的需求'}));
+  expect(screen.getByRole('dialog',{name:'我能满足他的需求'})).toBeTruthy();
   expect(screen.getByRole('button',{name:'我的收集'}).getAttribute('aria-pressed')).toBe('true');
   data.lines=[];
+});
+
+test('square cards show whether I can supply and can be filtered to affordable only',()=>{
+  state.demands.push({...createDemand({id:'d2',groupId:'g',demanderAccountId:'b',eggGameId:3227,natures:['固执'],body:'大块头',voice:'婉转声',quantity:1}),});
+  state.demands.push(createDemand({id:'d3',groupId:'g',demanderAccountId:'b',eggGameId:9999,natures:['固执'],body:'',voice:'',quantity:1}));
+  const egg={id:'e1',accountId:'a',gameAccountKey:'uid:1',eggGameId:3227,nature:'固执',body:'大块头' as const,voice:'婉转声' as const,
+    kind:'ordinary' as const,status:'available' as const,listed:true,provenance:'unknown' as const,confidence:'manual' as const,labelSource:'unknown' as const};
+  const data=state as typeof state & {eggs:(typeof egg)[]};data.eggs=[egg];
+  render(<EggMatchingHub {...props} members={[...props.members,{accountId:'b',displayName:'乙'}]}/>);
+  fireEvent.click(screen.getByText('组内广场'));
+  expect(screen.getAllByText('我能给蛋').length).toBeGreaterThan(0);
+  expect(screen.getByText('接不了')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'只看我能接'}));
+  expect(screen.getByRole('button',{name:'只看我能接'}).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.queryByText('接不了')).toBeNull();
+  data.eggs=[];state.demands.length=1;
+});
+
+test('demander picks my own egg for the peer and confirms before the trade is sent',()=>{
+  mutate.mockClear();
+  state.demands.push(createDemand({id:'d2',groupId:'g',demanderAccountId:'b',eggGameId:3227,natures:['固执'],body:'',voice:'',quantity:1}));
+  const base={eggGameId:3227,nature:'固执',body:'大块头' as const,voice:'婉转声' as const,
+    kind:'ordinary' as const,status:'available' as const,listed:true,provenance:'unknown' as const,confidence:'manual' as const,labelSource:'unknown' as const};
+  const data=state as typeof state & {eggs:(typeof base & {id:string;accountId:string;gameAccountKey:string})[]};
+  data.eggs=[{...base,id:'mine',accountId:'a',gameAccountKey:'uid:1'},{...base,id:'theirs',accountId:'b',gameAccountKey:'uid:2'}];
+  render(<EggMatchingHub {...props} members={[...props.members,{accountId:'b',displayName:'乙'}]}/>);
+  fireEvent.click(screen.getByRole('button',{name:/菊花梨/}));
+  fireEvent.click(screen.getByRole('button',{name:'看他的需求'}));
+  expect(screen.getByRole('dialog',{name:'我能满足他的需求'})).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'选这颗'}));
+  expect(screen.getByRole('dialog',{name:'发起换蛋'})).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'确认发起'}));
+  expect(mutate).toHaveBeenCalledTimes(1);
+  expect(mutate.mock.calls[0][0]).toMatchObject({type:'request',supplierAccountId:'b'});
+  data.eggs=[];state.demands.length=1;
 });
 
 test('completed collections remain accessible in a collapsed history',()=>{

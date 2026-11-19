@@ -11,16 +11,25 @@ import { AccountPanel } from './AccountPanel';
 const json = (body: unknown): Response =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
-describe('云同步面板（免密恢复码）', () => {
+describe('云同步面板（用户名 + 密码）', () => {
   const calls: Array<{ path: string; method: string }> = [];
 
   const respond = (path: string): unknown => {
-    if (path.startsWith('/api/auth/register')) {
-      return { ok: true, accountId: 'acc-1', token: 'token-1', recoveryCode: 'ABCD-EFGH-JKLM' };
+    if (path.startsWith('/api/auth/signup')) {
+      return { ok: true, accountId: 'acc-1', token: 'token-1', username: '训练家小明' };
     }
-    if (path.startsWith('/api/auth/recover')) return { ok: true, accountId: 'acc-2', token: 'token-2' };
+    if (path.startsWith('/api/auth/login')) {
+      return { ok: true, accountId: 'acc-2', token: 'token-2', username: '训练家小明' };
+    }
+    if (path.startsWith('/api/auth/setup')) return { ok: true, username: '训练家小明' };
     if (path.startsWith('/api/me')) {
-      return { ok: true, accountId: 'acc-1', createdAt: 1, snapshot: { version: 1, updatedAt: 2, bytes: 10 } };
+      return {
+        ok: true,
+        accountId: 'acc-1',
+        createdAt: 1,
+        username: '训练家小明',
+        snapshot: { version: 1, updatedAt: 2, bytes: 10 },
+      };
     }
     if (path.startsWith('/api/sync')) {
       return path.includes('full=1') ? { ok: true, snapshot: null } : { ok: true, version: 1 };
@@ -51,19 +60,23 @@ describe('云同步面板（免密恢复码）', () => {
     vi.unstubAllGlobals();
   });
 
-  test('没登录时给两条路：开启云同步 / 用恢复码登录', () => {
+  test('没登录时给两条路：注册 / 登录', () => {
     render(<AccountPanel />);
-    expect(screen.getByTestId('account-register')).toHaveTextContent('开启云同步');
-    expect(screen.getByTestId('account-recover-input')).toBeInTheDocument();
+    expect(screen.getByTestId('account-register')).toHaveTextContent('注册并开启云同步');
+    expect(screen.getByTestId('account-mode-login')).toBeInTheDocument();
+    expect(screen.getByTestId('account-username-input')).toBeInTheDocument();
+    expect(screen.getByTestId('account-password-input')).toBeInTheDocument();
   });
 
-  test('开启云同步：显示一次性恢复码，并把本机数据传上去', async () => {
+  test('注册：建号后把本机数据传上去', async () => {
     render(<AccountPanel />);
+    fireEvent.change(screen.getByTestId('account-username-input'), { target: { value: '训练家小明' } });
+    fireEvent.change(screen.getByTestId('account-password-input'), { target: { value: '12345678' } });
+    fireEvent.change(screen.getByTestId('account-confirm-input'), { target: { value: '12345678' } });
     fireEvent.click(screen.getByTestId('account-register'));
     await waitFor(() => {
-      expect(screen.getByTestId('account-recovery-code')).toHaveTextContent('ABCD-EFGH-JKLM');
+      expect(calls.some((call) => call.path === '/api/auth/signup')).toBe(true);
     });
-    expect(screen.getByTestId('account-recovery-block')).toHaveTextContent('只显示这一次');
     await waitFor(() => {
       expect(calls.some((call) => call.path === '/api/sync' && call.method === 'PUT')).toBe(true);
     });
@@ -71,19 +84,58 @@ describe('云同步面板（免密恢复码）', () => {
     await waitFor(() => {
       expect(screen.getByTestId('account-sync')).toBeInTheDocument();
     });
+    expect(window.localStorage.getItem('roco.deviceToken')).toBe('token-1');
   });
 
-  test('换设备：输入恢复码即登录（令牌落本地）', async () => {
+  test('注册：两次密码不一致时不发请求', async () => {
     render(<AccountPanel />);
-    fireEvent.change(screen.getByTestId('account-recover-input'), { target: { value: 'ZPXE-JJ76-AEVT' } });
-    fireEvent.click(screen.getByTestId('account-recover-submit'));
+    fireEvent.change(screen.getByTestId('account-username-input'), { target: { value: '训练家小明' } });
+    fireEvent.change(screen.getByTestId('account-password-input'), { target: { value: '12345678' } });
+    fireEvent.change(screen.getByTestId('account-confirm-input'), { target: { value: '87654321' } });
+    fireEvent.click(screen.getByTestId('account-register'));
     await waitFor(() => {
-      expect(calls.some((call) => call.path === '/api/auth/recover')).toBe(true);
+      expect(screen.getByTestId('account-error')).toHaveTextContent('两次输入的密码不一致');
+    });
+    expect(calls.some((call) => call.path === '/api/auth/signup')).toBe(false);
+  });
+
+  test('换设备：用用户名密码登录（令牌落本地）', async () => {
+    render(<AccountPanel />);
+    fireEvent.click(screen.getByTestId('account-mode-login'));
+    fireEvent.change(screen.getByTestId('account-username-input'), { target: { value: '训练家小明' } });
+    fireEvent.change(screen.getByTestId('account-password-input'), { target: { value: '12345678' } });
+    fireEvent.click(screen.getByTestId('account-login'));
+    await waitFor(() => {
+      expect(calls.some((call) => call.path === '/api/auth/login')).toBe(true);
     });
     await waitFor(() => {
       expect(screen.getByTestId('account-sync')).toBeInTheDocument();
     });
     expect(window.localStorage.getItem('roco.deviceToken')).toBe('token-2');
+  });
+
+  test('老账号（没有用户名）登录后可以补设用户名密码', async () => {
+    window.localStorage.setItem('roco.deviceToken', 'token-old');
+    window.localStorage.setItem('roco.accountId', 'acc-old');
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+      calls.push({ path, method: String(init?.method ?? 'GET') });
+      const body = path.startsWith('/api/me')
+        ? { ok: true, accountId: 'acc-old', createdAt: 1, username: null, snapshot: null }
+        : respond(path);
+      return Promise.resolve(json(body));
+    });
+
+    render(<AccountPanel />);
+    const setup = await screen.findByTestId('account-open-setup');
+    fireEvent.click(setup);
+    fireEvent.change(screen.getByTestId('account-setup-username'), { target: { value: '训练家小明' } });
+    fireEvent.change(screen.getByTestId('account-setup-password'), { target: { value: '12345678' } });
+    fireEvent.change(screen.getByTestId('account-setup-confirm'), { target: { value: '12345678' } });
+    fireEvent.click(screen.getByTestId('account-setup-submit'));
+    await waitFor(() => {
+      expect(calls.some((call) => call.path === '/api/auth/setup')).toBe(true);
+    });
   });
 
   test('立即同步：一条动作里拉云端再推回（云端还没有数据时把本机当第一份）', async () => {

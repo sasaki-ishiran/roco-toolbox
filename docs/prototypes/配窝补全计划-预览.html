@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>补全计划 · 布局预稿（375 / 390）</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px 14px 40px;
+    background: #eef2f7;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: #0f172a;
+  }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  .hint { font-size: 12px; color: #64748b; margin: 0 0 18px; line-height: 1.6; }
+  .stage { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; }
+  .device { flex: 0 0 auto; }
+  .device > .label {
+    font-size: 12px; font-weight: 600; color: #475569; margin: 0 0 8px 2px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .label .w { font-weight: 400; color: #94a3b8; }
+  .screen {
+    background: #f1f5f9; border-radius: 22px; padding: 12px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .12), 0 12px 28px -16px rgba(15, 23, 42, .35);
+  }
+  .card {
+    background: #fff; border-radius: 16px; padding: 14px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
+    margin-bottom: 10px;
+  }
+  .card-title { font-size: 13px; font-weight: 600; color: #475569; margin: 0; }
+  .summary { margin: 6px 0 0; font-size: 13px; color: #334155; line-height: 1.5; }
+  .sum-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 3px;
+    border-radius: 999px; padding: 3px 8px; font-size: 11px; line-height: 1;
+    background: #f1f5f9; color: #475569;
+  }
+  .pill b { font-weight: 700; }
+  .pill.green { background: #ecfdf5; color: #047857; }
+  .pill.blue { background: #eff6ff; color: #1d4ed8; }
+  .pill.amber { background: #fffbeb; color: #b45309; }
+  .pill.rose { background: #fff1f2; color: #be123c; }
+
+  .acct { font-size: 13px; font-weight: 600; color: #334155; margin: 10px 2px 6px; }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; margin: 10px -2px 0; padding: 0 2px 2px; }
+  .tab {
+    flex: 0 0 auto; border: 0; border-radius: 999px; padding: 5px 11px;
+    background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 500;
+    font-family: inherit;
+  }
+  .tab span { color: #94a3b8; font-size: 10px; margin-left: 3px; }
+  .tab.on { background: #059669; color: #fff; }
+  .tab.on span { color: #a7f3d0; }
+  .acct:first-of-type { margin-top: 12px; }
+
+  .map {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+    height: 62px; display: flex; align-items: center; gap: 6px; padding: 0 10px;
+    overflow: hidden;
+  }
+  .nest { width: 20px; height: 20px; border-radius: 6px; background: #cbd5e1; }
+  .nest.g { background: #10b981; }
+  .nest.b { background: #60a5fa; }
+  .nest.y { background: #fbbf24; }
+  .map-line { flex: 1; height: 2px; background: #cbd5e1; }
+
+  ul.pairs { list-style: none; margin: 8px 0 0; padding: 0; }
+  ul.pairs li {
+    border-left: 4px solid #94a3b8; background: #f8fafc; border-radius: 10px;
+    padding: 8px 9px; margin-bottom: 6px;
+  }
+  .row1 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .dot { width: 8px; height: 8px; border-radius: 999px; background: #94a3b8; flex: 0 0 auto; }
+  .badge {
+    font-size: 10px; font-weight: 700; line-height: 1; color: #fff;
+    border-radius: 4px; padding: 3px 5px;
+  }
+  .badge.p100 { background: #059669; }
+  .badge.p60 { background: #0284c7; }
+  .badge.p30 { background: #94a3b8; }
+  .dual { font-size: 10px; font-weight: 700; color: #7c3aed; background: #f5f3ff; border-radius: 4px; padding: 3px 5px; }
+  .single { font-size: 10px; color: #94a3b8; background: #f1f5f9; border-radius: 4px; padding: 3px 5px; }
+  .meta { font-size: 12px; color: #475569; }
+  .meta b { color: #0f172a; font-weight: 600; }
+  .row2 { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 5px; font-size: 12.5px; color: #334155; }
+  .g { font-size: 10px; font-weight: 700; border-radius: 3px; padding: 1px 3px; }
+  .g.m { background: #dbeafe; color: #1d4ed8; }
+  .g.f { background: #fce7f3; color: #be185d; }
+  .x { color: #cbd5e1; margin: 0 2px; }
+  .row3 { display: flex; justify-content: space-between; gap: 8px; margin-top: 5px; font-size: 11px; color: #94a3b8; }
+  .expect { color: #0f766e; font-weight: 700; }
+  .send { margin: 3px 0 0; font-size: 11px; color: #0369a1; }
+  .note { color: #b45309; }
+
+  .gap {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: #fff; border: 1px dashed #cbd5e1; border-radius: 10px;
+    padding: 7px 9px; margin-top: 6px; font-size: 12px; color: #334155;
+  }
+  .gap .why { color: #94a3b8; font-size: 11px; text-align: right; }
+  .gap.warn { border-color: #fca5a5; background: #fff7f7; }
+  .gap.warn .why { color: #be123c; }
+
+  .foot { margin-top: 10px; font-size: 11px; color: #94a3b8; line-height: 1.6; }
+  .legend { margin-top: 14px; font-size: 12px; color: #475569; line-height: 1.8; max-width: 760px; }
+  .legend code { background: #fff; border: 1px solid #e2e8f0; border-radius: 4px; padding: 0 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+  <h1>补全计划 · 看板卡片预稿</h1>
+  <p class="hint">
+    两个宽度都按真机卡宽排：375（左）/ 390（右）。<br />
+    这版只做「看得见的部分」：效率档 + 双组标记 + 期望补格数 + 性别折算提示 + 缺口原因。
+    跨号传蛋待办还没实现，所以下面只标了位置，没画内容。
+  </p>
+
+  <div class="stage">
+    <!-- 375 -->
+    <div class="device">
+      <p class="label">375 <span class="w">iPhone 12/13 mini 卡宽</span></p>
+      <div class="screen" style="width: 375px;">
+        <div class="card">
+          <h2 class="card-title">补全计划</h2>
+          <p class="summary">
+            3 个号 · 还差 <b>5</b> 格：双组可补 3 · 单组可补 1 · 要传蛋 1
+          </p>
+          <div class="sum-row">
+            <span class="pill green">100% <b>2</b></span>
+            <span class="pill blue">60% <b>2</b></span>
+            <span class="pill">30% <b>2</b></span>
+            <span class="pill amber">需传蛋 <b>1</b></span>
+          </div>
+
+          <div class="tabs">
+            <button class="tab on">账号甲 <span>4 对</span></button>
+            <button class="tab">账号乙 <span>待补</span></button>
+            <button class="tab">账号丙 <span>待补</span></button>
+          </div>
+          <p class="acct">账号甲 · 用 6/11 窝</p>
+          <div class="map">
+            <span class="nest g"></span><span class="map-line"></span><span class="nest"></span>
+            <span class="map-line"></span><span class="nest b"></span><span class="map-line"></span>
+            <span class="nest"></span><span class="map-line"></span><span class="nest y"></span>
+          </div>
+
+          <ul class="pairs">
+            <li style="border-left-color:#059669">
+              <div class="row1">
+                <span class="dot" style="background:#059669"></span>
+                <span class="badge p100">100%</span>
+                <span class="dual">双组</span>
+                <span class="meta">妖精组 × 动物组 · <b>胆小</b> · 大婉</span>
+              </div>
+              <div class="row2">
+                小独角兽 <span class="g f">母</span><span class="x">×</span>双组兽 <span class="g m">公</span>
+                <span class="meta" style="color:#059669;font-size:11px">学院小窝</span>
+              </div>
+              <div class="row3"><span>盒子12 第3位 × 盒子4 第1位</span><span class="expect">期望 2.0</span></div>
+              <p class="send">孵出来传给 账号乙、账号丙</p>
+            </li>
+            <li style="border-left-color:#0284c7">
+              <div class="row1">
+                <span class="dot" style="background:#0284c7"></span>
+                <span class="badge p60">60%</span>
+                <span class="dual">双组</span>
+                <span class="meta">魔力组 × 昆虫组 · <b>固执</b> · 大婉</span>
+              </div>
+              <div class="row2">
+                火花 <span class="g f">母</span><span class="x">×</span>霹雳鸟 <span class="g m">公</span>
+              </div>
+              <div class="row3"><span>盒子2 第1位 × 盒子7 第5位</span><span class="expect">期望 1.2</span></div>
+            </li>
+            <li style="border-left-color:#0284c7">
+              <div class="row1">
+                <span class="dot" style="background:#0284c7"></span>
+                <span class="badge p60">60%</span>
+                <span class="single">单组</span>
+                <span class="meta">植物组 · <b>开朗</b> · 大婉</span>
+              </div>
+              <div class="row2">
+                鸭吉吉 <span class="g f">母</span><span class="x">×</span>粉星仔 <span class="g m">公</span>
+              </div>
+              <div class="row3">
+                <span>盒子9 第2位 × 盒子9 第4位</span>
+                <span><span class="note">母方 8:2 出公 80%</span> <span class="expect">0.96</span></span>
+              </div>
+            </li>
+            <li style="border-left-color:#94a3b8">
+              <div class="row1">
+                <span class="dot" style="background:#94a3b8"></span>
+                <span class="badge p30">30%</span>
+                <span class="dual">双组</span>
+                <span class="meta">天空组 × 机械组 · <b>平和</b> · 大婉</span>
+              </div>
+              <div class="row2">
+                电悠悠 <span class="g f">母</span><span class="x">×</span>机械兽 <span class="g m">公</span>
+              </div>
+              <div class="row3"><span>盒子1 第6位 × 盒子6 第2位</span><span class="expect">期望 0.6</span></div>
+            </li>
+          </ul>
+
+          <div class="gap warn">
+            <span>软体组 · 认真 · 大婉</span>
+            <span class="why">这个组没有能出公的母方</span>
+          </div>
+          <div class="gap">
+            <span>大地组 · 大胆 · 大婉</span>
+            <span class="why">窝位不够</span>
+          </div>
+          <div class="gap">
+            <span>海洋组 · 淘气 · 大婉</span>
+            <span class="why">缺带「淘气」的母</span>
+          </div>
+          <p class="foot">缺口只写结论，不写解释段落。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 390 -->
+    <div class="device">
+      <p class="label">390 <span class="w">iPhone 14/15 卡宽</span></p>
+      <div class="screen" style="width: 390px;">
+        <div class="card">
+          <h2 class="card-title">补全计划</h2>
+          <p class="summary">
+            3 个号 · 还差 <b>5</b> 格：双组可补 3 · 单组可补 1 · 要传蛋 1
+          </p>
+          <div class="sum-row">
+            <span class="pill green">100% <b>2</b></span>
+            <span class="pill blue">60% <b>2</b></span>
+            <span class="pill">30% <b>2</b></span>
+            <span class="pill amber">需传蛋 <b>1</b></span>
+          </div>
+
+          <div class="tabs">
+            <button class="tab on">账号甲 <span>4 对</span></button>
+            <button class="tab">账号乙 <span>待补</span></button>
+            <button class="tab">账号丙 <span>待补</span></button>
+          </div>
+          <p class="acct">账号甲 · 用 6/11 窝</p>
+          <div class="map">
+            <span class="nest g"></span><span class="map-line"></span><span class="nest"></span>
+            <span class="map-line"></span><span class="nest b"></span><span class="map-line"></span>
+            <span class="nest"></span><span class="map-line"></span><span class="nest y"></span>
+          </div>
+
+          <ul class="pairs">
+            <li style="border-left-color:#059669">
+              <div class="row1">
+                <span class="dot" style="background:#059669"></span>
+                <span class="badge p100">100%</span>
+                <span class="dual">双组</span>
+                <span class="meta">妖精组 × 动物组 · <b>胆小</b> · 大婉</span>
+              </div>
+              <div class="row2">
+                小独角兽 <span class="g f">母</span><span class="x">×</span>双组兽 <span class="g m">公</span>
+                <span class="meta" style="color:#059669;font-size:11px">学院小窝</span>
+              </div>
+              <div class="row3"><span>盒子12 第3位 × 盒子4 第1位</span><span class="expect">期望 2.0</span></div>
+              <p class="send">孵出来传给 账号乙、账号丙</p>
+            </li>
+            <li style="border-left-color:#0284c7">
+              <div class="row1">
+                <span class="dot" style="background:#0284c7"></span>
+                <span class="badge p60">60%</span>
+                <span class="dual">双组</span>
+                <span class="meta">魔力组 × 昆虫组 · <b>固执</b> · 大婉</span>
+              </div>
+              <div class="row2">
+                火花 <span class="g f">母</span><span class="x">×</span>霹雳鸟 <span class="g m">公</span>
+              </div>
+              <div class="row3"><span>盒子2 第1位 × 盒子7 第5位</span><span class="expect">期望 1.2</span></div>
+            </li>
+            <li style="border-left-color:#0284c7">
+              <div class="row1">
+                <span class="dot" style="background:#0284c7"></span>
+                <span class="badge p60">60%</span>
+                <span class="single">单组</span>
+                <span class="meta">植物组 · <b>开朗</b> · 大婉</span>
+              </div>
+              <div class="row2">
+                鸭吉吉 <span class="g f">母</span><span class="x">×</span>粉星仔 <span class="g m">公</span>
+              </div>
+              <div class="row3">
+                <span>盒子9 第2位 × 盒子9 第4位</span>
+                <span><span class="note">母方 8:2 出公 80%</span> <span class="expect">0.96</span></span>
+              </div>
+            </li>
+            <li style="border-left-color:#94a3b8">
+              <div class="row1">
+                <span class="dot" style="background:#94a3b8"></span>
+                <span class="badge p30">30%</span>
+                <span class="dual">双组</span>
+                <span class="meta">天空组 × 机械组 · <b>平和</b> · 大婉</span>
+              </div>
+              <div class="row2">
+                电悠悠 <span class="g f">母</span><span class="x">×</span>机械兽 <span class="g m">公</span>
+              </div>
+              <div class="row3"><span>盒子1 第6位 × 盒子6 第2位</span><span class="expect">期望 0.6</span></div>
+            </li>
+          </ul>
+
+          <div class="gap warn">
+            <span>软体组 · 认真 · 大婉</span>
+            <span class="why">这个组没有能出公的母方</span>
+          </div>
+          <div class="gap">
+            <span>大地组 · 大胆 · 大婉</span>
+            <span class="why">窝位不够</span>
+          </div>
+          <div class="gap">
+            <span>海洋组 · 淘气 · 大婉</span>
+            <span class="why">缺带「淘气」的母</span>
+          </div>
+          <p class="foot">缺口只写结论，不写解释段落。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <b>这版改了 4 处，都只加字不动结构：</b><br />
+    ① 标题「配窝建议」→「补全计划」，下面多一行汇总（几个号、还差多少、双组/单组/传蛋各几格）。<br />
+    ② 每条配对左边多两枚小徽标：<code>100% / 60% / 30%</code> 是性格遗传档，<code>双组 / 单组</code> 是这条线能补几个组。<br />
+    ③ 右下角多一个 <code>期望</code>：等于「性格概率 × 组数 × 母方性别折算」，排序就按它从高到低。<br />
+    ④ 没排上的缺口从一行字变成带原因的条目，新增「这个组没有能出公的母方」（对应代码里的 <code>male-scarce</code>）。
+  </div>
+</body>
+</html>

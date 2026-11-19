@@ -1,9 +1,9 @@
 /**
- * 账号会话（免密：设备绑定 + 恢复码，2026-10-06）
+ * 账号会话（2026-11-18 起：用户名 + 密码）
  *
  * - 令牌存在 localStorage `roco.deviceToken`，请求带 `Authorization: Bearer`
- * - 「开启云同步」= 开号，服务端返回**一次性恢复码**（页面提醒用户存下来；丢了可在仍登录的设备上重新生成）
- * - 换设备 = 用恢复码换新令牌
+ * - 新设备：注册（用户名 + 密码）或登录；忘记密码找管理员重置
+ * - 老账号（以前只有恢复码）只要还在这台设备上登录着，设置一次用户名密码即可保留数据与小组
  */
 import { API_BASE, deviceId } from './analytics';
 
@@ -21,6 +21,8 @@ export interface CloudMeta {
 export interface MeResult {
   accountId: string;
   createdAt: number;
+  /** 老账号还没设置用户名时为 null */
+  username?: string | null;
   snapshot: CloudMeta | null;
 }
 
@@ -82,7 +84,7 @@ export async function authFetch(path: string, init: RequestInit = {}): Promise<R
   });
   if (response.status === 401) {
     if (readToken() === token && readAccountId() === account) clearSession();
-    throw new Error('登录已失效，请重新用恢复码登录');
+    throw new Error('登录已失效，请重新登录');
   }
   return response;
 }
@@ -110,32 +112,50 @@ function remember(accountId: string, token: string): void {
   notify();
 }
 
-/** 开启云同步：开号（服务端返回**一次性**恢复码） */
-export async function registerAccount(): Promise<{ accountId: string; recoveryCode: string }> {
-  const data = await post<{ accountId: string; token: string; recoveryCode: string }>('/api/auth/register', {
+/** 注册：新建账号（用户名 + 密码），令牌直接落本地 */
+export async function signUp(username: string, password: string): Promise<string> {
+  const data = await post<{ accountId: string; token: string; username: string }>('/api/auth/signup', {
+    username,
+    password,
     deviceId: deviceId(),
   });
   remember(data.accountId, data.token);
   markSynced(0);
-  return { accountId: data.accountId, recoveryCode: data.recoveryCode };
+  return data.username;
 }
 
-/** 换设备：用恢复码登录（返回账号 id，令牌已保存） */
-export async function recoverAccount(recoveryCode: string): Promise<string> {
-  const data = await post<{ accountId: string; token: string }>('/api/auth/recover', {
-    recoveryCode,
+/** 登录：用户名 + 密码换令牌（返回账号 id，令牌已保存） */
+export async function signIn(username: string, password: string): Promise<string> {
+  const data = await post<{ accountId: string; token: string }>('/api/auth/login', {
+    username,
+    password,
     deviceId: deviceId(),
   });
   remember(data.accountId, data.token);
   return data.accountId;
 }
 
-/** 重新生成恢复码（旧的立即失效） */
-export async function rotateRecoveryCode(): Promise<string> {
-  const response = await authFetch('/api/auth/rotate', { method: 'POST' });
-  const data = (await response.json()) as { recoveryCode?: string; error?: string };
-  if (!response.ok || !data.recoveryCode) throw new Error(data.error ?? '生成失败');
-  return data.recoveryCode;
+/** 老账号补设用户名密码（保留原有云端数据与小组） */
+export async function setupAccount(username: string, password: string): Promise<string> {
+  const response = await authFetch('/api/auth/setup', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+  const data = (await response.json()) as { username?: string; error?: string };
+  if (!response.ok || !data.username) throw new Error(data.error ?? '设置失败');
+  return data.username;
+}
+
+/** 修改密码 */
+export async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
+  const response = await authFetch('/api/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ oldPassword, newPassword }),
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? '修改失败');
+  }
 }
 
 /** 退出登录：撤销令牌（本地数据保留） */

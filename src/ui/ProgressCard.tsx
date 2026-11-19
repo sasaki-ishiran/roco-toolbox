@@ -5,8 +5,6 @@ export interface ProgressCardProps {
   hint?: string;
   /** 给了它就整卡可点，用作快速入口 */
   onClick?: () => void;
-  /** 可点时右下角的动作文案 */
-  action?: string;
   /** 可点卡的 testid（页面里可能有多张可点卡，避免 strict mode 冲突） */
   actionTestId?: string;
 }
@@ -17,7 +15,6 @@ export function ProgressCard({
   denominator,
   hint,
   onClick,
-  action,
   actionTestId,
 }: ProgressCardProps) {
   const percent = denominator > 0 ? Math.round((numerator / denominator) * 100) : 0;
@@ -31,7 +28,6 @@ export function ProgressCard({
         <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${percent}%` }} />
       </div>
       {hint ? <p className="mt-1 text-xs text-slate-400">{hint}</p> : null}
-      {action ? <p className="mt-1 text-xs font-medium text-emerald-700">{action} ›</p> : null}
     </>
   );
 

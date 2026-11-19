@@ -17,7 +17,7 @@ function validState(value: unknown): value is EggWorkflowState {
   if (!object(value) || !Array.isArray(value.demands) || !Array.isArray(value.eggs) || !Array.isArray(value.trades) || !object(value.watermarks) || !object(value.orders)) return false;
   return (value.lines===undefined||Array.isArray(value.lines)&&value.lines.every(l=>object(l)&&typeof l.id==='string'&&typeof l.accountId==='string'&&validLine(l))) &&
     (value.patrol===undefined||Array.isArray(value.patrol)&&value.patrol.every(p=>object(p)&&typeof p.tradeId==='string'&&['give','return'].includes(String(p.side))&&
-      (p.checkedAt===null||typeof p.checkedAt==='number')&&['pending','ok','queued','error','quota','produced','ambiguous','quiet'].includes(String(p.status))&&
+      (p.checkedAt===null||typeof p.checkedAt==='number')&&['pending','ok','queued','error','quota','placed','produced','ambiguous','quiet'].includes(String(p.status))&&
       (p.notification===null||['pending','leased','sent','failed','unbound'].includes(String(p.notification)))))&&
     (value.legacyHistory===undefined||Array.isArray(value.legacyHistory)&&value.legacyHistory.every(h=>object(h)&&typeof h.id==='string'&&typeof h.groupId==='string'&&typeof h.demanderAccountId==='string'&&
       (h.supplierAccountId===undefined||typeof h.supplierAccountId==='string')&&Number.isInteger(h.eggGroupId)&&Number(h.eggGroupId)>0&&typeof h.nature==='string'&&typeof h.body==='string'&&typeof h.voice==='string'&&

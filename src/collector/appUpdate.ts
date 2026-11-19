@@ -75,8 +75,10 @@ export function checkAppUpdate(): boolean {
   try {
     check();
     return true;
-  } catch {
-    emit({ ...snapshot, state: 'failed', message: '检查失败，请稍后重试' });
+  } catch (error) {
+    // 把真实异常带出来：旧壳偶尔会在桥接调用上直接抛错，只显示「检查失败」无法定位
+    const reason = error instanceof Error && error.message ? error.message : String(error ?? '');
+    emit({ ...snapshot, state: 'failed', message: reason ? `检查失败：${reason}` : '检查失败，请稍后重试' });
     return false;
   }
 }

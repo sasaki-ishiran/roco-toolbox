@@ -4,3 +4,8 @@ build/
 local.properties
 *.apk
 .cxx/
+
+# 发行签名（沿用现网 APK 的证书，保证覆盖安装；证书文件不进版本库）
+keystore/
+*.jks
+

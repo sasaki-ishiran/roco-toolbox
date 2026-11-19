@@ -20,9 +20,9 @@ test('未登录的小组页只给登录提示，待加入码保留', async ({ pa
   expect(pending).toBe('ABCD2345');
 
   await page.getByTestId('group-login').click();
-  // 新结构：去登录直达「我的 · 工具箱身份」（游戏数据与身份分开）
+  // 新结构：去登录直达「我的 · 我的身份」（游戏数据与身份分开）
   await expect(page.getByTestId('profile-identity-intro')).toBeVisible();
-  await expect(page.getByTestId('account-recover-input')).toBeVisible();
+  await expect(page.getByTestId('account-username-input')).toBeVisible();
 });
 
 test('已登录且本机无数据：能浏览小组资源，不能发布自己的摘要', async ({ page }) => {

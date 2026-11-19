@@ -28,7 +28,7 @@ self.addEventListener('fetch', (event) => {
 });
 
 /**
- * 采集器「分享」→「洛克工具箱」的入口。
+ * 采集器「分享」→「小布助手」的入口。
  * 把分享过来的数据 JSON 暂存进 Cache Storage，然后跳回首页；
  * 首页启动时会把它取走并走原有的导入流程（见 src/share/shareTarget.ts）。
  */

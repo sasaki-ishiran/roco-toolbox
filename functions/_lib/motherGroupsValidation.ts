@@ -121,9 +121,9 @@ export function parseMotherResource(value: unknown): MotherResourceDraft {
   const criteriaId = record.criteriaId;
   if (
     typeof criteriaId !== 'string' ||
-    // 2026-10-29：小组可比性只认 v3（产线口径编进 criteriaId）。
+    // 小组可比性只认 v4（身高体型规则与目标模式均编进 criteriaId）。
     // 旧 id 一律拒绝，避免「发布成功但永远待确认」的静默状态；旧客户端会收到明确的 400。
-    !/^all-mothers-v3-(perfect|medal)$/.test(criteriaId)
+    !/^all-mothers-v4-(perfect|medal)$/.test(criteriaId)
   ) {
     invalid('criteriaId 不受支持：客户端版本过旧，请更新后重新发布');
   }

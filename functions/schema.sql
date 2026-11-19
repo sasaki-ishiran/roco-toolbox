@@ -11,14 +11,21 @@
 -- 只能执行一次，重复跑会报 duplicate column / table already exists。
 -- 迁移是给「已有数据的旧库」打补丁用的。
 
--- 账号：免密，凭「恢复码」找回；恢复码只存 SHA-256 哈希，明文只在注册/轮换时返回一次
+-- 账号：用户名 + 密码登录（2026-11-18）。
+-- 老账号只有恢复码：recovery_hash 仍然保留，新账号写一个用不到的随机哈希占位。
+-- 用户名可空（老账号未设置），username_lower 用于大小写不敏感的唯一性判断。
 CREATE TABLE IF NOT EXISTS accounts (
-  id            TEXT PRIMARY KEY,      -- crypto.randomUUID()
-  created_at    INTEGER NOT NULL,
-  last_seen_at  INTEGER NOT NULL,
-  recovery_hash TEXT NOT NULL,         -- sha256(标准化后的恢复码)
-  label         TEXT                   -- 用户自填备注，可空
+  id             TEXT PRIMARY KEY,      -- crypto.randomUUID()
+  created_at     INTEGER NOT NULL,
+  last_seen_at   INTEGER NOT NULL,
+  recovery_hash  TEXT NOT NULL,         -- 老账号：sha256(标准化后的恢复码)；新账号：随机占位
+  label          TEXT,                  -- 用户自填备注，可空
+  username       TEXT,                  -- 登录用户名，3-16 位字母/数字/下划线/中文
+  username_lower TEXT,                  -- 小写后的用户名（唯一索引用它）
+  password_hash  TEXT                   -- pbkdf2$迭代次数$盐$哈希
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_username_lower
+  ON accounts (username_lower) WHERE username_lower IS NOT NULL;
 
 -- 会话令牌：明文不落库，只存 SHA-256
 CREATE TABLE IF NOT EXISTS tokens (
@@ -541,17 +548,21 @@ CREATE TABLE IF NOT EXISTS egg_patrol_observations (
   uid TEXT NOT NULL, actor_id TEXT NOT NULL, task_key TEXT NOT NULL,
   group_id TEXT NOT NULL REFERENCES mother_groups(id) ON DELETE CASCADE,
   trade_id TEXT NOT NULL, side TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('produced','ambiguous')),
+  status TEXT NOT NULL CHECK(status IN ('placed','produced','ambiguous')),
   observed_at INTEGER NOT NULL, PRIMARY KEY(uid,actor_id,task_key)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS egg_patrol_one_egg ON egg_patrol_observations(uid,actor_id) WHERE status='produced';
+-- 提醒节流：同一颗蛋 2 小时内不重复、当天最多 4 次；蛋收走后不再匹配，提醒自然停止
+CREATE TABLE IF NOT EXISTS egg_patrol_reminders (
+  uid TEXT NOT NULL, actor_id TEXT NOT NULL, task_key TEXT NOT NULL,
+  day TEXT NOT NULL, sent_today INTEGER NOT NULL DEFAULT 0, last_sent_at INTEGER NOT NULL,
+  PRIMARY KEY(uid,actor_id,task_key)
+);
 CREATE TABLE IF NOT EXISTS egg_patrol_notifications (
   id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES mother_groups(id) ON DELETE CASCADE,
   binding_version TEXT NOT NULL, trade_id TEXT NOT NULL, side TEXT NOT NULL,
   uid TEXT NOT NULL, actor_id TEXT NOT NULL, payload_json TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
   next_at INTEGER NOT NULL, lease_token TEXT NOT NULL DEFAULT '', lease_until INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL, sent_at INTEGER, error_code TEXT,
-  UNIQUE(group_id,trade_id,side,uid,actor_id)
+  created_at INTEGER NOT NULL, sent_at INTEGER, error_code TEXT
 );
 CREATE INDEX IF NOT EXISTS egg_patrol_notification_due ON egg_patrol_notifications(status,next_at,lease_until);

@@ -63,7 +63,7 @@ describe('小组清单临时状态', () => {
     expect(g2.result.current).toMatchObject({ query: '', view: 'missing' });
   });
 
-  test('换工具箱身份立即清旧临时态', () => {
+  test('换我的身份立即清旧临时态', () => {
     ensureGroupSession('A');
     const hook = renderHook(() => useGroupList('A', 'g1'));
     act(() => setGroupList('A', 'g1', { query: '火神' }));

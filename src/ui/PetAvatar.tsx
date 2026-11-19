@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { petAvatarUrl } from '../domain/petAvatar';
 
 /** 尺寸只允许这几档，用静态类名（Tailwind 不能拼字符串） */
-export type PetAvatarSize = 20 | 24 | 32 | 36 | 40 | 44 | 56 | 64 | 72;
+export type PetAvatarSize = 20 | 24 | 32 | 36 | 40 | 44 | 52 | 56 | 62 | 64 | 66 | 72;
 
 const SIZE_CLASS: Record<PetAvatarSize, string> = {
   20: 'h-5 w-5 text-[10px]',
@@ -11,8 +11,11 @@ const SIZE_CLASS: Record<PetAvatarSize, string> = {
   36: 'h-9 w-9 text-sm',
   40: 'h-10 w-10 text-sm',
   44: 'h-11 w-11 text-sm',
+  52: 'h-[52px] w-[52px] text-base',
   56: 'h-14 w-14 text-lg',
+  62: 'h-[62px] w-[62px] text-lg',
   64: 'h-16 w-16 text-lg',
+  66: 'h-[66px] w-[66px] text-lg',
   72: 'h-[4.5rem] w-[4.5rem] text-xl',
 };
 

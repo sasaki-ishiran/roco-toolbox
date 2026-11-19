@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="zh-Hans-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>看板 · 母本缺口 · 居中悬浮窗（预览）</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #eef2f6; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; }
+  .page { padding: 22px 16px 48px; }
+  .review { max-width: 880px; margin: 0 auto 22px; }
+  .review h1 { margin: 0 0 6px; font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+  .review p { margin: 0; max-width: 860px; font-size: 12.5px; line-height: 1.85; color: #475569; }
+  .review b { color: #047857; }
+  .rules { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .rule { border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; padding: 4px 9px; font-size: 11px; color: #475569; }
+  .compare { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .compare div { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 7px 10px; font-size: 11px; color: #64748b; }
+  .compare b { color: #0f172a; }
+  .stage { display: flex; align-items: flex-start; justify-content: center; gap: 26px; flex-wrap: wrap; }
+  .device { background: #0f172a; border-radius: 28px; padding: 7px; box-shadow: 0 20px 44px rgba(15, 23, 42, .2); }
+  .device-label { margin: 2px 0 6px; text-align: center; font-size: 10px; letter-spacing: .05em; color: #94a3b8; }
+  .phone { position: relative; width: 375px; height: 812px; overflow: hidden; border-radius: 22px; background: #f1f5f9; }
+  .phone[data-width="390"] { width: 390px; }
+
+  /* —— 真实 App 外框：标题栏 + 六入口 —— */
+  .appbar { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 12px; background: #fff; border-bottom: 1px solid #f1f5f9; }
+  .appbar b { font-size: 15px; font-weight: 800; }
+  .appbar .actions { display: flex; gap: 6px; }
+  .appbar .actions button { border: 0; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 11px; padding: 4px 10px; }
+  .tabs6 { display: flex; height: 40px; background: #fff; border-bottom: 1px solid #f1f5f9; }
+  .tabs6 button { flex: 1; border: 0; border-bottom: 2px solid transparent; background: none; color: #64748b; font-size: 13px; }
+  .tabs6 button.on { color: #047857; border-color: #059669; font-weight: 600; }
+  .screen { height: 728px; overflow-y: auto; padding: 10px 10px 26px; scrollbar-width: none; }
+  .screen::-webkit-scrollbar { width: 0; }
+
+  /* —— 看板顶部（只保留本次需要的上下文） —— */
+  .board-card { border-radius: 16px; background: #fff; padding: 10px; box-shadow: 0 1px 3px rgba(15, 23, 42, .07); }
+  .account-row { display: flex; align-items: center; gap: 7px; }
+  .account-row .label { flex-shrink: 0; font-size: 11px; color: #64748b; }
+  .select { display: flex; align-items: center; gap: 4px; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; font-size: 11px; color: #334155; }
+  .select span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mode { display: flex; flex-shrink: 0; padding: 2px; border-radius: 8px; background: #f1f5f9; }
+  .mode button { border: 0; border-radius: 6px; background: none; padding: 4px 7px; font-size: 10.5px; color: #64748b; }
+  .mode button.on { background: #059669; color: #fff; font-weight: 600; }
+  .grades { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; margin-top: 9px; }
+  .grade { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; height: 42px; border: 1px solid #d1fae5; border-radius: 9px; background: #ecfdf5; color: #065f46; font-size: 9.5px; line-height: 1.25; }
+  .grade span { white-space: nowrap; }
+  .grade small { font-size: 8.5px; color: #059669; }
+  .hint-line { margin: 6px 1px 0; font-size: 10px; line-height: 1.5; color: #94a3b8; }
+  .progress { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .progress-card { border-radius: 14px; background: #fff; padding: 9px 10px; box-shadow: 0 1px 3px rgba(15, 23, 42, .07); }
+  .progress-card h3 { margin: 0; font-size: 12px; font-weight: 600; color: #334155; }
+  .progress-card .num { margin-top: 2px; font-size: 15px; font-weight: 800; color: #0f172a; }
+  .progress-card .num small { font-size: 10px; font-weight: 500; color: #94a3b8; }
+  .progress-card .bar { height: 4px; margin-top: 5px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+  .progress-card .bar i { display: block; height: 100%; border-radius: inherit; background: #34d399; }
+  .segment { display: flex; gap: 3px; margin: 9px 0 7px; padding: 3px; border-radius: 10px; background: #e2e8f0; }
+  .segment button { flex: 1; height: 30px; border: 0; border-radius: 8px; background: none; font-size: 12px; color: #475569; }
+  .segment button.on { background: #fff; color: #047857; font-weight: 700; box-shadow: 0 1px 2px rgba(15, 23, 42, .08); }
+
+  /* —— 母本缺口：四列，图片略缩、名字放大 —— */
+  .gap-panel { border-radius: 16px; background: #fff; padding: 9px 8px 10px; box-shadow: 0 1px 3px rgba(15, 23, 42, .07); }
+  .gap-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 1px 7px; }
+  .gap-head b { font-size: 12px; color: #334155; }
+  .gap-head span { font-size: 10px; color: #94a3b8; }
+  .gap-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .gap-item { position: relative; height: 120px; min-width: 0; overflow: hidden; border: 1px solid #a7f3d0; border-radius: 11px; background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 78%); padding: 0; text-align: center; cursor: pointer; transition: border-color .12s, transform .12s; }
+  .gap-item:active { transform: scale(.97); border-color: #059669; }
+  .gap-item:focus-visible { outline: 2px solid #059669; outline-offset: 1px; }
+  .gap-item .no { position: absolute; left: 5px; top: 5px; font-size: 8px; font-weight: 600; color: #64748b; }
+  .gap-item .nat { position: absolute; right: 4px; top: 5px; border-radius: 3px; background: #fef3c7; color: #92400e; padding: 0 3px; font-size: 8.5px; line-height: 11px; font-weight: 600; }
+  .ava-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+  .ava-wrap .fb { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; border-radius: 10px; background: #e2e8f0; color: #64748b; font-weight: 700; }
+  .ava-wrap img { position: relative; object-fit: contain; }
+  .gap-item .ava-wrap { position: absolute; left: 50%; top: 24px; width: 52px; height: 52px; transform: translateX(-50%); }
+  .gap-item .ava-wrap img, .gap-item .ava-wrap .fb { width: 52px; height: 52px; }
+  .gap-item .ava-wrap .fb { font-size: 17px; }
+  .gap-item .name { position: absolute; left: 3px; right: 3px; top: 80px; height: 16px; font-size: 12px; line-height: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gap-item .groups { position: absolute; left: 3px; right: 3px; bottom: 4px; display: flex; justify-content: center; gap: 2px; overflow: hidden; }
+  .gap-item .groups span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 3px; background: #e0f2fe; color: #075985; padding: 0 2px; font-size: 8px; line-height: 11px; }
+
+  /* —— 居中悬浮窗 —— */
+  .modal-layer { position: absolute; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 14px; }
+  .modal-layer[hidden] { display: none; }
+  .backdrop { position: absolute; inset: 0; border: 0; background: rgba(15, 23, 42, .5); }
+  .modal { position: relative; display: flex; flex-direction: column; width: 100%; max-height: 92%; min-height: 30%; overflow: hidden; border-radius: 18px; background: #fff; box-shadow: 0 24px 60px rgba(15, 23, 42, .3); animation: modal-pop .18s ease-out; }
+  @keyframes modal-pop { from { transform: scale(.96); opacity: .65; } to { transform: scale(1); opacity: 1; } }
+  .modal-head { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px 0; }
+  .modal-head .eyebrow { margin: 0 0 1px; font-size: 10px; font-weight: 600; letter-spacing: .04em; color: #059669; }
+  .modal-head h2 { margin: 0; font-size: 19px; line-height: 25px; font-weight: 800; letter-spacing: -.01em; }
+  .modal-head h2 small { margin-left: 4px; font-size: 10px; font-weight: 500; color: #94a3b8; letter-spacing: 0; }
+  .close { position: absolute; top: 9px; right: 9px; z-index: 5; width: 30px; height: 30px; border: 0; border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 17px; line-height: 1; }
+  .modal-scroll { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 12px 16px; scrollbar-width: none; }
+  .modal-body { margin: 0; }
+  .modal-scroll::-webkit-scrollbar { width: 0; }
+
+  /* —— 上方目标精灵：与配窝卡同款 —— */
+  .target-row { display: flex; gap: 9px; align-items: stretch; padding: 6px 0 7px; border-bottom: 1px solid #f1f5f9; }
+  .target-row .petcard { width: 160px; flex-shrink: 0; }
+  .target-meta { display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; }
+  .target-meta .count { margin: 0; font-size: 13px; font-weight: 800; color: #0f172a; }
+  .target-meta p { margin: 0; font-size: 10px; line-height: 1.55; color: #64748b; }
+  .target-meta .small { color: #94a3b8; }
+
+  /* —— 配窝卡同款：86px，头像 44，蛋组 / 奖牌 / 性格 / dB / 身高体重 / 盒位 —— */
+  .petcard { position: relative; height: 86px; overflow: hidden; border-radius: 10px; border: 1px solid #fbcfe8; background: #fdf2f8; padding: 4px; }
+  .petcard.male { border-color: #bae6fd; background: #f0f9ff; }
+  .petcard.target { border-color: #fbcfe8; background: #fdf2f8; }
+  .petcard .left { position: absolute; left: 5px; top: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; max-width: 54%; }
+  .petcard .g { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 3px; background: #e0f2fe; color: #075985; padding: 0 3px; font-size: 8px; line-height: 11px; }
+  .petcard .medals { display: flex; align-items: center; gap: 2px; margin-top: 1px; }
+  .petcard .medals img { width: 13px; height: 13px; object-fit: contain; filter: drop-shadow(0 1px 1px rgba(15, 23, 42, .12)); }
+  .petcard .right { position: absolute; right: 5px; top: 5px; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: 9px; line-height: 11px; color: #64748b; }
+  .petcard .right .nat { display: flex; align-items: center; gap: 1px; }
+  .petcard .right .natb { display: inline-flex; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 2px; background: #fef3c7; color: #78350f; padding: 0 2px; font-size: 9px; line-height: 11px; font-weight: 600; }
+  .petcard .gm { display: inline-flex; width: 11px; height: 11px; align-items: center; justify-content: center; border-radius: 999px; font-size: 8px; line-height: 1; }
+  .petcard .gm.f { background: #fce7f3; color: #db2777; }
+  .petcard .gm.m { background: #e0f2fe; color: #0369a1; }
+  .petcard .tag { border-radius: 2px; padding: 0 3px; font-size: 8.5px; line-height: 11px; }
+  .petcard .tag.amber { background: #fef3c7; color: #92400e; font-weight: 600; }
+  .petcard .tag.rose { background: #fff1f2; color: #be123c; font-weight: 600; }
+  .petcard .ava-wrap { position: absolute; left: 50%; top: 6px; width: 44px; height: 44px; transform: translateX(-50%); }
+  .petcard .ava-wrap img, .petcard .ava-wrap .fb { width: 44px; height: 44px; }
+  .petcard .ava-wrap .fb { font-size: 15px; border-radius: 8px; }
+  .petcard .name { margin: 0; position: absolute; left: 4px; right: 4px; top: 55px; font-size: 11px; line-height: 14px; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #0f172a; }
+  .petcard .box { margin: 0; position: absolute; left: 4px; right: 4px; top: 71px; font-size: 8.5px; line-height: 11px; text-align: center; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* —— 小组求助：常驻入口，不占配法排序 —— */
+  .group-help { margin-top: 6px; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 12px; background: #fffbeb; padding: 7px 9px; }
+  .gh-top { display: flex; align-items: center; gap: 5px; }
+  .gh-type { border-radius: 4px; background: #fef3c7; color: #92400e; padding: 1px 6px; font-size: 10px; line-height: 16px; font-weight: 700; }
+  .gh-tag { border-radius: 4px; border: 1px solid #fde68a; background: #fff; color: #b45309; padding: 0 5px; font-size: 9px; line-height: 15px; font-weight: 600; }
+  .gh-pct { margin-left: auto; font-size: 10px; font-weight: 700; color: #b45309; white-space: nowrap; }
+  .gh-text { margin: 4px 0 0; font-size: 10px; line-height: 1.6; color: #92400e; }
+  .gh-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .gh-chips span { border-radius: 999px; border: 1px solid #fde68a; background: #fff; padding: 0 5px; font-size: 9px; line-height: 14px; color: #b45309; }
+  .gh-action { margin-top: 5px; min-height: 28px; padding: 0 10px; border: 1px solid #fbbf24; border-radius: 8px; background: #fff; color: #b45309; font-size: 10.5px; font-weight: 700; }
+  .gh-action:active { background: #fffbeb; }
+  .group-help.compact { display: flex; align-items: center; gap: 5px; padding: 7px 9px; }
+  .gh-compact-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: #92400e; }
+  .gh-link { margin-left: auto; flex-shrink: 0; min-height: 28px; border: 0; background: none; padding: 0 0 0 6px; color: #b45309; font-size: 10px; font-weight: 700; }
+  .no-pair { margin: 7px 1px 0; font-size: 10px; line-height: 1.6; color: #94a3b8; }
+
+  /* —— 补法 —— */
+  .routes-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 7px 1px 5px; }
+  .routes-head h3 { margin: 0; font-size: 13px; font-weight: 700; color: #334155; }
+  .routes-head span { font-size: 10px; color: #94a3b8; }
+  .routes { list-style: none; margin: 0; padding: 0; }
+  .route { border: 1px solid #e2e8f0; border-left: 4px solid #94a3b8; border-radius: 12px; background: #fff; padding: 6px 8px 5px; }
+  .route + .route { margin-top: 6px; }
+  .route.self { border-left-color: #059669; }
+  .route.transfer { border-left-color: #0284c7; }
+  .route.help { border-left-color: #d97706; }
+  .route-top { display: flex; align-items: center; gap: 5px; }
+  .rank { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 9px; font-weight: 700; }
+  .type { border-radius: 4px; padding: 1px 6px; font-size: 10px; line-height: 16px; font-weight: 700; }
+  .type.self { background: #ecfdf5; color: #047857; }
+  .type.transfer { background: #f0f9ff; color: #0369a1; }
+  .type.help { background: #fffbeb; color: #b45309; }
+  .pct { margin-left: auto; font-size: 20px; line-height: 20px; font-weight: 800; letter-spacing: -.02em; color: #b45309; }
+  .route.transfer .pct { color: #0369a1; }
+  .route.self .pct { color: #047857; }
+  .pct small { margin-left: 1px; font-size: 9px; font-weight: 600; letter-spacing: 0; }
+  .formula { margin: 2px 0 0 21px; font-size: 10px; color: #94a3b8; }
+  .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 6px; }
+  .flow { margin: 5px 0 0; text-align: center; font-size: 10.5px; font-weight: 600; color: #0369a1; }
+  .note { margin: 3px 0 0; font-size: 10px; line-height: 1.55; color: #64748b; }
+  .note b { color: #334155; }
+  .helpbox { display: flex; gap: 7px; align-items: flex-start; margin-top: 6px; padding: 7px 8px; border-radius: 9px; background: #fffbeb; }
+  .helpbox .ic { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 999px; background: #f59e0b; color: #fff; font-size: 10px; font-weight: 800; }
+  .helpbox p { margin: 0; font-size: 10px; line-height: 1.55; color: #92400e; }
+  .route-action { display: inline-flex; align-items: center; justify-content: center; min-height: 26px; margin-top: 5px; padding: 0 10px; border: 1px solid #d1fae5; border-radius: 8px; background: #fff; color: #047857; font-size: 10.5px; font-weight: 600; }
+  .route.transfer .route-action { border-color: #bae6fd; color: #0369a1; }
+  .route.help .route-action { border-color: #fde68a; color: #b45309; }
+  .route-action:active { background: #f8fafc; }
+  .empty { padding: 18px 10px 8px; text-align: center; }
+  .empty h3 { margin: 0 0 3px; font-size: 13px; }
+  .empty p { margin: 0; font-size: 10.5px; line-height: 1.6; color: #94a3b8; }
+  .empty .actions { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+  .empty .actions button { min-height: 29px; padding: 0 10px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; color: #475569; font-size: 10.5px; }
+  .empty .actions button.primary { border-color: #a7f3d0; background: #ecfdf5; color: #047857; font-weight: 600; }
+  .modal-foot { margin: 6px 1px 0; font-size: 9.5px; line-height: 1.6; color: #94a3b8; }
+
+  /* —— 新结构：目标卡 + 小组求助卡；下方只留概率 + 配窝卡 —— */
+  .top-row { display: flex; gap: 8px; margin-top: 7px; }
+  .top-row .petcard { width: 160px; flex-shrink: 0; }
+  .help-card { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 10px; background: #fffbeb; padding: 6px 7px; }
+  .hc-top { display: flex; align-items: center; gap: 4px; }
+  .hc-type { font-size: 13px; font-weight: 800; color: #92400e; }
+  .hc-tag { border: 1px solid #fde68a; border-radius: 3px; background: #fff; padding: 0 4px; font-size: 8.5px; line-height: 13px; font-weight: 600; color: #b45309; }
+  .hc-main { margin: 2px 0 0; font-size: 10.5px; line-height: 1.4; font-weight: 700; color: #92400e; }
+  .hc-sub { margin: 1px 0 0; font-size: 9px; line-height: 1.35; color: #b45309; }
+  .hc-action { margin-top: 3px; align-self: flex-end; min-height: 22px; border: 0; background: none; padding: 0; color: #b45309; font-size: 10px; font-weight: 700; }
+  .route-list { margin-top: 8px; }
+  .unpairable { display: flex; align-items: center; justify-content: center; gap: 5px; margin: 8px 0 0; padding: 5px 8px; border: 1px solid #fca5a5; border-left: 3px solid #ef4444; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-size: 10.5px; font-weight: 600; text-align: center; }
+  .unpairable .ic { display: inline-flex; flex-shrink: 0; width: 14px; height: 14px; align-items: center; justify-content: center; border-radius: 999px; background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; line-height: 1; }
+  .route-block { border-left: 4px solid #059669; border-radius: 12px; background: #f8fafc; padding: 7px 8px 6px; }
+  .route-block + .route-block { margin-top: 8px; }
+  .route-block.transfer { border-left-color: #0284c7; }
+  .rb-top { display: flex; align-items: center; gap: 6px; }
+  .rb-name { font-size: 11px; font-weight: 700; color: #047857; }
+  .route-block.transfer .rb-name { color: #0369a1; }
+  .rb-flow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; color: #64748b; }
+  .rb-pct { margin-left: auto; font-size: 18px; line-height: 18px; font-weight: 800; color: #047857; }
+  .route-block.transfer .rb-pct { color: #0369a1; }
+  .rb-pct.muted { font-size: 15px; color: #cbd5e1; }
+  .route-block .pair { margin-top: 5px; }
+  .rb-foot { display: flex; justify-content: flex-end; margin-top: 5px; }
+  .rb-add { min-height: 28px; padding: 0 10px; border: 1px solid #a7f3d0; border-radius: 8px; background: #fff; color: #047857; font-size: 10.5px; font-weight: 700; }
+  .route-block.transfer .rb-add { border-color: #bae6fd; color: #0369a1; }
+  .rb-add:active { background: #f8fafc; }
+  .rb-missing { display: flex; align-items: center; justify-content: center; min-height: 52px; margin-top: 5px; border: 1px dashed #e2e8f0; border-radius: 10px; background: #fff; color: #94a3b8; font-size: 10.5px; }
+
+  .toast { position: absolute; left: 50%; bottom: 34px; z-index: 80; transform: translate(-50%, 8px); max-width: 82%; border-radius: 999px; background: rgba(15, 23, 42, .9); color: #fff; padding: 8px 14px; font-size: 11px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="review">
+    <h1>看板 · 母本缺口：四列卡 + 居中悬浮窗</h1>
+    <p>
+      按这轮意见改：看板四列不变（头像 52、名字 12）；悬浮窗居中，<b>目标精灵卡改成母性粉底</b>，
+      小组求助卡放在它右侧、<b>字号放大</b>，下面那句说明移除，只留概率 / 状态和「去求蛋」；
+      下方只留 <b>本号直配 / 跨号传蛋</b> 两段——概率 + 配窝卡 + 右下「加入配窝建议」；少母一段能补就保留两段；两段都补不了时不再画两个空框，改成<b>红框感叹号 + 「本号、跨号都无法配对」</b>。
+      数字、账号、盒位为示例；卡片只画 12 张。
+    </p>
+    <div class="rules">
+      <span class="rule">① 四列 · 头像 52 · 名字 12</span>
+      <span class="rule">② 精灵卡母性粉底；求助字号放大</span>
+      <span class="rule">③ 下方只留概率 + 配窝卡</span>
+      <span class="rule">④ 配窝卡右下「加入配窝建议」</span>
+      <span class="rule">⑤ 两段都补不了 → 红框感叹号「本号、跨号都无法配对」</span>
+    </div>
+    <div class="compare">
+      <div>现状：<b>4 列</b> · 头像 44px · 名字 6px</div>
+      <div>本稿：<b>4 列</b> · 头像 52px · 名字 12px</div>
+      <div>悬浮窗：目标卡 + 求助卡并排；下方两段配窝卡</div>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="device" id="frame-375">
+      <p class="device-label">375 · 看板 · 母本缺口</p>
+      <div class="phone" data-width="375" data-phone></div>
+    </div>
+    <div class="device" id="frame-390">
+      <p class="device-label">390 · 看板 · 母本缺口</p>
+      <div class="phone" data-width="390" data-phone></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const EGG_GROUPS = { 2: '巨灵组', 3: '两栖组', 4: '昆虫组', 5: '天空组', 6: '动物组', 7: '妖精组', 8: '植物组', 9: '拟人组', 10: '软体组', 11: '大地组', 12: '魔力组', 13: '海洋组', 14: '飞龙组', 15: '机械组' };
+  const AVATAR = (id) => `https://game.gtimg.cn/images/rocom/rocodata/jingling/${id}/icon.png`;
+  const MEDAL = (file) => `../../public/ui/medals/${file}`;
+  const GROUPS_BY_ID = {
+    3001: [6, 9], 3002: [12], 3003: [12, 2], 3008: [3, 5], 3010: [7], 3012: [5], 3020: [6],
+    3049: [9, 2], 3058: [4, 5], 3083: [2, 9], 3112: [7, 10], 3118: [13, 12], 3121: [7, 9],
+    3142: [9, 7], 3264: [7], 3344: [5, 3], 3754: [2, 9],
+  };
+
+  /** 一只精灵卡上的数据；奖牌默认按已选目标给「大块头 + 婉转声」。 */
+  const pet = (name, id, gender, nature, db, box, weight = 100) => ({
+    name, id, gender, nature, db, box,
+    groups: GROUPS_BY_ID[id] || [],
+    medalBody: '大块头',
+    height: 100,
+    weight,
+  });
+
+  /** 示例数据：账号 / 盒位 / 数值都是示意，口径按当前领域规则。 */
+  const MOTHERS = [
+    {
+      id: 3002, no: '008', name: '水蓝蓝', natures: ['聪明'], groups: [12],
+      routes: [
+        {
+          type: 'self', pct: 30, nature: 30, female: 100,
+          mother: pet('水蓝蓝', 3002, '母', '大胆', 100, '昭昭 · 盒子 03 第 1 位'),
+          father: pet('果冻', 3118, '公', '聪明', 100, '昭昭 · 盒子 07 第 2 位'),
+          note: '本号这只只差性格（大胆 → 聪明）；这条线占 2 个窝。',
+          action: '去配窝',
+        },
+        {
+          type: 'transfer', pct: 30, nature: 30, female: 100,
+          source: '云舟', target: '昭昭',
+          mother: pet('水蓝蓝', 3002, '母', '大胆', 100, '云舟 · 盒子 02 第 1 位'),
+          father: pet('果冻', 3118, '公', '聪明', 100, '云舟 · 盒子 07 第 2 位'),
+          note: '云舟这只母本只差性格（大胆 → 聪明）；纯母蛋出母 100%，30% 过线，蛋传过来孵。',
+          action: '去补全计划',
+        },
+      ],
+    },
+    {
+      id: 3003, no: '005', name: '火花', natures: ['固执', '开朗'], groups: [12, 2],
+      routes: [
+        {
+          type: 'help', pct: 12, nature: 60, female: 20, academyPct: 20,
+          note: '火花 4:1、出母 20%，所有号都一样：普通配对 12% 对性母，学院小窝也只有 20%，都到不了 30%。',
+          action: '去小组求助',
+        },
+      ],
+    },
+    {
+      id: 3010, no: '030', name: '恶魔叮', natures: ['开朗', '固执', '平和'], groups: [7],
+      routes: [
+        {
+          type: 'help', pct: 15, nature: 30, female: 50,
+          note: '单对最好 15%；不占窝。',
+          action: '去小组求助',
+        },
+      ],
+    },
+    { id: 3020, no: '277', name: '地鼠', natures: ['平和'], groups: [6], routes: [] },
+    {
+      id: 3001, no: '002', name: '喵喵', natures: ['踏实', '开朗'], groups: [6, 9],
+      routes: [
+        {
+          type: 'help', pct: 15, nature: 30, female: 50,
+          note: '单对最好 15%；不占窝。',
+          action: '去小组求助',
+        },
+      ],
+    },
+    {
+      id: 3049, no: '073', name: '白发懒人', natures: ['平和', '固执'], groups: [9, 2],
+      routes: [
+        {
+          type: 'help', pct: 15, nature: 30, female: 50,
+          note: '单对最好 15%；不占窝。',
+          action: '去小组求助',
+        },
+      ],
+    },
+    {
+      id: 3754, no: '393', name: '火豆丁', natures: ['固执'], groups: [2, 9],
+      routes: [
+        {
+          type: 'help', pct: 15, nature: 30, female: 50,
+          note: '单对最好 15%；不占窝。',
+          action: '去小组求助',
+        },
+      ],
+    },
+    {
+      id: 3058, no: '082', name: '一窝蜂', natures: ['开朗'], groups: [4, 5], missing: { transfer: 'father' },
+      routes: [
+        {
+          type: 'self', pct: 30, nature: 30, female: 100,
+          mother: pet('一窝蜂', 3058, '母', '大胆', 100, '昭昭 · 盒子 04 第 4 位'),
+          father: pet('草头鸭', 3008, '公', '开朗', 100, '昭昭 · 盒子 08 第 1 位'),
+          note: '纯母蛋，出母 100%；本号只差性格，占 2 个窝就能补。',
+          action: '去配窝',
+        },
+      ],
+    },
+    {
+      id: 3112, no: '185', name: '甜田螺', natures: ['固执', '调皮'], groups: [7, 10],
+      routes: [
+        {
+          type: 'self', pct: 30, nature: 30, female: 100,
+          mother: pet('甜田螺', 3112, '母', '大胆', 100, '昭昭 · 盒子 09 第 2 位'),
+          father: pet('卡波', 3264, '公', '固执', 100, '昭昭 · 盒子 11 第 3 位'),
+          note: '纯母蛋，本号只差性格；出母 100%，30% 已经过线。',
+          action: '去配窝',
+        },
+      ],
+    },
+    {
+      id: 3121, no: '142', name: '大耳帽兜', natures: ['平和', '固执'], groups: [7, 9],
+      routes: [
+        {
+          type: 'transfer', pct: 30, nature: 30, female: 100,
+          source: '云舟', target: '昭昭',
+          mother: pet('大耳帽兜', 3121, '母', '大胆', 100, '云舟 · 盒子 03 第 2 位'),
+          father: pet('恶魔叮', 3010, '公', '平和', 100, '云舟 · 盒子 10 第 1 位'),
+          note: '云舟这只母本只差性格；纯母蛋出母 100%，30% 过线。',
+          action: '去补全计划',
+        },
+      ],
+    },
+    {
+      id: 3142, no: '085', name: '小夜', natures: ['固执'], groups: [9, 7],
+      routes: [
+        {
+          type: 'self', pct: 30, nature: 30, female: 100,
+          mother: pet('小夜', 3142, '母', '胆小', 100, '昭昭 · 盒子 12 第 1 位'),
+          father: pet('恶魔叮', 3010, '公', '固执', 100, '昭昭 · 盒子 10 第 1 位'),
+          note: '纯母蛋，出母 100%；本号只差性格，占 2 个窝。',
+          action: '去配窝',
+        },
+      ],
+    },
+    {
+      id: 3344, no: '088', name: '乖乖鹄', natures: ['平和', '开朗'], groups: [5, 3],
+      routes: [
+        {
+          type: 'transfer', pct: 30, nature: 30, female: 100,
+          source: '云舟', target: '昭昭',
+          mother: pet('乖乖鹄', 3344, '母', '胆小', 100, '云舟 · 盒子 01 第 4 位'),
+          father: pet('鸭吉吉', 3012, '公', '开朗', 100, '云舟 · 盒子 05 第 2 位'),
+          note: '云舟这只母本只差性格；纯母蛋出母 100%，30% 过线。',
+          action: '去补全计划',
+        },
+      ],
+    },
+  ];
+
+  const fmtPct = (n) => `${Math.round(n)}%`;
+
+  function avatar(id, name, cls = '') {
+    const first = (name || '?').slice(0, 1);
+    return `<span class="ava-wrap ${cls}"><img src="${AVATAR(id)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="fb">${first}</span></span>`;
+  }
+
+  function cardHtml(mother) {
+    const groups = mother.groups.slice(0, 2).map((g) => `<span>${EGG_GROUPS[g] || '未分组'}</span>`).join('');
+    return `
+      <button type="button" class="gap-item" data-id="${mother.id}" aria-label="${mother.name}，推荐性格 ${mother.natures.join('、')}，点击看怎么补">
+        <span class="no">No.${mother.no}</span>
+        <span class="nat">${mother.natures[0] || '—'}</span>
+        ${avatar(mother.id, mother.name)}
+        <span class="name" title="${mother.name}">${mother.name}</span>
+        <span class="groups">${groups}</span>
+      </button>`;
+  }
+
+  function medalIcons(p) {
+    const body = p.medalBody === '大块头'
+      ? (p.weight >= 100 ? '1001-max.png' : '1001.png')
+      : p.medalBody === '小不点'
+        ? (p.weight <= 0 ? '1002-min.png' : '1002.png')
+        : null;
+    const voice = p.db >= 100 ? '1026-max.png' : p.db <= -100 ? '1025-max.png' : p.db >= 96 ? '1026.png' : p.db <= -96 ? '1025.png' : null;
+    return `<span class="medals">${body ? `<img src="${MEDAL(body)}" alt="${p.medalBody}" title="${p.medalBody}">` : ''}${voice ? `<img src="${MEDAL(voice)}" alt="" title="声音 ${p.db}dB">` : ''}</span>`;
+  }
+
+  function groupTags(groups) {
+    return groups.map((g) => `<span class="g">${EGG_GROUPS[g] || '未分组'}</span>`).join('');
+  }
+
+  /** 配窝卡同款：86px 高，44px 头像，带蛋组 / 奖牌 / 性格 / dB / 身高体重 / 盒位 */
+  function petCardHtml(p) {
+    const gender = p.gender === '母' ? 'f' : 'm';
+    return `
+      <article class="petcard ${p.gender === '母' ? 'female' : 'male'}">
+        <div class="left">${groupTags(p.groups)}${medalIcons(p)}</div>
+        <div class="right">
+          <span class="nat"><i class="gm ${gender}">${p.gender === '母' ? '♀' : '♂'}</i><b class="natb">${p.nature}</b></span>
+          <span>${p.db}dB</span>
+          <span>高${p.height}%</span>
+          <span>重${p.weight}%</span>
+        </div>
+        ${avatar(p.id, p.name)}
+        <h4 class="name" title="${p.name}">${p.name}</h4>
+        <p class="box" title="${p.box}">${p.box}</p>
+      </article>`;
+  }
+
+  /** 上方目标精灵卡：同款卡，奖牌是外面选的目标；没有盒位，写目标 + 未收集 */
+  function targetCardHtml(mother) {
+    return `
+      <article class="petcard target">
+        <div class="left">${groupTags(mother.groups)}<span class="medals"><img src="${MEDAL('1001-max.png')}" alt="大块头" title="大块头"><img src="${MEDAL('1026-max.png')}" alt="婉转声" title="婉转声"></span></div>
+        <div class="right">
+          ${mother.natures.slice(0, 2).map((n) => `<span class="tag amber">${n}</span>`).join('')}
+          <span class="tag rose">未收集</span>
+        </div>
+        ${avatar(mother.id, mother.name)}
+        <h4 class="name" title="${mother.name}">${mother.name}</h4>
+        <p class="box">目标 大块头 · 婉转声</p>
+      </article>`;
+  }
+
+  function helpCardHtml(help, readyRoutes) {
+    const count = readyRoutes.length;
+    const best = count ? Math.round(Math.max(...readyRoutes.map((route) => route.pct))) : null;
+    let main;
+    if (help.pct != null) {
+      main = help.academyPct != null
+        ? `对性母 ${Math.round(help.pct)}% · 学院 ${Math.round(help.academyPct)}%`
+        : `对性母 ${Math.round(help.pct)}%`;
+    } else if (count > 0) {
+      main = `已有 ${count} 条 ${best}% 的线`;
+    } else {
+      main = '';
+    }
+    return `
+      <div class="help-card">
+        <div class="hc-top"><span class="hc-type">小组求助</span></div>
+        ${main ? `<p class="hc-main">${main}</p>` : ''}
+        <button type="button" class="hc-action" data-toast="示意：打开小组求助">去求蛋 ›</button>
+      </div>`;
+  }
+
+  function routeBlockHtml(mother, type) {
+    const route = mother.routes.find((item) => item.type === type);
+    const name = type === 'self' ? '本号直配' : '跨号传蛋';
+    if (!route) {
+      const missing = (mother.missing && mother.missing[type]) || 'mother';
+      return `
+        <section class="route-block ${type} missing">
+          <div class="rb-top"><span class="rb-name">${name}</span><span class="rb-pct muted">—</span></div>
+          <div class="rb-missing">无对应${missing === 'father' ? '种公' : '母本'}</div>
+        </section>`;
+    }
+    const flow = type === 'transfer' ? `<span class="rb-flow">${route.source} → ${route.target}</span>` : '';
+    return `
+      <section class="route-block ${type}">
+        <div class="rb-top">
+          <span class="rb-name">${name}</span>
+          ${flow}
+          <span class="rb-pct">${Math.round(route.pct)}%</span>
+        </div>
+        <div class="pair">${petCardHtml(route.mother)}${petCardHtml(route.father)}</div>
+        <div class="rb-foot"><button type="button" class="rb-add" data-toast="示意：加入配窝建议">加入配窝建议</button></div>
+      </section>`;
+  }
+
+  function modalHtml(mother) {
+    const ready = mother.routes.filter((route) => route.type === 'self' || route.type === 'transfer');
+    const help = mother.routes.find((route) => route.type === 'help') || { type: 'help', pct: null };
+    const routeBody = ready.length === 0
+      ? '<p class="unpairable"><span class="ic" aria-hidden="true">!</span>本号、跨号都无法配对</p>'
+      : `${routeBlockHtml(mother, 'self')}${routeBlockHtml(mother, 'transfer')}`;
+    return `
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">母本缺口 · 怎么补</p>
+          <h2>${mother.name}<small>No.${mother.no}</small></h2>
+        </div>
+        <button type="button" class="close" data-close aria-label="关闭">×</button>
+      </div>
+      <div class="modal-scroll">
+        <div class="modal-body">
+          <div class="top-row">
+            ${targetCardHtml(mother)}
+            ${helpCardHtml(help, ready)}
+          </div>
+          <div class="route-list">
+            ${routeBody}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function mountPhone(root) {
+    const width = root.dataset.width;
+    root.innerHTML = `
+      <header class="appbar">
+        <b>小布助手</b>
+        <span class="actions"><button type="button">刷新</button><button type="button">教程</button></span>
+      </header>
+      <nav class="tabs6" aria-label="主导航">
+        <button type="button" class="on">看板</button>
+        <button type="button">家园</button>
+        <button type="button">收集</button>
+        <button type="button">附近</button>
+        <button type="button">小组</button>
+        <button type="button">我的</button>
+      </nav>
+      <div class="screen" data-screen>
+        <section class="board-card">
+          <div class="account-row">
+            <span class="label">账号</span>
+            <button type="button" class="select"><span>昭昭、云舟 (2/2)</span><span>⌄</span></button>
+            <div class="mode"><button type="button" class="on">追满分</button><button type="button">追双牌</button></div>
+          </div>
+          <div class="grades">
+            <button type="button" class="grade"><span>大块头</span><span>婉转声</span><small>目标</small></button>
+            <button type="button" class="grade"><span>大块头</span><span>粗嗓门</span></button>
+            <button type="button" class="grade"><span>小不点</span><span>婉转声</span></button>
+            <button type="button" class="grade"><span>小不点</span><span>粗嗓门</span></button>
+          </div>
+          <p class="hint-line">追满分即满声：婉转声 +100、粗嗓门 -100。</p>
+        </section>
+
+        <div class="progress">
+          <section class="progress-card">
+            <h3>种公全收集</h3>
+            <p class="num">0 <small>/ 14 组</small></p>
+            <div class="bar"><i style="width:0%"></i></div>
+          </section>
+          <section class="progress-card">
+            <h3>母本全收集</h3>
+            <p class="num">3 <small>/ 208 只</small></p>
+            <div class="bar"><i style="width:1.4%"></i></div>
+          </section>
+        </div>
+
+        <div class="segment" role="tablist" aria-label="看板行动">
+          <button type="button" role="tab" aria-selected="false">种公推荐</button>
+          <button type="button" role="tab" aria-selected="true" class="on">母本缺口</button>
+        </div>
+
+        <section class="gap-panel">
+          <div class="gap-head">
+            <b>205 只未收集</b>
+            <span>点卡片看怎么补</span>
+          </div>
+          <div class="gap-grid">${MOTHERS.map(cardHtml).join('')}</div>
+        </section>
+      </div>
+      <div class="modal-layer" hidden>
+        <button type="button" class="backdrop" data-close aria-label="关闭悬浮窗"></button>
+        <section class="modal" role="dialog" aria-modal="true" aria-label="母本缺口补法"></section>
+      </div>
+      <div class="toast" role="status"></div>`;
+
+    const screen = root.querySelector('[data-screen]');
+    const layer = root.querySelector('.modal-layer');
+    const modal = root.querySelector('.modal');
+    const toast = root.querySelector('.toast');
+    let toastTimer = 0;
+
+    const showToast = (text) => {
+      toast.textContent = text;
+      toast.classList.add('show');
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => toast.classList.remove('show'), 1600);
+    };
+
+    const close = () => {
+      layer.hidden = true;
+      root.querySelectorAll('[data-id]').forEach((el) => el.removeAttribute('aria-expanded'));
+    };
+
+    const open = (mother) => {
+      modal.innerHTML = modalHtml(mother);
+      layer.hidden = false;
+      const scroll = modal.querySelector('.modal-scroll');
+      if (scroll) scroll.scrollTop = 0;
+      root.querySelectorAll('[data-id]').forEach((el) => {
+        el.setAttribute('aria-expanded', el.dataset.id === String(mother.id) ? 'true' : 'false');
+      });
+    };
+
+    root.addEventListener('click', (event) => {
+      const card = event.target.closest('[data-id]');
+      if (card) {
+        const mother = MOTHERS.find((item) => String(item.id) === card.dataset.id);
+        if (mother) open(mother);
+        return;
+      }
+      if (event.target.closest('[data-close]')) {
+        close();
+        return;
+      }
+      const toastButton = event.target.closest('[data-toast]');
+      if (toastButton) showToast(toastButton.dataset.toast);
+    });
+
+    root.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !layer.hidden) close();
+    });
+  }
+
+  document.querySelectorAll('[data-phone]').forEach(mountPhone);
+</script>
+</body>
+</html>

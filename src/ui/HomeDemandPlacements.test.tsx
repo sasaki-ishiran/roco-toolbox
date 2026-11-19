@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   state: {
     accountId: 'me' as string | null,
     items: [] as Array<Record<string, unknown>>,
+    names: new Map<string, string>(),
     loading: false,
     error: '',
     reload: () => {},
@@ -102,7 +103,7 @@ const renderPanel = (pets: OwnedPet[]) =>
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
-  h.state = { accountId: 'me', items: [], loading: false, error: '', reload: () => {} };
+  h.state = { accountId: 'me', items: [], names: new Map(), loading: false, error: '', reload: () => {} };
 });
 
 describe('家园 · 接单上窝', () => {
@@ -221,15 +222,15 @@ describe('家园 · 接单上窝', () => {
     ]);
 
     // 第二条单默认是「双亲同性格」的 30%（60% × 性别 50%）；同档两对，30% 的那对（15%）不列
-    expect(screen.getAllByTestId('home-demand-chance')[1]).toHaveTextContent('约 30%');
+    expect(screen.getAllByTestId('home-demand-chance')[1]).toHaveTextContent('30%开朗');
     expect(screen.getAllByTestId('home-demand-badge')[1]).toHaveTextContent('换配对 2');
-    expect(screen.queryByText(/约 15%/)).toBeNull();
+    expect(screen.queryByText(/15%/)).toBeNull();
 
     fireEvent.click(screen.getAllByTestId('home-demand-badge')[1]);
     fireEvent.click(screen.getByTestId('home-demand-use-option-1'));
 
     // 换成同档的另一对：概率不变，种公换成第二只
-    expect(screen.getAllByTestId('home-demand-chance')[1]).toHaveTextContent('约 30%');
+    expect(screen.getAllByTestId('home-demand-chance')[1]).toHaveTextContent('30%开朗');
     expect(screen.getAllByTestId('home-demand-row')[1]).toHaveTextContent('开朗公乙');
   });
 
@@ -367,27 +368,24 @@ describe('家园 · 接单上窝', () => {
     const frame = frames[0];
     expect(frame.className).toContain('border-emerald-300');
     expect(frame.className).toContain('pointer-events-none');
-    // 尺寸盖住卡片缩放后的外沿（141.6×106.2 + 2px×2）
-    expect(frame.style.width).toBe('146px');
-    expect(frame.style.height).toBe('110px');
+    // 已在家园的徽标下移到卡底，居中
+    expect(screen.getByTestId('home-demand-inhome')).toHaveTextContent('已在家园');
   });
 
-  test('两张亲本卡在 375 宽的行内并排放得下，不再需要横向滚动（2026-11-01 用户反馈）', () => {
+  test('两张亲本卡在行内并排放得下，不再需要横向滚动', () => {
     h.state.items = [demandItem()];
     renderPanel([
       pet({ gameId: egg.gameId, gender: '母', captureId: 'cap_academy' }),
       pet({ gameId: fatherSpecies.gameId, gender: '公' }),
     ]);
 
-    const boxes = screen.getAllByTestId('home-demand-parent-box');
-    expect(boxes).toHaveLength(2);
-    const total = boxes.reduce((sum, box) => sum + Number.parseFloat(box.style.width), 0);
-    // 375 屏宽下：375 - 页面 32 - 区块 32 - 行边框 2 - 行内边距 16 = 293，间距 8
-    expect(total + 8).toBeLessThanOrEqual(293);
-    expect(screen.getByTestId('home-demand-parent-row').className).not.toContain('overflow-x-auto');
+    const cards = screen.getAllByTestId('home-demand-parent');
+    expect(cards).toHaveLength(2);
+    // 母本、种公各占网格一列，同一行并排
+    expect(cards[0].parentElement?.className).not.toContain('overflow-x-auto');
   });
 
-  test('提示按可孵出概率配色：学院方案 50% 绿', () => {
+  test('学院方案概率头：50%固执', () => {
     h.state.items = [demandItem()];
     renderPanel([
       pet({ gameId: egg.gameId, gender: '母', nature: '固执', captureId: 'cap_academy' }),
@@ -395,11 +393,10 @@ describe('家园 · 接单上窝', () => {
     ]);
 
     const chance = screen.getByTestId('home-demand-chance');
-    expect(chance).toHaveTextContent('约 50%');
-    expect(chance.className).toContain('text-emerald-700');
+    expect(chance).toHaveTextContent('50%固执');
   });
 
-  test('双亲同性格时 30% 概率，提示用黄色', () => {
+  test('双亲同性格时概率头 30%', () => {
     // 先来的单占掉学院小窝，这条只能走普通窝（双亲同性格 60% × 性别 50%）
     h.state.items = [
       demandItem({ nature: '固执', updatedAt: 1 }),
@@ -412,12 +409,10 @@ describe('家园 · 接单上窝', () => {
       pet({ gameId: fatherSpecies.gameId, gender: '公', nature: '开朗' }),
     ]);
 
-    const chance = screen.getAllByTestId('home-demand-chance')[1];
-    expect(chance).toHaveTextContent('约 30%');
-    expect(chance.className).toContain('text-amber-600');
+    expect(screen.getAllByTestId('home-demand-chance')[1]).toHaveTextContent('30%开朗');
   });
 
-  test('只有一方带目标性格时 15% 概率，提示用红色', () => {
+  test('只有一方带目标性格时概率头 15%', () => {
     h.state.items = [
       demandItem({ nature: '固执', updatedAt: 1 }),
       demandItem({ nature: '慎重', updatedAt: 2, demanderAccountId: 'm2' }),
@@ -429,21 +424,17 @@ describe('家园 · 接单上窝', () => {
       pet({ gameId: fatherSpecies.gameId, gender: '公', nature: '沉默' }),
     ]);
 
-    const chance = screen.getAllByTestId('home-demand-chance')[1];
-    expect(chance).toHaveTextContent('约 15%');
-    expect(chance.className).toContain('text-rose-600');
+    expect(screen.getAllByTestId('home-demand-chance')[1]).toHaveTextContent('15%慎重');
   });
 
-  test('不挑性格时只算性别概率：50% 绿', () => {
+  test('不挑性格时概率头只显示性别比例 50%', () => {
     h.state.items = [demandItem({ nature: '' })];
     renderPanel([
       pet({ gameId: egg.gameId, gender: '母', nature: '慎重', captureId: 'cap_m1' }),
       pet({ gameId: fatherSpecies.gameId, gender: '公', nature: '沉默' }),
     ]);
 
-    const chance = screen.getByTestId('home-demand-chance');
-    expect(chance).toHaveTextContent('约 50%');
-    expect(chance.className).toContain('text-emerald-700');
+    expect(screen.getByTestId('home-demand-chance')).toHaveTextContent('50%');
   });
 
   test('同款需求撤回重发后重新接单，不继承旧的已上窝勾选', () => {

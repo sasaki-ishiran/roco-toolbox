@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>附近面板 · 布局预览（375 / 390）</title>
+<style>
+  :root {
+    --bg: #0f1720;
+    --panel: #ffffff;
+    --ink: #182230;
+    --muted: #6b7a89;
+    --line: #e3e8ee;
+    --brand: #1f9d63;
+    --warn: #d97706;
+    --hit: #e5473f;
+    --map-a: #f59e0b;
+    --map-b: #38bdf8;
+    --orb: #1f9d63;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: #e7edf3;
+    font: 13px/1.5 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header { padding: 18px 24px 10px; }
+  header h1 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+  header p { margin: 0; color: #93a4b5; font-size: 12px; }
+  .layout { display: flex; gap: 24px; padding: 8px 24px 28px; align-items: flex-start; }
+  .stage { display: flex; gap: 28px; flex-wrap: wrap; }
+  .artboard { position: relative; }
+  .artboard .caption { margin-bottom: 8px; color: #9fb0c1; font-size: 12px; }
+  .screen {
+    position: relative; border-radius: 22px; overflow: hidden;
+    border: 6px solid #24313d; box-shadow: 0 16px 40px rgba(0,0,0,.45);
+    background: #1b2a21;
+  }
+  .game { position: absolute; inset: 0; }
+  .game .sky {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(120% 80% at 50% 12%, #2f5a44 0%, #1e3a2c 52%, #16281f 100%);
+  }
+  .game .glow {
+    position: absolute; left: 50%; bottom: -18%; width: 86%; aspect-ratio: 1;
+    transform: translateX(-50%); border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 240, 190, .30) 0%, rgba(255, 240, 190, .10) 46%, rgba(255,240,190,0) 70%);
+  }
+  .game .hud {
+    position: absolute; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #f7f3e2, #d9d2b6 70%);
+    box-shadow: 0 4px 10px rgba(0,0,0,.35);
+  }
+  .game .hud::after {
+    content: ""; position: absolute; inset: 32%;
+    border-radius: 50%; background: rgba(255,255,255,.55);
+  }
+  .game .stick {
+    position: absolute; left: 9%; bottom: 7%; width: 84px; height: 84px; border-radius: 50%;
+    background: rgba(12,18,14,.35); border: 1px solid rgba(255,255,255,.20);
+  }
+  .game .skill { position: absolute; right: 7%; bottom: 8%; display: grid; gap: 8px; }
+  .game .skill i {
+    display: block; width: 52px; height: 52px; border-radius: 50%;
+    background: rgba(16,24,20,.42); border: 1px solid rgba(255,255,255,.22);
+  }
+  .zones { position: absolute; inset: 0; pointer-events: none; }
+  .zone {
+    position: absolute; border: 1px dashed rgba(255,255,255,.0); border-radius: 10px;
+    transition: border-color .15s;
+  }
+  body.show-zones .zone { border-color: rgba(255,255,255,.55); }
+  body.show-zones .zone b {
+    position: absolute; top: -9px; left: 6px; padding: 0 5px;
+    background: rgba(9,14,18,.85); border-radius: 4px;
+    font-size: 10px; font-weight: 600; color: #fff;
+  }
+
+  /* ------- 悬浮球 ------- */
+  .orb {
+    position: absolute; width: 44px; height: 44px; border-radius: 22px;
+    border: 2px solid var(--orb); background: rgba(255,255,255,.06);
+    display: grid; place-items: center; cursor: grab; touch-action: none;
+    backdrop-filter: blur(2px);
+  }
+  .orb::before {
+    content: ""; width: 20px; height: 20px; border-radius: 50%;
+    background: radial-gradient(circle at 32% 30%, #fdfdf6, #cfd8d0 62%, #9fb0a5);
+    box-shadow: 0 0 0 2px rgba(31,157,99,.22);
+  }
+  .orb .badge {
+    position: absolute; top: -8px; right: -10px; min-width: 20px; height: 18px; padding: 0 5px;
+    border-radius: 9px; background: var(--brand); color: #fff;
+    font-size: 10px; font-weight: 700; display: grid; place-items: center;
+  }
+
+  /* ------- 面板 ------- */
+  .panel {
+    position: absolute; border-radius: 12px; background: rgba(255,255,255,.97);
+    color: var(--ink); box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    overflow: hidden;
+  }
+  .panel .inner { padding: 8px; }
+  .hit {
+    height: 44px; border-radius: 8px; background: #f2f6f4;
+    padding: 5px 8px; display: flex; flex-direction: column; justify-content: center;
+    cursor: grab;
+  }
+  .hit strong { font-size: 11.5px; }
+  .hit span { font-size: 9.5px; color: var(--muted); margin-top: 1px; }
+  .titlerow {
+    height: 20px; margin-top: 4px; display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600;
+  }
+  .titlerow em {
+    font-style: normal; font-size: 9px; font-weight: 500; color: #8a6a1f;
+    background: #fdf3d7; border: 1px solid #f3dfa8; border-radius: 4px; padding: 0 4px;
+  }
+  .map {
+    margin-top: 6px; border-radius: 8px; background: #0d1a26; position: relative;
+    overflow: hidden; border: 1px solid #16324a;
+  }
+  .map .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(56,189,248,.10) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,189,248,.10) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  .map .ring {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    border-radius: 50%; border: 1px dashed rgba(255,255,255,.45);
+  }
+  .map .ring.inner { border-style: solid; border-color: rgba(255,255,255,.18); }
+  .map .dot { position: absolute; width: 7px; height: 7px; border-radius: 50%; transform: translate(-50%, -50%); }
+  .map .dot.plain { background: #cbd5e1; }
+  .map .dot.rare { background: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,.28); }
+  .map .dot.alert { background: #ef4444; box-shadow: 0 0 0 2px rgba(239,68,68,.28); }
+  .map .dot.shiny { background: #22d3ee; box-shadow: 0 0 0 2px rgba(34,211,238,.28); }
+  .map .self {
+    position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; border-radius: 50%;
+    transform: translate(-50%, -50%); border: 2px solid #fff; background: #1f9d63;
+  }
+  .map .north {
+    position: absolute; left: 6px; top: 4px; font-size: 9px; color: rgba(255,255,255,.55);
+    letter-spacing: .5px;
+  }
+  .map .scaler {
+    position: absolute; right: 6px; bottom: 4px; font-size: 8.5px; color: rgba(255,255,255,.45);
+  }
+  .list {
+    margin-top: 8px; overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .list::-webkit-scrollbar { width: 4px; }
+  .list::-webkit-scrollbar-thumb { background: #cfd8e2; border-radius: 2px; }
+  .row {
+    height: 30px; margin-bottom: 2px; border-radius: 6px; background: #f8fafc;
+    display: flex; align-items: center; gap: 6px; padding: 0 7px; font-size: 10.5px;
+  }
+  .row .name { font-weight: 600; white-space: nowrap; }
+  .row .lv { color: var(--muted); font-size: 9.5px; }
+  .row .dist { margin-left: auto; color: #334155; font-size: 9.5px; white-space: nowrap; }
+  .row .tag {
+    font-size: 9px; padding: 1px 4px; border-radius: 4px; white-space: nowrap;
+    border: 1px solid #e3e8ee; color: #475569; background: #fff;
+  }
+  .row .tag.rare { color: #9a6206; border-color: #f1d69b; background: #fdf6e5; }
+  .row .tag.alert { color: #b91c1c; border-color: #f6c9c6; background: #fdeeed; }
+  .row .tag.shiny { color: #0e7490; border-color: #b7e5ef; background: #ecfbff; }
+  .foot {
+    height: 20px; display: flex; align-items: center; justify-content: flex-end;
+    color: var(--muted); font-size: 9.5px;
+  }
+  .empty {
+    height: 100%; display: grid; place-items: center; text-align: center;
+    color: var(--muted); font-size: 10px; gap: 2px;
+  }
+  .empty small { display: block; font-size: 9px; color: #9aa8b6; }
+
+  /* ------- 控制台 ------- */
+  .console {
+    width: 320px; flex: none; background: #141f29; border: 1px solid #223142;
+    border-radius: 14px; padding: 16px;
+  }
+  .console h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #dbe6f0; }
+  .group { margin-bottom: 16px; }
+  .group > label { display: flex; justify-content: space-between; font-size: 12px; color: #9fb0c1; margin-bottom: 6px; }
+  .group > label b { color: #e7edf3; font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: #22c55e; }
+  .presets { display: grid; gap: 8px; }
+  .preset {
+    text-align: left; padding: 9px 10px; border-radius: 9px; cursor: pointer;
+    background: #182633; border: 1px solid #25384a; color: #cfdae6; font-size: 12px;
+  }
+  .preset b { display: block; color: #fff; font-size: 12.5px; margin-bottom: 2px; }
+  .preset.on { border-color: #22c55e; background: #16301f; }
+  .preset small { color: #8fa3b6; font-size: 11px; }
+  .checks { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: #b8c7d6; }
+  .checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .readout {
+    font: 11px/1.7 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    color: #a9c0d4; background: #101a23; border: 1px solid #1d2c3a; border-radius: 8px;
+    padding: 8px 10px; white-space: pre-wrap;
+  }
+  .actions { display: flex; gap: 8px; }
+  .actions button {
+    flex: 1; padding: 9px 10px; border-radius: 9px; cursor: pointer; font-size: 12px;
+    background: #22c55e; color: #062012; border: 0; font-weight: 700;
+  }
+  .actions button.ghost { background: #182633; color: #cfdae6; border: 1px solid #25384a; font-weight: 500; }
+  .hint { margin-top: 10px; color: #7f93a6; font-size: 11px; line-height: 1.7; }
+</style>
+</head>
+<body class="show-zones">
+<header>
+  <h1>附近面板 · 布局预览</h1>
+  <p>画布为真实逻辑尺寸（375 / 390 dp），面板宽度按 dp 直接绘制；拖动面板 / 悬浮球、调参数后复制 JSON 回传即可落地。</p>
+</header>
+
+<div class="layout">
+  <div class="stage" id="stage"></div>
+
+  <aside class="console">
+    <h2>方案预设</h2>
+    <div class="presets" id="presets"></div>
+
+    <div class="group" style="margin-top:16px">
+      <label>地图高度 <b><span id="mapHVal">168</span> dp</b></label>
+      <input id="mapH" type="range" min="120" max="280" step="4" value="168" />
+    </div>
+    <div class="group">
+      <label>列表一次露出 <b><span id="rowsVal">4</span> 行</b></label>
+      <input id="rows" type="range" min="2" max="8" step="1" value="4" />
+    </div>
+    <div class="group">
+      <label>面板宽度 <b><span id="panelWVal">268</span> dp</b></label>
+      <input id="panelW" type="range" min="240" max="340" step="4" value="268" />
+    </div>
+    <div class="group checks">
+      <label><input id="zones" type="checkbox" checked /> 标注地图 / 列表 / 球</label>
+      <label><input id="ballToggle" type="checkbox" checked /> 显示悬浮球</label>
+    </div>
+
+    <div class="readout" id="readout"></div>
+    <div class="actions" style="margin-top:12px">
+      <button id="copy">复制布局 JSON</button>
+      <button class="ghost" id="reset">复位拖动</button>
+    </div>
+    <div class="hint">
+      数据为示意：列表按「只保留命中目标」口径（可提醒 / 稀有 / 炫彩），
+      普通精灵只在地图与「附近 N」里出现。
+    </div>
+  </aside>
+</div>
+
+<script>
+const DEVICES = [
+  { label: '375 × 812', w: 375, h: 812 },
+  { label: '390 × 844', w: 390, h: 844 },
+];
+
+const PRESETS = {
+  A: { name: 'A · 地图优先', desc: '地图全宽 3:2，列表在下滚动', mapH: 168, rows: 4, panelW: 268 },
+  B: { name: 'B · 方形大图', desc: '地图全宽正方，列表只露 3 行', mapH: 252, rows: 3, panelW: 268 },
+  C: { name: 'C · 当前实现', desc: '左侧 120×120，列表在右', mapH: 120, rows: 8, panelW: 268, legacy: true },
+};
+
+const PETS = [
+  { name: '花怨鳗', lv: 42, dist: '12m 北', tag: '稀有', kind: 'rare' },
+  { name: '雪豆丁', lv: 45, dist: '18m 西北', tag: '异色', kind: 'shiny' },
+  { name: '护主犬', lv: 38, dist: '23m 东', tag: '可提醒', kind: 'alert' },
+  { name: '伊贝儿', lv: 31, dist: '29m 西南', tag: '炫彩', kind: 'shiny' },
+  { name: '小灵桃', lv: 27, dist: '34m 东南', tag: '稀有', kind: 'rare' },
+  { name: '石敢当', lv: 24, dist: '41m 北', tag: '污染', kind: 'rare' },
+];
+
+const state = {
+  preset: 'A',
+  mapH: 168,
+  rows: 4,
+  panelW: 268,
+  showBall: true,
+  showZones: true,
+  ball: { x: 14, y: 132 },
+  panel: { x: 14, y: 186 },
+};
+
+const EDGE = 8, PAD = 8, HIT_H = 44, TITLE_H = 20, ROW_H = 30, ROW_GAP = 2, FOOT_H = 20;
+
+function panelHeight(mapH, rows) {
+  const listH = rows * ROW_H + (rows - 1) * ROW_GAP;
+  return PAD + HIT_H + 4 + TITLE_H + 6 + mapH + 8 + listH + 4 + FOOT_H + PAD;
+}
+
+function totalMatched() { return 12; }   // 命中目标总数（示意，大于可见行数时出脚注）
+
+function dots(mapH, panelW) {
+  const positions = [
+    [22, 34, 'plain'], [46, 26, 'rare'], [64, 40, 'plain'], [30, 58, 'alert'],
+    [52, 62, 'shiny'], [72, 55, 'plain'], [40, 74, 'plain'], [60, 76, 'rare'],
+  ];
+  return positions.map(([px, py, kind], index) => {
+    const left = px / 100 * (panelW - 2 * PAD);
+    const top = py / 100 * mapH;
+    return `<i class="dot ${kind}" style="left:${left}px;top:${top}px"></i>`;
+  }).join('');
+}
+
+function mapMarkup(mapH, panelW) {
+  const inner = Math.min(mapH, panelW - 2 * PAD);
+  return `
+    <div class="map" style="height:${mapH}px">
+      <div class="grid"></div>
+      <div class="ring inner" style="width:${inner * 0.46}px;height:${inner * 0.46}px"></div>
+      <div class="ring" style="width:${inner * 0.78}px;height:${inner * 0.78}px"></div>
+      <div class="self"></div>
+      ${dots(mapH, panelW)}
+      <span class="north">N</span>
+      <span class="scaler">120m</span>
+    </div>`;
+}
+
+function rowsMarkup(rows) {
+  const shown = Math.min(rows, PETS.length);
+  const out = [];
+  for (let index = 0; index < shown; index++) {
+    const pet = PETS[index];
+    out.push(`
+      <div class="row">
+        <span class="name">${pet.name}</span>
+        <span class="lv">Lv${pet.lv}</span>
+        <span class="dist">${pet.dist}</span>
+        <span class="tag ${pet.kind}">${pet.tag}</span>
+      </div>`);
+  }
+  return out.join('');
+}
+
+function panelMarkup(device) {
+  const legacy = state.preset === 'C';
+  const panelW = state.panelW;
+  const listH = state.rows * ROW_H + (state.rows - 1) * ROW_GAP;
+  const hidden = Math.max(0, totalMatched() - state.rows);
+  const foot = hidden > 0 ? `还有 ${hidden} 只未显示` : '';
+
+  const head = `
+    <div class="hit"><strong>战斗采集 · 赛季奇遇</strong><span>进入赛季奇遇战后自动记录</span></div>
+    <div class="titlerow">附近 21 · 稀有 2 <em>中心为估算</em></div>`;
+
+  if (legacy) {
+    return `
+      <div class="panel" id="panel" style="width:${panelW}px">
+        <div class="inner" style="position:relative">
+          ${head}
+          <div style="display:flex;gap:8px;margin-top:6px">
+            ${mapMarkup(120, 140).replace('class="map"', 'class="map" style="width:120px;flex:none"')}
+            <div class="list" style="height:${8 * ROW_H + 7 * ROW_GAP}px;flex:1;margin-top:0">${rowsMarkup(8)}</div>
+          </div>
+          <div class="foot">${foot}</div>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="panel" id="panel" style="width:${panelW}px">
+      <div class="inner">
+        ${head}
+        ${mapMarkup(state.mapH, panelW)}
+        <div class="list" style="height:${listH}px">${rowsMarkup(state.rows)}</div>
+        <div class="foot">${foot}</div>
+      </div>
+    </div>`;
+}
+
+function render() {
+  const stage = document.getElementById('stage');
+  stage.innerHTML = DEVICES.map((device, index) => `
+    <div class="artboard">
+      <div class="caption">${device.label} · 屏高 ${device.h}dp</div>
+      <div class="screen" data-device="${index}" style="width:${device.w}px;height:${device.h}px">
+        <div class="game">
+          <div class="sky"></div>
+          <div class="glow"></div>
+          <div class="hud" style="left:12%;top:16%;width:64px;height:64px"></div>
+          <div class="stick"></div>
+          <div class="skill"><i></i><i></i></div>
+        </div>
+        ${state.showBall ? `<div class="orb" data-drag="ball" style="left:${state.ball.x}px;top:${state.ball.y}px"><span class="badge">21</span></div>` : ''}
+        <div data-drag="panel" style="position:absolute;left:${state.panel.x}px;top:${state.panel.y}px">${panelMarkup(device)}</div>
+        <div class="zones">
+          <div class="zone" style="left:${state.panel.x + PAD}px;top:${state.panel.y + PAD + HIT_H + 4 + TITLE_H + 6}px;width:${state.panelW - 2 * PAD}px;height:${state.preset === 'C' ? 120 : state.mapH}px"><b>A 地图区</b></div>
+          <div class="zone" style="left:${state.panel.x + PAD}px;top:${state.panel.y + PAD + HIT_H + 4 + TITLE_H + 6 + (state.preset === 'C' ? 0 : state.mapH + 8)}px;width:${state.preset === 'C' ? state.panelW - 2 * PAD - 128 : state.panelW - 2 * PAD}px;height:${state.preset === 'C' ? 8 * ROW_H + 7 * ROW_GAP : state.rows * ROW_H + (state.rows - 1) * ROW_GAP}px"><b>B 列表区（滚动）</b></div>
+          ${state.showBall ? `<div class="zone" style="left:${state.ball.x - 4}px;top:${state.ball.y - 4}px;width:52px;height:52px;border-radius:26px"><b>C 球</b></div>` : ''}
+        </div>
+      </div>
+    </div>`).join('');
+
+  document.body.classList.toggle('show-zones', state.showZones);
+  bindDrag();
+  updateReadout();
+  updateControls();
+}
+
+function updateReadout() {
+  const height = panelHeight(state.preset === 'C' ? 120 : state.mapH, state.preset === 'C' ? 8 : state.rows);
+  const lines = DEVICES.map((device) => {
+    const ratio = (height / device.h * 100).toFixed(0);
+    return `${device.label}  面板 ${state.panelW}×${height}dp  占屏高 ${ratio}%`;
+  });
+  lines.push(`地图 ${state.preset === 'C' ? '120×120（现状）' : `${state.panelW - 16}×${state.mapH}`}  列表露出 ${state.preset === 'C' ? 8 : state.rows} 行（可滚）`);
+  lines.push(`球 (${state.ball.x}, ${state.ball.y})   面板 (${state.panel.x}, ${state.panel.y})`);
+  document.getElementById('readout').textContent = lines.join('\n');
+}
+
+function updateControls() {
+  document.getElementById('mapH').value = state.mapH;
+  document.getElementById('rows').value = state.rows;
+  document.getElementById('panelW').value = state.panelW;
+  document.getElementById('mapHVal').textContent = state.mapH;
+  document.getElementById('rowsVal').textContent = state.rows;
+  document.getElementById('panelWVal').textContent = state.panelW;
+  document.getElementById('ballToggle').checked = state.showBall;
+  document.getElementById('zones').checked = state.showZones;
+  document.querySelectorAll('.preset').forEach((node) => {
+    node.classList.toggle('on', node.dataset.preset === state.preset);
+  });
+}
+
+function bindDrag() {
+  document.querySelectorAll('[data-drag]').forEach((node) => {
+    node.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('input,button')) return;
+      const kind = node.dataset.drag;
+      const screen = node.closest('.screen');
+      const bounds = screen.getBoundingClientRect();
+      const origin = { ...state[kind] };
+      const startX = event.clientX, startY = event.clientY;
+      node.setPointerCapture(event.pointerId);
+      const move = (moveEvent) => {
+        const nextX = Math.round(origin.x + moveEvent.clientX - startX);
+        const nextY = Math.round(origin.y + moveEvent.clientY - startY);
+        const minX = -6, minY = 0;
+        const maxX = bounds.width - 60, maxY = bounds.height - 60;
+        state[kind] = {
+          x: Math.min(maxX, Math.max(minX, nextX)),
+          y: Math.min(maxY, Math.max(minY, nextY)),
+        };
+        node.style.left = `${state[kind].x}px`;
+        node.style.top = `${state[kind].y}px`;
+        updateReadout();
+      };
+      const up = () => {
+        node.removeEventListener('pointermove', move);
+        node.removeEventListener('pointerup', up);
+      };
+      node.addEventListener('pointermove', move);
+      node.addEventListener('pointerup', up);
+    });
+  });
+}
+
+document.getElementById('presets').innerHTML = Object.entries(PRESETS).map(([key, preset]) => `
+  <button class="preset" data-preset="${key}">
+    <b>${preset.name}</b><small>${preset.desc}</small>
+  </button>`).join('');
+
+document.querySelectorAll('.preset').forEach((node) => {
+  node.addEventListener('click', () => {
+    const preset = PRESETS[node.dataset.preset];
+    state.preset = node.dataset.preset;
+    Object.assign(state, { mapH: preset.mapH, rows: preset.rows, panelW: preset.panelW });
+    state.panel = { x: 14, y: state.showBall ? state.ball.y + 54 : 120 };
+    render();
+  });
+});
+
+document.getElementById('mapH').addEventListener('input', (event) => {
+  state.mapH = Number(event.target.value);
+  state.preset = 'A';
+  render();
+});
+document.getElementById('rows').addEventListener('input', (event) => {
+  state.rows = Number(event.target.value);
+  state.preset = 'A';
+  render();
+});
+document.getElementById('panelW').addEventListener('input', (event) => {
+  state.panelW = Number(event.target.value);
+  render();
+});
+document.getElementById('zones').addEventListener('change', (event) => {
+  state.showZones = event.target.checked;
+  document.body.classList.toggle('show-zones', state.showZones);
+});
+document.getElementById('ballToggle').addEventListener('change', (event) => {
+  state.showBall = event.target.checked;
+  render();
+});
+document.getElementById('reset').addEventListener('click', () => {
+  state.ball = { x: 14, y: 132 };
+  state.panel = { x: 14, y: 186 };
+  render();
+});
+document.getElementById('copy').addEventListener('click', async () => {
+  const height = panelHeight(state.preset === 'C' ? 120 : state.mapH, state.preset === 'C' ? 8 : state.rows);
+  const json = {
+    preset: state.preset,
+    panel: { width: state.panelW, height },
+    map: { width: state.panelW - 2 * PAD, height: state.preset === 'C' ? 120 : state.mapH },
+    list: { visibleRows: state.preset === 'C' ? 8 : state.rows, rowHeight: ROW_H, gap: ROW_GAP, scroll: true },
+    ball: { size: 44, ...state.ball },
+    panelPosition: { ...state.panel },
+  };
+  const text = JSON.stringify(json, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    document.getElementById('copy').textContent = '已复制';
+    setTimeout(() => { document.getElementById('copy').textContent = '复制布局 JSON'; }, 1200);
+  } catch (error) {
+    window.prompt('复制失败，手动复制：', text);
+  }
+});
+
+render();
+</script>
+</body>
+</html>

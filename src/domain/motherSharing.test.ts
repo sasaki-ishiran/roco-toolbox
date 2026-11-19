@@ -150,8 +150,8 @@ describe('selectMotherSharingViews：我缺的 / 我能补谁 / 小组资源', (
 describe('口径版本', () => {
   test('旧口径摘要与「全部母本」不可比较（成员需重新发布）', () => {
     const legacy = { ...resourceWith([101]), criteriaId: 'female-huge-voice100-v2' };
-    expect(motherResourceCriteriaIdOf('perfect')).toBe('all-mothers-v3-perfect');
-    expect(motherResourceCriteriaIdOf('medal')).toBe('all-mothers-v3-medal');
+    expect(motherResourceCriteriaIdOf('perfect')).toBe('all-mothers-v4-perfect');
+    expect(motherResourceCriteriaIdOf('medal')).toBe('all-mothers-v4-medal');
     expect(isMotherResourceComparable(legacy, FIXTURE_CATALOG_VERSION)).toBe(false);
     expect(isMotherResourceComparable(resourceWith([101]), FIXTURE_CATALOG_VERSION)).toBe(true);
     // 切换目标模式 → 期望 criteriaId 变了，旧摘要需更新（2026-10-29 B2-H01）

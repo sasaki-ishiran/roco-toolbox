@@ -10,6 +10,7 @@ import {
   toggleFilterGroup,
   toggleGroupNature,
   setNatureMode,
+  setTargetGrade,
 } from './coverageFilterStore';
 
 const slotCount = (filter: CoverageFilter): number =>
@@ -21,24 +22,36 @@ const naturesOf = (groupId: number): string[] =>
 describe('覆盖筛选 store', () => {
   beforeEach(() => {
     resetCoverageFilter();
-    // 档位 2026-10-06 起是全局口径（入口在看板），「恢复默认」刻意不动它 → 测试里显式复位，保证用例隔离
-    if (!getCoverageFilter().grades.includes('大婉')) toggleFilterGrade('大婉');
-    for (const grade of getCoverageFilter().grades.filter((item) => item !== '大婉')) {
-      toggleFilterGrade(grade);
-    }
+    // 档位 2026-11-18 起是单选、全局口径（入口在看板 / 覆盖度筛选）；「恢复默认」刻意不动它
+    setTargetGrade('大婉');
   });
 
-  test('默认：14 蛋组全选、每蛋组推荐前 3、档位只勾大婉 → 42 个槽位', () => {
+  test('默认：14 蛋组全选、八大性格、档位只勾大婉 → 112 个槽位', () => {
     const filter = getCoverageFilter();
     expect(filter.groupIds).toHaveLength(14);
     expect(filter.grades).toEqual(['大婉']);
-    expect(slotCount(filter)).toBe(42);
+    // 2026-11-19 用户口径：默认「八大性格」= 整池 8 个 × 14 组 × 1 档位
+    expect(filter.natureMode).toBe('eight');
+    expect(slotCount(filter)).toBe(112);
   });
 
-  test('档位多选：加一个档位，分母翻倍', () => {
+  test('切到自选性格先预选八大，不会从空白开始', () => {
+    setNatureMode('custom');
+    const filter = getCoverageFilter();
+    expect(filter.natureMode).toBe('custom');
+    expect(filter.customNatures).toHaveLength(targetNaturePool.length);
+    expect(slotCount(filter)).toBe(112);
+  });
+
+  test('推荐模式：每蛋组各取前 3 → 42 个槽位', () => {
+    setNatureMode('recommended');
+    expect(slotCount(getCoverageFilter())).toBe(42);
+  });
+
+  test('档位单选：再点一个会替换，不会累加', () => {
     toggleFilterGrade('小婉');
-    expect(getCoverageFilter().grades).toEqual(['大婉', '小婉']);
-    expect(slotCount(getCoverageFilter())).toBe(84);
+    expect(getCoverageFilter().grades).toEqual(['小婉']);
+    expect(slotCount(getCoverageFilter())).toBe(112);
   });
 
   test('蛋组取消：只影响该组，别组不变', () => {
@@ -46,11 +59,13 @@ describe('覆盖筛选 store', () => {
     const filter = getCoverageFilter();
     expect(filter.groupIds).not.toContain(2);
     expect(filter.groupIds).toHaveLength(13);
-    expect(slotCount(filter)).toBe(39);
+    expect(slotCount(filter)).toBe(104);
   });
 
-  // 「急躁」不在任何蛋组的默认前 3 里（它是额外目标性格），适合用来验证组内加减
+  // 「急躁」不在任何蛋组的默认前 3 里（它是额外目标性格），适合用来验证组内加减。
+  // 组内性格只在推荐模式生效，所以这里先切到推荐模式。
   test('组内加减：给某个蛋组加一个非默认性格，只加这一组', () => {
+    setNatureMode('recommended');
     toggleGroupNature(2, '急躁');
     expect(naturesOf(2)).toContain('急躁');
     expect(naturesOf(3)).not.toContain('急躁');
@@ -70,6 +85,8 @@ describe('覆盖筛选 store', () => {
       (name) => !targetNaturePool.some((entry) => entry.name === name),
     )!;
     setNatureMode('custom');
+    // 切到自选时会预选八大：先清空，才验证「全选只补八大、不动池外」
+    toggleAllCustomNatures();
     toggleCustomNature(outside);
 
     toggleAllCustomNatures();

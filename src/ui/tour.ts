@@ -82,7 +82,7 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
     {
       id: 'start-collect',
       title: '点「开始采集」',
-      body: '在安卓工具箱里点「开始采集」，按提示同意 VPN 授权，再打开游戏依次看一遍精灵仓库、背包和蛋仓。进度走满会自动停止、保存并导入；采集成功后会自动继续。',
+      body: '在安卓版小布助手里点「开始采集」，按提示同意 VPN 授权，再打开游戏依次看一遍精灵仓库、背包与蛋仓。进度走满会自动停止、保存并导入；采集成功后会自动继续。',
       profileSection: 'data',
       anchor: 'collector-start',
       waitForImport: true,
@@ -92,8 +92,8 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
   dashboard: [
     {
       id: 'dashboard-target',
-      title: '先定目标档位',
-      body: '全站都按这里的「当前模式 + 档位」算。想追满分或双牌，在这里切换，覆盖度和配窝会一起变。',
+      title: '先定种公目标',
+      body: '全站按这里的当前模式和奖牌组合计算。四种组合选一项；追满分时声音须达到 +100 / -100，追双牌时按对应声音奖牌判定。',
       page: 'dashboard',
       anchor: 'dashboard-target',
     },
@@ -173,7 +173,7 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
     {
       id: 'home-tabs',
       title: '家园分两页',
-      body: '「家园现状」看窝、配对和地上的蛋；「接单上窝」看你在需求中心接的单该怎么上窝。',
+      body: '「家园现状」看窝和实际配对；「接单上窝」看你在需求中心接的单该怎么上窝。',
       page: 'home',
       homeView: 'nests',
       anchor: 'home-tabs',
@@ -197,7 +197,7 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
     {
       id: 'profile-account',
       title: '云同步（可选）',
-      body: '开启后换手机不丢数据，也能在小组里认出是同一人。恢复码只显示一次，记得截图保存。',
+      body: '开启后换手机不丢数据，也能在小组里认出是同一人。用用户名和密码登录，忘记密码找管理员重置。',
       profileSection: 'identity',
       anchor: 'profile-account',
     },

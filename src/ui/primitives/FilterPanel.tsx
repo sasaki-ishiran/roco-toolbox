@@ -15,6 +15,8 @@ export interface FilterPanelProps {
   toggleTestId?: string;
   clearTestId?: string;
   summaryTestId?: string;
+  /** 标题右侧、清除按钮左侧的附加控件（如卡片列数切换） */
+  headerExtra?: ReactNode;
   children: ReactNode;
 }
 
@@ -36,6 +38,7 @@ export function FilterPanel({
   toggleTestId,
   clearTestId,
   summaryTestId,
+  headerExtra,
   children,
 }: FilterPanelProps) {
   return (
@@ -49,19 +52,20 @@ export function FilterPanel({
           aria-expanded={open}
           onClick={() => onOpenChange(!open)}
           data-testid={toggleTestId}
-          className="min-h-[28px] text-xs font-medium text-emerald-700"
+          className="mr-auto min-h-[26px] shrink-0 whitespace-nowrap text-[10px] font-medium text-emerald-700"
         >
           {title}
           <span aria-hidden="true" className="ml-1 text-[10px] text-slate-400">
             {open ? '▲' : '▼'}
           </span>
         </button>
+        {headerExtra}
         {onClear ? (
           <button
             type="button"
             onClick={onClear}
             data-testid={clearTestId}
-            className="min-h-[28px] px-2 text-xs text-slate-500"
+            className="min-h-[26px] shrink-0 px-2 text-[10px] text-slate-500"
           >
             {clearLabel}
           </button>
@@ -72,7 +76,7 @@ export function FilterPanel({
           {summary}
         </p>
       ) : null}
-      {open ? <div className="mt-2 space-y-2.5">{children}</div> : null}
+      {open ? <div className={`mt-2 ${dense ? 'space-y-1.5' : 'space-y-2.5'}`}>{children}</div> : null}
     </section>
   );
 }

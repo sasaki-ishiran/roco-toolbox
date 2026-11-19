@@ -3,15 +3,16 @@ import { track } from '../api/analytics';
 import {
   type CloudMeta,
   type MeResult,
+  changePassword,
   deleteAccount,
   errorText,
   fetchMe,
   logoutAccount,
   markSynced,
   readAccountId,
-  recoverAccount,
-  registerAccount,
-  rotateRecoveryCode,
+  setupAccount,
+  signIn,
+  signUp,
   subscribeSession,
 } from '../api/session';
 import { applySnapshot, downloadSnapshot, syncNow, uploadSnapshot } from '../api/sync';
@@ -19,18 +20,17 @@ import { recordSyncedPets } from './syncAdditions';
 import { useSnapshots } from './useSnapshots';
 
 /**
- * 账号 & 云同步（2026-10-06，免密：设备绑定 + 恢复码）
+ * 账号 & 云同步（2026-11-18 起：用户名 + 密码）
  *
  * 用户主线只有两条：
- * - 第一台设备：点「开启云同步」→ **必须存下恢复码**（只显示一次）
- * - 换设备：输恢复码 → 自动把云端数据拉下来写进本机（一键）
+ * - 第一台设备：注册（用户名 + 密码）→ 云端立刻有这份数据
+ * - 换设备：用同一个用户名密码登录 → 自动把云端数据拉下来写进本机（一键）
  *
- * 日常对齐两台设备只需要点「立即同步」：拉云端 → 与本机按账号合并 → 推回云端，一个动作搞定
- * （2026-10-07：原来的「上传 / 从云端恢复 / 冲突二选一」三步并成这一步，用户不用再理解版本号）。
+ * 老账号（以前只有恢复码）只要这台设备还登录着，点「设置用户名和密码」即可保留全部数据和小组；
+ * 忘记密码没有自助找回，找管理员重置。
+ *
+ * 日常对齐两台设备只需要点「立即同步」：拉云端 → 与本机按账号合并 → 推回云端，一个动作搞定。
  * 「用本机覆盖云端」保留为逃生口（合并只增不减，删掉的账号得靠它推上去）。
- *
- * 恢复码只显示一次（服务端只存哈希），文案要提醒保存；但也不用写得像「丢了就完了」——
- * 只要还有一台已登录的设备，点「重新生成恢复码」就能换一张新的（旧码同时失效）。
  */
 const timeText = (ms: number): string => (ms ? new Date(ms).toLocaleString() : '—');
 
@@ -50,7 +50,7 @@ export interface AccountPanelProps {
   onAutoConflictHandled?: () => void;
   /**
    * 「我的」页分区（2026-10-24）：identity 只看身份动作、sync 只看私有同步。
-   * 组件本身仍只挂载一份，切分区不会丢恢复码 / 同步提示。
+   * 组件本身仍只挂载一份，切分区不会丢登录表单 / 同步提示。
    */
   section?: 'identity' | 'sync';
 }
@@ -65,8 +65,14 @@ export function AccountPanel({
     const id = readAccountId();
     return id && meCache?.accountId === id ? meCache.me : null;
   });
-  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
-  const [codeInput, setCodeInput] = useState('');
+  const [mode, setMode] = useState<'login' | 'register'>('register');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [confirmInput, setConfirmInput] = useState('');
+  const [credentialForm, setCredentialForm] = useState<'none' | 'setup' | 'password'>('none');
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -131,23 +137,37 @@ export function AccountPanel({
     }
   };
 
-  const handleRegister = () =>
-    run('register', async () => {
-      const { recoveryCode: code } = await registerAccount();
-      setRecoveryCode(code);
-      setMessage('已开启云同步。恢复码建议复制或截图保存——换手机、重装都靠它。');
+  const credentialProblem = (): string => {
+    const name = usernameInput.trim();
+    if (!/^[A-Za-z0-9_\u4e00-\u9fa5]{3,16}$/.test(name)) return '用户名需为 3-16 位字母、数字、下划线或中文';
+    if (passwordInput.length < 8 || passwordInput.length > 32) return '密码需为 8-32 位';
+    if (passwordInput !== confirmInput) return '两次输入的密码不一致';
+    return '';
+  };
+
+  const handleSignUp = () =>
+    run('signup', async () => {
+      const invalid = credentialProblem();
+      if (invalid) {
+        setError(invalid);
+        return;
+      }
+      const name = await signUp(usernameInput.trim(), passwordInput);
       track('account_create');
+      setPasswordInput('');
+      setConfirmInput('');
+      setMessage(`已开启云同步（用户名 ${name}）。换手机时用这个用户名和密码登录。`);
       // 开号后立刻把本机数据传上去，免得用户以为「开了同步但云端还是空的」
       const result = await uploadSnapshot();
       if (!result.ok) setConflict(result.conflict);
       else rememberMe(await fetchMe());
     });
 
-  const handleRecover = () =>
-    run('recover', async () => {
-      await recoverAccount(codeInput.trim());
+  const handleSignIn = () =>
+    run('login', async () => {
+      await signIn(usernameInput.trim(), passwordInput);
       track('account_recover');
-      setCodeInput('');
+      setPasswordInput('');
       const cloud = await downloadSnapshot();
       if (!cloud) {
         setMessage('这个账号云端还没有数据。已把本机数据作为第一份上传。');
@@ -160,6 +180,41 @@ export function AccountPanel({
       track('sync_download', { version: cloud.meta.version, restored: true });
       setMessage('已把云端数据写到本机，正在刷新…');
       window.setTimeout(() => window.location.reload(), 800);
+    });
+
+  /** 老账号：在这台仍登录的设备上补设用户名密码，原有数据和小组都保留 */
+  const handleSetupCredentials = () =>
+    run('setup', async () => {
+      const invalid = credentialProblem();
+      if (invalid) {
+        setError(invalid);
+        return;
+      }
+      const name = await setupAccount(usernameInput.trim(), passwordInput);
+      setUsernameInput('');
+      setPasswordInput('');
+      setConfirmInput('');
+      setCredentialForm('none');
+      setMessage(`已设置用户名 ${name}，换手机时用它登录。`);
+      rememberMe(await fetchMe());
+    });
+
+  const handleChangePassword = () =>
+    run('password', async () => {
+      if (newPassword.length < 8 || newPassword.length > 32) {
+        setError('新密码需为 8-32 位');
+        return;
+      }
+      if (newPassword !== newPasswordConfirm) {
+        setError('两次输入的新密码不一致');
+        return;
+      }
+      await changePassword(oldPassword, newPassword);
+      setOldPassword('');
+      setNewPassword('');
+      setNewPasswordConfirm('');
+      setCredentialForm('none');
+      setMessage('密码已修改，下次登录用新密码。');
     });
 
   /** 一键同步：拉云端 → 与本机合并 → 推回云端（正常情况只需要点这一个按钮） */
@@ -218,13 +273,6 @@ export function AccountPanel({
     });
   };
 
-  const handleRotate = () =>
-    run('rotate', async () => {
-      const code = await rotateRecoveryCode();
-      setRecoveryCode(code);
-      setMessage('已生成新的恢复码，旧的立即失效，请保存新的。');
-    });
-
   const handleLogout = () =>
     run('logout', async () => {
       await logoutAccount();
@@ -254,7 +302,7 @@ export function AccountPanel({
     >
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-700">
-          {section === 'identity' ? '工具箱身份' : section === 'sync' ? '私有同步' : '云同步（跨设备）'}
+          {section === 'identity' ? '我的身份' : section === 'sync' ? '私有同步' : '云同步（跨设备）'}
         </h2>
         {/* 文案避开「N 个账号」的写法：导入面板那行用的是那个格式，别让 e2e 的选择器撞车。
             账号数直接读内存快照，避免异步算大小导致切页时文字先闪一下。 */}
@@ -269,6 +317,11 @@ export function AccountPanel({
             已登录 · 云端版本 {me?.snapshot ? me.snapshot.version : '暂无'} · 上次更新{' '}
             {me?.snapshot ? timeText(me.snapshot.updatedAt) : '—'}
           </p>
+          {section !== 'sync' ? (
+            <p className="text-xs text-slate-500" data-testid="account-username">
+              {me ? (me.username ? `用户名：${me.username}` : '还没有用户名，设置后才能在别的设备上登录') : ' '}
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             {section !== 'identity' ? (
               <button
@@ -292,15 +345,36 @@ export function AccountPanel({
                 {busy === 'force' ? '上传中…' : '用本机覆盖云端'}
               </button>
             ) : null}
-            {section !== 'sync' ? (
+            {section !== 'sync' && me && !me.username ? (
               <button
                 type="button"
-                data-testid="account-rotate"
-                onClick={handleRotate}
+                data-testid="account-open-setup"
+                onClick={() => {
+                  setUsernameInput('');
+                  setPasswordInput('');
+                  setConfirmInput('');
+                  setCredentialForm(credentialForm === 'setup' ? 'none' : 'setup');
+                }}
+                disabled={busy !== ''}
+                className="min-h-[30px] rounded-lg bg-emerald-600 px-2.5 text-xs font-medium text-white disabled:opacity-50"
+              >
+                设置用户名和密码
+              </button>
+            ) : null}
+            {section !== 'sync' && me?.username ? (
+              <button
+                type="button"
+                data-testid="account-open-password"
+                onClick={() => {
+                  setOldPassword('');
+                  setNewPassword('');
+                  setNewPasswordConfirm('');
+                  setCredentialForm(credentialForm === 'password' ? 'none' : 'password');
+                }}
                 disabled={busy !== ''}
                 className="min-h-[30px] rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-600 disabled:opacity-50"
               >
-                重新生成恢复码
+                修改密码
               </button>
             ) : null}
             {section !== 'sync' ? (
@@ -326,73 +400,183 @@ export function AccountPanel({
               </button>
             ) : null}
           </div>
+
+          {credentialForm === 'setup' ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2" data-testid="account-setup-form">
+              <p className="text-[11px] text-slate-500">设置后换设备用用户名和密码登录，现有数据和小组都保留。</p>
+              <input
+                value={usernameInput}
+                onChange={(event) => setUsernameInput(event.target.value)}
+                placeholder="用户名（3-16 位）"
+                data-testid="account-setup-username"
+                autoComplete="username"
+                className="min-h-[32px] w-full rounded-lg border border-slate-200 px-2.5 text-sm"
+              />
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(event) => setPasswordInput(event.target.value)}
+                placeholder="密码（8-32 位）"
+                data-testid="account-setup-password"
+                autoComplete="new-password"
+                className="min-h-[32px] w-full rounded-lg border border-slate-200 px-2.5 text-sm"
+              />
+              <input
+                type="password"
+                value={confirmInput}
+                onChange={(event) => setConfirmInput(event.target.value)}
+                placeholder="再输一次密码"
+                data-testid="account-setup-confirm"
+                autoComplete="new-password"
+                className="min-h-[32px] w-full rounded-lg border border-slate-200 px-2.5 text-sm"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  data-testid="account-setup-submit"
+                  onClick={handleSetupCredentials}
+                  disabled={busy !== ''}
+                  className="min-h-[32px] flex-1 rounded-lg bg-emerald-600 px-2.5 text-xs font-medium text-white disabled:opacity-50"
+                >
+                  {busy === 'setup' ? '保存中…' : '保存'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCredentialForm('none')}
+                  className="min-h-[32px] rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {credentialForm === 'password' ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2" data-testid="account-password-form">
+              <input
+                type="password"
+                value={oldPassword}
+                onChange={(event) => setOldPassword(event.target.value)}
+                placeholder="原密码"
+                data-testid="account-password-old"
+                autoComplete="current-password"
+                className="min-h-[32px] w-full rounded-lg border border-slate-200 px-2.5 text-sm"
+              />
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="新密码（8-32 位）"
+                data-testid="account-password-new"
+                autoComplete="new-password"
+                className="min-h-[32px] w-full rounded-lg border border-slate-200 px-2.5 text-sm"
+              />
+              <input
+                type="password"
+                value={newPasswordConfirm}
+                onChange={(event) => setNewPasswordConfirm(event.target.value)}
+                placeholder="再输一次新密码"
+                data-testid="account-password-confirm"
+                autoComplete="new-password"
+                className="min-h-[32px] w-full rounded-lg border border-slate-200 px-2.5 text-sm"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  data-testid="account-password-submit"
+                  onClick={handleChangePassword}
+                  disabled={busy !== ''}
+                  className="min-h-[32px] flex-1 rounded-lg bg-emerald-600 px-2.5 text-xs font-medium text-white disabled:opacity-50"
+                >
+                  {busy === 'password' ? '保存中…' : '保存新密码'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCredentialForm('none')}
+                  className="min-h-[32px] rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : section === 'sync' ? (
         <p className="mt-2 text-xs text-slate-500" data-testid="account-sync-needs-identity">
-          还没有工具箱身份。先到「工具箱身份」开启云同步或输入恢复码。
+          还没有我的身份。先到「我的身份」注册或登录。
         </p>
       ) : (
         <div className="mt-2 space-y-2">
-          <button
-            type="button"
-            data-testid="account-register"
-            onClick={handleRegister}
-            disabled={busy !== ''}
-            className="min-h-[36px] w-full rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {busy === 'register' ? '开启中…' : '开启云同步（生成恢复码）'}
-          </button>
-          <div className="flex gap-2">
-            <input
-              value={codeInput}
-              onChange={(event) => setCodeInput(event.target.value)}
-              placeholder="已有恢复码？输在这里"
-              data-testid="account-recover-input"
-              className="min-h-[36px] min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 text-sm uppercase"
-            />
+          <div className="flex rounded-lg bg-slate-100 p-0.5" role="group">
             <button
               type="button"
-              data-testid="account-recover-submit"
-              onClick={handleRecover}
-              disabled={busy !== '' || codeInput.trim().length === 0}
-              className="min-h-[36px] shrink-0 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 disabled:opacity-50"
+              data-testid="account-mode-register"
+              onClick={() => setMode('register')}
+              aria-pressed={mode === 'register'}
+              className={`min-h-[30px] flex-1 rounded-md text-xs font-medium ${
+                mode === 'register' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500'
+              }`}
+            >
+              注册
+            </button>
+            <button
+              type="button"
+              data-testid="account-mode-login"
+              onClick={() => setMode('login')}
+              aria-pressed={mode === 'login'}
+              className={`min-h-[30px] flex-1 rounded-md text-xs font-medium ${
+                mode === 'login' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500'
+              }`}
             >
               登录
             </button>
           </div>
+          <input
+            value={usernameInput}
+            onChange={(event) => setUsernameInput(event.target.value)}
+            placeholder="用户名"
+            data-testid="account-username-input"
+            autoComplete="username"
+            className="min-h-[36px] w-full rounded-lg border border-slate-200 px-2.5 text-sm"
+          />
+          <input
+            type="password"
+            value={passwordInput}
+            onChange={(event) => setPasswordInput(event.target.value)}
+            placeholder="密码（8-32 位）"
+            data-testid="account-password-input"
+            autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+            className="min-h-[36px] w-full rounded-lg border border-slate-200 px-2.5 text-sm"
+          />
+          {mode === 'register' ? (
+            <input
+              type="password"
+              value={confirmInput}
+              onChange={(event) => setConfirmInput(event.target.value)}
+              placeholder="再输一次密码"
+              data-testid="account-confirm-input"
+              autoComplete="new-password"
+              className="min-h-[36px] w-full rounded-lg border border-slate-200 px-2.5 text-sm"
+            />
+          ) : null}
+          <button
+            type="button"
+            data-testid={mode === 'register' ? 'account-register' : 'account-login'}
+            onClick={mode === 'register' ? handleSignUp : handleSignIn}
+            disabled={busy !== ''}
+            className="min-h-[36px] w-full rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {mode === 'register'
+              ? busy === 'signup'
+                ? '注册中…'
+                : '注册并开启云同步'
+              : busy === 'login'
+                ? '登录中…'
+                : '登录'}
+          </button>
+          <p className="text-[11px] text-slate-400">忘记密码联系管理员重置。</p>
         </div>
       )}
-
-      {recoveryCode && section !== 'sync' ? (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2" data-testid="account-recovery-block">
-          <p className="text-[11px] text-amber-700">
-            恢复码只显示这一次，建议复制或截图保存（换手机、重装都靠它）。万一丢了也没关系：在仍登录的设备上点「重新生成恢复码」就能换一张新的。
-          </p>
-          <p className="mt-1 select-all font-mono text-base font-semibold tracking-wider text-amber-900" data-testid="account-recovery-code">
-            {recoveryCode}
-          </p>
-          <div className="mt-1 flex gap-2">
-            <button
-              type="button"
-              data-testid="account-copy-code"
-              onClick={() => {
-                void navigator.clipboard?.writeText(recoveryCode);
-                setMessage('已复制恢复码');
-              }}
-              className="min-h-[28px] rounded-md border border-amber-300 px-2 text-xs text-amber-800"
-            >
-              复制
-            </button>
-            <button
-              type="button"
-              onClick={() => setRecoveryCode(null)}
-              className="min-h-[28px] rounded-md border border-amber-300 px-2 text-xs text-amber-800"
-            >
-              我已保存
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {conflict ? (
         <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2" data-testid="account-conflict">
@@ -433,8 +617,7 @@ export function AccountPanel({
       ) : null}
 
       <p className="mt-2 text-[11px] text-slate-400">
-        同步内容：账号数据 + 设置。目标模式、母本达标标准、账号筛选以云端为准（两台算出来的数字才一致）；
-        分页、复制提示等显示习惯各设备各留。恢复码与统计开关不参与。
+        同步内容：账号数据 + 设置；目标模式、母本达标标准、账号筛选以云端为准。
       </p>
     </section>
   );

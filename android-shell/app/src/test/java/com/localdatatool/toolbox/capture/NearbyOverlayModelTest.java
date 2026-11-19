@@ -44,25 +44,10 @@ public class NearbyOverlayModelTest {
                 .put("alert", index == 0)
                 .put("distanceM", 10 + index)
                 .put("bearingLabel", "东北")
-                .put("bearingArrow", "↗")
                 .put("x", 307500 + index * 100)
                 .put("y", 410000));
         }
         return pets;
-    }
-
-    @Test public void petParsesBearingArrow() throws Exception {
-        NearbyOverlayModel model = NearbyOverlayModel.parse(payload(null));
-        assertEquals("↗", model.pets.get(0).bearingArrow);
-        assertEquals("东北", model.pets.get(0).bearingLabel);
-
-        // 旧网页不传 bearingArrow：保持空串，列表退回方位文字
-        JSONObject legacy = payload(null);
-        JSONArray legacyPets = new JSONArray();
-        legacyPets.put(new JSONObject().put("key", "a").put("name", "旧数据").put("bearingLabel", "东"));
-        legacy.put("pets", legacyPets);
-        NearbyOverlayModel legacyModel = NearbyOverlayModel.parse(legacy);
-        assertEquals("", legacyModel.pets.get(0).bearingArrow);
     }
 
     @Test public void missingPanelsFallsBackToBothOn() throws Exception {
@@ -101,14 +86,53 @@ public class NearbyOverlayModelTest {
     @Test public void listKeepsMaxRowsAndReportsHiddenTotal() throws Exception {
         JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
         json.put("pets", pets(NearbyOverlayModel.MAX_ROWS + 6));
-        json.put("total", NearbyOverlayModel.MAX_ROWS + 12);
-        json.put("matched", NearbyOverlayModel.MAX_ROWS + 6);
+        json.put("total", NearbyOverlayModel.MAX_ROWS + 6);
         NearbyOverlayModel model = NearbyOverlayModel.parse(json);
         assertEquals(NearbyOverlayModel.MAX_ROWS, model.pets.size());
         assertEquals(NearbyOverlayModel.MAX_ROWS, model.shownRows());
         assertEquals(6, model.hiddenCount());
         assertEquals("还有 6 只未显示", model.footText());
-        assertEquals("附近 " + (NearbyOverlayModel.MAX_ROWS + 12) + " · 稀有 2", model.titleText());
+        assertEquals("附近 " + (NearbyOverlayModel.MAX_ROWS + 6) + " · 稀有 2", model.titleText());
+    }
+
+    @Test public void mapPetsCarryAllNearbyWhileListKeepsFiltered() throws Exception {
+        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
+        JSONArray list = new JSONArray();
+        list.put(new JSONObject().put("key", "hit").put("name", "命中").put("x", 1).put("y", 2));
+        JSONArray map = new JSONArray();
+        map.put(new JSONObject().put("key", "hit").put("name", "命中").put("x", 1).put("y", 2));
+        map.put(new JSONObject().put("key", "plain").put("name", "普通").put("x", 3).put("y", 4));
+        json.put("pets", list);
+        json.put("mapPets", map);
+        json.put("total", 1);
+
+        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
+        assertEquals(1, model.pets.size());
+        assertEquals(2, model.mapPets.size());
+        assertEquals("plain", model.mapPets.get(1).key);
+
+        // 旧网页只给 pets：地图退回 pets，不空图
+        json.remove("mapPets");
+        NearbyOverlayModel legacy = NearbyOverlayModel.parse(json);
+        assertEquals(1, legacy.mapPets.size());
+        assertEquals("hit", legacy.mapPets.get(0).key);
+    }
+
+    @Test public void listBodyHeightClampsToMap() {
+        // 有地图时列表可视区固定等于地图高度
+        assertEquals(NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.bodyHeight(5, true));
+        assertEquals(NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.bodyHeight(24, true));
+        // 无地图时按行数算，超过地图高度就封顶（框内滑动）
+        assertEquals(NearbyOverlayModel.listHeight(2), NearbyOverlayModel.bodyHeight(2, false));
+        assertEquals(NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.bodyHeight(20, false));
+        assertEquals(NearbyOverlayModel.EMPTY_BODY_HEIGHT, NearbyOverlayModel.bodyHeight(0, false));
+    }
+
+    @Test public void listShowsExactlyThreeRows() {
+        // 行高 28 + 行距 3：3 行正好 90 = 地图高度，第 4 行要滑动
+        assertEquals(NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.listHeight(3));
+        assertEquals(NearbyOverlayModel.MAP_SIZE, NearbyOverlayModel.bodyHeight(3, true));
+        assertTrue(NearbyOverlayModel.listHeight(4) > NearbyOverlayModel.MAP_SIZE);
     }
 
     @Test public void missingPetFieldsDoNotBreakParsing() throws Exception {
@@ -132,54 +156,140 @@ public class NearbyOverlayModelTest {
         assertNull(model.pets.get(1).distanceM);
     }
 
-    @Test public void plainPetsOnlyCountInNearbyTotal() throws Exception {
-        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
-        json.put("pets", pets(1));
-        json.put("total", 21);
-        json.put("matched", 1);
-        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
-        assertEquals(21, model.total);
-        assertEquals(1, model.matchedTotal);
-        assertEquals(1, model.shownRows());
-        assertEquals(0, model.hiddenCount());
-        assertFalse(model.noTargets());
-        assertEquals("附近 21 · 稀有 2", model.titleText());
-    }
-
-    @Test public void noMatchedTargetsShowsTargetEmptyState() throws Exception {
-        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
-        json.put("pets", new JSONArray());
-        json.put("total", 6);
-        json.put("matched", 0);
-        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
-        assertEquals(0, model.shownRows());
-        assertEquals(0, model.hiddenCount());
-        assertTrue(model.noTargets());
-    }
-
     @Test public void nullPayloadIsIgnored() {
         assertNull(NearbyOverlayModel.parse(null));
     }
 
     @Test public void panelHeightMatchesSpecTable() {
-        // 有地图：列表区固定等于地图高度（120），行数再多也不再拉长面板
-        assertEquals(64 + 28 + 120 + 8, NearbyOverlayModel.panelHeight(true, true, true, 5, true, 0));
-        assertEquals(64 + 28 + 120 + 20, NearbyOverlayModel.panelHeight(true, true, true, 8, true, 4));
-        assertEquals(64 + 28 + 120 + 20, NearbyOverlayModel.panelHeight(true, true, true, 24, true, 4));
+        // 有地图：列表区固定等于地图高度（90 = 3 行 × 28 + 2 × 3），行数再多也不再拉长面板
+        assertEquals(NearbyOverlayModel.HIT_HEIGHT + NearbyOverlayModel.BODY_TOP_GAP
+                + NearbyOverlayModel.MAP_SIZE + NearbyOverlayModel.FOOT_GAP,
+            NearbyOverlayModel.panelHeight(true, true, true, 3, true, 0));
+        assertEquals(NearbyOverlayModel.HIT_HEIGHT + NearbyOverlayModel.BODY_TOP_GAP
+                + NearbyOverlayModel.MAP_SIZE + NearbyOverlayModel.FOOT_ROW_GAP,
+            NearbyOverlayModel.panelHeight(true, true, true, 3, true, 4));
+        assertEquals(NearbyOverlayModel.HIT_HEIGHT + NearbyOverlayModel.BODY_TOP_GAP
+                + NearbyOverlayModel.MAP_SIZE + NearbyOverlayModel.FOOT_ROW_GAP,
+            NearbyOverlayModel.panelHeight(true, true, true, 24, true, 4));
         // 仅命中
-        assertEquals(64, NearbyOverlayModel.panelHeight(true, true, false, 0, false, 0));
-        // 命中区无数据 + 附近无精灵（实测 200）
-        assertEquals(200, NearbyOverlayModel.panelHeight(true, false, true, 0, true, 0));
-        // 仅附近，5 条
-        assertEquals(28 + 120 + 8, NearbyOverlayModel.panelHeight(false, false, true, 5, true, 0));
-        // 仅附近，8 条截断
-        assertEquals(28 + 120 + 20, NearbyOverlayModel.panelHeight(false, false, true, 8, true, 4));
+        assertEquals(NearbyOverlayModel.HIT_HEIGHT,
+            NearbyOverlayModel.panelHeight(true, true, false, 0, false, 0));
+        // 命中区无数据 + 附近无精灵（实测 170 = 44 + 28 + 90 + 8）
+        assertEquals(NearbyOverlayModel.HIT_EMPTY_HEIGHT + NearbyOverlayModel.BODY_TOP_GAP
+                + NearbyOverlayModel.MAP_SIZE + NearbyOverlayModel.FOOT_GAP,
+            NearbyOverlayModel.panelHeight(true, false, true, 0, true, 0));
+        // 仅附近
+        assertEquals(NearbyOverlayModel.BODY_TOP_GAP + NearbyOverlayModel.MAP_SIZE
+                + NearbyOverlayModel.FOOT_GAP,
+            NearbyOverlayModel.panelHeight(false, false, true, 5, true, 0));
+        assertEquals(NearbyOverlayModel.BODY_TOP_GAP + NearbyOverlayModel.MAP_SIZE
+                + NearbyOverlayModel.FOOT_ROW_GAP,
+            NearbyOverlayModel.panelHeight(false, false, true, 8, true, 4));
         // 只有列表（无地图）：短列表按行数算，超过地图高度就封顶
-        assertEquals(64 + 28 + NearbyOverlayModel.ROW_HEIGHT * 2 + NearbyOverlayModel.ROW_GAP + 8,
+        assertEquals(NearbyOverlayModel.HIT_HEIGHT + NearbyOverlayModel.BODY_TOP_GAP
+                + NearbyOverlayModel.listHeight(2) + NearbyOverlayModel.FOOT_GAP,
             NearbyOverlayModel.panelHeight(true, true, true, 2, false, 0));
-        assertEquals(64 + 28 + 120 + 8, NearbyOverlayModel.panelHeight(true, true, true, 20, false, 0));
+        assertEquals(NearbyOverlayModel.HIT_HEIGHT + NearbyOverlayModel.BODY_TOP_GAP
+                + NearbyOverlayModel.MAP_SIZE + NearbyOverlayModel.FOOT_GAP,
+            NearbyOverlayModel.panelHeight(true, true, true, 20, false, 0));
         // 空列表 + 无地图
-        assertEquals(64 + 28 + 44 + 8, NearbyOverlayModel.panelHeight(true, true, true, 0, false, 0));
+        assertEquals(NearbyOverlayModel.HIT_HEIGHT + NearbyOverlayModel.BODY_TOP_GAP
+                + NearbyOverlayModel.EMPTY_BODY_HEIGHT + NearbyOverlayModel.FOOT_GAP,
+            NearbyOverlayModel.panelHeight(true, true, true, 0, false, 0));
+    }
+
+    @Test public void twoLineTextKeepsFieldOrder() throws Exception {
+        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
+        JSONArray list = new JSONArray();
+        list.put(new JSONObject()
+            .put("key", "k1").put("name", "雪豆丁").put("level", 37)
+            .put("kinds", new JSONArray().put("high").put("colorful"))
+            .put("rare", true).put("alert", true)
+            .put("nature", "保守").put("gender", "母")
+            .put("distanceM", 12.38).put("bearingArrow", "↗")
+            .put("heightPct", 12.38).put("weightPct", 0.29)
+            .put("voiceDb", 15).put("reason", "demand"));
+        json.put("pets", list);
+        json.put("total", 1);
+
+        NearbyOverlayModel.Pet pet = NearbyOverlayModel.parse(json).pets.get(0);
+        // 两行卡片：第一行 名称+Lv37（左）/ ↗ 12m（右）；第二行 高 · 重 · 声音（只写分贝）；只截断不四舍五入
+        assertEquals("Lv37", NearbyOverlayModel.levelText(pet));
+        assertEquals("↗ 12m", NearbyOverlayModel.distanceArrowText(pet));
+        assertEquals("12m ↗ 37级", NearbyOverlayModel.metaTextLine1(pet));
+        assertEquals("高:12.3% 重:0.2% +15dB", NearbyOverlayModel.metaTextLine2(pet));
+        assertEquals(NearbyOverlayModel.RowTone.DEMAND, NearbyOverlayModel.toneOf(pet));
+    }
+
+    @Test public void missingFieldsKeepCardTextShort() throws Exception {
+        JSONObject json = payload("{\"battle\":false,\"nearby\":true}");
+        JSONArray list = new JSONArray();
+        // 没有等级：第一行左侧只有名称
+        list.put(new JSONObject().put("key", "k1").put("name", "蹦蹦种子"));
+        // 没有方向时不画箭头，但距离照常显示
+        list.put(new JSONObject().put("key", "k2").put("name", "雪豆丁")
+            .put("distanceM", 7.6));
+        json.put("pets", list);
+        json.put("total", 2);
+
+        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
+        assertEquals("", NearbyOverlayModel.levelText(model.pets.get(0)));
+        assertEquals("8m", NearbyOverlayModel.distanceArrowText(model.pets.get(1)));
+    }
+
+    @Test public void voiceFallsBackToRawDbAndNeverPrintsNull() throws Exception {
+        JSONObject json = payload("{\"battle\":false,\"nearby\":true}");
+        JSONArray list = new JSONArray();
+        list.put(new JSONObject()
+            .put("key", "k1").put("name", "雪豆丁").put("level", 37)
+            .put("kinds", new JSONArray()).put("rare", false).put("alert", false)
+            .put("distanceM", 12.38)
+            .put("voiceLabel", JSONObject.NULL).put("voiceDb", -99)
+            .put("reason", JSONObject.NULL)
+            .put("x", 1.0).put("y", 2.0));
+        list.put(new JSONObject()
+            .put("key", "k2").put("name", "蹦蹦种子").put("level", 3)
+            .put("kinds", new JSONArray()).put("rare", false).put("alert", false)
+            .put("distanceM", 4.0)
+            .put("voiceLabel", JSONObject.NULL).put("reason", JSONObject.NULL));
+        json.put("pets", list);
+        json.put("total", 2);
+
+        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
+        // 没有声音牌子时用原始分贝，不能把 JSON null 读成字面量 "null"
+        assertEquals("-99dB", NearbyOverlayModel.metaTextLine2(model.pets.get(0)));
+        // 原始数据也没有声音字段时整段省略，不输出 null / 占位符
+        assertEquals("", NearbyOverlayModel.metaTextLine2(model.pets.get(1)));
+        assertNull(model.pets.get(0).reason);
+    }
+
+    @Test public void rowToneFollowsPriority() throws Exception {
+        assertEquals(NearbyOverlayModel.RowTone.COLORFUL, tone("colorful", "shiny", false, null));
+        assertEquals(NearbyOverlayModel.RowTone.SHINY, tone("shiny", "pollution", false, null));
+        assertEquals(NearbyOverlayModel.RowTone.POLLUTION, tone("pollution", null, true, null));
+        assertEquals(NearbyOverlayModel.RowTone.RARE, tone(null, null, true, null));
+        assertEquals(NearbyOverlayModel.RowTone.NORMAL, tone(null, null, false, null));
+        assertEquals(NearbyOverlayModel.RowTone.DEMAND, tone("colorful", null, true, "demand"));
+    }
+
+    private static NearbyOverlayModel.RowTone tone(
+        String first, String second, boolean rare, String reason) throws Exception {
+        JSONArray kinds = new JSONArray();
+        if (first != null) kinds.put(first);
+        if (second != null) kinds.put(second);
+        JSONObject pet = new JSONObject().put("key", "k").put("kinds", kinds).put("rare", rare);
+        if (reason != null) pet.put("reason", reason);
+        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
+        json.put("pets", new JSONArray().put(pet));
+        json.put("total", 1);
+        return NearbyOverlayModel.toneOf(NearbyOverlayModel.parse(json).pets.get(0));
+    }
+
+    @Test public void percentTextTruncatesInsteadOfRounding() {
+        assertEquals("12.3%", NearbyOverlayModel.pctText(12.38));
+        assertEquals("0.2%", NearbyOverlayModel.pctText(0.29));
+        assertEquals("100.0%", NearbyOverlayModel.pctText(100.0));
+        assertEquals("—", NearbyOverlayModel.pctText(null));
     }
 
     @Test public void emptyAndWaitingStatesUseSpecWording() throws Exception {
@@ -211,46 +321,28 @@ public class NearbyOverlayModelTest {
         assertEquals("进入赛季奇遇战后，这里会显示守卫的个体数据。", NearbyOverlayModel.HIT_EMPTY_TEXT);
     }
 
+    @Test public void selfDebugFieldsDrivePerfLogging() throws Exception {
+        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
+        json.put("selfSource", "odometry");
+        json.put("selfAt", 1731234567890L);
+        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
+        assertEquals("odometry", model.selfSource);
+        assertEquals(Long.valueOf(1731234567890L), model.selfAt);
+        // 地图里最近的距离（pets 默认 10m 起）
+        assertEquals(10.0, model.nearestM, 1e-9);
+
+        // 旧网页没有这两个字段：不能因此报错
+        JSONObject legacy = payload("{\"battle\":true,\"nearby\":true}");
+        NearbyOverlayModel old = NearbyOverlayModel.parse(legacy);
+        assertNull(old.selfSource);
+        assertNull(old.selfAt);
+    }
+
     @Test public void mapCatalogComesFromSharedCalibrationJson() {
         String json = "{\"maps\":{\"10003\":{\"name\":\"卡洛西亚大陆\"},\"10007\":{}}}";
         assertEquals(new HashSet<>(Arrays.asList(10003, 10007)),
             NearbyOverlayModel.parseMapScenes(json));
         assertEquals(new HashSet<Integer>(), NearbyOverlayModel.parseMapScenes("not json"));
-    }
-
-    @Test public void mapPetsFallBackToListWhenPayloadIsOld() throws Exception {
-        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
-        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
-        assertEquals(model.pets.size(), model.mapPets.size());
-        assertEquals("p0", model.mapPets.get(0).key);
-    }
-
-    @Test public void mapPetsKeepPlainPetsForRadar() throws Exception {
-        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
-        json.put("pets", pets(1));
-        json.put("mapPets", pets(6));
-        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
-        assertEquals(1, model.pets.size());
-        assertEquals(6, model.mapPets.size());
-        assertEquals("p5", model.mapPets.get(5).key);
-    }
-
-    @Test public void mapPetsAreCapped() throws Exception {
-        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
-        json.put("mapPets", pets(40));
-        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
-        assertEquals(NearbyOverlayModel.MAX_MAP_POINTS, model.mapPets.size());
-    }
-
-    @Test public void petReasonIsParsedAndDefaultsToEmpty() throws Exception {
-        JSONObject json = payload("{\"battle\":true,\"nearby\":true}");
-        JSONArray pets = new JSONArray();
-        pets.put(new JSONObject().put("key", "demand").put("reason", "demand"));
-        pets.put(new JSONObject().put("key", "legacy"));
-        json.put("pets", pets);
-        NearbyOverlayModel model = NearbyOverlayModel.parse(json);
-        assertEquals("demand", model.pets.get(0).reason);
-        assertEquals("", model.pets.get(1).reason);
     }
 }
 

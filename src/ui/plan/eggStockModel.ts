@@ -2,15 +2,26 @@ import { canCirculateEgg, type EggRecord } from '../../shared/eggMatching';
 
 /** Normalized trusted-adapter input, not raw capture JSON or user-edited form data. */
 export type EggObservation = Pick<EggRecord, 'id' | 'eggGameId' | 'nature' | 'body' | 'voice'> &
-  Partial<Pick<EggRecord, 'provenance' | 'confidence' | 'kind'>>;
+  Partial<Pick<EggRecord, 'provenance' | 'confidence' | 'kind' | 'labelSource' | 'parents'>> & {
+    gameAccountKey?: string;
+  };
 export interface StockEgg extends EggRecord {
   location: 'bag' | 'home';
   listed: boolean;
   lastConfirmedAt: number;
+  /** 游戏账号（uid:...）；同一工具箱账号可能导入多个游戏账号。 */
+  gameAccountKey?: string;
 }
-interface SnapshotPart { eggs: readonly EggObservation[]; complete: boolean }
+interface SnapshotPart {
+  eggs: readonly EggObservation[];
+  complete: boolean;
+  /** 这一部位自己的采集时间；背包与家园来自不同抓包，不能共用一个时间。 */
+  capturedAt?: number;
+}
 export interface EggStockSnapshot {
   accountId: string;
+  /** 游戏账号（uid:...）；同一工具箱账号可能导入多个游戏账号，水位按它分开。 */
+  gameAccountKey?: string;
   /** One coherent capture cycle; pass its bag/home parts together. */
   capturedAt: number;
   bag?: SnapshotPart;
@@ -45,16 +56,19 @@ export function reconcileEggStock(state: EggStockState, snapshot: EggStockSnapsh
   validatePart(snapshot.bag);
   validatePart(snapshot.home);
   if (!snapshot.bag && !snapshot.home) return state;
-  const accountKey = JSON.stringify(snapshot.accountId);
+  const accountKey = JSON.stringify([snapshot.accountId, snapshot.gameAccountKey ?? '']);
   if (snapshot.capturedAt <= (state.captureWatermarks[accountKey] ?? -1)) return state;
 
   const previous = new Map(state.eggs.filter(e => e.accountId === snapshot.accountId).map(e => [e.id, e]));
   const next = new Map(previous);
+  const gameKey = snapshot.gameAccountKey ?? '';
+  const sameGame = (egg: StockEgg): boolean =>
+    egg.accountId === snapshot.accountId && (egg.gameAccountKey ?? '') === gameKey;
   for (const location of ['bag', 'home'] as const) {
     const part = snapshot[location];
     if (part?.complete) {
       const currentIds = new Set(part.eggs.map(e => e.id));
-      for (const [id, egg] of next) if (egg.location === location && !currentIds.has(id)) next.delete(id);
+      for (const [id, egg] of next) if (sameGame(egg) && egg.location === location && !currentIds.has(id)) next.delete(id);
     }
   }
   const history = { ...state.provenanceHistory };
@@ -72,15 +86,22 @@ export function reconcileEggStock(state: EggStockState, snapshot: EggStockSnapsh
         const current = next.get(observation.id);
         if (current) {
           const kind = observation.kind === 'special' || observation.kind === 'shiny' ? observation.kind : current.kind;
-          const updated = { ...current, provenance, kind };
+          const updated = { ...current, provenance, kind,
+            lastConfirmedAt: Math.max(current.lastConfirmedAt, snapshot[location]?.capturedAt ?? snapshot.capturedAt) };
+          if (observation.parents) updated.parents = observation.parents;
+          if (observation.labelSource === 'system' && updated.labelSource !== 'manual') updated.labelSource = 'system';
           next.set(current.id, { ...updated, listed: current.listed && canCirculateEgg(updated) });
         }
         continue;
       }
       const egg: StockEgg = { id: observation.id, accountId: snapshot.accountId, eggGameId: observation.eggGameId,
         nature: observation.nature, body: observation.body, voice: observation.voice,
-        provenance, confidence: observation.confidence ?? 'unknown', kind: observation.kind ?? old?.kind ?? 'ordinary',
-        status: old?.status ?? 'available', location, lastConfirmedAt: snapshot.capturedAt, listed: false };
+        provenance, confidence: observation.confidence ?? 'unknown',
+        labelSource: observation.labelSource ?? (observation.confidence === 'system' ? 'system' : 'unknown'),
+        parents: observation.parents ?? old?.parents,
+        kind: observation.kind ?? old?.kind ?? 'ordinary',
+        gameAccountKey: observation.gameAccountKey ?? old?.gameAccountKey ?? snapshot.gameAccountKey,
+        status: old?.status ?? 'available', location, lastConfirmedAt: snapshot[location]?.capturedAt ?? snapshot.capturedAt, listed: false };
       egg.listed = !!old?.listed && canCirculateEgg(egg);
       next.set(egg.id, egg);
     }

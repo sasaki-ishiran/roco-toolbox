@@ -166,7 +166,7 @@ function parseTarget(value: unknown): GroupTargetConfig | null {
         : undefined;
     const target: MotherTargetConfig = {
       kind: 'mother',
-      // 兜底也不能拿资源口径常量：组目标是旧命名空间，与 all-mothers-v3-* 不是一回事（R2-7-L07）
+      // 兜底也不能拿资源口径常量：组目标是独立命名空间，与 all-mothers-v4-* 不同。
       criteriaId:
         typeof record.criteriaId === 'string'
           ? record.criteriaId

@@ -98,8 +98,8 @@ export async function readCollectorState(): Promise<CollectorState | null> {
   if (typeof window === 'undefined' || !window.RocoCapture) return null;
   let value: CollectorState;
   try { value = JSON.parse(await window.RocoCapture.getState()) as CollectorState; }
-  catch { throw new Error('无法读取本机采集状态，请返回工具箱重试'); }
-  if (value?.version !== 1) throw new Error('采集桥版本不兼容，请更新安卓工具箱');
+  catch { throw new Error('无法读取本机采集状态，请返回小布助手重试'); }
+  if (value?.version !== 1) throw new Error('采集桥版本不兼容，请更新安卓版小布助手');
   if (typeof value.supported !== 'boolean' || !['idle', 'starting', 'capturing', 'stopping', 'failed'].includes(value.phase)
     || typeof value.message !== 'string' || !nonnegative(value.packets) || !nonnegative(value.bytes)
     || (value.progressVersion != null && (value.progressVersion !== 1 || typeof value.fileId !== 'string'
@@ -108,7 +108,7 @@ export async function readCollectorState(): Promise<CollectorState | null> {
     || !Array.isArray(value.files) || value.files.length > 10 || value.files.some((file) =>
       !file || !/^capture-[0-9]+\.pcap$/.test(file.id) || typeof file.name !== 'string'
       || !nonnegative(file.size) || !nonnegative(file.createdAt) || typeof file.valid !== 'boolean')) {
-    throw new Error('本机采集状态无效，请重新打开工具箱');
+    throw new Error('本机采集状态无效，请重新打开小布助手');
   }
   return value;
 }
@@ -162,7 +162,7 @@ export async function readCaptureSnapshotBytes(snapshot: CaptureSnapshot, signal
     }
   }
   const response = await fetch(snapshot.url, { cache: 'no-store', credentials: 'omit', signal });
-  if (!response.ok) throw new Error('无法读取本机原包，请返回工具箱重新导入');
+  if (!response.ok) throw new Error('无法读取本机原包，请返回小布助手重新导入');
   const bytes = new Uint8Array(await response.arrayBuffer());
   liveBytes = { id: snapshot.id, bytes };
   return bytes;
@@ -178,7 +178,7 @@ async function fetchCaptureDelta(url: string, from: number, signal?: AbortSignal
 }
 export async function collectorAction(action: CollectorAction, id?: string): Promise<void> {
   const bridge = window.RocoCapture;
-  if (!bridge || typeof bridge[action] !== 'function') throw new Error('请更新安卓工具箱后使用内置采集');
+  if (!bridge || typeof bridge[action] !== 'function') throw new Error('请更新安卓版小布助手后使用内置采集');
   if (id != null && !/^capture-[0-9]+\.pcap$/.test(id)) throw new Error('无效的采集文件');
   const call = bridge[action] as (id?: string) => string | Promise<string>;
   const error = await (id == null ? call() : call(id));
@@ -194,7 +194,7 @@ export async function collectorAction(action: CollectorAction, id?: string): Pro
  */
 export async function startCollectorCapture(mode: StartCaptureMode = 'full'): Promise<void> {
   const bridge = window.RocoCapture;
-  if (!bridge || typeof bridge.startCapture !== 'function') throw new Error('请更新安卓工具箱后使用内置采集');
+  if (!bridge || typeof bridge.startCapture !== 'function') throw new Error('请更新安卓版小布助手后使用内置采集');
   const error = await bridge.startCapture(mode);
   if (error) throw new Error(error);
 }
@@ -251,7 +251,7 @@ export async function updateBattleOverlay(payload: BattleOverlayPayload): Promis
 /** 跳系统设置页去授予「显示在其他应用上层」；原生打不开时抛错。 */
 export async function requestOverlayPermission(): Promise<void> {
   const request = window.RocoCapture?.requestOverlayPermission;
-  if (typeof request !== 'function') throw new Error('请更新安卓工具箱后使用悬浮窗');
+  if (typeof request !== 'function') throw new Error('请更新安卓版小布助手后使用悬浮窗');
   const error = await request();
   if (error) throw new Error(error);
 }

@@ -1,7 +1,7 @@
 import catalogGen from './catalog.gen.json';
-import productEggNatures from './productEggNatures.json';
 import type { EggGroupId, SpeciesEntry } from '../domain/types';
 import type { TargetNature } from '../domain/studCoverage';
+import productEggNatures from './productEggNatures.json';
 
 interface CatalogGen {
   source: string;
@@ -22,10 +22,10 @@ export const CATALOG_VERSION = data.dataVersion;
 
 /**
  * 蛋组显示名的玩家习惯叫法覆盖。
- * wiki 与 data/pvp-natures.json 里叫「飞龙组」，但玩家习惯都叫「龙组」，
+ * wiki 与 data/pvp-natures.json 里叫「飞龙组」，但玩家（以及蛋神助手）都叫「龙组」，
  * 所以只改显示名，数据键（group id）不动。
  */
-const EGG_GROUP_DISPLAY_OVERRIDES: Record<string, string> = { 飞龙组: '龙组' };
+const EGG_GROUP_DISPLAY_OVERRIDES: Record<string, string> = { "飞龙组": '龙组' };
 
 export const eggGroupNames: Record<number, string> = Object.fromEntries(
   Object.entries(data.eggGroupNames).map(([id, name]) => [
@@ -34,24 +34,38 @@ export const eggGroupNames: Record<number, string> = Object.fromEntries(
   ]),
 );
 
-/**
- * 产品设定的推荐性格（2026-11-02 用户拍板）。
- *
- * 菜菜确认的那份「推荐性格」作为**产品默认口径**，覆盖图鉴烘焙的
- * `eggRecommendedNatures`（没覆盖到的蛋仍按 PVP 推荐 / 种族值兜底）。
- * 只覆盖基础形态（`eggGameId === gameId`），运行期按蛋查——与个人覆盖表的优先级一致：
- * 个人改过的蛋仍以个人表为准，没改过的蛋用这里的产品口径。
- */
-const PRODUCT_EGG_NATURES: Record<string, string[]> =
-  (productEggNatures as { natures: Record<string, string[]> }).natures;
+/** 产品设定的每颗蛋推荐性格（`productEggNatures.json`，key = 蛋的 gameId）。 */
+const productNaturesByGameId: Record<string, string[]> = productEggNatures.natures;
 
+/**
+ * 蛋归属修正（2026-11-17 用户口径）。
+ *
+ * 阿瓦鲨是乐乐鲨的成熟形态，图鉴却把它拆成两条独立血脉、各自当成一颗蛋，
+ * 「母本 / 种公」里于是凭空多出两颗不存在的蛋。用户拍板：**阿瓦鲨彻底不计入任何蛋**，
+ * 所以这里把它的 `eggGameId` 置空（不归乐乐鲨，也不自己成蛋）。
+ */
+const EGG_GAME_ID_OVERRIDES: Record<number, number | null> = {
+  3806: null, // 阿瓦鲨（柠檬鲨的样子）
+  3807: null, // 阿瓦鲨（虎纹鲨的样子）
+};
+
+/**
+ * 图鉴物种表。
+ *
+ * 推荐性格以**产品口径**为准（2026-11-02 产品设定）：`productEggNatures.json` 里列出的蛋，
+ * 直接用它给的性格列表；图鉴管线产出的 `eggRecommendedNatures` 可能滞后一步，只作兜底。
+ */
 export const species: SpeciesEntry[] = data.species.map((entry) => {
-  const productNatures =
-    entry.eggGameId === entry.gameId ? PRODUCT_EGG_NATURES[String(entry.gameId)] : undefined;
+  const eggGameId = Object.prototype.hasOwnProperty.call(EGG_GAME_ID_OVERRIDES, entry.gameId)
+    ? EGG_GAME_ID_OVERRIDES[entry.gameId]
+    : entry.eggGameId;
   return {
     ...entry,
+    eggGameId,
     eggGroups: (entry.eggGroups ?? []).filter((g): g is EggGroupId => typeof g === 'number'),
-    ...(productNatures?.length ? { eggRecommendedNatures: [...productNatures] } : {}),
+    ...(eggGameId === entry.gameId && productNaturesByGameId[String(entry.gameId)]
+      ? { eggRecommendedNatures: productNaturesByGameId[String(entry.gameId)] }
+      : {}),
   };
 });
 
@@ -128,3 +142,42 @@ export const allNatureNames: string[] = data.natures.map((nature) => nature.name
 export const targetNaturePool: Array<{ id: number; name: string }> = targetNatureNames
   .map((name) => ({ id: natureIdByName.get(name) ?? 0, name }))
   .filter((entry) => entry.id > 0);
+
+/**
+ * 性格 → 提升的属性（物攻 / 物防 / 魔攻 / 魔防 / 速度 / 生命）。
+ *
+ * 来源：`data/natures.json` 的 `plus` 字段。图鉴生成数据 `catalog.gen.json` 只保留了 id / name，
+ * 而性格面板要按属性分组展示，所以这里补一份静态映射（性格固定 30 条，不随版本变化）。
+ */
+export const naturePlusStats: ReadonlyMap<string, string> = new Map([
+  ['大胆', '物攻'],
+  ['固执', '物攻'],
+  ['调皮', '物攻'],
+  ['勇敢', '物攻'],
+  ['逞强', '物攻'],
+  ['稳重', '物防'],
+  ['天真', '物防'],
+  ['懒散', '物防'],
+  ['悠闲', '物防'],
+  ['坦率', '物防'],
+  ['聪明', '魔攻'],
+  ['专注', '魔攻'],
+  ['偏执', '魔攻'],
+  ['冷静', '魔攻'],
+  ['理性', '魔攻'],
+  ['警惕', '魔防'],
+  ['温顺', '魔防'],
+  ['害羞', '魔防'],
+  ['慎重', '魔防'],
+  ['焦虑', '魔防'],
+  ['胆小', '速度'],
+  ['急躁', '速度'],
+  ['开朗', '速度'],
+  ['莽撞', '速度'],
+  ['热情', '速度'],
+  ['沉默', '生命'],
+  ['忧郁', '生命'],
+  ['平和', '生命'],
+  ['粗心', '生命'],
+  ['踏实', '生命'],
+]);

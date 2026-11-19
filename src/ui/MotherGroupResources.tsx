@@ -1523,6 +1523,7 @@ export function MotherGroupResources({
             <PetCompactCard
               gameId={pet.gameId}
               name={nameOfPet(pet)}
+              number={speciesByGameId.get(pet.gameId)?.number}
               gender={pet.gender}
               nature={pet.nature}
               medalBody={pet.medalBody}

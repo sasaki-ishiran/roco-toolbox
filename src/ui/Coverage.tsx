@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listCollectionGroups, publishCollectionDemand } from '../api/collectionGroups';
 import { readAccountId } from '../api/session';
-import { ALL_EGG_GROUP_IDS, groupRecommendedNatures } from '../domain/coverageTargets';
+import { ALL_EGG_GROUP_IDS } from '../domain/coverageTargets';
 import { describeCoverageCells } from '../domain/coverageDetail';
 import { TARGET_MODE_LABELS } from '../domain/petFilters';
-import { eggGroupNames, allNatureNames, species, targetNatures, targetNatureNames, targetNaturePool } from '../data/catalog';
-import { AccountFilterBar } from './AccountFilterBar';
+import {
+  eggGroupNames,
+  allNatureNames,
+  naturePlusStats,
+  species,
+  targetNatureNames,
+  targetNaturePool,
+} from '../data/catalog';
 import { CollectionTargetEditor } from './CollectionTargetEditor';
 import { useOwnedPets } from './useOwnedPets';
+import { useAccountFilter } from './accountFilterStore';
 import { useCollectionSummary } from './useCollectionSummary';
 import {
   resetCoverageFilter,
@@ -27,10 +34,8 @@ import {
   CoverageMatrix,
 } from './CoverageMatrix';
 import { EmptyState } from './EmptyState';
+import { NATURE_STAT_ORDER } from './NatureSelectionContent';
 import { SourceNotice } from './SourceNotice';
-import {
-  useAccountFilter,
-} from './accountFilterStore';
 import { StudMatrix, type StudDemandPublishInput } from './StudMatrix';
 import { useCoverageSlots } from './useCoverageSlots';
 
@@ -44,56 +49,47 @@ export interface CoverageProps {
 /** 淡黄格弹层里的小组列表缓存有效期：同一账号 60 秒内只拉一次（与接单页同一口径，R2-4-L05）。 */
 const DEMAND_GROUPS_TTL_MS = 60_000;
 
+/**
+ * 自选性格分组（2026-11-19 用户口径）：和精灵背包「全部性格」一致，
+ * 按提升属性排成 6 行、每行 5 个；30 个性格常显，不再用「更多」折叠。
+ */
+const CUSTOM_NATURE_ROWS = NATURE_STAT_ORDER.map((stat) => ({
+  stat,
+  names: allNatureNames.filter((name) => naturePlusStats.get(name) === stat),
+})).filter((row) => row.names.length > 0);
+
 export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: CoverageProps = {}) {
   // 与看板同一份摘要（2026-10-24）：覆盖矩阵不再自己算一遍
-  const { loaded, owned, mode, stud, recommendations } = useCollectionSummary();
-  const { accounts, all } = useOwnedPets();
+  const { loaded, owned, mode, stud, recommendations, plans } = useCollectionSummary();
+  const { accounts } = useOwnedPets();
   const { excluded } = useAccountFilter();
-  /**
-   * 跨号补缺（2026-11-02）：只在**单账号视角**下算其他号能不能出这颗蛋。
-   * 其他号即使被筛选条排除，也仍然在 `all` 里，所以这里直接从全量里取。
-   */
-  const transferTarget = useMemo(() => {
-    const selected = accounts.filter((account) => !excluded.has(account));
-    return selected.length === 1 ? selected[0] : undefined;
-  }, [accounts, excluded]);
-  const transferPets = useMemo(() => {
-    if (!transferTarget) return undefined;
-    return all.filter((pet) => pet.account !== transferTarget);
-  }, [transferTarget, all]);
   const [editorOpen, setEditorOpen] = useState(false);
-  /** 筛选收在种公阵列右上角（2026-10-29 用户要求），默认收起省空间。 */
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  /** 自选性格的「更多」：默认只出八大性格（两排），点开才显示全部（2026-10-30）。 */
-  const [customMore, setCustomMore] = useState(false);
+  /** 自选性格的下拉：默认收起，只留一行摘要；点开才铺 6 行 × 5 列（2026-11-19 用户口径）。 */
+  const [customOpen, setCustomOpen] = useState(false);
 
   const filter = useCoverageFilter();
   const slots = useCoverageSlots();
   /**
-   * 「筛选与默认值不同」圆点（2026-11-01 R2-4-L03 补）：除了蛋组少选与自选模式，
-   * 推荐模式下在蛋组展开区改过本组性格也算偏离默认，与 StudMatrix 的注释契约对齐。
+   * 「筛选与默认值不同」标记（2026-11-01 R2-4-L03，2026-11-19 随默认模式改为八大）：
+   * 蛋组少选、或性格模式不是「八大性格」，都算偏离默认。
    */
-  const filterActive = useMemo(() => {
-    if (filter.groupIds.length < ALL_EGG_GROUP_IDS.length) return true;
-    if (filter.natureMode === 'custom') return true;
-    const defaults = groupRecommendedNatures(targetNatures);
-    return ALL_EGG_GROUP_IDS.some((groupId) => {
-      const current = filter.naturesByGroup[groupId] ?? [];
-      const baseline = defaults[groupId] ?? [];
-      return (
-        current.length !== baseline.length ||
-        current.some((name) => !baseline.includes(name))
-      );
-    });
-  }, [filter]);
-  /**
-   * 收起的「更多」里已经勾上的池外性格（2026-11-01 R2-4-M03）：
-   * 收起后这些性格仍然参与覆盖矩阵 / 种公阵列，界面上必须还能看见，否则就是「看不见却生效」。
-   */
-  const hiddenCustomNatures = useMemo(
-    () => filter.customNatures.filter((name) => !targetNatureNames.includes(name)),
-    [filter.customNatures],
+  const filterActive = useMemo(
+    () =>
+      filter.groupIds.length < ALL_EGG_GROUP_IDS.length || filter.natureMode !== 'eight',
+    [filter],
   );
+
+  /**
+   * 点属性名整组勾选 / 取消（与精灵背包「全部性格」一致）：
+   * 默认按 8 大预选时，点一下补全该组；整组都亮着时再点一下整组取消。
+   */
+  const toggleNatureStat = (names: readonly string[]) => {
+    const allOn = names.every((name) => filter.customNatures.includes(name));
+    for (const name of names) {
+      const on = filter.customNatures.includes(name);
+      if (allOn ? on : !on) toggleCustomNature(name);
+    }
+  };
   const speciesByGameId = useMemo(
     () => new Map(species.map((entry) => [entry.gameId, entry])),
     [],
@@ -165,13 +161,177 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
 
   return (
     <main className="mx-auto max-w-md space-y-3 p-4" data-tour="collection-studs">
-      <AccountFilterBar accounts={accounts} />
       {!loaded ? (
         <p className="text-sm text-slate-400">正在读取本地数据…</p>
       ) : accounts.length === 0 ? (
         <EmptyState onGoImport={onGoImport} />
       ) : (
         <>
+          {/* 筛选提成一级卡片（2026-11-19 用户口径）：一进种公页就能改蛋组 / 档位 / 性格，
+              不再收在阵列右上角；性格三种模式，默认「八大性格」 */}
+          <section
+            className="rounded-2xl bg-white p-3 shadow-sm"
+            data-testid="coverage-filter-card"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-medium text-slate-500">筛选</h2>
+              {filterActive ? (
+                <span
+                  className="text-[10px] font-medium text-emerald-700"
+                  data-testid="coverage-filter-active"
+                >
+                  已改
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-2">
+              <CoverageFilterBar
+                filter={filter}
+                onToggleGroup={toggleFilterGroup}
+                onReset={resetCoverageFilter}
+                onOpenTargetEditor={() => setEditorOpen(true)}
+              />
+
+              {/* 性格：推荐性格 / 八大性格 / 自选性格（2026-11-19 用户口径，默认八大） */}
+              <div className="mt-2" data-testid="nature-mode">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-slate-500">性格</span>
+                  <div
+                    className="flex gap-0.5 rounded-lg bg-slate-100 p-0.5"
+                    role="group"
+                    aria-label="性格模式"
+                  >
+                    {(
+                      [
+                        { value: 'recommended', label: '推荐性格' },
+                        { value: 'eight', label: '八大性格' },
+                        { value: 'custom', label: '自选性格' },
+                      ] as const
+                    ).map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        aria-pressed={filter.natureMode === item.value}
+                        onClick={() => setNatureMode(item.value)}
+                        data-testid={`nature-mode-${item.value}`}
+                        className={`min-h-[28px] rounded-md px-2 text-xs ${
+                          filter.natureMode === item.value
+                            ? 'bg-white font-medium text-emerald-700 shadow-sm'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {filter.natureMode === 'eight' ? (
+                  <p
+                    className="mt-1.5 text-[11px] leading-relaxed text-slate-400"
+                    data-testid="nature-mode-eight-list"
+                  >
+                    八大性格：{targetNatureNames.join('、')}
+                  </p>
+                ) : null}
+
+                {filter.natureMode === 'custom' ? (
+                  <div className="mt-2 space-y-1" data-testid="custom-natures">
+                    {/* 下拉框（2026-11-19 用户口径）：收起时只占一行摘要，点开才铺
+                        六行 × 五列（每行一个属性组，30 个性格全部可选），收起按钮固定在网格上方 */}
+                    <button
+                      type="button"
+                      aria-expanded={customOpen}
+                      onClick={() => setCustomOpen((value) => !value)}
+                      data-testid="custom-nature-toggle"
+                      className="flex min-h-[32px] w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-left"
+                    >
+                      <span
+                        className="min-w-0 flex-1 truncate text-xs text-slate-600"
+                        data-testid="custom-natures-summary"
+                      >
+                        {filter.customNatures.length === 0
+                          ? '还没选性格'
+                          : `已选 ${filter.customNatures.length} 个：${filter.customNatures.join('、')}`}
+                      </span>
+                      <span className="shrink-0 text-xs font-medium text-emerald-700">
+                        {customOpen ? '收起 ▴' : '全部性格 ▾'}
+                      </span>
+                    </button>
+
+                    {customOpen ? (
+                      <div className="space-y-1" data-testid="custom-nature-grid">
+                        {CUSTOM_NATURE_ROWS.map(({ stat, names }) => {
+                          const allOn = names.every((name) => filter.customNatures.includes(name));
+                          return (
+                            <div
+                              key={stat}
+                              className="grid grid-cols-[2.4rem_repeat(5,minmax(0,1fr))] items-stretch gap-1"
+                              data-testid={`custom-nature-row-${stat}`}
+                            >
+                              <button
+                                type="button"
+                                aria-pressed={allOn}
+                                onClick={() => toggleNatureStat(names)}
+                                title={`${stat}：整组勾选 / 取消`}
+                                data-testid={`custom-nature-stat-${stat}`}
+                                className={`min-h-[30px] rounded-md border text-[11px] ${
+                                  allOn
+                                    ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
+                                    : 'border-slate-200 bg-slate-50 text-slate-500'
+                                }`}
+                              >
+                                {stat}
+                              </button>
+                              {names.map((name) => {
+                                const on = filter.customNatures.includes(name);
+                                return (
+                                  <button
+                                    key={name}
+                                    type="button"
+                                    aria-pressed={on}
+                                    onClick={() => toggleCustomNature(name)}
+                                    data-testid={`custom-nature-${name}`}
+                                    className={`min-h-[30px] rounded-md border px-1 text-xs ${
+                                      on
+                                        ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
+                                        : 'border-slate-200 bg-white text-slate-400'
+                                    }`}
+                                  >
+                                    {name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={toggleAllCustomNatures}
+                          className="mt-1.5 min-h-[28px] rounded-md border border-slate-200 px-2 text-xs text-slate-600"
+                          data-testid="custom-nature-select-all"
+                        >
+                          {targetNaturePool.every((entry) =>
+                            filter.customNatures.includes(entry.name),
+                          )
+                            ? '全部取消'
+                            : '全选八大'}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {filter.natureMode === 'custom' && filter.customNatures.length === 0 ? (
+                  <p className="mt-1 text-xs text-slate-400" data-testid="custom-natures-empty">
+                    先勾选要集齐的性格，蛋组矩阵会按所选性格显示。
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
           <section className="rounded-2xl bg-white p-4 shadow-sm">
             <h2 className="text-sm font-medium text-slate-500">
               覆盖度
@@ -202,13 +362,12 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
           {/* 新用户第一次进来给一次极简说明（3 条），点「知道了」后不再出现 */}
           <CoverageIntroCard />
 
-          {/* 种公阵列（2026-10-28）：蛋组 × 目标性格，档位做 tab；
-              筛选收进卡片右上角（2026-10-29 用户要求），下方保留按蛋组缺口明细 */}
+          {/* 种公阵列（2026-10-28，参考蛋神）：蛋组 × 目标性格，档位做 tab；
+              卡片标题与副标题去掉（2026-11-19 用户口径：导航已经是「收集 · 种公」），
+              下方保留按蛋组缺口明细 */}
           <StudMatrix
             slots={slots}
             owned={owned}
-            transferPets={transferPets}
-            transferTarget={transferTarget}
             species={species}
             speciesByGameId={speciesByGameId}
             eggGroupNames={eggGroupNames}
@@ -219,113 +378,8 @@ export function Coverage({ expandedGroupId, onToggleGroup, onGoImport }: Coverag
             demandGroupsError={demandGroupsError}
             onLoadDemandGroups={loadDemandGroups}
             onPublishStudDemand={publishStudDemand}
-            filterOpen={filtersOpen}
-            onToggleFilter={() => setFiltersOpen((open) => !open)}
-            filterActive={filterActive}
-            filterPanel={
-              <>
-                <CoverageFilterBar
-                  filter={filter}
-                  onToggleGroup={toggleFilterGroup}
-                  onReset={resetCoverageFilter}
-                  onOpenTargetEditor={() => setEditorOpen(true)}
-                />
-
-                {/* 推荐性格 / 自选性格（2026-10-05 用户拍板：加回普通筛选模式） */}
-                <div className="mt-2" data-testid="nature-mode">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-slate-500">性格</span>
-                    <div
-                      className="flex gap-0.5 rounded-lg bg-slate-100 p-0.5"
-                      role="group"
-                      aria-label="性格模式"
-                    >
-                      {(
-                        [
-                          { value: 'recommended', label: '推荐性格' },
-                          { value: 'custom', label: '自选性格' },
-                        ] as const
-                      ).map((item) => (
-                        <button
-                          key={item.value}
-                          type="button"
-                          aria-pressed={filter.natureMode === item.value}
-                          onClick={() => setNatureMode(item.value)}
-                          data-testid={`nature-mode-${item.value}`}
-                          className={`min-h-[28px] rounded-md px-2 text-xs ${
-                            filter.natureMode === item.value
-                              ? 'bg-white font-medium text-emerald-700 shadow-sm'
-                              : 'text-slate-500'
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {filter.natureMode === 'custom' ? (
-                    <div className="mt-2" data-testid="custom-natures">
-                      {/* 八大性格固定两排（4 列 × 2 行），第 9 格「更多」可展开全部性格（2026-10-30） */}
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {(customMore ? allNatureNames : targetNatureNames).map((name) => {
-                          const on = filter.customNatures.includes(name);
-                          return (
-                            <button
-                              key={name}
-                              type="button"
-                              aria-pressed={on}
-                              onClick={() => toggleCustomNature(name)}
-                              data-testid={`custom-nature-${name}`}
-                              className={`min-h-[30px] rounded-md border px-1 text-xs ${
-                                on
-                                  ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700'
-                                  : 'border-slate-200 bg-white text-slate-400'
-                              }`}
-                            >
-                              {name}
-                            </button>
-                          );
-                        })}
-                        {allNatureNames.length > targetNatureNames.length ? (
-                          <button
-                            type="button"
-                            onClick={() => setCustomMore((value) => !value)}
-                            aria-expanded={customMore}
-                            data-testid="custom-nature-more"
-                            className="min-h-[30px] rounded-md border border-dashed border-slate-300 bg-white px-1 text-xs text-slate-500"
-                          >
-                            {customMore ? '收起' : `更多 +${allNatureNames.length - targetNatureNames.length}`}
-                          </button>
-                        ) : null}
-                      </div>
-                      {/* 收起「更多」时，池外已选的性格仍生效 → 用一行只读摘要让人看得见（R2-4-M03） */}
-                      {!customMore && hiddenCustomNatures.length > 0 ? (
-                        <p className="mt-1 text-xs text-slate-400" data-testid="custom-natures-hidden">
-                          更多里已选：{hiddenCustomNatures.join('、')}（点上面「更多」可改）
-                        </p>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={toggleAllCustomNatures}
-                        className="mt-1.5 min-h-[28px] rounded-md border border-slate-200 px-2 text-xs text-slate-600"
-                        data-testid="custom-nature-select-all"
-                      >
-                        {targetNaturePool.every((entry) => filter.customNatures.includes(entry.name))
-                          ? '全部取消'
-                          : '全选八大'}
-                      </button>
-                    </div>
-                  ) : null}
-
-                  {filter.natureMode === 'custom' && filter.customNatures.length === 0 ? (
-                    <p className="mt-1 text-xs text-slate-400" data-testid="custom-natures-empty">
-                      先勾选要集齐的性格，蛋组矩阵会按所选性格显示。
-                    </p>
-                  ) : null}
-                </div>
-              </>
-            }
+            plans={plans}
+            accountNames={accounts.filter((name) => !excluded.has(name))}
           />
 
           <h2 className="px-1 text-sm font-medium text-slate-500">缺口明细（按蛋组）</h2>

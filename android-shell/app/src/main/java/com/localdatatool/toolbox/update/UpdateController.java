@@ -56,25 +56,24 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class UpdateController {
 
     /**
-     * 唯一配置点：远端版本清单地址。
+     * 唯一配置点：远端版本清单地址，由构建通道在 build.gradle 里注入
+     * （production = 主站 version-18；internal = 独立内测清单）。
      *
-     * <p>主站 {@code /android/version.json} 被 Cloudflare 边缘缓存咬住（7 天 TTL、账号无 zone
-     * 无法 purge），1.2.6 客户端读到的是旧副本，所以新版本改读带版本号的 {@code version-18.json}。
-     * 这个新路径拿到的清单是**可信**的，可以触发强制更新。</p>
+     * <p>主站 {@code /android/version.json} 曾被 Cloudflare 边缘缓存咬住（7 天 TTL），
+     * 1.2.6 客户端读到旧副本，所以新版本改读带版本号的 {@code version-18.json}。
+     * 正式通道下这个地址是**可信**的，可以触发强制更新；内测通道只读内测清单，
+     * 不会因为公开清单把人推到公开版本。</p>
      */
-    public static final String MANIFEST_URL =
-        "https://roco-toolbox.pages.dev/android/version-18.json";
+    public static final String MANIFEST_URL = BuildConfig.MANIFEST_URL;
 
-    /** 兜底地址：都可能被边缘缓存咬住，只做「提示更新」，不做强更。 */
-    private static final String LEGACY_MANIFEST_URL =
-        "https://roco-toolbox.pages.dev/android/version.json";
-    private static final String DOWNLOADS_MANIFEST_URL =
-        "https://roco-toolbox-downloads.pages.dev/android/version.json";
+    /** 兜底地址：都可能被边缘缓存咬住，只做「提示更新」，不做强更；内测通道为空。 */
+    private static final String LEGACY_MANIFEST_URL = BuildConfig.LEGACY_MANIFEST_URL;
+    private static final String DOWNLOADS_MANIFEST_URL = BuildConfig.DOWNLOADS_MANIFEST_URL;
 
     private static final String PREFS = "roco_update";
     private static final String KEY_SKIPPED = "skippedVersionCode";
     private static final String APK_NAME = "roco-toolbox-latest.apk";
-    private static final String AUTHORITY = "com.localdatatool.toolbox.fileprovider";
+    private static final String AUTHORITY = BuildConfig.APPLICATION_ID + ".fileprovider";
 
     /** 全屏强制更新页的底色与文字色 */
     private static final int COLOR_PAGE = 0xFFF8FAFC;
@@ -99,18 +98,34 @@ public final class UpdateController {
     private TextView progressText;
     /** 低于最低可用版本时挂着的全屏更新页（不可取消） */
     private Dialog forceDialog;
+    /** 检查结果回推给网页（「我的」页更新入口按它切「检查 / 更新」文案） */
+    private StatusListener statusListener;
+
+    /** 检查结果回调：state = latest / available / failed。 */
+    public interface StatusListener {
+        void onStatus(String state, String versionName, String message);
+    }
+
+    public void setStatusListener(StatusListener listener) {
+        this.statusListener = listener;
+    }
 
     public UpdateController(Activity activity) {
         this.activity = activity;
         this.prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        java.util.List<UpdateManager.ManifestSource> sources = new java.util.ArrayList<>();
+        // 主清单：正式通道 = 主站 version-18（可信，可强更）；内测通道 = 独立内测清单
+        sources.add(() -> readManifest(MANIFEST_URL));
+        // 兜底：只提示更新，避免一份旧缓存把人卡在更新页；内测通道不混入公开清单
+        if (!LEGACY_MANIFEST_URL.isEmpty()) {
+            sources.add(() -> UpdateManager.asNoticeOnly(readManifest(LEGACY_MANIFEST_URL)));
+        }
+        if (!DOWNLOADS_MANIFEST_URL.isEmpty()) {
+            sources.add(() -> UpdateManager.asNoticeOnly(readManifest(DOWNLOADS_MANIFEST_URL)));
+        }
         this.manager = new UpdateManager(
             BuildConfig.VERSION_CODE, apkFile(),
-            UpdateManager.firstValid(
-                // 新路径：可信清单，低于 minSupportedVersionCode 会进全屏强制更新页
-                () -> readManifest(MANIFEST_URL),
-                // 旧路径 / 下载站：只提示更新，避免一份旧缓存把人卡在更新页
-                () -> UpdateManager.asNoticeOnly(readManifest(LEGACY_MANIFEST_URL)),
-                () -> UpdateManager.asNoticeOnly(readManifest(DOWNLOADS_MANIFEST_URL))),
+            UpdateManager.firstValid(sources.toArray(new UpdateManager.ManifestSource[0])),
             this::downloadApk, this::canInstallPackage);
     }
 
@@ -148,17 +163,20 @@ public final class UpdateController {
         if (destroyed) return;
         worker.execute(() -> manager.check(new UpdateManager.Listener() {
             @Override public void onUpToDate() {
+                report("latest", BuildConfig.VERSION_NAME, null);
                 if (!silent) main.post(() -> dialog("已是最新版本",
                     "当前已是最新版本 v" + BuildConfig.VERSION_NAME + "。"));
             }
 
             @Override public void onAvailable(UpdateManifest manifest, boolean required) {
+                report("available", manifest.versionName, null);
                 int skipped = prefs.getInt(KEY_SKIPPED, -1);
                 if (silent && !required && skipped == manifest.versionCode) return;
                 main.post(() -> showAvailable(manifest, required));
             }
 
             @Override public void onCheckFailed(String message) {
+                report("failed", null, message);
                 if (silent) return;
                 main.post(() -> dialog("检查更新失败", message));
             }
@@ -169,6 +187,13 @@ public final class UpdateController {
 
             @Override public void onDownloadFailed(String message) { }
         }));
+    }
+
+    /** 把检查结果回推给网页（主线程回调，网页不在也不影响原生弹窗）。 */
+    private void report(String state, String versionName, String message) {
+        StatusListener listener = statusListener;
+        if (listener == null) return;
+        main.post(() -> listener.onStatus(state, versionName, message));
     }
 
     private void showAvailable(UpdateManifest manifest, boolean required) {
@@ -290,7 +315,7 @@ public final class UpdateController {
                 toast("没有可用的剪贴板");
                 return;
             }
-            clipboard.setPrimaryClip(ClipData.newPlainText("洛克工具箱下载链接", url));
+            clipboard.setPrimaryClip(ClipData.newPlainText("小布助手下载链接", url));
             toast("下载链接已复制");
         } catch (Exception error) {
             toast("复制失败：" + describe(error));
@@ -365,7 +390,7 @@ public final class UpdateController {
     private void showInstallPermission() {
         new AlertDialog.Builder(activity)
             .setTitle("需要允许安装未知应用")
-            .setMessage("系统要求先允许「洛克工具箱」安装应用，才能继续安装更新。")
+            .setMessage("系统要求先允许「小布助手」安装应用，才能继续安装更新。")
             .setPositiveButton("去设置", (dialog, which) -> openInstallSettings())
             .setNegativeButton("取消", (dialog, which) ->
                 toast("没有允许安装，更新包已下载好，之后可以再试。"))
@@ -380,7 +405,7 @@ public final class UpdateController {
             activity.startActivity(intent);
         } catch (Exception error) {
             settingsOpened = false;
-            dialog("打不开系统设置", "请到系统设置里允许「洛克工具箱」安装未知应用后重试。");
+            dialog("打不开系统设置", "请到系统设置里允许「小布助手」安装未知应用后重试。");
         }
     }
 

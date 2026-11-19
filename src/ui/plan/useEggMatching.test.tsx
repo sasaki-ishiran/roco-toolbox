@@ -1,12 +1,35 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { useEggMatching } from './useEggMatching';
+import { clearEggMatchingCache, useEggMatching } from './useEggMatching';
 import { emptyEggWorkflow } from '../../shared/eggWorkflow';
 import { getEggMatching,mutateEggMatching } from '../../api/eggMatching';
 import { getPlanAlertBadge, publishPlanAlertBadge } from './planAlertsStore';
 vi.mock('../../api/eggMatching',async original=>({...await original<typeof import('../../api/eggMatching')>(),getEggMatching:vi.fn(),mutateEggMatching:vi.fn()}));
 const response=()=>({version:0,state:emptyEggWorkflow()});
-beforeEach(()=>{vi.mocked(getEggMatching).mockReset().mockResolvedValue(response());vi.mocked(mutateEggMatching).mockReset();});
+beforeEach(()=>{clearEggMatchingCache();vi.mocked(getEggMatching).mockReset().mockResolvedValue(response());vi.mocked(mutateEggMatching).mockReset();});
+test('re-entering the demand center reuses the last loaded data instead of loading again',async()=>{
+  vi.mocked(getEggMatching).mockResolvedValueOnce({...response(),version:3});
+  const first=renderHook(()=>useEggMatching('g','a'));
+  await waitFor(()=>expect(first.result.current.data?.version).toBe(3));
+  first.unmount();
+  let resolve!:(value:ReturnType<typeof response>)=>void;
+  vi.mocked(getEggMatching).mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+  const second=renderHook(()=>useEggMatching('g','a'));
+  expect(second.result.current.data?.version).toBe(3);
+  expect(second.result.current.loading).toBe(false);
+  await act(async()=>{resolve({...response(),version:3});});
+});
+test('a stale background response never replaces newer cached data',async()=>{
+  vi.mocked(getEggMatching).mockResolvedValueOnce({...response(),version:5});
+  const first=renderHook(()=>useEggMatching('g','a'));
+  await waitFor(()=>expect(first.result.current.data?.version).toBe(5));
+  first.unmount();
+  vi.mocked(getEggMatching).mockResolvedValueOnce({...response(),version:4});
+  const second=renderHook(()=>useEggMatching('g','a'));
+  expect(second.result.current.data?.version).toBe(5);
+  await waitFor(()=>expect(getEggMatching).toHaveBeenCalledTimes(2));
+  expect(second.result.current.data?.version).toBe(5);
+});
 test('changing identity cannot leave the new group busy or install an old mutation response',async()=>{
   let resolve!:(value:ReturnType<typeof response>)=>void;
   vi.mocked(mutateEggMatching).mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));

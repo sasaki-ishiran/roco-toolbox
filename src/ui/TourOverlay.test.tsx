@@ -58,7 +58,7 @@ describe('新手引导', () => {
     expect(startTitles).toContain('开始采集');
     expect(TOUR_SEGMENTS.start.some((step) => step.waitForImport)).toBe(true);
 
-    expect(TOUR_SEGMENTS.dashboard.map((step) => step.title).join('|')).toContain('目标档位');
+    expect(TOUR_SEGMENTS.dashboard.map((step) => step.title).join('|')).toContain('种公目标');
     expect(TOUR_SEGMENTS.collection.map((step) => step.title).join('|')).toContain('覆盖度');
     expect(TOUR_SEGMENTS.collection.map((step) => step.title).join('|')).toContain('母本全收集');
     expect(TOUR_SEGMENTS.nearby.map((step) => step.title).join('|')).toContain('雷达');

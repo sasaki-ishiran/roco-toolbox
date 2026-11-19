@@ -55,7 +55,12 @@ describe('petIcons', () => {
 
     expect(petVoiceMedalIcon(100)).toBe('/ui/medals/1026-max.png');
     expect(petVoiceMedalIcon(-100)).toBe('/ui/medals/1025-max.png');
-    expect(petVoiceMedalIcon(96)).toBeNull();
+    // 双牌档（≥96 / ≤-96）也有奖牌，只是不带 MAX 缎带（2026-11-17 用户口径）
+    expect(petVoiceMedalIcon(96)).toBe('/ui/medals/1026.png');
+    expect(petVoiceMedalIcon(99)).toBe('/ui/medals/1026.png');
+    expect(petVoiceMedalIcon(-96)).toBe('/ui/medals/1025.png');
+    expect(petVoiceMedalIcon(95)).toBeNull();
+    expect(petVoiceMedalIcon(-95)).toBeNull();
   });
 
   test('稀有度徽标：异色 / 炫彩 / 异色炫彩', () => {

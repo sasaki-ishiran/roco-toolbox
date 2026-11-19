@@ -26,23 +26,22 @@ public final class CaptureController {
     private static final int VPN_REQUEST = 8195, NOTICE_REQUEST = 8196;
     private static final String FILE_PREFIX = "https://roco-share.invalid/collector/";
     /** 当前站点 origin（内测可切换，见 com.localdatatool.toolbox.ServerConfig）；只有它算可信页面。 */
-    private volatile String origin = "https://roco-toolbox.pages.dev";
+    private volatile String siteOrigin = "https://roco-toolbox.pages.dev";
     public interface ImportReady { void ready(String name, String url); }
     private final Activity activity;
     private final ImportReady imported;
     private final Map<String, CaptureSnapshot> grants = new ConcurrentHashMap<>();
-    private CaptureUploadManager uploads;
     private volatile boolean trusted;
     private boolean permissionPending;
     private boolean awaitingLaunch;
     public CaptureController(Activity activity, ImportReady imported) { this.activity = activity; this.imported = imported; }
-    public void setOrigin(String origin) { this.origin = origin; }
+    public void setSiteOrigin(String origin) { this.siteOrigin = origin; }
     public void setPage(String url) {
         Uri uri = url == null ? Uri.EMPTY : Uri.parse(url);
         String host = uri.getHost();
         String page = host == null ? "" : "https://" + host
             + (uri.getPort() == -1 || uri.getPort() == 443 ? "" : ":" + uri.getPort());
-        trusted = "https".equals(uri.getScheme()) && origin.equals(page);
+        trusted = "https".equals(uri.getScheme()) && siteOrigin.equals(page);
     }
     public void invalidatePage() { trusted = false; }
     public void destroy() {
@@ -57,7 +56,6 @@ public final class CaptureController {
         try {
             JSONArray rows = new JSONArray();
             CaptureFiles files = CaptureVpnService.files(activity);
-            CaptureUploadManager uploadManager = uploads();
             // 正在写的文件带 .incomplete 标记，属正常状态；忙碌时不要把它当成「残缺文件」返回，
             // 否则刚点开始采集就会出现「未完整保存或没有可用数据」。
             boolean writing = "starting".equals(state.phase) || "capturing".equals(state.phase)
@@ -67,21 +65,18 @@ public final class CaptureController {
                 JSONObject row = new JSONObject().put("id", file.getName()).put("name", file.getName())
                     .put("size", file.length()).put("createdAt", Long.parseLong(file.getName().substring(8, file.getName().length() - 5)))
                     .put("valid", files.valid(file));
-                JSONObject upload = uploadManager.get(file.getName());
-                if (!upload.optString("state").isEmpty()) row.put("upload", upload);
                 rows.put(row);
             }
             return new JSONObject().put("version", 1).put("supported", Build.VERSION.SDK_INT >= 26)
                 .put("phase", state.phase).put("message", state.message).put("packets", state.packets).put("bytes", state.bytes).put("files", rows)
-                .put("progressVersion", 1).put("fileId", state.fileId).put("savedBytes", state.savedBytes)
-                .put("uploadBusy", uploadManager.busy()).toString();
+                .put("progressVersion", 1).put("fileId", state.fileId).put("savedBytes", state.savedBytes).toString();
         } catch (Exception error) {
             return "{\"version\":1,\"supported\":" + (Build.VERSION.SDK_INT >= 26) + ",\"phase\":\"failed\",\"packets\":0,\"bytes\":0,\"files\":[],\"message\":"
                 + JSONObject.quote("无法读取本机采集文件：" + CaptureVpnService.friendly(error)) + "}";
         }
     }
     public String startCapture(String mode) {
-        if (!trusted) return "请在工具箱内使用采集";
+        if (!trusted) return "请在小布助手内使用采集";
         if (Build.VERSION.SDK_INT < 26) return "内置采集需要 Android 8 或以上，仍可手动导入文件";
         if (!CaptureVpnService.STATE.begin(mode)) return "采集正在进行或保存中";
         activity.runOnUiThread(() -> {
@@ -127,7 +122,7 @@ public final class CaptureController {
         permissionPending = false; askVpn(); return true;
     }
     public String stopCapture() {
-        if (!trusted) return "请在工具箱内停止采集";
+        if (!trusted) return "请在小布助手内停止采集";
         activity.runOnUiThread(() -> {
             if (!trusted) return;
             if (permissionPending) { awaitingLaunch = false; CaptureVpnService.STATE.update("idle", "已取消启动采集"); return; }
@@ -136,7 +131,7 @@ public final class CaptureController {
         return "";
     }
     public String openGame() {
-        if (!trusted) return "请在工具箱内打开游戏";
+        if (!trusted) return "请在小布助手内打开游戏";
         activity.runOnUiThread(() -> {
             if (!trusted) return;
             try {
@@ -150,18 +145,8 @@ public final class CaptureController {
         });
         return "";
     }
-    private CaptureUploadManager uploads() throws IOException {
-        synchronized (this) {
-            if (uploads == null) {
-                File directory = new File(activity.getFilesDir(), "captures");
-                if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException("无法创建本机采集目录");
-                uploads = CaptureUploadManager.get(directory, BuildConfig.CAPTURE_TOKEN);
-            }
-            return uploads;
-        }
-    }
     private File requireFile(String id, boolean importable) throws IOException {
-        if (!trusted) throw new IOException("请在工具箱内使用采集文件");
+        if (!trusted) throw new IOException("请在小布助手内使用采集文件");
         if (CaptureVpnService.STATE.busy()) throw new IOException("请先停止采集并等待保存完成");
         CaptureFiles files = CaptureVpnService.files(activity);
         File file = files.require(id);
@@ -185,7 +170,7 @@ public final class CaptureController {
      * 与采集前台通知分开，避免被正在进行的采集通知覆盖。
      */
     public String notifyRareAlert(String title, String body) {
-        if (!trusted) return "请在工具箱内使用提醒";
+        if (!trusted) return "请在小布助手内使用提醒";
         try {
             String safeTitle = title == null ? "" : title.trim();
             String safeBody = body == null ? "" : body.trim();
@@ -223,7 +208,7 @@ public final class CaptureController {
         }
     }
     public String inspectCapture() throws Exception {
-        if (!trusted) throw new IOException("请在工具箱内查看采集进度");
+        if (!trusted) throw new IOException("请在小布助手内查看采集进度");
         CaptureState state = CaptureVpnService.STATE;
         synchronized (state) {
             if (!"capturing".equals(state.phase) || state.savedBytes <= 24 || state.fileId.isEmpty()) return "";
@@ -243,7 +228,7 @@ public final class CaptureController {
     public String shareCapture(String id) {
         try {
             File file = requireFile(id, false);
-            Uri uri = FileProvider.getUriForFile(activity, "com.localdatatool.toolbox.fileprovider", file);
+            Uri uri = FileProvider.getUriForFile(activity, BuildConfig.APPLICATION_ID + ".fileprovider", file);
             activity.runOnUiThread(() -> {
                 if (!trusted) return;
                 Intent send = new Intent(Intent.ACTION_SEND).setType("application/vnd.tcpdump.pcap")
@@ -256,18 +241,10 @@ public final class CaptureController {
             return "";
         } catch (Exception error) { return CaptureVpnService.friendly(error); }
     }
-    public String uploadCapture(String id) {
-        try {
-            File file = requireFile(id, true);
-            return uploads().upload(file);
-        } catch (Exception error) { return CaptureVpnService.friendly(error); }
-    }
     public String deleteCapture(String id) {
         try {
             requireFile(id, false);
-            if (uploads().busy(id)) throw new IOException("文件正在上传，请等待完成后再删除");
             CaptureVpnService.files(activity).delete(id);
-            uploads().remove(id);
             return "";
         } catch (Exception error) { return CaptureVpnService.friendly(error); }
     }
@@ -293,7 +270,7 @@ public final class CaptureController {
             }
             if (from < 0 || from > grant.size) throw new IOException("invalid capture range");
             Map<String, String> headers = new HashMap<>();
-            headers.put("Access-Control-Allow-Origin", origin); headers.put("Cache-Control", "no-store");
+            headers.put("Access-Control-Allow-Origin", siteOrigin); headers.put("Cache-Control", "no-store");
             headers.put("Content-Length", Long.toString(grant.size - from));
             headers.put("X-Capture-From", Long.toString(from));
             headers.put("X-Capture-Total", Long.toString(grant.size));

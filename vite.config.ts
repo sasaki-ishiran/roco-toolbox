@@ -21,8 +21,8 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       manifest: {
-        name: '洛克工具箱',
-        short_name: '洛克工具箱',
+        name: '小布助手',
+        short_name: '小布助手',
         description: '洛克王国：世界 孵蛋规划工具箱（数据默认只存在本机；开启云同步后账号数据会上传到云端）',
         lang: 'zh-CN',
         start_url: '.',
@@ -31,15 +31,15 @@ export default defineConfig({
         background_color: '#f8fafc',
         theme_color: '#059669',
         // 必须给 PNG 位图：安卓 Chrome 要 192/512 的位图才会做成「真安装」（WebAPK），
-        // 只有 SVG 时会退化成快捷方式，而快捷方式拿不到分享目标 —— 「洛克工具箱」就不会出现在分享面板里。
+        // 只有 SVG 时会退化成快捷方式，而快捷方式拿不到分享目标 —— 「小布助手」就不会出现在分享面板里。
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
-        // 采集器里点「分享」→ 选「洛克工具箱」，数据 JSON 直接进来自动导入，不用再手动选文件。
+        // 采集器里点「分享」→ 选「小布助手」，数据 JSON 直接进来自动导入，不用再手动选文件。
         // 采集器分享时用的是宽泛的 */* 类型，Chrome 会拿它来和 accept 逐条比对，
-        // 只写 application/json 会导致「洛克工具箱」压根不出现在分享面板里，所以必须带上 */*。
+        // 只写 application/json 会导致「小布助手」压根不出现在分享面板里，所以必须带上 */*。
         share_target: {
           action: 'share-target',
           method: 'POST',

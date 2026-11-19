@@ -1,140 +1,113 @@
 import { useMemo } from 'react';
+import { species } from '../data/catalog';
 import type { StudRecommendation } from '../domain/suggestions';
 import { PetAvatar } from './PetAvatar';
-import { CHIP_BASE, CHIP_OFF, CHIP_ON } from './primitives/styles';
+import { PetCardLayout } from './PetCardLayout';
 import {
+  setSuggestionGroupDone,
   setSuggestionDoneOpen,
-  setSuggestionQuantity,
-  toggleSuggestionDone,
   useSuggestionCard,
 } from './suggestionCardStore';
 
-const QUANTITY_OPTIONS = [3, 15, '全部'] as const;
+const speciesByGameId = new Map(species.map((entry) => [entry.gameId, entry]));
+
+export interface GroupedRecommendation {
+  gameId: number;
+  displayName: string;
+  records: StudRecommendation[];
+  natureNames: string[];
+  groupLabels: string[];
+}
 
 export interface SuggestionCardProps {
-  title: string;
   items: StudRecommendation[];
+  /**
+   * 点卡片看「怎么补」（2026-11-19 用户口径）：传了就改成开悬浮窗，
+   * 不再用点卡标记「已换到」；不传保留旧的标记行为（小屏列表仍可用）。
+   */
+  onOpenGap?: (group: GroupedRecommendation) => void;
   /**
    * 清单为空时的提示语：由页面按「有没有数据 / 目标是否全收齐」给出，
    * 组件不自己猜（2026-10-24：以前写死「导入抓包数据后给出建议」，
    * 种公已收齐的用户会被误导以为数据没导进来）。
    */
   emptyNote: string;
-  /** 数量选项选「全部」时跳到「收集 · 种公阵列」看完整清单（原「换什么」页 2026-10-30 已下线） */
-  onOpenSwap?: () => void;
 }
 
 /**
- * 优质种公推荐（2026-10-04 改版）：每条是「性格精灵（组别）」的待办。
+ * 种公推荐：每张卡是一只精灵，汇总其不同性格和蛋组推荐。
  *
  * 2026-10-05 拍板后的交互：
- * - 勾选 = 标记「已换到」，条目移出主列表、收进**已换到折叠区**（默认收起，避免页面过长）；
- *   点折叠区展开可还原（再点勾选框）。
- * - 待办是栈：按完成时间倒序，先完成的在折叠区底部（先入后出）。
- * - 数量（5 / 15 / 全部）只作用于主列表；折叠区是已完成的，不受数量限制。
+ * - 点击卡片 = 标记「已换到」，条目移出主列表、收进**已换到折叠区**（默认收起，避免页面过长）；
+ *   点折叠区展开可还原（再点卡片）。
+ * - 同一精灵的多条推荐合并为一张卡；完成时整组标记或还原。
  */
-export function SuggestionCard({ title, items, emptyNote, onOpenSwap }: SuggestionCardProps) {
-  // 完成时间戳 / 折叠态 / 数量都在模块级 store：切页签回来不丢（见 suggestionCardStore）
-  const { doneAt, doneOpen, quantity } = useSuggestionCard();
+export function SuggestionCard({ items, emptyNote, onOpenGap }: SuggestionCardProps) {
+  // 完成时间戳 / 折叠态都在模块级 store：切页签回来不丢（见 suggestionCardStore）
+  const { doneAt, doneOpen } = useSuggestionCard();
 
-  const doneIds = useMemo(
+  const groupedRecommendations = useMemo(() => {
+    const groups = new Map<number, GroupedRecommendation>();
+    for (const item of items) {
+      let group = groups.get(item.gameId);
+      if (!group) {
+        group = {
+          gameId: item.gameId,
+          displayName: item.displayName,
+          records: [],
+          natureNames: [],
+          groupLabels: [],
+        };
+        groups.set(item.gameId, group);
+      }
+      group.records.push(item);
+      if (!group.natureNames.includes(item.natureName)) group.natureNames.push(item.natureName);
+      for (const label of item.groupLabels) {
+        if (!group.groupLabels.includes(label)) group.groupLabels.push(label);
+      }
+    }
+    return [...groups.values()];
+  }, [items]);
+
+  const visiblePending = useMemo(
     () =>
-      Object.entries(doneAt)
-        .sort((a, b) => a[1] - b[1]) // 先完成的在前，渲染时反转为「先入后出」：先完成的在底部
-        .map(([id]) => id),
-    [doneAt],
+      groupedRecommendations.filter(
+        (group) => !group.records.every((item) => item.id in doneAt),
+      ),
+    [doneAt, groupedRecommendations],
   );
-
-  const visiblePending = useMemo(() => {
-    const pending = items.filter((item) => !(item.id in doneAt));
-    return pending.slice(0, quantity);
-  }, [items, doneAt, quantity]);
 
   const doneItems = useMemo(
     () =>
-      doneIds
-        .map((id) => items.find((item) => item.id === id))
-        .filter((item): item is StudRecommendation => Boolean(item))
-        .reverse(), // 栈：先完成的沉底
-    [doneIds, items],
+      groupedRecommendations
+        .filter((group) => group.records.every((item) => item.id in doneAt))
+        .sort((a, b) => {
+          const aDoneAt = Math.max(...a.records.map((item) => doneAt[item.id] ?? 0));
+          const bDoneAt = Math.max(...b.records.map((item) => doneAt[item.id] ?? 0));
+          return bDoneAt - aDoneAt;
+        }),
+    [doneAt, groupedRecommendations],
   );
 
-  const toggle = (id: string) => {
-    toggleSuggestionDone(id);
-  };
-
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm" data-testid="recommend-list">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-medium text-slate-500">{title}</h2>
-        <div
-          className="flex items-center gap-1"
-          role="group"
-          aria-label="推荐数量"
-          data-testid="recommend-quantity"
-        >
-          {QUANTITY_OPTIONS.map((option) =>
-            option === '全部' ? (
-              <button
-                key={option}
-                type="button"
-                onClick={onOpenSwap}
-                className={`${CHIP_BASE} text-emerald-700`}
-                data-testid="recommend-quantity-all"
-              >
-                {option}
-              </button>
-            ) : (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={quantity === option}
-                onClick={() => setSuggestionQuantity(option)}
-                className={`${CHIP_BASE} ${quantity === option ? CHIP_ON : CHIP_OFF}`}
-                data-testid={`recommend-quantity-${option}`}
-              >
-                {option}
-              </button>
-            ),
-          )}
-        </div>
-      </div>
-
+    <section className="rounded-2xl bg-white shadow-sm" data-testid="recommend-list">
       {items.length === 0 ? (
-        <p className="mt-1 text-sm text-slate-400" data-testid="recommend-empty">
+        <p className="p-4 text-sm text-slate-400" data-testid="recommend-empty">
           {emptyNote}
         </p>
       ) : (
         <>
           {visiblePending.length > 0 && (
-            <ul className="mt-1 space-y-1" data-testid="recommend-items">
-              {visiblePending.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                  data-testid="recommend-item"
-                >
-                  <input
-                    type="checkbox"
-                    checked={false}
-                    onChange={() => toggle(item.id)}
-                    className="h-4 w-4 shrink-0 accent-emerald-600"
-                    data-testid="recommend-item-check"
-                    aria-label={`标记 ${item.natureName}${item.displayName} 已换到`}
-                  />
-                  <PetAvatar gameId={item.gameId} name={item.displayName} size={24} />
-                  <span>
-                    {item.natureName}
-                    {item.displayName}（{item.groupLabels.join(' × ')}）
-                  </span>
-                </li>
+            <ul className="grid grid-cols-4 gap-1" data-testid="recommend-items">
+              {visiblePending.map((group) => (
+                <SuggestionItem key={group.gameId} group={group} done={false} onOpenGap={onOpenGap} />
               ))}
             </ul>
           )}
 
-          {/* 已换到折叠区：默认收起，点击展开可还原（先完成的在底部） */}
-          {doneItems.length > 0 && (
-            <div className="mt-2" data-testid="recommend-done">
+          {/* 已换到折叠区：默认收起，点击展开可还原（改开悬浮窗后不再产生新记录） */}
+          {!onOpenGap && doneItems.length > 0 && (
+            <div className="mt-2 px-1 pb-1" data-testid="recommend-done">
               <button
                 type="button"
                 onClick={() => setSuggestionDoneOpen(!doneOpen)}
@@ -142,30 +115,12 @@ export function SuggestionCard({ title, items, emptyNote, onOpenSwap }: Suggesti
                 className="min-h-[28px] rounded-md bg-slate-100 px-2.5 text-xs text-slate-500"
                 data-testid="recommend-done-toggle"
               >
-                已换到 {doneItems.length} 条{doneOpen ? ' · 收起' : ''}
+                已换到 {doneItems.length} 只{doneOpen ? ' · 收起' : ''}
               </button>
               {doneOpen && (
-                <ul className="mt-1 space-y-1">
-                  {doneItems.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-400 line-through"
-                      data-testid="recommend-item"
-                    >
-                      <input
-                        type="checkbox"
-                        checked
-                        onChange={() => toggle(item.id)}
-                        className="h-4 w-4 shrink-0 accent-emerald-600"
-                        data-testid="recommend-item-check"
-                        aria-label={`还原 ${item.natureName}${item.displayName}`}
-                      />
-                      <PetAvatar gameId={item.gameId} name={item.displayName} size={24} />
-                      <span>
-                        {item.natureName}
-                        {item.displayName}（{item.groupLabels.join(' × ')}）
-                      </span>
-                    </li>
+                <ul className="mt-1 grid grid-cols-4 gap-1">
+                  {doneItems.map((group) => (
+                    <SuggestionItem key={group.gameId} group={group} done onOpenGap={onOpenGap} />
                   ))}
                 </ul>
               )}
@@ -174,5 +129,51 @@ export function SuggestionCard({ title, items, emptyNote, onOpenSwap }: Suggesti
         </>
       )}
     </section>
+  );
+}
+
+function SuggestionItem({
+  group,
+  done,
+  onOpenGap,
+}: {
+  group: GroupedRecommendation;
+  done: boolean;
+  onOpenGap?: (group: GroupedRecommendation) => void;
+}) {
+  const detail = `${group.natureNames.join('、')}${group.displayName}（${group.groupLabels.join(' × ')}）`;
+  return (
+    <li title={detail} data-testid="recommend-item">
+      <PetCardLayout
+        name={group.displayName}
+        number={speciesByGameId.get(group.gameId)?.number}
+        eggGroups={group.groupLabels}
+        natures={group.natureNames}
+        naturesTestId="recommend-item-nature"
+        title={detail}
+        ariaLabel={
+          onOpenGap
+            ? `看 ${detail} 怎么补`
+            : done
+              ? `还原 ${detail} 已换到`
+              : `标记 ${detail} 已换到`
+        }
+        className="w-full"
+        size="suggest"
+        fitName
+        fitNameBase={9}
+        fitNameMin={8}
+        avatar={<PetAvatar gameId={group.gameId} name={group.displayName} size={44} />}
+        onClick={() =>
+          onOpenGap
+            ? onOpenGap(group)
+            : setSuggestionGroupDone(
+                group.records.map((item) => item.id),
+                !done,
+              )
+        }
+        ariaPressed={onOpenGap ? undefined : done}
+      />
+    </li>
   );
 }

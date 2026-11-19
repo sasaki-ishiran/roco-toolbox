@@ -11,7 +11,7 @@ import {
   effectiveMotherVoices,
 } from '../domain/motherCriteria';
 import { createNaturesResolver } from '../domain/recommendedNatures';
-import { computeStudCoverage } from '../domain/studCoverage';
+import { computeStudCoverage, computeStudCoverageByAccount } from '../domain/studCoverage';
 import { computeStudRecommendations } from '../domain/suggestions';
 import type { OwnedPet } from '../domain/types';
 import { useCoverageSlots } from './useCoverageSlots';
@@ -35,6 +35,8 @@ export interface CollectionSummary {
   mode: TargetMode;
   mother: { collected: number; total: number };
   stud: ReturnType<typeof computeStudCoverage>;
+  /** 每个号自己那份种公覆盖度（2026-11-18 修正：缺口按号各算） */
+  coverageByAccount: ReadonlyMap<string, ReturnType<typeof computeStudCoverage>>;
   plans: ReturnType<typeof buildNestPlans>;
   recommendations: ReturnType<typeof computeStudRecommendations>;
 }
@@ -71,6 +73,8 @@ export function useCollectionSummary(): CollectionSummary {
         {
           bodies: motherCriteria.bodies,
           voices: effectiveMotherVoices(motherCriteria.voices, mode),
+          grades: motherCriteria.grades,
+          targetMode: mode,
           recommendedNatures: motherCriteria.recommendedNatures === true,
         },
         naturesOf,
@@ -85,12 +89,17 @@ export function useCollectionSummary(): CollectionSummary {
     [owned, slots, mode],
   );
 
+  const coverageByAccount = useMemo(
+    () => computeStudCoverageByAccount(slots, species, owned, eggGroupNames, mode),
+    [owned, slots, mode],
+  );
+
   const wishes = useSwapWishes(stud, owned);
   const recommendations = useMemo(() => computeStudRecommendations(wishes), [wishes]);
 
   const plans = useMemo(
-    () => buildNestPlans({ species, owned, coverage: stud, mode }),
-    [owned, stud, mode],
+    () => buildNestPlans({ species, owned, coverage: stud, coverageByAccount, mode }),
+    [owned, stud, coverageByAccount, mode],
   );
 
   return {
@@ -100,6 +109,7 @@ export function useCollectionSummary(): CollectionSummary {
     mode,
     mother,
     stud,
+    coverageByAccount,
     plans,
     recommendations,
   };

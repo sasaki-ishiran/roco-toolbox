@@ -22,7 +22,7 @@ export interface ProfileProps {
 }
 
 const SECTIONS = [
-  { value: 'identity', label: '工具箱身份' },
+  { value: 'identity', label: '我的身份' },
   { value: 'data', label: '游戏数据' },
   { value: 'sync', label: '私有同步' },
 ];
@@ -35,7 +35,7 @@ const TAP_WINDOW_MS = 2000;
  * 「我的」（2026-10-24 重构任务 6）：身份、游戏数据、私有同步三块。
  *
  * AccountPanel 只挂载**一份**（数据分区用 CSS 隐藏，不是卸载）：
- * 切分区不会丢恢复码 / 同步提示，也不会重复挂认证与同步处理。
+ * 切分区不会丢登录表单 / 同步提示，也不会重复挂认证与同步处理。
  */
 export function Profile({
   section,
@@ -136,7 +136,7 @@ export function Profile({
       {section === 'identity' ? (
         <StateNotice
           kind="unknown"
-          title="工具箱身份"
+          title="我的身份"
           description="用来跨设备同步同一份数据。游戏账号（UID）是游戏里的角色，在「游戏数据」里单独管理。"
           testId="profile-identity-intro"
         />
@@ -216,7 +216,7 @@ export function Profile({
         <ServerAddressPanel onClose={() => setServerPanelOpen(false)} />
       ) : null}
 
-      {/* AccountPanel 常驻：数据分区只是隐藏，切回来恢复码与同步提示仍在 */}
+      {/* AccountPanel 常驻：数据分区只是隐藏，切回来登录表单与同步提示仍在 */}
       <div className={section === 'data' ? 'hidden' : 'space-y-3'} data-testid="profile-account-slot">
         <AccountPanel
           section={section === 'sync' ? 'sync' : 'identity'}

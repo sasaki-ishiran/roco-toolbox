@@ -17,4 +17,17 @@ public class CaptureStateTest {
         assertFalse(state.busy()); assertTrue(state.begin());
         state.update("failed", "权限已被撤销"); assertTrue(state.begin());
     }
+    /** 后台渲染优先级的降级只跟「采集停止」这一个事件走：busy→idle 回调一次，其它状态变化不打扰。 */
+    @Test public void idleListenerFiresOnceWhenCaptureStops() {
+        CaptureState state = new CaptureState();
+        int[] fired = {0};
+        state.onIdle = () -> fired[0]++;
+        assertTrue(state.begin());
+        state.update("capturing", "采集中");
+        assertEquals(0, fired[0]);
+        state.update("idle", "已停止");
+        assertEquals(1, fired[0]);
+        state.update("idle", "已停止");
+        assertEquals(1, fired[0]);
+    }
 }

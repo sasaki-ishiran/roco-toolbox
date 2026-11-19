@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>「我的」页 · 检查更新入口预览</title>
+<style>
+  :root{
+    --bg:#f1f5f9; --card:#ffffff; --ink:#0f172a; --text:#334155; --sub:#64748b;
+    --line:#e2e8f0; --accent:#059669; --accent-weak:#ecfdf5; --warn:#b45309; --warn-weak:#fffbeb;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#e2e8f0;font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;color:var(--ink);}
+  .bar{position:sticky;top:0;z-index:9;display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+       padding:10px 16px;background:#0f172a;color:#e2e8f0;font-size:13px;}
+  .bar b{font-weight:600;margin-right:6px;}
+  .bar button{border:1px solid #334155;background:#1e293b;color:#e2e8f0;border-radius:8px;
+       padding:5px 10px;font-size:12px;cursor:pointer;}
+  .bar button.on{background:#059669;border-color:#059669;color:#fff;}
+  .stage{display:flex;gap:28px;justify-content:center;align-items:flex-start;padding:26px 16px 40px;flex-wrap:wrap;}
+  .phone-wrap{display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .phone-wrap .cap{font-size:12px;color:#475569;}
+  .phone{background:var(--bg);border-radius:26px;box-shadow:0 10px 30px rgba(15,23,42,.18);
+         overflow:hidden;border:1px solid #cbd5e1;}
+  .screen{background:var(--bg);}
+  .app{padding:14px 16px 20px;}
+  /* 分段控件 */
+  .seg{display:grid;grid-template-columns:repeat(3,1fr);background:#e2e8f0;border-radius:12px;padding:3px;}
+  .seg span{text-align:center;font-size:12px;padding:7px 0;border-radius:9px;color:var(--sub);}
+  .seg span.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(15,23,42,.08);}
+  /* 提示卡 */
+  .notice{margin-top:12px;background:var(--card);border-radius:16px;padding:14px 16px;box-shadow:0 1px 2px rgba(15,23,42,.06);}
+  .notice h3{margin:0 0 4px;font-size:15px;font-weight:600;}
+  .notice p{margin:0;font-size:12.5px;line-height:1.6;color:var(--sub);}
+  /* 新增：检查更新 */
+  .update{margin-top:12px;background:var(--card);border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.06);}
+  .update.row{display:flex;align-items:center;gap:12px;padding:14px 16px;}
+  .update .grow{flex:1;min-width:0;}
+  .update .title{font-size:14px;font-weight:600;}
+  .update .meta{margin-top:2px;font-size:12px;color:var(--sub);}
+  .update .chev{font-size:18px;color:#cbd5e1;}
+  .btn{border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:13px;
+       padding:8px 14px;cursor:pointer;white-space:nowrap;}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);}
+  .badge{display:inline-block;margin-top:6px;font-size:11.5px;padding:3px 8px;border-radius:999px;
+         background:var(--accent-weak);color:var(--accent);}
+  .badge.warn{background:var(--warn-weak);color:var(--warn);}
+  /* 卡片式（选项 B：整行可点） */
+  .stack{padding:14px 16px;}
+  .stack .line1{display:flex;align-items:center;gap:10px;}
+  .stack .ico{width:30px;height:30px;border-radius:9px;background:#f1f5f9;display:grid;place-items:center;font-size:15px;}
+  /* 版本小字（原有，5 连点切服） */
+  .ver-line{margin-top:14px;text-align:center;font-size:10px;color:#cbd5e1;}
+  .hint{font-size:11.5px;color:#475569;margin-left:8px;}
+</style>
+</head>
+<body>
+<div class="bar">
+  <b>「我的」页 · 检查更新入口</b>
+  <span>布局：</span>
+  <button id="vA" class="on" onclick="setVariant('a')">A 一行卡片</button>
+  <button id="vB" onclick="setVariant('b')">B 图标列表行</button>
+  <span style="margin-left:12px">状态：</span>
+  <button id="s0" class="on" onclick="setState(0)">已是最新</button>
+  <button id="s1" onclick="setState(1)">发现新版</button>
+  <button id="s2" onclick="setState(2)">检查中</button>
+</div>
+
+<div class="stage">
+  <div class="phone-wrap">
+    <div class="phone" style="width:375px">
+      <div class="screen"><div class="app" data-phone></div></div>
+    </div>
+    <div class="cap">375px</div>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone" style="width:390px">
+      <div class="screen"><div class="app" data-phone></div></div>
+    </div>
+    <div class="cap">390px</div>
+  </div>
+</div>
+
+<script>
+  const state = { variant: 'a', status: 0 };
+  const VERSION = '1.3.6';
+
+  function updateHtml() {
+    const metaVer = `当前版本 ${VERSION}`;
+    if (state.status === 2) {
+      // 检查中
+      const title = '检查更新';
+      const meta = `正在检查…`;
+      return state.variant === 'a'
+        ? `<div class="update"><div class="stack"><div class="line1">
+             <div class="grow"><div class="title">${title}</div><div class="meta">${meta}</div></div>
+             <span class="chev">⋯</span></div></div></div>`
+        : `<div class="update row"><div class="grow"><div class="title">${title}</div><div class="meta">${meta}</div></div><span class="chev">⋯</span></div>`;
+    }
+    if (state.status === 1) {
+      // 发现新版
+      const title = '检查更新';
+      const meta = `${metaVer} → 新版本 1.3.7`;
+      const action = `<button class="btn">更新</button>`;
+      const badge = `<span class="badge warn">发现新版本 1.3.7</span>`;
+      return state.variant === 'a'
+        ? `<div class="update"><div class="row" style="padding:14px 16px">
+             <div class="grow"><div class="title">${title}</div><div class="meta">${meta}</div>${badge}</div>${action}</div></div>`
+        : `<div class="update"><div class="stack"><div class="line1">
+             <div class="ico">⬆️</div>
+             <div class="grow"><div class="title">${title}</div><div class="meta">${meta}</div>${badge}</div>${action}</div></div></div>`;
+    }
+    // 已是最新
+    const title = '检查更新';
+    const meta = metaVer;
+    const action = `<button class="btn ghost">检查</button>`;
+    const badge = `<span class="badge">已是最新版本</span>`;
+    return state.variant === 'a'
+      ? `<div class="update"><div class="row" style="padding:14px 16px">
+           <div class="grow"><div class="title">${title}</div><div class="meta">${meta}</div>${badge}</div>${action}</div></div>`
+      : `<div class="update"><div class="stack"><div class="line1">
+           <div class="ico">✓</div>
+           <div class="grow"><div class="title">${title}</div><div class="meta">${meta}</div>${badge}</div>${action}</div></div></div>`;
+  }
+
+  function render() {
+    document.querySelectorAll('[data-phone]').forEach((root) => {
+      root.innerHTML = `
+        <div class="seg"><span class="on">工具箱身份</span><span>游戏数据</span><span>私有同步</span></div>
+        <div class="notice">
+          <h3>工具箱身份</h3>
+          <p>用来跨设备同步同一份数据。游戏账号（UID）是游戏里的角色，在「游戏数据」里单独管理。</p>
+        </div>
+        ${updateHtml()}
+        <p class="ver-line">版本 2026-11-09 23:52</p>
+      `;
+    });
+  }
+
+  function setVariant(v) {
+    state.variant = v;
+    document.getElementById('vA').classList.toggle('on', v === 'a');
+    document.getElementById('vB').classList.toggle('on', v === 'b');
+    render();
+  }
+  function setState(n) {
+    state.status = n;
+    for (let i = 0; i < 3; i++) document.getElementById('s' + i).classList.toggle('on', i === n);
+    render();
+  }
+  render();
+</script>
+</body>
+</html>

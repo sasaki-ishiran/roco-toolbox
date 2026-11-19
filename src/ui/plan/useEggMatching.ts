@@ -3,6 +3,17 @@ import { publishPlanAlertBadge } from './planAlertsStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EggMatchingError, getEggMatching, mutateEggMatching, type EggMatchingResponse } from '../../api/eggMatching';
 
+/**
+ * 需求中心的数据缓存（2026-11-18）。
+ *
+ * 之前每次进页面都把 data 清空再请求，用户每次都要等一次完整加载。
+ * 这里按「小组 + 账号」留住上一份响应：再次进入先用缓存立即出内容，
+ * 后台再刷新；版本号只增不减，旧响应不会把新数据顶回去。
+ */
+const cache = new Map<string, EggMatchingResponse>();
+/** 仅测试用：清掉缓存，避免用例之间互相影响。 */
+export function clearEggMatchingCache(): void { cache.clear(); }
+
 export function useEggMatching(groupId: string, accountId: string) {
   const [data, setData] = useState<EggMatchingResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,6 +28,7 @@ export function useEggMatching(groupId: string, accountId: string) {
     const requested = key;
     try {
       const next = await getEggMatching(groupId);
+      cache.set(requested, next);
       if (identity.current !== requested || writing.current) return;
       if (!current.current || next.version >= current.current.version) { current.current = next; setData(next); }
       setError(null);
@@ -25,7 +37,11 @@ export function useEggMatching(groupId: string, accountId: string) {
     } finally { if (identity.current === requested) setLoading(false); }
   }, [groupId, key]);
   useEffect(() => {
-    identity.current = key; current.current = null; writing.current=null; setBusy(false); setData(null); setLoading(true); setError(null);
+    identity.current = key; writing.current=null; setBusy(false); setError(null);
+    const cached = cache.get(key) ?? null;
+    current.current = cached;
+    setData(cached);
+    setLoading(!cached);
     void refresh();
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 20_000);
     const focus = () => { if (document.visibilityState === 'visible') void refresh(); };
@@ -38,6 +54,7 @@ export function useEggMatching(groupId: string, accountId: string) {
     writing.current = requested; setBusy(true);
     try {
       const next = await mutateEggMatching(groupId, current.current.version, action);
+      cache.set(requested, next);
       if (identity.current !== requested) return;
       current.current = next; setData(next); setError(null);
     } catch (failure) {
@@ -45,6 +62,7 @@ export function useEggMatching(groupId: string, accountId: string) {
         setError(failure instanceof Error ? failure.message : '操作失败');
         if (failure instanceof EggMatchingError && failure.status === 409) {
           const next = await getEggMatching(groupId);
+          cache.set(requested, next);
           if (identity.current === requested) { current.current = next; setData(next); }
         }
       }

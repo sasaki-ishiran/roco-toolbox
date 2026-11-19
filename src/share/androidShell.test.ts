@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 /**
  * 安卓壳的分享入口守卫（静态检查壳源码，不需要真机）。
  *
- * 真机上出过一次「分享面板里找不到洛克工具箱」：壳只注册了 SEND（系统分享面板），
+ * 真机上出过一次「分享面板里找不到小布助手」：壳只注册了 SEND（系统分享面板），
  * 而微信 / QQ 的「用其他应用打开」发的是 VIEW 意图，文件挂在 intent.data 上。
  * 这类缺口网页侧的测试测不出来，把三个前提钉在这里，谁改坏了先在这里失败。
  */
@@ -42,8 +42,9 @@ describe('安卓壳的导出分享（1.1.4）', () => {
   test('分享走文件（EXTRA_STREAM + FileProvider），大备份不被文本截断', () => {
     expect(activity).toContain('Intent.ACTION_SEND');
     expect(activity).toContain('Intent.EXTRA_STREAM');
-    expect(activity).toContain('com.localdatatool.toolbox.fileprovider');
+    // authority 跟着 applicationId 走：内测包是 com.localdatatool.toolbox.internal，不能写死正式包名
+    expect(activity).toContain('BuildConfig.APPLICATION_ID + ".fileprovider"');
     expect(manifest).toContain('androidx.core.content.FileProvider');
-    expect(manifest).toContain('com.localdatatool.toolbox.fileprovider');
+    expect(manifest).toContain('${applicationId}.fileprovider');
   });
 });

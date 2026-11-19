@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>悬浮面板整体缩小 · 两行卡片</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 14px 10px 36px; background: #0b1220; color: #cbd5e1;
+         font: 13px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 15px; margin: 0 0 4px; color: #e2e8f0; }
+  .sub { font-size: 11px; color: #64748b; margin-bottom: 12px; }
+  .controls { background: #111c30; border: 1px solid #1e2c44; border-radius: 10px; padding: 11px; margin-bottom: 14px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 11px; }
+  input[type=range] { flex: 1; min-width: 110px; accent-color: #34d399; }
+  .num { font-variant-numeric: tabular-nums; color: #e2e8f0; font-weight: 600; }
+  .metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; font-size: 11px; color: #94a3b8; }
+  .metrics b { color: #e2e8f0; }
+  button { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 5px 9px; font-size: 11px; }
+  pre { display: none; background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 7px; font-size: 10px; color: #7dd3fc; overflow: auto; margin: 6px 0 0; }
+
+  .stage { background: linear-gradient(135deg, #10233d, #1a3a2e 55%, #2b2a1f); border-radius: 12px;
+           padding: 12px 8px 10px; margin-bottom: 14px; }
+  .stage h2 { font-size: 12px; margin: 0 0 8px; color: #e2e8f0; }
+  .panel { background: rgba(15, 23, 42, .93); border: 1px solid #334155; border-radius: 9px;
+           overflow: hidden; box-shadow: 0 8px 22px rgba(0,0,0,.45); margin: 0 auto; }
+  .hit { height: 64px; padding: 6px 8px; font-size: 9px; color: #94a3b8; background: rgba(30,41,59,.6);
+         border-bottom: 1px solid #1e293b; }
+  .hit b { color: #fbbf24; font-size: 10px; }
+  .head { padding: 4px 8px 0; font-size: 10px; color: #e2e8f0; font-weight: 600; }
+  .body { display: flex; gap: 6px; padding: 3px 8px 0; }
+  .map { position: relative; flex: none; border-radius: 7px; background:
+         radial-gradient(circle at 50% 50%, rgba(52,211,153,.18), rgba(15,23,42,.9) 62%),
+         repeating-linear-gradient(0deg, #14243a 0 9px, #0f1c2e 9px 10px);
+         border: 1px solid #2b3b55; }
+  .map .self { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #34d399;
+               left: 50%; top: 50%; transform: translate(-50%,-50%); box-shadow: 0 0 0 5px rgba(52,211,153,.15); }
+  .map .pet { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #fbbf24; }
+  .list { flex: 1; min-width: 0; overflow: hidden; }
+  .card { border-radius: 5px; background: #16233a; border: 1px solid #22304a; padding: 2px 5px; margin-bottom: 3px;
+          overflow: hidden; }
+  .r1 { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; white-space: nowrap; }
+  .r1 .left { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #e2e8f0; font-weight: 600; }
+  .r1 .lv { font-weight: 400; color: #93c5fd; margin-left: 3px; }
+  .r1 .right { flex: none; color: #7dd3fc; }
+  .r2 { color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .foot { height: 12px; margin: 3px 8px 6px; font-size: 9px; color: #64748b; }
+  .cap { font-size: 10px; color: #94a3b8; text-align: center; margin-top: 7px; }
+  .cap b { color: #e2e8f0; }
+  .wrap { position: relative; }
+  .measure { position: absolute; inset: 0; border: 1px dashed #ef4444; border-radius: 7px; pointer-events: none; }
+  .badge { position: absolute; left: 3px; top: 3px; background: #ef4444; color: #fff; font-size: 8px;
+           padding: 0 4px; border-radius: 999px; white-space: nowrap; }
+  .note { font-size: 11px; color: #94a3b8; background: #111c30; border: 1px solid #1e2c44; border-radius: 10px; padding: 9px 11px; }
+  .note b { color: #e2e8f0; }
+  @media (min-width: 390px) { .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+  <h1>悬浮面板整体缩小 · 两行紧凑卡片</h1>
+  <div class="sub">数值按 1dp = 1px 预览；红框为改动边界。卡片第一行：昵称+等级靠左，方位+距离靠右；第二行：高·重·声音。</div>
+
+  <div class="controls">
+    <div class="row"><span>面板宽</span><input id="w" type="range" min="200" max="274" step="1" value="240" /><span class="num" id="wText">240 dp</span></div>
+    <div class="row"><span>行高</span><input id="rh" type="range" min="26" max="34" step="1" value="32" /><span class="num" id="rhText">32 dp</span></div>
+    <div class="row"><label style="display:flex;gap:5px;align-items:center;font-size:11px;color:#94a3b8"><input id="follow" type="checkbox" checked /> 列表高度跟随地图</label><button id="copy">复制 JSON</button></div>
+    <div class="metrics">
+      <div>地图：<b id="mMap">102×102</b></div>
+      <div>卡片宽：<b id="mCard">116</b></div>
+      <div>可见行：<b id="mRows">3</b></div>
+      <div>面板高（无战斗）：<b id="mH">138</b></div>
+      <div>面板高（有命中）：<b id="mH2">202</b></div>
+      <div>占屏（375×812）：<b id="mArea">10.9%</b></div>
+    </div>
+    <pre id="json"></pre>
+  </div>
+
+  <div class="stage"><h2>① 现状 · 面板 274 / 地图 120 / 两行卡片</h2><div class="wrap"><div class="panel" id="pNow"></div></div>
+    <div class="cap">274 × 156（无战斗）/ 220（有命中） · 列表 132 · 2 行卡片 34dp · 可见 3 行 + 10dp</div></div>
+
+  <div class="stage"><h2>② 档位一 · 面板 240 / 地图 102 / 两行卡片</h2><div class="wrap"><div class="panel" id="pA"></div></div>
+    <div class="cap">240 × 138 / 202 · 卡片 116 宽 · 行高 32 · <b>3 行完整</b> · 占屏 10.9% / 10.0%</div></div>
+
+  <div class="stage"><h2>③ 档位二 · 面板 214 / 地图 90 / 两行卡片</h2><div class="wrap"><div class="panel" id="pB"></div></div>
+    <div class="cap">214 × 126 / 190 · 卡片 102 宽 · 行高 28 · <b>3 行完整</b> · 占屏 8.9% / 7.7%</div></div>
+
+  <div class="note">
+    <b>取舍：</b>两行卡片为「昵称+等级 / 高·重·声音」，第二行超宽省略号；
+    档位二卡片只有 102dp，昵称超过 3 字会省略，距离贴右。地图与列表高度仍绑定（bodyHeight = 地图边长），
+    所以两行卡片行高压到 32 / 28（28 = 第一行 16 + 第二行 12），仍保住 3 行可见。
+  </div>
+
+<script>
+  const ROW_GAP = 3, EDGE = 8, MAP_GAP = 6, FOOT = 8, HIT = 64, HIT2 = 64;
+
+  function rowsFor(body, rowH, gap) {
+    let n = 0;
+    while ((n + 1) * rowH + n * gap <= body + 0.01) n++;
+    return n;
+  }
+
+  function card(w, rowH, tight) {
+    const nameSize = tight ? 10 : 10.5;
+    const l1 = tight ? 8 : 8.5, l2 = tight ? 7.5 : 8;
+    const headH = 16, line2H = rowH - headH;
+    return `<div class="card" style="height:${rowH}px">
+      <div class="r1" style="font-size:${nameSize}px;line-height:${headH}px">
+        <div class="left">石岚<span class="lv" style="font-size:${l1}px">Lv38</span></div>
+        <div class="right" style="font-size:${l1}px">↗ 72m</div>
+      </div>
+      <div class="r2" style="font-size:${l2}px;line-height:${line2H}px">高 62.3% · 重 48.1% · +96dB</div>
+    </div>`;
+  }
+
+  function render(host, cfg) {
+    const { width, map, rowH, gap, twoLine, label } = cfg;
+    const cardW = width - EDGE * 2 - map - MAP_GAP;
+    const body = map;
+    const rows = Math.max(1, rowsFor(body, rowH, gap));
+    const hNo = 28 + body + FOOT;
+    const hHit = 64 + 28 + body + FOOT;
+    const cards = [];
+    for (let i = 0; i < rows; i++) cards.push(twoLine ? card(cardW, rowH, width <= 220) : nowCard(cardW, rowH));
+    host.style.width = width + 'px';
+    host.innerHTML = `
+      <div class="hit"><b>战斗采集 · 赛季奇遇</b><br/>进入赛季奇遇战后，这里会显示守卫的个体数据。</div>
+      <div class="head">附近 8 · 稀有 3</div>
+      <div class="body" style="height:${body}px">
+        <div class="map" style="width:${map}px;height:${map}px">
+          <div class="measure"><span class="badge">${map}×${map}</span></div>
+          <div class="self"></div><div class="pet" style="left:63%;top:37%"></div><div class="pet" style="left:31%;top:63%"></div>
+        </div>
+        <div class="list" style="height:${body}px">${cards.join('')}</div>
+      </div>
+      <div class="foot">还有 4 只未显示</div>`;
+    return { width, map, cardW, rowH, gap, body, rows, hNo, hHit };
+  }
+
+  function nowCard(w, rowH) {
+    return `<div class="card" style="height:${rowH}px;padding:2px 6px">
+      <div class="r1" style="font-size:9px;line-height:15px"><div class="left" style="font-size:11px">石岚 <span class="lv" style="font-size:8.5px;color:#93c5fd">72m ↗ 38级</span></div></div>
+      <div class="r2" style="font-size:9px;line-height:13px">高:62.3% · 重:48.1% · +96dB</div>
+    </div>`;
+  }
+
+  const W = document.getElementById('w'), RH = document.getElementById('rh'), F = document.getElementById('follow');
+  const live = document.createElement('div');
+  live.className = 'stage';
+  live.innerHTML = '<h2>调节预览</h2><div class="wrap"><div class="panel" id="pLive"></div></div>';
+  document.querySelector('.controls').after(live);
+
+  function update() {
+    const width = Number(W.value), rowH = Number(RH.value), follow = F.checked;
+    document.getElementById('wText').textContent = width + ' dp';
+    document.getElementById('rhText').textContent = rowH + ' dp';
+    const map = width >= 240 ? 102 : width >= 220 ? 96 : 90;
+    const gap = follow ? 3 : 4;
+    const m = render(document.getElementById('pLive'), { width, map, rowH, gap, twoLine: true, label: '自定义' });
+    document.getElementById('mMap').textContent = `${map}×${map}`;
+    document.getElementById('mCard').textContent = `${m.cardW} dp`;
+    document.getElementById('mRows').textContent = `${m.rows} 行`;
+    document.getElementById('mH').textContent = `${m.hNo} dp`;
+    document.getElementById('mH2').textContent = `${m.hHit} dp`;
+    const area = (width * m.hNo) / (375 * 812) * 100;
+    document.getElementById('mArea').textContent = `${area.toFixed(1)}%`;
+    window.__layout = { panelWidth: width, mapSize: map, cardWidth: m.cardW, rowHeight: rowH, rowGap: gap, visibleRows: m.rows, panelHeightNoBattle: m.hNo, panelHeightWithHit: m.hHit, cardLines: 2 };
+  }
+  document.getElementById('copy').onclick = async () => {
+    const pre = document.getElementById('json'); pre.style.display = 'block';
+    pre.textContent = JSON.stringify(window.__layout, null, 2);
+    try { await navigator.clipboard.writeText(pre.textContent); } catch (e) {}
+  };
+  W.addEventListener('input', update); RH.addEventListener('input', update); F.addEventListener('change', update);
+
+  render(document.getElementById('pNow'), { width: 274, map: 120, rowH: 34, gap: 4, twoLine: false });
+  render(document.getElementById('pA'), { width: 240, map: 102, rowH: 32, gap: 3, twoLine: true });
+  render(document.getElementById('pB'), { width: 214, map: 90, rowH: 28, gap: 3, twoLine: true });
+  update();
+</script>
+</body>
+</html>

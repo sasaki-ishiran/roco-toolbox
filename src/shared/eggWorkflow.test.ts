@@ -219,3 +219,56 @@ test('manual reminders allow exactly the half-hour boundary and never renew them
   expect(next.trades[0].reminderBy).toBe('b');
   expect(state.trades[0].reminderAt).toBe(1000);
 });
+
+test('captured obtained time is kept by stock sync and survives a later capture without it', () => {
+  let state = applyEggAction(emptyEggWorkflow(), 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 1, complete: true,
+    eggs: [{ ...stock('e', 3227), obtainedAt: '2026-11-17T22:31:00' }] }, 1);
+  expect(state.eggs[0].obtainedAt).toBe('2026-11-17T22:31:00');
+  state = applyEggAction(state, 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 2, complete: true, eggs: [stock('e', 3227)] }, 2);
+  expect(state.eggs[0].obtainedAt).toBe('2026-11-17T22:31:00');
+});
+
+test('old records without obtained time stay valid and unusable values are dropped', () => {
+  const old = applyEggAction(emptyEggWorkflow(), 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 1, complete: true, eggs: [stock('e', 3227)] }, 1);
+  expect(old.eggs[0].obtainedAt).toBeUndefined();
+  const bad = applyEggAction(emptyEggWorkflow(), 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 1, complete: true,
+    eggs: [{ ...stock('e', 3227), obtainedAt: '不是时间' }] }, 1);
+  expect(bad.eggs[0].obtainedAt).toBeUndefined();
+});
+
+const parents = { mother: { id: 'm', gameId: 3227, name: '菊花梨', nature: '保守', body: '大块头', voice: '+100', nestName: '普通小窝' },
+  fathers: [{ id: 'f', gameId: 3215, name: '海豹战士', nature: '胆小', body: '大块头', voice: '婉转声' }], confirmed: false };
+const homeEgg = (over: Record<string, unknown>) => ({ ...stock('home1', 3227), location: 'home', labelSource: 'system',
+  parents, lastConfirmedAt: 1763391600000, ...over });
+
+test('homeComplete removes only home eggs and keeps bag stock', () => {
+  let state = sync(initial(), 'a', 'bag1', 3436);
+  state = applyEggAction(state, 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 2, complete: false, homeComplete: true,
+    eggs: [stock('bag1', 3436), homeEgg({})] }, 2);
+  expect(state.eggs).toHaveLength(2);
+  expect(state.eggs.find(e => e.id === 'home1')).toMatchObject({ location: 'home', labelSource: 'system', confidence: 'system', lastConfirmedAt: 1763391600000 });
+  state = applyEggAction(state, 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 3, complete: false, homeComplete: true,
+    eggs: [stock('bag1', 3436)] }, 3);
+  expect(state.eggs.map(e => e.id)).toEqual(['bag1']);
+});
+
+test('bag complete never deletes home eggs, and a home egg without parents cannot claim system', () => {
+  let state = applyEggAction(emptyEggWorkflow(), 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 1, complete: false,
+    homeComplete: true, eggs: [homeEgg({})] }, 1);
+  state = applyEggAction(state, 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 2, complete: true, homeComplete: false,
+    eggs: [] }, 2);
+  expect(state.eggs.map(e => e.id)).toEqual(['home1']);
+  const bare = applyEggAction(emptyEggWorkflow(), 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 1, complete: true,
+    eggs: [homeEgg({ parents: undefined })] }, 1);
+  expect(bare.eggs[0].labelSource).toBe('unknown');
+  expect(bare.eggs[0].confidence).toBe('unknown');
+});
+
+test('manual labels survive later home captures and stay manual', () => {
+  let state = applyEggAction(emptyEggWorkflow(), 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 1, complete: false,
+    homeComplete: true, eggs: [homeEgg({})] }, 1);
+  state = applyEggAction(state, 'g', 'a', { type: 'label', id: 'home1', nature: '保守', body: '大块头', voice: '婉转声' }, 2);
+  state = applyEggAction(state, 'g', 'a', { type: 'stock-sync', gameAccountKey: 'uid:1', capturedAt: 3, complete: false,
+    homeComplete: true, eggs: [homeEgg({ nature: '' })] }, 3);
+  expect(state.eggs[0]).toMatchObject({ nature: '保守', labelSource: 'manual', confidence: 'manual' });
+});

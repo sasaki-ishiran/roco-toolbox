@@ -16,12 +16,12 @@ test('PWA：manifest 可访问且 Service Worker 注册成功', async ({ page })
     start_url: string;
     icons: Array<{ src: string; purpose?: string; sizes?: string; type?: string }>;
   };
-  expect(manifest.name).toBe('洛克工具箱');
+  expect(manifest.name).toBe('小布助手');
   expect(manifest.display).toBe('standalone');
   expect(manifest.icons.length).toBeGreaterThanOrEqual(2);
 
   // 安卓 Chrome 要 192/512 的位图（PNG）才会做成「真安装」（WebAPK）。
-  // 只有 SVG 时会退化成快捷方式，而快捷方式拿不到分享目标 ——「洛克工具箱」就不会出现在系统分享面板里。
+  // 只有 SVG 时会退化成快捷方式，而快捷方式拿不到分享目标 ——「小布助手」就不会出现在系统分享面板里。
   const iconTypes = manifest.icons.map((icon) => `${icon.sizes}|${icon.type}`);
   expect(iconTypes, '要有 192x192 的 PNG 位图图标').toContain('192x192|image/png');
   expect(iconTypes, '要有 512x512 的 PNG 位图图标').toContain('512x512|image/png');

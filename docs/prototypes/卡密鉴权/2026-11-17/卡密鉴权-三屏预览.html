@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>卡密鉴权 · 三屏预览（375 / 390）</title>
+<link rel="stylesheet" href="../../shared/toolbox-shell.css">
+<style>
+  :root{
+    --bg:#f8fafc; --panel:#fff; --text:#0f172a; --sub:#64748b; --line:#e2e8f0;
+    --green:#059669; --green-dark:#047857; --green-bg:#ecfdf5;
+    --amber:#b45309; --amber-bg:#fffbeb; --amber-line:#fde68a;
+    --red:#b91c1c; --red-bg:#fef2f2; --red-line:#fecaca;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:#eef2f7;color:var(--text);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px 12px 28px;
+  }
+  .toolbar{
+    width:min(720px,100%);background:#fff;border:1px solid var(--line);border-radius:12px;
+    padding:10px 12px;display:flex;flex-direction:column;gap:8px;
+  }
+  .toolbar-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .toolbar small{color:var(--sub);font-size:11px}
+  .chip{
+    min-height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--line);
+    background:#fff;color:#475569;font-size:12px;cursor:pointer;
+  }
+  .chip[aria-pressed="true"]{background:var(--green-bg);border-color:#a7f3d0;color:var(--green-dark);font-weight:600}
+  .chip.warn[aria-pressed="true"]{background:var(--red-bg);border-color:var(--red-line);color:var(--red)}
+
+  .stage{display:flex;justify-content:center;width:100%}
+  .device{
+    position:relative;width:375px;height:780px;background:var(--bg);border-radius:22px;
+    box-shadow:0 18px 40px #0f172a24,0 2px 6px #0f172a14;overflow:hidden;flex:none;
+    border:1px solid #e5eaf1;
+  }
+  .device[data-w="390"]{width:390px}
+
+  /* ---------- 背景：应用骨架（门覆盖在它上面） ---------- */
+  .app-bg{position:absolute;inset:0;display:flex;flex-direction:column;filter:none}
+  .app-bg .top{height:88px;background:#fff;border-bottom:1px solid #f1f5f9}
+  .app-bg .hdr{height:47px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+  .app-bg .hdr b{font-size:16px}
+  .app-bg .hdr span{font-size:11px;color:var(--sub)}
+  .app-bg .nav{height:41px;display:grid;grid-template-columns:repeat(6,1fr);align-items:center;padding:0 8px;font-size:13px;color:var(--sub);border-top:1px solid #f8fafc}
+  .app-bg .nav i{display:block;text-align:center;font-style:normal;padding:10px 0;border-bottom:2px solid transparent}
+  .app-bg .nav i.on{color:var(--green-dark);border-color:var(--green);font-weight:600}
+  .app-bg .body{flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+  .sk{background:#fff;border-radius:14px;box-shadow:0 1px 3px #0f172a0c;padding:12px}
+  .sk h4{margin:0 0 8px;font-size:13px}
+  .sk .row{height:10px;border-radius:6px;background:#eef2f7;margin:6px 0}
+  .sk .row.w60{width:60%}.sk .row.w40{width:40%}
+  .sk .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .sk .box{height:64px;border-radius:10px;background:#f1f5f9}
+
+  /* ---------- 通用门层 ---------- */
+  .gate{
+    position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;
+    padding:24px 20px;background:linear-gradient(180deg,#f8fafc 0%,#eef4fb 100%);
+  }
+  .gate[data-active="1"]{display:flex}
+  .gate.scroll{justify-content:center;overflow-y:auto;padding-top:24px;padding-bottom:24px}
+  .badge{
+    width:52px;height:52px;border-radius:15px;display:grid;place-items:center;margin-bottom:14px;
+    background:#fff;border:1px solid var(--line);box-shadow:0 2px 6px #0f172a0d;
+  }
+  .badge svg{width:26px;height:26px;fill:none;stroke:var(--green);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .badge.amber svg{stroke:var(--amber)}
+  .badge.red svg{stroke:var(--red)}
+  .gate h2{margin:0 0 6px;font-size:20px;line-height:1.3;letter-spacing:-.2px}
+  .gate p{margin:0 0 6px;color:var(--sub);font-size:13px;line-height:1.6}
+  .gate .strong{color:#334155}
+  .gate .note{margin-top:12px;font-size:11px;color:#94a3b8;line-height:1.6}
+  .card-note{
+    margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;
+    font-size:11px;color:var(--sub);line-height:1.65;
+  }
+  .card-note b{color:#334155;font-weight:600}
+  .field{margin-top:16px}
+  .field label{display:block;font-size:12px;color:#475569;margin-bottom:6px}
+  .field input{
+    width:100%;height:44px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;
+    padding:0 12px;font-size:15px;letter-spacing:1.5px;color:var(--text);
+  }
+  .field input:focus{outline:2px solid #05966933;border-color:var(--green)}
+  .err{display:none;margin-top:8px;font-size:12px;color:var(--red)}
+  .err[data-on="1"]{display:block}
+  .actions{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+  .btn{
+    min-height:38px;border-radius:10px;border:1px solid transparent;font-size:14px;font-weight:600;
+    display:flex;align-items:center;justify-content:center;gap:6px;padding:0 14px;cursor:pointer;
+  }
+  .btn.primary{background:var(--green);color:#fff}
+  .btn.primary:disabled{background:#94a3b8;cursor:default}
+  .btn.secondary{background:#fff;color:#334155;border-color:var(--line);font-weight:500;min-height:34px;font-size:13px}
+  .btn.ghost{background:transparent;color:#64748b;font-weight:500;min-height:30px;font-size:12px;border:0}
+  .btn.danger{background:#fff;color:var(--red);border-color:var(--red-line);font-weight:600;min-height:34px;font-size:13px}
+  .btn.wide{width:100%}
+  .linkish{background:none;border:0;color:var(--green-dark);font-size:12px;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+  .countdown{
+    margin-top:14px;display:flex;align-items:baseline;gap:8px;background:#fff;border:1px solid var(--line);
+    border-radius:12px;padding:12px;
+  }
+  .countdown b{font-size:26px;color:var(--amber);line-height:1}
+  .countdown span{font-size:12px;color:var(--sub)}
+  .countdown.green b{color:var(--green-dark)}
+  .countdown.red b{color:var(--red)}
+
+  /* 采集出口（吊销页） */
+  .capture{
+    margin-top:14px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 12px;
+  }
+  .capture .top{display:flex;align-items:center;gap:6px;font-size:12px;color:#334155}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex:none}
+  .dot.off{background:#94a3b8}
+  .capture .meta{margin-top:4px;font-size:11px;color:var(--sub)}
+  .capture .btn{margin-top:8px}
+
+  /* 设备列表 */
+  .devlist{margin-top:14px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+  .devlist .row{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:12px}
+  .devlist .row:last-child{border-bottom:0}
+  .devlist .row.oldest{background:#fffdf7}
+  .devlist .row.gone{color:#cbd5e1;text-decoration:line-through}
+  .devlist .name{flex:1;min-width:0;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .devlist .when{color:var(--sub);font-size:11px;flex:none}
+  .tag{font-size:10px;padding:2px 5px;border-radius:5px;background:#f1f5f9;color:var(--sub);flex:none}
+  .tag.now{background:var(--green-bg);color:var(--green-dark)}
+  .tag.old{background:var(--amber-bg);color:var(--amber)}
+
+  /* ---------- 管理页 ---------- */
+  .admin{position:absolute;inset:0;display:none;flex-direction:column;background:var(--bg)}
+  .admin[data-active="1"]{display:flex}
+  .admin .top{height:52px;background:#fff;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:8px;padding:0 14px}
+  .admin .top h1{margin:0;font-size:16px;flex:1}
+  .admin .top .who{font-size:11px;color:var(--sub)}
+  .admin .body{flex:1;overflow-y:auto;padding:12px 12px 24px;display:flex;flex-direction:column;gap:10px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .stat{background:#fff;border-radius:12px;padding:9px 8px;text-align:center;border:1px solid var(--line)}
+  .stat b{display:block;font-size:18px;line-height:1.2}
+  .stat span{font-size:10px;color:var(--sub)}
+  .stat.amber b{color:var(--amber)} .stat.red b{color:var(--red)} .stat.green b{color:var(--green-dark)}
+  .filters{display:flex;gap:6px;flex-wrap:wrap}
+  .banner{
+    display:none;background:var(--green-bg);border:1px solid #a7f3d0;color:var(--green-dark);
+    border-radius:10px;padding:8px 10px;font-size:12px;
+  }
+  .banner[data-on="1"]{display:block}
+  .lic{border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+  .lic .l1{display:flex;align-items:center;gap:6px}
+  .lic .l1 b{font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lic .l2{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--sub)}
+  .lic .l3{display:flex;align-items:center;gap:8px;margin-top:2px}
+  .lic .l3 .spacer{flex:1}
+  .lic.revoked{background:#fbfbfc}
+  .lic.revoked .l1 b{color:#94a3b8}
+  .st{font-size:10px;padding:2px 6px;border-radius:5px;flex:none}
+  .st.on{background:var(--green-bg);color:var(--green-dark)}
+  .st.frozen{background:var(--amber-bg);color:var(--amber)}
+  .st.revoked{background:var(--red-bg);color:var(--red)}
+  .mini{min-height:28px;padding:0 8px;border-radius:7px;font-size:11px;border:1px solid var(--line);background:#fff;color:#334155;cursor:pointer}
+  .mini.danger{color:var(--red);border-color:var(--red-line)}
+  .admin .foot{font-size:10px;color:#94a3b8;line-height:1.6;padding:0 2px}
+
+  .toast{
+    position:absolute;left:50%;bottom:26px;transform:translate(-50%,8px);opacity:0;pointer-events:none;
+    max-width:92%;width:max-content;padding:9px 13px;border-radius:10px;background:#0f172aeb;color:#fff;
+    font-size:12px;transition:opacity .16s,transform .16s;z-index:60;
+  }
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .loading{opacity:.65;pointer-events:none}
+  @media(prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="toolbar-row">
+    <button class="chip" data-screen="gate" aria-pressed="true">① 卡密门</button>
+    <button class="chip" data-screen="frozen" aria-pressed="false">② 冻结</button>
+    <button class="chip" data-screen="cancelled" aria-pressed="false">③ 注销（可恢复）</button>
+    <button class="chip" data-screen="revoked" aria-pressed="false">④ 吊销</button>
+    <button class="chip" data-screen="devices" aria-pressed="false">⑤ 设备超限</button>
+    <button class="chip" data-screen="admin" aria-pressed="false">⑥ 管理页</button>
+  </div>
+  <div class="toolbar-row">
+    <button class="chip" id="w375" aria-pressed="true">375</button>
+    <button class="chip" id="w390" aria-pressed="false">390</button>
+    <button class="chip" id="reset">重置交互</button>
+    <small>预览范围：新增界面（仅原型，未落代码）。管理页不属于工具箱六个入口，为独立管理控制台。</small>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="device" id="device" data-w="375">
+    <!-- 背景应用骨架 -->
+    <div class="app-bg" id="appBg">
+      <div class="top">
+        <div class="hdr"><b>洛克工具箱</b><span id="authState">授权：正常</span></div>
+        <div class="nav"><i class="on">看板</i><i>家园</i><i>收集</i><i>附近</i><i>小组</i><i>我的</i></div>
+      </div>
+      <div class="body">
+        <div class="sk"><h4>今日概览</h4><div class="row w60"></div><div class="row w40"></div></div>
+        <div class="sk"><h4>我的收集</h4><div class="grid"><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div></div></div>
+        <div class="sk"><h4>附近精灵</h4><div class="row"></div><div class="row w60"></div></div>
+      </div>
+    </div>
+
+    <!-- ① 卡密门 -->
+    <section class="gate" data-gate="gate" data-active="1">
+      <div class="badge">
+        <svg viewBox="0 0 24 24"><path d="M7 11V8a5 5 0 0 1 10 0v3"/><rect x="4.5" y="11" width="15" height="9.5" rx="2.5"/><path d="M12 15v2.5"/></svg>
+      </div>
+      <h2>输入卡密后使用</h2>
+      <p>工具箱需要一张有效卡密才能打开。卡密由管理员发放，输入一次后会记住这台设备。</p>
+      <div class="field">
+        <label for="code">专属卡密</label>
+        <input id="code" inputmode="text" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19">
+        <div class="err" id="codeErr">这张卡密不正确，或者已经被停用。请检查后重试。</div>
+      </div>
+      <div class="actions">
+        <button class="btn primary wide" id="activate" disabled>验证并进入</button>
+        <button class="btn ghost" id="toMigrate">我有恢复码，迁移老账号</button>
+      </div>
+      <div class="card-note">
+        <b>卡密只用于授权。</b>不会上传你的采集内容、导入数据和孵蛋规划；验证失败也不会删除本机任何文件。
+      </div>
+    </section>
+
+    <!-- ② 冻结 -->
+    <section class="gate" data-gate="frozen">
+      <div class="badge amber">
+        <svg viewBox="0 0 24 24"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/><path d="M12 6.5 10 4.6M12 6.5l2-1.9M12 17.5l-2 1.9M12 17.5l2 1.9"/></svg>
+      </div>
+      <h2>这张卡密已冻结</h2>
+      <p>已经 <b class="strong">5 天</b>没有打开工具箱。连续 14 天不使用会自动注销，目前还剩 <b class="strong">9 天</b>。</p>
+      <div class="countdown"><b>9</b><span>天后自动注销<br>在此之前联网点一下就能继续用</span></div>
+      <div class="actions">
+        <button class="btn primary wide" id="unfreeze">恢复使用</button>
+        <button class="btn secondary wide" data-toast="已复制管理员联系方式，去群里找我即可">联系管理员</button>
+      </div>
+      <div class="note">恢复不需要换卡，也不用找管理员；设备绑定和账号都不会变。<br>本机数据都还在，没有删除。</div>
+    </section>
+
+    <!-- ③ 注销（可恢复窗口） -->
+    <section class="gate" data-gate="cancelled">
+      <div class="badge red">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></svg>
+      </div>
+      <h2>这张卡密的授权已注销</h2>
+      <p>因为连续 14 天没有使用。注销后 30 天内还能恢复，目前还剩 <b class="strong">28 天</b>。</p>
+      <div class="countdown red"><b>28</b><span>天恢复窗口<br>过期后卡密作废，需要重新申请</span></div>
+      <div class="actions">
+        <button class="btn primary wide" id="reactivate">输入卡密重新激活</button>
+        <button class="btn secondary wide" data-toast="已复制管理员联系方式，去群里找我即可">联系管理员</button>
+      </div>
+      <div class="card-note">
+        采集文件、导入记录、孵蛋规划、账号和小组都还在本机与云端，<b>只作废授权，不删数据</b>。
+      </div>
+    </section>
+
+    <!-- ④ 吊销 -->
+    <section class="gate scroll" data-gate="revoked">
+      <div class="badge red">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M6.5 6.5l11 11"/></svg>
+      </div>
+      <h2>这张卡密已被管理员停用</h2>
+      <p>工具箱暂时无法继续使用。你的采集文件、已导入的数据、孵蛋规划都还在本机，没有被删除。</p>
+      <div class="capture" id="captureBox">
+        <div class="top"><span class="dot" id="capDot"></span><span id="capTitle">当前采集仍在继续</span></div>
+        <div class="meta" id="capMeta">已记录 1,284 包 · 3.6 MiB · 采集不会因为停用而中断</div>
+        <button class="btn secondary wide" id="stopCapture">停止采集并导出</button>
+      </div>
+      <div class="actions">
+        <button class="btn primary wide" data-to-screen="gate">输入新卡密</button>
+        <button class="btn secondary wide" data-toast="仍然无法使用：这张卡密处于停用状态">重试</button>
+      </div>
+      <div class="note">如果这是误操作，请联系管理员恢复；恢复后本机数据原样接上。</div>
+    </section>
+
+    <!-- ⑤ 设备超限 -->
+    <section class="gate scroll" data-gate="devices">
+      <div class="badge amber">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="12" height="10" rx="2"/><rect x="16" y="9" width="5" height="11" rx="1.6"/><path d="M6 18h6"/></svg>
+      </div>
+      <h2>这台设备超出授权数量（5 台）</h2>
+      <p>一张卡密最多同时在 5 台设备上使用。移掉一台不用的设备就能继续进入。</p>
+      <div class="devlist" id="devList">
+        <div class="row" data-dev="平板"><span class="name">平板</span><span class="tag old">最久没用</span><span class="when">23 天前</span></div>
+        <div class="row"><span class="name">Windows · 桌面版</span><span class="when">2 天前</span></div>
+        <div class="row"><span class="name">手机 · 备用机</span><span class="when">5 天前</span></div>
+        <div class="row"><span class="name">手机 · 主力机</span><span class="when">3 小时前</span></div>
+        <div class="row"><span class="name">电脑浏览器</span><span class="tag now">当前设备</span><span class="when">刚刚</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary wide" id="removeOldest">移掉最久没用的一台</button>
+        <button class="btn secondary wide" data-toast="已取消，本次没有移出任何设备">取消</button>
+      </div>
+      <div class="note">设备位从第一次打开时开始占用；换机重装会占新位置，可以在管理页手动清理。</div>
+    </section>
+
+    <!-- ⑥ 管理页 -->
+    <section class="admin" data-admin="1">
+      <div class="top">
+        <h1>卡密管理</h1>
+        <span class="who">超级管理员</span>
+        <button class="mini" data-toast="已复制管理地址">复制地址</button>
+      </div>
+      <div class="body">
+        <div class="stats">
+          <div class="stat green"><b>18</b><span>在用</span></div>
+          <div class="stat amber"><b>3</b><span>冻结</span></div>
+          <div class="stat"><b>1</b><span>已注销</span></div>
+          <div class="stat red"><b>2</b><span>已吊销</span></div>
+        </div>
+
+        <div class="filters" id="filters">
+          <button class="chip" data-filter="all" aria-pressed="false">全部</button>
+          <button class="chip" data-filter="manual" aria-pressed="false">手动发卡</button>
+          <button class="chip" data-filter="migrate" aria-pressed="true">迁移自动发卡</button>
+        </div>
+
+        <div class="banner" id="adminBanner">已吊销。在线设备最迟 30 秒内退出，离线设备下次打开时失效。</div>
+
+        <div class="lic" data-source="migrate">
+          <div class="l1"><b>迁移-A1B2C3D4-1117</b><span class="st on">在用</span></div>
+          <div class="l2"><span>账号 …7f3a</span><span>设备 2/5</span><span>2 小时前</span></div>
+          <div class="l3"><span class="spacer"></span><button class="mini danger revoke">吊销</button></div>
+        </div>
+        <div class="lic" data-source="migrate">
+          <div class="l1"><b>迁移-E5F6A7B8-1117</b><span class="st frozen">冻结</span></div>
+          <div class="l2"><span>账号 …2c19</span><span>设备 1/5</span><span>4 天前</span></div>
+          <div class="l3"><span class="spacer"></span><button class="mini danger revoke">吊销</button></div>
+        </div>
+        <div class="lic" data-source="migrate">
+          <div class="l1"><b>迁移-C9D0E1F2-1117</b><span class="st on">在用</span></div>
+          <div class="l2"><span>账号 …8a4d</span><span>设备 5/5</span><span>12 分钟前</span></div>
+          <div class="l3"><span class="spacer"></span><button class="mini danger revoke">吊销</button></div>
+        </div>
+        <div class="lic" data-source="manual">
+          <div class="l1"><b>手动-朋友A</b><span class="st on">在用</span></div>
+          <div class="l2"><span>账号 …5b21</span><span>设备 3/5</span><span>1 天前</span></div>
+          <div class="l3"><span class="spacer"></span><button class="mini danger revoke">吊销</button></div>
+        </div>
+        <div class="lic revoked" data-source="manual">
+          <div class="l1"><b>手动-朋友B</b><span class="st revoked">已吊销</span></div>
+          <div class="l2"><span>账号 …0e77</span><span>设备 2/5</span><span>3 天前吊销</span></div>
+          <div class="l3"><span class="spacer"></span><button class="mini restore">恢复</button></div>
+        </div>
+
+        <div class="foot">迁移卡共 24 张（严口径：有真实使用痕迹的账号，已排除本人和测试号）。<br>批量操作：<button class="mini danger" data-toast="需要二次确认：将吊销全部 24 张迁移卡">吊销全部迁移卡</button></div>
+      </div>
+    </section>
+
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var device=document.getElementById('device');
+  var toastEl=document.getElementById('toast');
+  var toastTimer=null;
+  function toast(text){
+    toastEl.textContent=text; toastEl.classList.add('on');
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){toastEl.classList.remove('on');},2200);
+  }
+  function show(screen){
+    document.querySelectorAll('[data-gate]').forEach(function(el){el.dataset.active=el.dataset.gate===screen?'1':'0';});
+    var admin=document.querySelector('[data-admin]');
+    admin.dataset.active=screen==='admin'?'1':'0';
+    document.getElementById('appBg').style.visibility=screen==='admin'?'hidden':'visible';
+    document.querySelectorAll('.toolbar [data-screen]').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.screen===screen?'true':'false');});
+  }
+  document.querySelectorAll('.toolbar [data-screen]').forEach(function(btn){
+    btn.addEventListener('click',function(){show(btn.dataset.screen);});
+  });
+  document.getElementById('w375').addEventListener('click',function(){device.dataset.w='375';this.setAttribute('aria-pressed','true');document.getElementById('w390').setAttribute('aria-pressed','false');});
+  document.getElementById('w390').addEventListener('click',function(){device.dataset.w='390';this.setAttribute('aria-pressed','true');document.getElementById('w375').setAttribute('aria-pressed','false');});
+  document.getElementById('reset').addEventListener('click',function(){location.reload();});
+
+  document.querySelectorAll('[data-toast]').forEach(function(btn){
+    btn.addEventListener('click',function(){toast(btn.dataset.toast);});
+  });
+  document.querySelectorAll('[data-to-screen]').forEach(function(btn){
+    btn.addEventListener('click',function(){show(btn.dataset.toScreen);});
+  });
+
+  // ① 卡密输入
+  var input=document.getElementById('code');
+  var activate=document.getElementById('activate');
+  var codeErr=document.getElementById('codeErr');
+  function normalize(v){
+    var raw=v.toUpperCase().replace(/[^0-9A-Z]/g,'').slice(0,16);
+    return raw.replace(/(.{4})/g,'$1-').replace(/-$/,'');
+  }
+  input.addEventListener('input',function(){
+    input.value=normalize(input.value);
+    codeErr.dataset.on='0';
+    activate.disabled=input.value.replace(/-/g,'').length<12;
+  });
+  activate.addEventListener('click',function(){
+    activate.classList.add('loading');
+    activate.textContent='正在验证…';
+    setTimeout(function(){
+      activate.classList.remove('loading');
+      var code=input.value.replace(/-/g,'');
+      if(code.indexOf('0000')===0){
+        activate.textContent='验证并进入';
+        codeErr.dataset.on='1';
+        return;
+      }
+      activate.textContent='验证并进入';
+      document.querySelector('[data-gate="gate"]').dataset.active='0';
+      document.getElementById('authState').textContent='授权：正常 · 1/5 台';
+      toast('已激活，可以开始使用');
+    },700);
+  });
+  document.getElementById('toMigrate').addEventListener('click',function(){
+    toast('输入恢复码可绑定老账号，自动领回原卡密');
+  });
+
+  // ② 冻结
+  document.getElementById('unfreeze').addEventListener('click',function(){
+    var btn=this; btn.classList.add('loading'); btn.textContent='正在联网核验…';
+    setTimeout(function(){
+      btn.classList.remove('loading'); btn.textContent='恢复使用';
+      document.querySelector('[data-gate="frozen"]').dataset.active='0';
+      toast('已恢复，可以继续使用');
+    },700);
+  });
+
+  // ③ 注销
+  document.getElementById('reactivate').addEventListener('click',function(){show('gate');});
+
+  // ④ 吊销 + 采集出口
+  document.getElementById('stopCapture').addEventListener('click',function(){
+    var btn=this;
+    document.getElementById('capTitle').textContent='采集已停止';
+    document.getElementById('capMeta').textContent='已导出 3.6 MiB，文件保存在本机「采集记录」里，不受授权影响';
+    document.getElementById('capDot').classList.add('off');
+    btn.disabled=true; btn.textContent='已停止并导出';
+    toast('已停止采集，文件已保存在本机');
+  });
+
+  // ⑤ 设备超限
+  document.getElementById('removeOldest').addEventListener('click',function(){
+    var btn=this;
+    var row=document.querySelector('#devList .row.oldest');
+    if(row){row.classList.add('gone');}
+    btn.classList.add('loading'); btn.textContent='正在移出并进入…';
+    setTimeout(function(){
+      document.querySelector('[data-gate="devices"]').dataset.active='0';
+      toast('已移出「平板 · 23 天前」，可以继续使用');
+    },900);
+  });
+
+  // ⑥ 管理页筛选与吊销
+  document.getElementById('filters').addEventListener('click',function(event){
+    var btn=event.target.closest('[data-filter]'); if(!btn) return;
+    var kind=btn.dataset.filter;
+    document.querySelectorAll('#filters [data-filter]').forEach(function(b){b.setAttribute('aria-pressed',b===btn?'true':'false');});
+    document.querySelectorAll('.lic').forEach(function(card){
+      card.style.display=(kind==='all'||card.dataset.source===kind)?'':'none';
+    });
+  });
+  function bindRestore(btn){
+    if(btn.dataset.bound==='1') return;
+    btn.dataset.bound='1';
+    btn.addEventListener('click',function(){
+      var card=btn.closest('.lic');
+      card.classList.remove('revoked');
+      card.querySelector('.st').className='st on';
+      card.querySelector('.st').textContent='在用';
+      btn.className='mini danger revoke'; btn.textContent='吊销'; btn.dataset.bound='0';
+      toast('已恢复，对方下次打开即可继续使用');
+      bindRevoke(btn);
+    });
+  }
+  function bindRevoke(btn){
+    btn.addEventListener('click',function(){
+      var card=btn.closest('.lic');
+      card.classList.add('revoked');
+      card.querySelector('.st').className='st revoked';
+      card.querySelector('.st').textContent='已吊销';
+      btn.className='mini restore'; btn.textContent='恢复'; btn.dataset.bound='0';
+      var banner=document.getElementById('adminBanner');
+      banner.dataset.on='1'; setTimeout(function(){banner.dataset.on='0';},4000);
+      toast('已吊销，在线设备最迟 30 秒内退出');
+      bindRestore(btn);
+    },{once:true});
+  }
+  document.querySelectorAll('.lic .revoke').forEach(bindRevoke);
+  document.querySelectorAll('.lic .restore').forEach(bindRestore);
+})();
+</script>
+</body>
+</html>

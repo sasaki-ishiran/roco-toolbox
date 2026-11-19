@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>悬浮窗面板 · 地图缩小方案</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; padding: 16px 12px 40px; background: #0b1220; color: #cbd5e1;
+         font: 13px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 15px; margin: 0 0 4px; color: #e2e8f0; }
+  .sub { font-size: 11px; color: #64748b; margin-bottom: 14px; }
+  .controls { background: #111c30; border: 1px solid #1e2c44; border-radius: 10px; padding: 12px; margin-bottom: 18px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  input[type=range] { flex: 1; min-width: 140px; accent-color: #34d399; }
+  .num { font-variant-numeric: tabular-nums; color: #e2e8f0; font-weight: 600; }
+  .metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; font-size: 11px; color: #94a3b8; }
+  .metrics b { color: #e2e8f0; font-weight: 600; }
+  button { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px; font-size: 11px; }
+  label.switch { font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
+  pre { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 8px; font-size: 10px; color: #7dd3fc; overflow: auto; margin: 6px 0 0; display: none; }
+
+  .stage { background: linear-gradient(135deg, #10233d, #1a3a2e 55%, #2b2a1f); border-radius: 12px;
+           padding: 14px 10px; margin-bottom: 16px; }
+  .stage h2 { font-size: 12px; margin: 0 0 10px; color: #e2e8f0; }
+  .panel { width: 274px; max-width: 100%; background: rgba(15, 23, 42, .92); border: 1px solid #334155;
+           border-radius: 10px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.45); margin: 0 auto 10px; }
+  .hit { height: 44px; padding: 7px 10px; font-size: 10px; color: #94a3b8; background: rgba(30,41,59,.6);
+         border-bottom: 1px solid #1e293b; }
+  .hit b { color: #fbbf24; font-size: 11px; font-weight: 600; }
+  .head { padding: 5px 8px 0; font-size: 11px; color: #e2e8f0; font-weight: 600; }
+  .body { display: flex; gap: 6px; padding: 4px 8px 0; }
+  .map { position: relative; flex: none; border-radius: 8px; background:
+         radial-gradient(circle at 50% 50%, rgba(52,211,153,.18), rgba(15,23,42,.9) 62%),
+         repeating-linear-gradient(0deg, #14243a 0 11px, #0f1c2e 11px 12px);
+         border: 1px solid #2b3b55; display: grid; place-items: center; color: #475569; font-size: 10px; }
+  .map .self { position: absolute; width: 10px; height: 10px; border-radius: 50%;
+               background: #34d399; box-shadow: 0 0 0 6px rgba(52,211,153,.15); left: 50%; top: 50%; transform: translate(-50%,-50%); }
+  .map .pet { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #fbbf24; }
+  .list { flex: 1; min-width: 0; overflow: hidden; }
+  .item { height: 34px; margin-bottom: 4px; border-radius: 5px; background: #16233a; border: 1px solid #22304a;
+          padding: 4px 6px; font-size: 10px; line-height: 13px; color: #cbd5e1; }
+  .item span { display: block; color: #64748b; font-size: 9px; }
+  .foot { height: 14px; margin: 4px 8px 8px; font-size: 9px; color: #64748b; }
+  .cap { font-size: 10px; color: #94a3b8; text-align: center; margin: 0 0 4px; }
+  .cap b { color: #e2e8f0; }
+  .badge { position: absolute; left: 4px; top: 4px; background: #ef4444; color: #fff; font-size: 9px;
+           padding: 1px 5px; border-radius: 999px; white-space: nowrap; }
+  .measure { position: absolute; inset: 0; border: 1px dashed #ef4444; border-radius: 8px; pointer-events: none; }
+  .dim { position: absolute; left: 50%; bottom: -16px; transform: translateX(-50%); font-size: 9px; color: #fca5a5; white-space: nowrap; }
+  .panel-wrap { position: relative; }
+  .note { font-size: 11px; color: #94a3b8; background: #111c30; border: 1px solid #1e2c44; border-radius: 10px; padding: 10px 12px; }
+  .note b { color: #e2e8f0; }
+  @media (min-width: 390px) { .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+  <h1>悬浮窗 · 地图区域缩小方案</h1>
+  <div class="sub">数值按 1dp = 1px 预览；实际手机按 density 换算。红框 = 改动边界。</div>
+
+  <div class="controls">
+    <div class="row">
+      <span>地图边长</span>
+      <input id="size" type="range" min="60" max="120" step="1" value="120" />
+      <span class="num" id="sizeText">120 dp</span>
+    </div>
+    <div class="row">
+      <label class="switch"><input id="follow" type="checkbox" /> 列表高度跟随地图（面板会变矮）</label>
+      <button id="copy">复制 JSON</button>
+    </div>
+    <div class="metrics">
+      <div>地图：<b id="mMap">120×120 dp</b></div>
+      <div>列表宽：<b id="mList">132 dp</b></div>
+      <div>列表可见：<b id="mRows">3 行 + 10dp</b></div>
+      <div>面板总高（无战斗）：<b id="mH">156 dp</b></div>
+      <div>面板总高（有命中）：<b id="mH2">220 dp</b></div>
+      <div>手势面积：<b id="mTouch">100%</b></div>
+    </div>
+    <pre id="json"></pre>
+  </div>
+
+  <div class="stage">
+    <h2>① 现状 · 地图 120</h2>
+    <div class="panel-wrap">
+      <div class="panel" id="p120"></div>
+    </div>
+    <div class="cap">地图 <b>120×120</b> · 列表 <b>132</b> · 可见 <b>3 行 + 第 4 行露 10dp</b> · 面板 <b>156 / 220 dp</b></div>
+  </div>
+
+  <div class="stage">
+    <h2>② 方案一 · 地图 102（-15%）</h2>
+    <div class="panel-wrap">
+      <div class="panel" id="p102"></div>
+    </div>
+    <div class="cap">地图 <b>102×102</b> · 列表 <b>150</b> · 可见 <b>3 行 + 第 4 行露 10dp</b> · 面板 <b>156 / 220 dp</b>（不变）</div>
+  </div>
+
+  <div class="stage">
+    <h2>③ 方案二 · 地图 90（-25%）</h2>
+    <div class="panel-wrap">
+      <div class="panel" id="p90"></div>
+    </div>
+    <div class="cap">地图 <b>90×90</b> · 列表 <b>162</b> · 可见 <b>3 行 + 第 4 行露 10dp</b> · 面板 <b>156 / 220 dp</b>（不变）</div>
+  </div>
+
+  <div class="note">
+    <b>列表行数为什么没变多：</b>当前设计里「列表可视高度 = 地图高度」（<code>bodyHeight = MAP_SIZE</code>），
+    地图缩小只会让列表变宽、文字更宽松；要让面板变矮就把「列表高度跟随地图」打开（方案一 -18dp、方案二 -30dp），
+    代价是可见行数变成 2 行多。要让列表多出行，必须把面板改高，和「缩小地图」目标相反。
+  </div>
+
+<script>
+  const ROW = 34, GAP = 4, PANEL = 274, EDGE = 8, LIST_GAP = 6, FOOT = 8, HIT = 44, HIT2 = 64, GAP28 = 28;
+
+  function visible(mapSize, follow) {
+    const body = follow ? mapSize : 120;
+    const full = Math.floor((body + GAP) / (ROW + GAP));
+    const rest = body - (full * ROW + (full - 1) * GAP);
+    return { body, full, rest: Math.max(0, rest) };
+  }
+
+  function render(host, mapSize, follow, label) {
+    const list = PANEL - EDGE * 2 - mapSize - LIST_GAP;
+    const v = visible(mapSize, follow);
+    const panelH = HIT + GAP28 + v.body + FOOT;
+    const panelH2 = HIT2 + GAP28 + v.body + FOOT;
+    const rows = [];
+    for (let i = 0; i < 5; i++) {
+      rows.push(`<div class="item">精灵 ${i + 1} · ${Math.max(3, mapSize - 30 - i * 9)}m<span>Lv.${20 + i} · 普通</span></div>`);
+    }
+    host.innerHTML = `
+      <div class="hit"><b>战斗采集 · 赛季奇遇</b><br/>进入赛季奇遇战后，这里会显示守卫的个体数据。</div>
+      <div class="head">附近 8 · 稀有 3</div>
+      <div class="body" style="height:${v.body}px">
+        <div class="map" style="width:${mapSize}px;height:${mapSize}px">
+          <div class="measure"><span class="badge">${mapSize}×${mapSize} dp</span></div>
+          <div class="self"></div>
+          <div class="pet" style="left:64%;top:38%"></div>
+          <div class="pet" style="left:32%;top:62%"></div>
+        </div>
+        <div class="list" style="height:${v.body}px">${rows.join('')}</div>
+      </div>
+      <div class="foot">还有 4 只未显示</div>`;
+    return { mapSize, listWidth: list, body: v.body, rows: `${v.full} 行${v.rest ? ` + ${v.rest}dp` : ''}`, panelH, panelH2 };
+  }
+
+  function drawAll() {
+    document.getElementById('p120').innerHTML = '';
+    render(document.getElementById('p120'), 120, false, '现状');
+    render(document.getElementById('p102'), 102, false, '-15%');
+    render(document.getElementById('p90'), 90, false, '-25%');
+  }
+
+  const size = document.getElementById('size');
+  const follow = document.getElementById('follow');
+  let live = document.getElementById('live');
+  if (!live) {
+    live = document.createElement('div');
+    live.id = 'live';
+    live.className = 'stage';
+    live.innerHTML = '<h2>调节预览（拖动滑块）</h2><div class="panel-wrap"><div class="panel" id="pLive"></div></div>';
+    document.querySelector('.controls').after(live);
+  }
+
+  function update() {
+    const s = Number(size.value);
+    const f = follow.checked;
+    document.getElementById('sizeText').textContent = s + ' dp';
+    const m = render(document.getElementById('pLive'), s, f, '自定义');
+    document.getElementById('mMap').textContent = `${s}×${s} dp`;
+    document.getElementById('mList').textContent = `${m.listWidth} dp`;
+    document.getElementById('mRows').textContent = m.rows;
+    document.getElementById('mH').textContent = `${m.panelH} dp`;
+    document.getElementById('mH2').textContent = `${m.panelH2} dp`;
+    document.getElementById('mTouch').textContent = `${Math.round((s * s) / 14400 * 100)}%`;
+    window.__layout = { mapSize: s, listWidth: m.listWidth, listHeightFollowsMap: f, bodyHeight: m.body, panelHeightNoBattle: m.panelH, panelHeightWithHit: m.panelH2 };
+  }
+
+  document.getElementById('copy').onclick = async () => {
+    const pre = document.getElementById('json');
+    pre.style.display = 'block';
+    pre.textContent = JSON.stringify(window.__layout, null, 2);
+    try { await navigator.clipboard.writeText(pre.textContent); } catch (e) {}
+  };
+
+  size.addEventListener('input', update);
+  follow.addEventListener('change', update);
+  drawAll();
+  update();
+</script>
+</body>
+</html>

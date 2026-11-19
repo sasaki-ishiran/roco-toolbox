@@ -1,7 +1,7 @@
 import type { LegacyEggHistory } from './eggMigration';
 import type { PatrolTaskStatus } from './eggPatrol';
 import { isDemandBody, isDemandVoice } from './collectionGroups';
-import { canCirculateEgg, canMatchDemand, createDemand, type EggDemand, type EggRecord } from './eggMatching';
+import { canCirculateEgg, canMatchDemand, createDemand, type EggDemand, type EggParentInfo, type EggParentsInfo, type EggRecord } from './eggMatching';
 
 export interface WorkflowEgg extends EggRecord {
   gameAccountKey: string;
@@ -9,6 +9,8 @@ export interface WorkflowEgg extends EggRecord {
   listed: boolean;
   itemConfId?: number;
   weightGrams?: number;
+  /** 游戏蛋数据里的获得时间（ISO 8601）。家园蛋与更新前的旧记录没有这个字段。 */
+  obtainedAt?: string;
   /** Last complete capture no longer contains this reserved instance. */
   missingFromCapture?: boolean;
 }
@@ -47,7 +49,36 @@ const str = (value: unknown): string => {
   if (typeof value !== 'string' || !value.trim() || value.length > 2048) throw new Error('标识无效');
   return value;
 };
-function normalizeEgg(value: unknown, accountId: string, gameAccountKey: string): WorkflowEgg {
+/** 获得时间只接受可解析的时间串；缺失或坏值一律当作没有，不阻塞老记录。 */
+const obtainedAtOf = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const text = value.trim();
+  if (!text || text.length > 40 || Number.isNaN(Date.parse(text))) return undefined;
+  return text;
+};
+function parentInfoOf(value: unknown): EggParentInfo {
+  const raw = record(value);
+  // gameId 允许 0：抓包只拿到名字/窝时仍保留父母展示，不伪造物种。
+  if (!Number.isSafeInteger(raw.gameId) || Number(raw.gameId) < 0) throw new Error('亲本物种无效');
+  return { id: str(raw.id), gameId: Number(raw.gameId),
+    name: typeof raw.name === 'string' ? raw.name.slice(0, 80) : '',
+    nature: typeof raw.nature === 'string' ? raw.nature.slice(0, 32) : '',
+    body: isDemandBody(raw.body) ? raw.body : '', voice: isDemandVoice(raw.voice) ? raw.voice : '',
+    ...(typeof raw.nestName === 'string' && raw.nestName ? { nestName: raw.nestName.slice(0, 40) } : {}),
+    ...(raw.academy === true ? { academy: true } : {}) };
+}
+/** 家园蛋的父母只作为展示与推算依据；形状不对直接拒绝，不保存半截数据。 */
+function parentsOf(value: unknown): EggParentsInfo | undefined {
+  if (value == null) return undefined;
+  const raw = record(value);
+  const mother = raw.mother == null ? undefined : parentInfoOf(raw.mother);
+  const fathers = Array.isArray(raw.fathers) ? raw.fathers.slice(0, 4).map(parentInfoOf) : [];
+  if (!mother && !fathers.length) throw new Error('亲本信息无效');
+  if (new Set(fathers.map(father => father.id)).size !== fathers.length) throw new Error('亲本信息重复');
+  return { ...(mother ? { mother } : {}), ...(fathers.length ? { fathers } : {}),
+    confirmed: raw.confirmed === true, stale: raw.stale === true };
+}
+function normalizeEgg(value: unknown, accountId: string, gameAccountKey: string, capture = false): WorkflowEgg {
   const raw = record(value);
   if (!Number.isSafeInteger(raw.eggGameId) || Number(raw.eggGameId) <= 0) throw new Error('蛋物种无效');
   const kind = raw.isShiny === true || raw.preciousEggType === 2 ? 'shiny' :
@@ -55,15 +86,24 @@ function normalizeEgg(value: unknown, accountId: string, gameAccountKey: string)
     ['specialEggConfId','appearanceType','extensionType'].some(key=>typeof raw[key]==='number' && Number(raw[key])!==0) ||
     (typeof raw.itemConfId==='number' && (raw.itemConfId<107000 || raw.itemConfId>107999)) ? 'special' : raw.kind ?? 'ordinary';
   if (!['ordinary', 'shiny', 'special'].includes(String(kind))) throw new Error('蛋分类无效');
+  const location = raw.location === 'home' ? 'home' : 'bag';
+  const parents = capture ? parentsOf(raw.parents) : undefined;
+  // 只有采集同步能写 system；家园蛋必须有父母依据，避免空壳「系统确认」。
+  const labelSource: NonNullable<EggRecord['labelSource']> =
+    capture && raw.labelSource === 'system' && (location === 'bag' || !!parents) ? 'system'
+      : raw.labelSource === 'manual' ? 'manual' : 'unknown';
   return { id: str(raw.id), accountId, gameAccountKey, eggGameId: Number(raw.eggGameId),
     accountName: typeof raw.accountName === 'string' ? raw.accountName.slice(0, 64) : undefined,
     nature: typeof raw.nature === 'string' && raw.nature.length <= 32 ? raw.nature : '',
     body: isDemandBody(raw.body) ? raw.body : 'unknown', voice: isDemandVoice(raw.voice) ? raw.voice : 'unknown',
     kind: kind as WorkflowEgg['kind'], provenance: raw.provenance === 'external' ? 'external' : 'unknown',
-    // Browser imports/manual labels are not server-verified game evidence.
-    confidence: 'manual', status: 'available', listed: false,
+    confidence: labelSource === 'system' ? 'system' : capture ? 'unknown' : 'manual',
+    status: 'available', listed: false, location, labelSource,
+    ...(Number.isFinite(raw.lastConfirmedAt) && Number(raw.lastConfirmedAt) > 0 ? { lastConfirmedAt: Number(raw.lastConfirmedAt) } : {}),
+    ...(parents ? { parents } : {}),
     itemConfId: Number.isSafeInteger(raw.itemConfId) ? Number(raw.itemConfId) : undefined,
-    weightGrams: typeof raw.weightGrams === 'number' && Number.isFinite(raw.weightGrams) ? raw.weightGrams : undefined };
+    weightGrams: typeof raw.weightGrams === 'number' && Number.isFinite(raw.weightGrams) ? raw.weightGrams : undefined,
+    obtainedAt: obtainedAtOf(raw.obtainedAt) };
 }
 const active = (trade: WorkflowTrade) => trade.status === 'accepted';
 const ownEgg = (state: EggWorkflowState, accountId: string, id: string) => {
@@ -141,29 +181,45 @@ export function applyEggAction(previous: EggWorkflowState, groupId: string, acto
   if (action.type === 'stock-sync') {
     const key = str(action.gameAccountKey);
     const timestamp = Number(action.capturedAt);
-    if (!Number.isFinite(timestamp) || timestamp < 0 || typeof action.complete !== 'boolean' || !Array.isArray(action.eggs) || action.eggs.length > 2000) throw new Error('库存快照无效');
+    if (!Number.isFinite(timestamp) || timestamp < 0 || typeof action.complete !== 'boolean' ||
+        typeof action.homeComplete !== 'undefined' && typeof action.homeComplete !== 'boolean' ||
+        !Array.isArray(action.eggs) || action.eggs.length > 2000) throw new Error('库存快照无效');
     const watermark = JSON.stringify([actor, key]);
     if (timestamp <= (state.watermarks[watermark] ?? -1)) return previous;
-    const incoming = action.eggs.map(e => normalizeEgg(e, actor, key));
+    const incoming = action.eggs.map(e => normalizeEgg(e, actor, key, true));
     if (new Set(incoming.map(e => e.id)).size !== incoming.length) throw new Error('库存实例重复');
     const old = state.eggs.filter(e => e.accountId === actor && e.gameAccountKey === key);
+    const completeBag = action.complete === true;
+    const completeHome = action.homeComplete === true;
+    const completeOf = (egg: EggRecord): boolean => (egg.location ?? 'bag') === 'home' ? completeHome : completeBag;
     for (const egg of incoming) {
       const before = old.find(e => e.id === egg.id);
       if (before) {
         egg.status = before.status;
         if (before.kind === 'special' || before.kind === 'shiny') egg.kind = before.kind;
-        // Missing captured attributes do not erase the user's label.
-        if (!egg.nature) egg.nature = before.nature;
-        if (egg.body === 'unknown') egg.body = before.body;
-        if (egg.voice === 'unknown') egg.voice = before.voice;
+        if (before.labelSource === 'manual') {
+          // 用户改过的属性不能被下一次采集覆盖，来源保持 manual。
+          egg.nature = before.nature; egg.body = before.body; egg.voice = before.voice;
+          egg.labelSource = 'manual'; egg.confidence = 'manual';
+        } else {
+          // Missing captured attributes do not erase the user's label.
+          if (!egg.nature) egg.nature = before.nature;
+          if (egg.body === 'unknown') egg.body = before.body;
+          if (egg.voice === 'unknown') egg.voice = before.voice;
+        }
+        // 新抓包偶尔缺时间时，保留已经记录过的获得时间。
+        if (!egg.obtainedAt) egg.obtainedAt = before.obtainedAt;
+        if (!egg.parents) egg.parents = before.parents;
+        const confirmed = Math.max(egg.lastConfirmedAt ?? 0, before.lastConfirmedAt ?? 0);
+        if (confirmed > 0) egg.lastConfirmedAt = confirmed;
         egg.listed = before.listed && canCirculateEgg(egg);
       }
     }
-    if (action.complete) for (const egg of old) {
-      if (!incoming.some(n => n.id === egg.id)) { egg.missingFromCapture = true; egg.listed = false; }
+    for (const egg of old) {
+      if (completeOf(egg) && !incoming.some(n => n.id === egg.id)) { egg.missingFromCapture = true; egg.listed = false; }
     }
     state.eggs = state.eggs.filter(e => !(e.accountId === actor && e.gameAccountKey === key) ||
-      (!incoming.some(n => n.id === e.id) && (!action.complete || e.status === 'reserved' || e.status === 'transferred')));
+      (!incoming.some(n => n.id === e.id) && (!completeOf(e) || e.status === 'reserved' || e.status === 'transferred')));
     state.eggs.push(...incoming);
     state.watermarks[watermark] = timestamp;
     return state;
@@ -177,7 +233,7 @@ export function applyEggAction(previous: EggWorkflowState, groupId: string, acto
     } else {
       available(egg);
       if (typeof action.nature !== 'string' || action.nature.length > 32 || !isDemandBody(action.body) || !isDemandVoice(action.voice)) throw new Error('标注无效');
-      Object.assign(egg, { nature: action.nature, body: action.body, voice: action.voice, confidence: 'manual' });
+      Object.assign(egg, { nature: action.nature, body: action.body, voice: action.voice, confidence: 'manual', labelSource: 'manual' });
     }
     return state;
   }

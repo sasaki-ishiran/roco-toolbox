@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="zh-Hans-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跨号传蛋 vs 小组求助（内外求并存）· 三版预览</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #f1f5f9; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    color: #0f172a; -webkit-font-smoothing: antialiased;
+  }
+  .page { padding: 20px 16px 40px; }
+  h1 { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
+  .lede { margin: 0 0 16px; max-width: 900px; font-size: 12px; line-height: 1.8; color: #64748b; }
+  .lede b { color: #0f766e; }
+  .stage { display: flex; align-items: flex-start; gap: 26px; flex-wrap: wrap; }
+  .device { background: #0f172a; border-radius: 22px; padding: 7px; box-shadow: 0 18px 40px rgba(15,23,42,.18); }
+  .device > .label { margin: 4px 0 8px; text-align: center; font-size: 11px; color: #cbd5e1; font-weight: 600; }
+  .device > .label span { display: block; font-weight: 400; color: #94a3b8; font-size: 10px; }
+  .screen { background: #f1f5f9; border-radius: 16px; overflow: hidden; width: 375px; padding: 12px; }
+
+  .card { border-radius: 16px; background: #fff; padding: 12px; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
+  .mom-head { display: flex; align-items: center; gap: 6px; border-top: 1px dashed #e2e8f0; padding-top: 10px; }
+  .mom-head h3 { margin: 0; font-size: 12px; font-weight: 600; color: #334155; }
+  .mom-count { border-radius: 999px; background: #fffbeb; color: #b45309; padding: 1px 7px; font-size: 10px; font-weight: 600; }
+  .mom-count.gray { background: #f1f5f9; color: #64748b; }
+
+  .item { border-left: 4px solid #f59e0b; border-radius: 12px; background: #f8fafc; padding: 8px; margin-top: 6px; }
+  .item.transfer { border-left-color: #38bdf8; }
+  .item.help { border-left-color: #cbd5e1; }
+  .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .dot { width: 8px; height: 8px; border-radius: 999px; background: #f59e0b; flex-shrink: 0; }
+  .item.transfer .dot { background: #38bdf8; }
+  .item.help .dot { background: #cbd5e1; }
+  .chip { border-radius: 4px; padding: 2px 6px; font-size: 10px; line-height: 1.2; font-weight: 600; background: #fffbeb; color: #b45309; }
+  .chip.gray { background: #f1f5f9; color: #64748b; font-weight: 500; }
+  .chip.sky { background: #f0f9ff; color: #0369a1; font-weight: 500; }
+  .chip.rose { background: #fff1f2; color: #be123c; }
+  .muted { font-size: 10px; color: #94a3b8; }
+
+  .pets { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 4px; margin-top: 6px; }
+  .pet { position: relative; height: 84px; border-radius: 12px; border: 1px solid #fbcfe8; background: #fdf2f8; padding: 5px; overflow: hidden; }
+  .pet.m { border-color: #bae6fd; background: #f0f9ff; }
+  .pet .groups { position: absolute; left: 5px; top: 5px; display: flex; flex-direction: column; gap: 1px; max-width: 60%; }
+  .pet .g { border-radius: 3px; padding: 0 3px; font-size: 9px; line-height: 12px; background: #e0f2fe; color: #075985; white-space: nowrap; }
+  .pet .right { position: absolute; right: 5px; top: 4px; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: 10px; line-height: 13px; color: #64748b; }
+  .pet .nat { border-radius: 2px; background: #fef3c7; color: #78350f; padding: 0 3px; font-size: 10px; font-weight: 500; }
+  .pet .name { position: absolute; left: 5px; right: 5px; top: 46px; margin: 0; font-size: 11px; line-height: 15px; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pet .box { position: absolute; left: 5px; right: 5px; top: 64px; margin: 0; font-size: 9px; line-height: 11px; color: #94a3b8; text-align: center; }
+
+  .flow { margin: 5px 0 0; text-align: center; font-size: 11px; font-weight: 600; color: #0369a1; }
+  .why { margin: 4px 0 0; font-size: 10px; line-height: 1.5; color: #64748b; }
+
+  .actions { display: flex; gap: 6px; margin-top: 6px; }
+  .btn { flex: 1; border-radius: 8px; border: 1px solid #bae6fd; background: #fff; color: #0369a1; font-size: 11px; font-weight: 600; padding: 6px 4px; text-align: center; }
+  .btn.ok { border-color: #a7f3d0; color: #047857; }
+  .btn.ghost { border-color: #e2e8f0; color: #64748b; font-weight: 500; }
+  .btn.small { flex: 0 0 auto; padding: 3px 8px; font-size: 10px; font-weight: 500; }
+
+  .row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: #475569; }
+  .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .pct { color: #0369a1; font-size: 10px; }
+  .section-title { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 11px; font-weight: 600; color: #334155; }
+  .section-title .tag { border-radius: 4px; padding: 1px 6px; font-size: 9px; font-weight: 600; }
+  .tag.in { background: #f0f9ff; color: #0369a1; }
+  .tag.out { background: #f5f3ff; color: #6d28d9; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>跨号传蛋（内求）与小组求助（外求）并存 · 三版</h1>
+  <p class="lede">
+    同一批缺口：<b>甜田螺</b>（本号内 30%）、<b>大耳帽兜</b>（洛丝能做 30%）、<b>宝藏小狐</b>（洛迩能做 15%）、<b>奔波鼠</b>（自己号都做不到 30%）。
+    三版都保证「能内求的缺口」和「只能外求的缺口」都能一眼看到两个选项。数据为示例。
+  </p>
+
+  <div class="stage">
+    <!-- 方案 A -->
+    <div class="device" id="variant-a">
+      <div class="label">方案 A · 一卡两路<span>每条缺口一张卡：左边内求，右边两个按钮</span></div>
+      <div class="screen">
+        <section class="card">
+          <div class="mom-head">
+            <h3>母本配窝</h3>
+            <span class="mom-count">本号未收集 189 · 可补 3</span>
+            <span class="mom-count gray">求助 1</span>
+          </div>
+
+          <div class="item transfer">
+            <div class="head">
+              <span class="dot"></span>
+              <span class="chip">30%固执♀</span>
+              <span class="chip sky">内求：洛丝（5号）</span>
+              <span class="muted">100dB</span>
+            </div>
+            <div class="pets">
+              <article class="pet">
+                <span class="groups"><span class="g">妖精组</span><span class="g">软体组</span></span>
+                <span class="right"><span class="nat">固执</span><span>100dB</span><span>高100%</span></span>
+                <p class="name">甜田螺</p><p class="box">盒子04 第19位</p>
+              </article>
+              <article class="pet m">
+                <span class="groups"><span class="g">妖精组</span></span>
+                <span class="right"><span class="nat">固执</span><span>100dB</span><span>高100%</span></span>
+                <p class="name">守夜烛</p><p class="box">盒子06 第1位</p>
+              </article>
+            </div>
+            <div class="actions">
+              <span class="btn">让洛丝传蛋</span>
+              <span class="btn ok">向小组求助</span>
+            </div>
+          </div>
+
+          <div class="item">
+            <div class="head">
+              <span class="dot"></span>
+              <span class="chip">30%踏实♀</span>
+              <span class="chip sky">内求：本号自己配</span>
+              <span class="muted">100dB</span>
+            </div>
+            <div class="pets">
+              <article class="pet">
+                <span class="groups"><span class="g">妖精组</span><span class="g">拟人组</span></span>
+                <span class="right"><span class="nat">专注</span><span>100dB</span><span>出母100%</span></span>
+                <p class="name">大耳帽兜</p><p class="box">盒子24 第22位</p>
+              </article>
+              <article class="pet m">
+                <span class="groups"><span class="g">魔力组</span><span class="g">妖精组</span></span>
+                <span class="right"><span class="nat">踏实</span><span>100dB</span><span>高100%</span></span>
+                <p class="name">梦游_穿旧睡衣的样子</p><p class="box">盒子01 第19位</p>
+              </article>
+            </div>
+            <div class="actions">
+              <span class="btn">占用本号 2 个窝</span>
+              <span class="btn ok">向小组求助</span>
+            </div>
+          </div>
+
+          <div class="item help">
+            <div class="head">
+              <span class="dot"></span>
+              <span class="chip gray">15%</span>
+              <span class="chip gray">内求：洛迩（3号）只有 15%</span>
+            </div>
+            <div class="row"><span class="name">宝藏小狐 · 推荐 固执 / 急躁</span><span class="pct">最好 15%</span></div>
+            <div class="actions"><span class="btn ok">向小组求助</span></div>
+          </div>
+
+          <div class="item help">
+            <div class="head">
+              <span class="dot"></span>
+              <span class="chip gray">奔波鼠</span>
+              <span class="chip gray">自己 6 个号都不到 30%</span>
+            </div>
+            <div class="row"><span class="name">推荐 沉默 · 出母 50%</span><span class="pct">最好 15%</span></div>
+            <div class="actions"><span class="btn ok">向小组求助</span></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 方案 B -->
+    <div class="device" id="variant-b">
+      <div class="label">方案 B · 分两段<span>上段内求（能传蛋的），下段外求（全部缺口）</span></div>
+      <div class="screen">
+        <section class="card">
+          <div class="mom-head">
+            <h3>母本配窝</h3>
+            <span class="mom-count">本号未收集 189 · 可补 3</span>
+            <span class="mom-count gray">求助 4</span>
+          </div>
+
+          <p class="section-title"><span class="tag in">内求</span>让号传蛋（3 条）</p>
+
+          <div class="item transfer">
+            <div class="head">
+              <span class="dot"></span>
+              <span class="chip">30%固执♀</span>
+              <span class="muted">洛丝（5号）→ 洛乌（6号）</span>
+            </div>
+            <div class="pets">
+              <article class="pet">
+                <span class="groups"><span class="g">妖精组</span><span class="g">软体组</span></span>
+                <span class="right"><span class="nat">固执</span><span>100dB</span></span>
+                <p class="name">甜田螺</p><p class="box">盒子04 第19位</p>
+              </article>
+              <article class="pet m">
+                <span class="groups"><span class="g">妖精组</span></span>
+                <span class="right"><span class="nat">固执</span><span>100dB</span></span>
+                <p class="name">守夜烛</p><p class="box">盒子06 第1位</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="item">
+            <div class="head"><span class="dot"></span><span class="chip">30%踏实♀</span><span class="muted">本号自己配 · 占 2 窝</span></div>
+            <div class="row"><span class="name">大耳帽兜 × 梦游_穿旧睡衣的样子</span><span class="pct">出母 100%</span></div>
+          </div>
+
+          <div class="item help">
+            <div class="head"><span class="dot"></span><span class="chip gray">15%</span><span class="chip gray">洛迩（3号）</span></div>
+            <div class="row"><span class="name">宝藏小狐 × 逗逗</span><span class="pct">最好 15%</span></div>
+          </div>
+
+          <p class="section-title"><span class="tag out">外求</span>向小组求助（4 条，含上面已能内求的）</p>
+          <div class="row"><span class="name">甜田螺 30%<span class="muted">（上面有内求）</span></span><span class="btn small ok">求助</span></div>
+          <div class="row"><span class="name">大耳帽兜 30%<span class="muted">（上面有内求）</span></span><span class="btn small ok">求助</span></div>
+          <div class="row"><span class="name">宝藏小狐 15%<span class="muted">（上面有内求）</span></span><span class="btn small ok">求助</span></div>
+          <div class="row"><span class="name">奔波鼠 15%</span><span class="btn small ok">求助</span></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 方案 C -->
+    <div class="device" id="variant-c">
+      <div class="label">方案 C · 只在传蛋卡上加「问小组」<span>传蛋卡不变，卡底加一个小按钮；没有内求的才进求助段</span></div>
+      <div class="screen">
+        <section class="card">
+          <div class="mom-head">
+            <h3>母本配窝</h3>
+            <span class="mom-count">本号未收集 189 · 可补 3</span>
+            <span class="mom-count gray">求助 1</span>
+          </div>
+
+          <div class="item transfer">
+            <div class="head"><span class="dot"></span><span class="chip">30%固执♀</span><span class="muted">100dB · 洛丝（5号）→ 洛乌（6号）</span></div>
+            <div class="pets">
+              <article class="pet">
+                <span class="groups"><span class="g">妖精组</span><span class="g">软体组</span></span>
+                <span class="right"><span class="nat">固执</span><span>100dB</span></span>
+                <p class="name">甜田螺</p><p class="box">盒子04 第19位</p>
+              </article>
+              <article class="pet m">
+                <span class="groups"><span class="g">妖精组</span></span>
+                <span class="right"><span class="nat">固执</span><span>100dB</span></span>
+                <p class="name">守夜烛</p><p class="box">盒子06 第1位</p>
+              </article>
+            </div>
+            <div class="actions" style="justify-content:flex-end">
+              <span class="btn small ghost">问小组</span>
+            </div>
+          </div>
+
+          <div class="item">
+            <div class="head"><span class="dot"></span><span class="chip">30%踏实♀</span><span class="muted">100dB · 本号自己配</span></div>
+            <div class="row"><span class="name">大耳帽兜 × 梦游_穿旧睡衣的样子</span><span class="pct">出母 100%</span></div>
+            <div class="actions" style="justify-content:flex-end">
+              <span class="btn small ghost">问小组</span>
+            </div>
+          </div>
+
+          <div class="item help">
+            <div class="head"><span class="dot"></span><span class="chip gray">奔波鼠</span><span class="chip gray">自己号都不到 30%</span></div>
+            <div class="row"><span class="name">推荐 沉默 · 最好 15%</span><span class="btn small ok">求助</span></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

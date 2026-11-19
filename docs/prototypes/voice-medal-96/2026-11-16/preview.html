@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>精灵卡声音奖牌 ≥96 预览（375 / 390）</title>
+<style>
+  /* 只还原本次对照需要的一页：顶部栏 + 页签 + 收集页（账号条 / 搜索 / 筛选 / 精灵库四列卡）。
+     卡片样式照 PetCard.tsx 的 Tailwind 实际值手写，尺寸与线上一致。 */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #f1f5f9; }
+  body {
+    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+  }
+  button { font: inherit; }
+  .sticky { position: sticky; top: 0; z-index: 50; background: #fff; }
+  .app-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    border-bottom: 1px solid #f1f5f9; background: #fff; padding: 8px 16px;
+  }
+  .app-header h1 { margin: 0; font-size: 16px; font-weight: 600; color: #0f172a; }
+  .header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .header-actions button {
+    min-height: 30px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff;
+    padding: 0 10px; font-size: 12px; color: #64748b;
+  }
+  .tabnav { display: flex; border-bottom: 1px solid #f1f5f9; background: #fff; padding: 0 8px; }
+  .tabnav span {
+    position: relative; min-height: 40px; flex: 1; display: inline-flex; align-items: center;
+    justify-content: center; border-bottom: 2px solid transparent; padding: 0 8px;
+    font-size: 14px; font-weight: 500; color: #64748b;
+  }
+  .tabnav span.active { border-bottom-color: #059669; color: #047857; }
+
+  main { margin: 0 auto; max-width: 448px; display: flex; flex-direction: column; gap: 4px; padding: 2px 16px 16px; }
+  .card-panel { border-radius: 12px; background: #fff; padding: 10px; box-shadow: 0 1px 2px rgba(15,23,42,.05); }
+  .account-head { display: flex; align-items: center; justify-content: space-between; }
+  .account-head span { font-size: 12px; font-weight: 500; color: #64748b; }
+  .account-head button { border: 0; background: none; padding: 0; font-size: 12px; font-weight: 500; color: #059669; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .chip {
+    min-height: 28px; border-radius: 8px; border: 1px solid #059669; background: #ecfdf5;
+    color: #047857; padding: 0 8px; font-size: 12px;
+  }
+  .search {
+    display: flex; align-items: center; gap: 8px; border-radius: 12px; background: #fff;
+    padding: 8px 10px; box-shadow: 0 1px 2px rgba(15,23,42,.05); color: #94a3b8; font-size: 12px;
+  }
+  .search .dot { width: 14px; height: 14px; border: 1.5px solid #cbd5e1; border-radius: 50%; position: relative; flex-shrink: 0; }
+  .search .dot::after { content: ""; position: absolute; right: -4px; bottom: -3px; width: 6px; height: 1.5px; background: #cbd5e1; transform: rotate(45deg); }
+  .filter-row {
+    display: flex; align-items: center; justify-content: space-between; border-radius: 12px;
+    background: #fff; padding: 8px 10px; box-shadow: 0 1px 2px rgba(15,23,42,.05); font-size: 12px;
+  }
+  .filter-row .title { font-weight: 500; color: #334155; }
+  .filter-row .hint { color: #94a3b8; }
+  .page-indicator { margin: 4px 0 0; font-size: 12px; color: #64748b; }
+  .page-size { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; margintop: 0; }
+  .page-size button {
+    min-height: 28px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff;
+    padding: 0 8px; font-size: 12px; color: #475569;
+  }
+  .page-size button.on { border-color: #059669; background: #059669; color: #fff; }
+  .pet-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .pet-grid li { min-width: 0; }
+
+  /* PetCard.tsx */
+  .pet-card {
+    position: relative; display: flex; flex-direction: column; align-items: center;
+    height: 100%; border-radius: 12px; background: #fff; padding: 6px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.05);
+  }
+  .avatar-wrap { position: relative; }
+  .avatar { display: block; width: 56px; height: 56px; object-fit: contain; flex-shrink: 0; }
+  .avatar-fallback {
+    width: 56px; height: 56px; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; background: #f1f5f9; color: #64748b; font-size: 18px; font-weight: 600;
+  }
+  .pet-name {
+    margin: 4px 0 0; width: 100%; font-size: 11px; line-height: 1.25; font-weight: 600;
+    color: #0f172a; text-align: center;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .pet-gender {
+    margin: 2px 0 0; max-width: 100%; font-size: 10px; line-height: 1.25; color: #334155;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .gmark {
+    display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
+    width: 12px; height: 12px; border-radius: 50%; font-size: 9px; line-height: 1; flex-shrink: 0;
+  }
+  .gmark.m { background: #fce7f3; color: #db2777; }
+  .gmark.f { background: #e0f2fe; color: #0369a1; }
+  .medals { display: flex; align-items: center; justify-content: center; gap: 2px; height: 16px; margin-top: 2px; }
+  .medals img { width: 16px; height: 16px; display: block; }
+  .pet-meta {
+    margin: 0; max-width: 100%; font-size: 10px; line-height: 1.25; color: #64748b;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pet-groups {
+    margin: 2px 0 0; width: 100%; font-size: 10px; line-height: 1.25; color: #64748b;
+    text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pet-pos {
+    margin: auto 0 0; width: 100%; padding-top: 2px; font-size: 10px; line-height: 1.25;
+    color: #94a3b8; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* 评审标注（只在截图里出现，不属于线上界面） */
+  .changed { outline: 2px dashed #e11d48; outline-offset: 2px; }
+  .mark {
+    position: absolute; top: -8px; right: -8px; z-index: 2;
+    width: 15px; height: 15px; border-radius: 50%; background: #e11d48; color: #fff;
+    border: 2px solid #fff; font-size: 9px; line-height: 11px; font-weight: 700; text-align: center;
+  }
+  .legend {
+    margin-top: 6px; border-radius: 12px; border: 1px solid #fca5a5; background: #fff1f2;
+    padding: 8px 10px; font-size: 11px; line-height: 1.5; color: #9f1239;
+  }
+  .legend h4 { margin: 0 0 4px; font-size: 11px; }
+  .legend p { margin: 0; }
+  .legend .measure { margin-top: 4px; color: #881337; }
+</style>
+</head>
+<body>
+<div class="sticky">
+  <header class="app-header">
+    <h1>洛克工具箱</h1>
+    <div class="header-actions">
+      <button type="button">刷新</button>
+      <button type="button">教程</button>
+    </div>
+  </header>
+  <nav class="tabnav">
+    <span>看板</span><span>家园</span><span class="active">收集</span><span>附近</span><span>小组</span><span>我的</span>
+  </nav>
+</div>
+
+<main>
+  <section class="card-panel">
+    <div class="account-head">
+      <span>账号（3/3）</span>
+      <button type="button">全不选</button>
+    </div>
+    <div class="chips">
+      <button class="chip" type="button">主号</button>
+      <button class="chip" type="button">小号一</button>
+      <button class="chip" type="button">小号二</button>
+    </div>
+  </section>
+
+  <div class="search"><i class="dot"></i><span>搜索精灵名</span></div>
+
+  <div class="filter-row">
+    <span class="title">筛选</span>
+    <span class="hint">性别 / 体型 / 声音 ›</span>
+  </div>
+
+  <p class="page-indicator">共 8 只 · 第 1 / 1 页（每页 8 只）</p>
+  <div class="page-size">
+    <span>每页</span>
+    <button type="button">8</button>
+    <button type="button">12</button>
+    <button type="button">20</button>
+    <button type="button">40</button>
+  </div>
+
+  <ul class="pet-grid" id="grid"></ul>
+
+  <section class="legend" id="legend"></section>
+</main>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const mode = params.get('mode') === 'before' ? 'before' : 'after';
+
+  // 示例数据（非用户真实库存）：覆盖 96 / -96 / 99 / 100 / -100 / 普通，
+  // 并让 96 与 -96 各自带一枚体型牌，检查双牌排布。
+  const pets = [
+    { name: '厉毒小萝', gameId: 3419, gender: '母', nature: '大胆', body: 'big', weight: '99.10%', voice: 96,  groups: '拟人组×天空组', pos: '主号·盒子01·1', changed: 1 },
+    { name: '厉毒小萝', gameId: 3419, gender: '公', nature: '固执', body: 'big', weight: '100.00%', voice: 100, groups: '拟人组×天空组', pos: '主号·盒子01·2' },
+    { name: '小夜',     gameId: 3142, gender: '母', nature: '胆小', body: '',    weight: '62.30%',  voice: 96,  groups: '拟人组×妖精组', pos: '主号·盒子02·1', changed: 3 },
+    { name: '格兰花',   gameId: 3073, gender: '公', nature: '开朗', body: '',    weight: '60.20%',  voice: 60,  groups: '植物组×妖精组', pos: '主号·盒子02·2' },
+    { name: '厉毒小萝', gameId: 3419, gender: '母', nature: '淘气', body: 'small', weight: '1.20%', voice: -96, groups: '拟人组×天空组', pos: '小号一·盒子01·3', changed: 5 },
+    { name: '火花',     gameId: 3003, gender: '公', nature: '勇敢', body: 'small', weight: '0.00%', voice: -100, groups: '魔力组×巨灵组', pos: '小号一·盒子01·4' },
+    { name: '小夜',     gameId: 3142, gender: '公', nature: '认真', body: '',    weight: '48.60%',  voice: 99,  groups: '拟人组×妖精组', pos: '小号二·盒子01·1', changed: 7 },
+    { name: '格兰花',   gameId: 3073, gender: '母', nature: '温和', body: '',    weight: '71.40%',  voice: 12,  groups: '植物组×妖精组', pos: '小号二·盒子01·2' },
+  ];
+
+  const avatar = (gameId) => `https://game.gtimg.cn/images/rocom/rocodata/jingling/${gameId}/icon.png`;
+  // 奖牌图用相对路径，双击 HTML 也能直接看（不用起本地服务）
+  const MEDAL = '../../../../public/ui/medals/';
+  const bodyMedal = (body, weight) => {
+    if (body === 'big') return weight === '100.00%' ? MEDAL + '1001-max.png' : MEDAL + '1001.png';
+    if (body === 'small') return weight === '0.00%' ? MEDAL + '1002-min.png' : MEDAL + '1002.png';
+    return null;
+  };
+  // 改前：声音奖牌只认 ±100（当前 petIcons.ts 的行为）
+  const voiceMedalBefore = (db) => db === 100 ? MEDAL + '1026-max.png' : db === -100 ? MEDAL + '1025-max.png' : null;
+  // 改后：|dB| ≥ 96 给牌，96–99 用普通牌，±100 仍用满分牌
+  const voiceMedalAfter = (db) =>
+    db >= 96 && db < 100 ? MEDAL + '1026.png'
+    : db <= -96 && db > -100 ? MEDAL + '1025.png'
+    : voiceMedalBefore(db);
+
+  const voiceMedal = mode === 'before' ? voiceMedalBefore : voiceMedalAfter;
+  const genderMark = (g) => g === '母'
+    ? '<span class="gmark m">♀</span>'
+    : g === '公' ? '<span class="gmark f">♂</span>' : '<span class="gmark">?</span>';
+
+  document.getElementById('grid').innerHTML = pets.map((pet) => {
+    const b = bodyMedal(pet.body, pet.weight);
+    const v = voiceMedal(pet.voice);
+    const bodyLabel = pet.body === 'big' ? '大块头' : pet.body === 'small' ? '小不点' : '';
+    const marks = [
+      b ? `<img src="${b}" alt="${bodyLabel}" title="${bodyLabel}">` : '',
+      v ? `<img src="${v}" alt="${pet.voice > 0 ? '婉转声' : '粗嗓门'}" title="${pet.voice > 0 ? '婉转声' : '粗嗓门'}">` : '',
+    ].join('');
+    return `<li>
+      <article class="pet-card${pet.changed ? ' changed' : ''}">
+        ${pet.changed ? `<span class="mark">${pet.changed}</span>` : ''}
+        <div class="avatar-wrap">
+          <img class="avatar" src="${avatar(pet.gameId)}" alt=""
+               onerror="this.outerHTML='<span class=&quot;avatar-fallback&quot;>${pet.name.slice(0,1)}</span>'">
+        </div>
+        <h3 class="pet-name" title="${pet.name}">${pet.name}</h3>
+        <p class="pet-gender">${genderMark(pet.gender)} ${pet.nature}</p>
+        <div class="medals">${marks}</div>
+        <p class="pet-meta">${pet.weight} · ${pet.voice}dB</p>
+        <p class="pet-groups">${pet.groups}</p>
+        <p class="pet-pos">${pet.pos}</p>
+      </article>
+    </li>`;
+  }).join('');
+
+  const lines = [
+    '① 厉毒小萝 96dB + 大块头：改前只有体型牌，改后多一枚普通婉转声牌。',
+    '③ 小夜 96dB、无体型牌：改前奖牌行留空，改后有一枚普通婉转声牌。',
+    '⑤ 厉毒小萝 -96dB + 小不点：改前只有体型牌，改后多一枚普通粗嗓门牌。',
+    '⑦ 小夜 99dB：改前留空，改后一枚普通婉转声牌。',
+    '未标注的 100dB / -100dB 两张是满分牌（MAX / MIN），改前改后完全一致；60dB / 12dB 两张始终无牌。',
+    '尺寸：奖牌行高固定 16px；单牌 16px、双牌 34px（含 2px 间距），375 宽卡内可用 69.25px、390 宽 73px。96dB+体型牌 的双牌结构与现有 100dB+体型牌 完全相同，不会挤压名称、性格、蛋组与位置行。',
+  ];
+  document.getElementById('legend').innerHTML =
+    `<h4>${mode === 'before' ? '改前（当前线上行为）：虚线框内奖牌行是空的' : '改后（本次方案 A）：虚线框内新增声音奖牌'}</h4>` +
+    `<p>${lines.slice(0, 4).join('<br>')}</p>` +
+    `<p class="measure">${lines.slice(4).join('<br>')}</p>`;
+</script>
+</body>
+</html>

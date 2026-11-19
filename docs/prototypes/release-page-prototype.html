@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>正式版内容 · 原型</title>
+<style>
+  :root {
+    --bg: #eef2f7;
+    --card: #ffffff;
+    --ink: #0f172a;
+    --sub: #64748b;
+    --line: #e2e8f0;
+    --green: #059669;
+    --green-soft: #ecfdf5;
+    --blue: #2563eb;
+    --blue-soft: #eff6ff;
+    --amber: #b45309;
+    --amber-soft: #fffbeb;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 430px; margin: 0 auto; padding: 18px 16px 28px; }
+  .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .eyebrow { font-size: 10px; letter-spacing: 1.4px; color: var(--sub); font-weight: 700; }
+  h1 { margin: 4px 0 0; font-size: 22px; line-height: 1.2; letter-spacing: -0.3px; }
+  .proto-badge {
+    flex: 0 0 auto; padding: 5px 9px; border-radius: 999px;
+    background: var(--amber-soft); color: var(--amber);
+    font-size: 10px; font-weight: 700; border: 1px dashed #f0c36d;
+  }
+  .notice {
+    margin: 12px 0 14px; padding: 10px 12px; border-radius: 12px;
+    background: #fff7ed; border: 1px dashed #f0c36d;
+    color: #92400e; font-size: 11px; line-height: 1.55;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+  }
+  .version-card { overflow: hidden; position: relative; }
+  .version-card::after {
+    content: ""; position: absolute; right: -36px; top: -36px;
+    width: 120px; height: 120px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(5, 150, 105, .14), transparent 68%);
+  }
+  .version-label { font-size: 11px; color: var(--sub); font-weight: 600; }
+  .version-row { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; }
+  .version { font-size: 34px; font-weight: 800; letter-spacing: -1px; }
+  .version-code { font-size: 11px; color: var(--sub); font-weight: 600; }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .meta-item { background: #f8fafc; border-radius: 10px; padding: 8px 10px; }
+  .meta-key { font-size: 10px; color: var(--sub); }
+  .meta-val { font-size: 12px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .section { margin-top: 18px; }
+  .section-head { display: flex; align-items: center; gap: 8px; margin: 0 2px 8px; }
+  .section-head h2 { margin: 0; font-size: 14px; letter-spacing: -0.1px; }
+  .count {
+    font-size: 10px; font-weight: 700; color: var(--sub);
+    background: #e2e8f0; border-radius: 999px; padding: 2px 7px;
+  }
+  .section-note { margin-left: auto; font-size: 10px; color: var(--sub); }
+  .list { display: grid; gap: 8px; }
+  .item {
+    background: var(--card); border: 1px solid var(--line); border-radius: 13px;
+    padding: 11px 12px; display: grid; grid-template-columns: auto 1fr; gap: 10px;
+  }
+  .tag {
+    width: 44px; height: 20px; border-radius: 6px; margin-top: 1px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; letter-spacing: .2px;
+  }
+  .tag-feat { background: var(--green-soft); color: var(--green); }
+  .tag-fix { background: var(--blue-soft); color: var(--blue); }
+  .tag-chore { background: #f1f5f9; color: var(--sub); }
+  .tag-beta { background: var(--amber-soft); color: var(--amber); width: 44px; }
+  .item-title { font-size: 12.5px; font-weight: 700; line-height: 1.35; }
+  .item-desc { margin-top: 3px; font-size: 11px; line-height: 1.5; color: var(--sub); }
+  .beta .item { background: #fffdf7; border-style: dashed; border-color: #f0d9a4; }
+  .footer {
+    margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line);
+    font-size: 10px; color: var(--sub); line-height: 1.7;
+  }
+  .fake { border-bottom: 1px dashed #cbd5e1; }
+  @media (min-width: 390px) {
+    .page { padding: 20px 18px 32px; }
+    .version { font-size: 36px; }
+    .item { padding: 12px 13px; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="top">
+    <div>
+      <div class="eyebrow">ROCO TOOLBOX</div>
+      <h1>正式版内容</h1>
+    </div>
+    <span class="proto-badge">原型 · 假数据</span>
+  </header>
+
+  <p class="notice">
+    本页为排版原型：版本号、时间、commit、条目均为<strong>占位假数据</strong>，仅用于确认三块内容的顺序与密度。
+    虚线框 = 尚未放量的内测条目。
+  </p>
+
+  <section class="card version-card">
+    <div class="version-label">当前正式版本</div>
+    <div class="version-row">
+      <span class="version fake">1.5.3</span>
+      <span class="version-code">versionCode <span class="fake">37</span></span>
+    </div>
+    <div class="meta">
+      <div class="meta-item">
+        <div class="meta-key">上线时间</div>
+        <div class="meta-val fake">2026-11-11 22:50</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-key">正式 commit</div>
+        <div class="meta-val fake">1a54d78</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>本次放量</h2>
+      <span class="count">5 条</span>
+      <span class="section-note">占位数据</span>
+    </div>
+    <div class="list">
+      <article class="item">
+        <span class="tag tag-feat">新功能</span>
+        <div>
+          <div class="item-title">悬浮球自动吸边与半透明</div>
+          <div class="item-desc">松手吸附左右边缘，3 秒无操作降到 50% 透明度，按下立刻恢复。</div>
+        </div>
+      </article>
+      <article class="item">
+        <span class="tag tag-feat">新功能</span>
+        <div>
+          <div class="item-title">附近列表单行七项</div>
+          <div class="item-desc">名称 · 距离 · 方位箭头 · 等级 · 高 · 重 · 声音，一行看完。</div>
+        </div>
+      </article>
+      <article class="item">
+        <span class="tag tag-fix">修复</span>
+        <div>
+          <div class="item-title">传送后场景号不更新</div>
+          <div class="item-desc">348 传送包改读 field 12，切场景后地图不再停在「场景 1」。</div>
+        </div>
+      </article>
+      <article class="item">
+        <span class="tag tag-fix">修复</span>
+        <div>
+          <div class="item-title">自身坐标冻结</div>
+          <div class="item-desc">附近精灵整批更换时用几何中位数重新定位，不再永久停在初始点。</div>
+        </div>
+      </article>
+      <article class="item">
+        <span class="tag tag-chore">优化</span>
+        <div>
+          <div class="item-title">RocoPerf 日志扩展</div>
+          <div class="item-desc">每 5 秒输出坐标来源、新鲜度、payload 指纹与渲染跳过原因。</div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section beta">
+    <div class="section-head">
+      <h2>内测中 · 尚未放量</h2>
+      <span class="count">3 条</span>
+      <span class="section-note">占位数据</span>
+    </div>
+    <div class="list">
+      <article class="item">
+        <span class="tag tag-beta">内测</span>
+        <div>
+          <div class="item-title">收集计划中心</div>
+          <div class="item-desc">发布计划、组内认领、结单与备注，目前只在测试服可用。</div>
+        </div>
+      </article>
+      <article class="item">
+        <span class="tag tag-beta">内测</span>
+        <div>
+          <div class="item-title">组内广场「组员在收」</div>
+          <div class="item-desc">只展示 backlog 计划，按创建时间倒序，空时整块不显示。</div>
+        </div>
+      </article>
+      <article class="item">
+        <span class="tag tag-beta">内测</span>
+        <div>
+          <div class="item-title">需求中心改版</div>
+          <div class="item-desc">统一两列卡型与需求筛选，正式站仍保留旧版需求中心。</div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div>生成时间：<span class="fake">2026-11-11 22:52</span> · 正式 commit：<span class="fake">1a54d78</span> · 内测 commit：<span class="fake">d3ab86f</span></div>
+    <div>条目由提交列表生成；虚线框条目只在内测通道可见。</div>
+  </footer>
+</main>
+</body>
+</html>

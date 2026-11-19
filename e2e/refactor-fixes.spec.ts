@@ -110,8 +110,7 @@ for (const width of [320, 375, 390, 1280]) {
     }
     await page.getByRole('button', { name: '收集', exact: true }).click();
     await page.getByTestId('collection-kind-studs').click();
-    // 2026-10-29：筛选收在种公阵列右上角，先展开
-    await page.getByTestId('stud-matrix-filter-toggle').click();
+    // 2026-11-19：筛选提成页首一级卡片，常显
     await page.getByTestId('coverage-groups-toggle').click();
     await page.getByTestId('nature-mode-custom').click();
     const controls = page.locator('[data-testid="nature-mode"] button, [data-testid="coverage-filter"] button');

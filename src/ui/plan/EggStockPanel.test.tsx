@@ -36,3 +36,36 @@ test('stock details show egg groups and do not invent missing actual parents',()
   expect(screen.getByText('暂无亲本记录')).toBeTruthy();
   expect(screen.getByText('蛋组')).toBeTruthy();
 });
+
+test('stock card shows the obtained time and the detail shows it in full',()=>{
+  const egg={...ordinary,obtainedAt:'2026-11-17T22:31:00'};
+  render(<EggStockPanel eggs={[egg]} species={[{gameId:3227,key:'p',name:'菊花梨',number:'1',eggGroups:[2]}]} busy={false} mutate={vi.fn()}/>);
+  expect(screen.getByTestId('stock-time').textContent).toBe('11-17 22:31');
+  fireEvent.click(screen.getByTestId('stock-card'));
+  expect(screen.getByTestId('detail-obtained-at').textContent).toBe('2026-11-17 22:31');
+});
+
+test('eggs without a captured time omit the card row and say so in the detail',()=>{
+  render(<EggStockPanel eggs={[ordinary]} species={[{gameId:3227,key:'p',name:'菊花梨',number:'1',eggGroups:[2]}]} busy={false} mutate={vi.fn()}/>);
+  expect(screen.queryByTestId('stock-time')).toBeNull();
+  fireEvent.click(screen.getByTestId('stock-card'));
+  expect(screen.getByTestId('detail-obtained-at').textContent).toBe('采集数据里没有获得时间');
+});
+
+test('home eggs show a home badge, last-confirmed time, real parents and cannot be listed',()=>{
+  const home={...ordinary,id:'h',location:'home' as const,lastConfirmedAt:Date.parse('2026-11-17T23:02:00+08:00'),
+    nature:'',confidence:'system' as const,labelSource:'system' as const,
+    parents:{mother:{id:'m',gameId:3227,name:'菊花梨',nature:'保守',body:'大块头',voice:'+100',nestName:'普通小窝'},
+      fathers:[{id:'f',gameId:3215,name:'海豹战士',nature:'胆小',body:'大块头',voice:'婉转声'}],confirmed:false}};
+  render(<EggStockPanel eggs={[home]} species={[{gameId:3227,key:'p',name:'菊花梨',number:'1',eggGroups:[2]},
+    {gameId:3215,key:'s',name:'海豹战士',number:'2',eggGroups:[3]}]} busy={false} mutate={vi.fn()}/>);
+  expect(screen.getByTestId('stock-home-badge').textContent).toBe('家园');
+  expect(screen.getByTestId('stock-confirmed').textContent).toBe('11-17 23:02');
+  fireEvent.click(screen.getByTestId('stock-card'));
+  expect(screen.getByTestId('detail-confirmed-at').textContent).toBe('2026-11-17 23:02');
+  expect(screen.getByText('海豹战士')).toBeTruthy();
+  expect(screen.getByText('可能性格：保守 / 胆小（各 30%，其余随机）')).toBeTruthy();
+  expect(screen.getByText('满重 约 1/18（收进背包后确定）')).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'挂出'})).toBeNull();
+  expect(screen.getByText('在地家园，收进背包后才能挂出')).toBeTruthy();
+});

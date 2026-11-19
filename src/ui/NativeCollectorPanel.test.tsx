@@ -39,7 +39,7 @@ describe('内置采集入口', () => {
   test('网页环境显示本机采集说明，不伪造开始采集按钮', async () => {
     render(<NativeCollectorPanel />);
     await waitFor(() => expect(screen.getByTestId('native-collector-fallback')).toBeTruthy());
-    expect(screen.getByText(/只在安卓工具箱安装包内提供/)).toBeTruthy();
+    expect(screen.getByText(/只在安卓版小布助手安装包内提供/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: '开始采集' })).toBeNull();
   });
   test('有采集桥但状态未读完时先显示稳定骨架，不整块空白', () => {

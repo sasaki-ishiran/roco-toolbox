@@ -5,7 +5,7 @@ import {
   type CoverageFilter,
 } from '../domain/coverageTargets';
 import type { PetGrade } from '../domain/petFilters';
-import { allNatureNames, targetNatures, targetNaturePool } from '../data/catalog';
+import { allNatureNames, targetNatureNames, targetNatures, targetNaturePool } from '../data/catalog';
 import { createModuleStore } from './createModuleStore';
 
 /**
@@ -75,9 +75,12 @@ const store = createModuleStore<CoverageFilter>(buildDefaultFilter(targetNatures
       groupIds: toGroupIds(loaded.groupIds) ?? defaults.groupIds,
       naturesByGroup: toNaturesByGroup(loaded.naturesByGroup, defaults.naturesByGroup),
       grades: Array.isArray(loaded.grades)
-        ? loaded.grades.filter(isGrade)
+        // 奖牌目标改成单选（2026-11-18）：旧数据 / 云同步里残留的多个档位只保留最后一个
+        ? loaded.grades.filter(isGrade).slice(-1)
         : defaults.grades,
-      natureMode: loaded.natureMode === 'custom' ? 'custom' : 'recommended',
+      // 2026-11-19：新增「八大性格」并改为默认。旧的「推荐性格」是上一版默认值、
+      // 分不清是没改过还是特意选的，统一迁到新默认；只有「自选性格」是用户显式选择，保留。
+      natureMode: loaded.natureMode === 'custom' ? 'custom' : 'eight',
       customNatures: toStringArray(loaded.customNatures),
     };
   },
@@ -103,12 +106,14 @@ export function toggleFilterGroup(groupId: number): void {
   store.set({ ...filter, groupIds });
 }
 
+/** 奖牌目标是单选（2026-11-18）：点别的档替换，点已选中的档取消目标。 */
 export function toggleFilterGrade(grade: PetGrade): void {
-  const filter = store.get();
-  const grades = filter.grades.includes(grade)
-    ? filter.grades.filter((item) => item !== grade)
-    : [...filter.grades, grade];
-  store.set({ ...filter, grades });
+  setTargetGrade(store.get().grades[0] === grade ? null : grade);
+}
+
+/** 目标编辑器选择单一体型 × 声音组合时使用；null 表示清空目标档位。 */
+export function setTargetGrade(grade: PetGrade | null): void {
+  store.set({ ...store.get(), grades: grade ? [grade] : [] });
 }
 
 /** 某个蛋组自己的性格加减（展开蛋组行时用，仅推荐模式有意义）。 */
@@ -121,9 +126,19 @@ export function toggleGroupNature(groupId: number, natureName: string): void {
   store.set({ ...filter, naturesByGroup: { ...filter.naturesByGroup, [groupId]: next } });
 }
 
-/** 切换「推荐性格 / 自选性格」。 */
-export function setNatureMode(mode: 'recommended' | 'custom'): void {
-  store.set({ ...store.get(), natureMode: mode });
+/**
+ * 切换「推荐性格 / 八大性格 / 自选性格」。
+ *
+ * 切到自选时，若还没勾过任何性格，就先预选八大性格（2026-11-19 用户口径：
+ * 「自选」是从八大全集里挑，不是从空白开始）。
+ */
+export function setNatureMode(mode: 'eight' | 'recommended' | 'custom'): void {
+  const filter = store.get();
+  const customNatures =
+    mode === 'custom' && filter.customNatures.length === 0
+      ? sortNatures([...targetNatureNames])
+      : filter.customNatures;
+  store.set({ ...filter, natureMode: mode, customNatures });
 }
 
 /** 自选模式下勾选 / 取消一个全局性格。 */

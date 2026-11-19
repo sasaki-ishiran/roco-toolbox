@@ -15,7 +15,9 @@ describe('图鉴数据', () => {
     const missing = species.filter(
       (entry) => entry.eggGroups.some((group) => group >= 2 && group <= 15) && entry.eggGameId == null,
     );
-    expect(missing.map((entry) => entry.name)).toEqual([]);
+    // 例外：阿瓦鲨（3806 / 3807）是成熟形态，2026-11-17 用户拍板「彻底不计入任何蛋」，
+    // 所以它虽然可孵蛋组、却没有蛋归属；除它之外不应再有漏归属的物种。
+    expect(missing.map((entry) => entry.name)).toEqual(['阿瓦鲨', '阿瓦鲨']);
     const base = species.find((entry) => entry.name === '云梦豚');
     expect(base?.maleCapable).toBe(true);
   });

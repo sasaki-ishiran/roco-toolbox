@@ -43,21 +43,17 @@ describe('母本达标口径（看板卡与母本页共用）', () => {
     expect(isQualifiedMother(pet({ voiceDb: -100, medalBody: '小不点' }), DEFAULT)).toBe(true);
   });
 
-  test('没有奖牌时：身高 100% 与体重 ≥95% 同时满足才算大块头', () => {
+  test('没有奖牌时：身高 100% / 0% 直接等效大块头 / 小不点', () => {
     const bigOnly: MotherCriteria = { voices: ['+100'], bodies: ['大块头'] };
     const smallOnly: MotherCriteria = { voices: ['+100'], bodies: ['小不点'] };
-    // 身高到顶 + 体重 95% 以上 → 达标；体重差一点就不算
-    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 100, weightPercent: 95 }), bigOnly)).toBe(true);
-    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 100, weightPercent: 99 }), bigOnly)).toBe(true);
-    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 100, weightPercent: 94.9 }), bigOnly)).toBe(false);
-    // 身高必须正好 100%，99.9% 不再放宽
+    // 身高到顶 / 到底即等效对应体型，不受体重百分位影响。
+    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 100, weightPercent: 1 }), bigOnly)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 0, weightPercent: 99 }), smallOnly)).toBe(true);
+    // 身高必须正好 100% / 0%，不对接近值放宽。
     expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 99.9, weightPercent: 99 }), bigOnly)).toBe(false);
-    // 小不点同理：身高 0% + 体重 ≤5%
-    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 0, weightPercent: 5 }), smallOnly)).toBe(true);
-    expect(isQualifiedMother(pet({ medalBody: '', heightPercent: 0, weightPercent: 5.1 }), smallOnly)).toBe(false);
     // 真·小不点不会因为身高 100% 被算成大块头
     expect(isQualifiedMother(pet({ medalBody: '小不点', weightPercent: 0 }), bigOnly)).toBe(false);
-    // 没有百分位（老数据 / 采集器缺图鉴且无体重）时保持原样，不靠猜
+    // 没有身高百分位（老数据）时保持原样，不靠猜
     expect(isQualifiedMother(pet({ medalBody: '' }), bigOnly)).toBe(false);
   });
 
@@ -65,6 +61,20 @@ describe('母本达标口径（看板卡与母本页共用）', () => {
     const bigOnly: MotherCriteria = { voices: ['+100'], bodies: ['大块头'] };
     expect(isQualifiedMother(pet({ medalBody: '大块头', heightPercent: 50, weightPercent: 90 }), bigOnly)).toBe(true);
     expect(isQualifiedMother(pet({ medalBody: '小不点', heightPercent: 100 }), bigOnly)).toBe(false);
+  });
+
+  test('母本孵蛋口径：无奖牌时身高 100% / 0% 即可，不再要求体重', () => {
+    const big: MotherCriteria = { voices: ['+100'], bodies: ['大块头'] };
+    expect(
+      isQualifiedMother(pet({ medalBody: '', heightPercent: 100, weightPercent: 55 }), big),
+    ).toBe(true);
+    expect(
+      isQualifiedMother(pet({ medalBody: '', heightPercent: 99, weightPercent: 100 }), big),
+    ).toBe(false);
+    const small: MotherCriteria = { voices: ['+100'], bodies: ['小不点'] };
+    expect(
+      isQualifiedMother(pet({ medalBody: '', heightPercent: 0, weightPercent: 45 }), small),
+    ).toBe(true);
   });
 
   test('要求推荐性格时，性格不在推荐列表里的母本不算达标', () => {
@@ -81,6 +91,26 @@ describe('母本达标口径（看板卡与母本页共用）', () => {
     // 不开开关时性格不参与判定
     expect(
       isQualifiedMother(pet({ nature: '开朗' }), { ...criteria, recommendedNatures: false }, naturesOf),
+    ).toBe(true);
+  });
+
+  test('组合奖牌条件可精确筛选四种组合中的任意多项', () => {
+    const criteria: MotherCriteria = {
+      bodies: ['大块头', '小不点'],
+      voices: ['+100'],
+      grades: ['大婉', '小婉'],
+      targetMode: 'perfect',
+    };
+    expect(isQualifiedMother(pet({ medalBody: '大块头', voiceDb: 100 }), criteria)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '小不点', voiceDb: 100 }), criteria)).toBe(true);
+    expect(isQualifiedMother(pet({ medalBody: '大块头', voiceDb: -100 }), criteria)).toBe(false);
+    expect(isQualifiedMother(pet({ medalBody: '大块头', voiceDb: 98 }), criteria)).toBe(false);
+
+    expect(
+      isQualifiedMother(
+        pet({ medalBody: '大块头', voiceDb: 97 }),
+        { ...criteria, grades: ['大婉'], targetMode: 'medal' },
+      ),
     ).toBe(true);
   });
 

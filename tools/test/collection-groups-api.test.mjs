@@ -57,7 +57,7 @@ const motherAccount = (uid, ids) => ({
 
 const motherDraft = (accounts) => ({
   schemaVersion: 1,
-  criteriaId: 'all-mothers-v3-perfect',
+  criteriaId: 'all-mothers-v4-perfect',
   catalogVersion: 'test-v1',
   accounts,
 });
@@ -128,7 +128,7 @@ test('新建母本组带目标；旧接口仍可读写', async () => {
     },
   });
   assert.equal(created.group.groupType, 'mother');
-  assert.equal(created.group.target.criteriaId, 'female-huge-voice100-v2');
+  assert.equal(created.group.target.criteriaId, 'female-huge-voice100-v3');
 
   const publish = await call(A.token, 'PUT', `/api/mother-groups/${created.id}/resources/me`, {
     baseRevision: 0,
@@ -179,7 +179,7 @@ test('母本发布不再校验口径；过期 baseTargetRevision 仍拒绝', asy
     displayName: 'A',
     groupType: 'mother',
   });
-  const customId = `mother-v2-${fnv1a('medal|小不点|婉转声')}`;
+  const customId = `mother-v3-${fnv1a('medal|小不点|婉转声')}`;
   const updated = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/target`, {
     baseTargetRevision: 0,
     target: {
@@ -197,7 +197,7 @@ test('母本发布不再校验口径；过期 baseTargetRevision 仍拒绝', asy
 
   const customDraft = {
     ...motherDraft([motherAccount(1001, [101])]),
-    criteriaId: 'all-mothers-v3-medal',
+    criteriaId: 'all-mothers-v4-medal',
   };
   const published = await call(A.token, 'PUT', `/api/collection-groups/${created.id}/resources/me`, {
     baseRevision: 0,
@@ -251,7 +251,7 @@ test('旧接口创建的组也能保存自选口径（自动补配置行）', as
   });
   assert.equal(update.status, 200, JSON.stringify(update.body));
   const detail = await call(A.token, 'GET', `/api/collection-groups/${groupId}`);
-  assert.equal(detail.body.group.target.criteriaId, `mother-v2-${fnv1a('medal|小不点|婉转声')}`);
+  assert.equal(detail.body.group.target.criteriaId, `mother-v3-${fnv1a('medal|小不点|婉转声')}`);
   assert.equal(detail.body.group.targetRevision, 1);
 });
 

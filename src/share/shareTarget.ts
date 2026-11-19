@@ -1,5 +1,5 @@
 /**
- * 采集器「分享」→「洛克工具箱」的落地暂存。
+ * 采集器「分享」→「小布助手」的落地暂存。
  *
  * 采集器的分享面板会把数据文件以 multipart/form-data POST 到网页的 /share-target，
  * Service Worker 接住请求、把文件**原样（按字节）**存进 Cache Storage，然后 303 跳回应用首页；

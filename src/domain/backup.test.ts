@@ -93,7 +93,7 @@ describe('buildBackup / parseToolboxBackup', () => {
   });
 
   test('文件名带日期', () => {
-    expect(backupFileName('2026-09-26T10:00:00.000Z')).toBe('洛克工具箱备份-2026-09-26.json');
+    expect(backupFileName('2026-09-26T10:00:00.000Z')).toBe('小布助手备份-2026-09-26.json');
   });
 
   test('家园快照跟着导出/导入保留', () => {

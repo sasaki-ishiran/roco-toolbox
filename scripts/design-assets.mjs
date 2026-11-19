@@ -68,7 +68,7 @@ function entry(a,data) {
     ...(back.length?['- 历史前稿：'+back.map(ref).join(' · ')+'。']:[]),''].join('\n');
 }
 export function renderIndexes(data) {
-  const intro='核对日期：'+data.reviewedOn+'。正式线基线：'+data.productionBaseline+'。仅只读核对 Git 与本地记录，未实时核验线上；开发线与正式线分开。原稿全部原位保留。\n\n由 registry.json 生成；修改台账后执行 node scripts/design-assets.mjs --write，不要直接修改本索引。\n';
+  const intro='核对日期：'+data.reviewedOn+'。正式线基线：'+data.productionBaseline+'。仅只读核对 Git 与本地记录，未实时核验线上；开发线与正式线分开。明确已被替代且获授权的页面已从朋友分支移除，其余登记原稿按台账保留。\n\n由 registry.json 生成；修改台账后执行 node scripts/design-assets.mjs --write，不要直接修改本索引。\n';
   const count=statuses.map(s=>s+' '+data.assets.filter(a=>a.status===s).length).join(' / ');
   const groups=[
     ['正式发布有记录',a=>a.status==='已采用'&&a.releaseScope==='正式发布有记录'],
@@ -81,6 +81,7 @@ export function renderIndexes(data) {
     '- [原型与外壳规范](原型与外壳规范.md)：整页共用框架、页面层级、评审、落地和归档规则。',
     '- [已采用与当前稿](已采用与当前稿.md)：先看采用范围与证据，再复用；开发/内测不等于正式使用。',
     '- [归档索引](归档索引.md)：被替代、未实现、待核实和评审附件分开。',
+    '- [朋友改页面-资源清单](朋友改页面-资源清单.md)：可直接修改的原型、共用外壳、参考稿与本轮删除记录。',
     '- [共用外壳接入](../prototypes/shared/README.md)：工具箱全局框架和小组场景适配；换蛋已审稿及实际发布状态查台账。',
     '- [产品交互规范](../产品交互规范.md)：控件与尺寸；[机器可读台账](registry.json)：证据、内容指纹与替代链。','',
     '本轮登记 **'+data.assets.length+' 项设计 / '+data.assets.reduce((n,a)=>n+a.files.length,0)+' 份 HTML**，另含 '+data.attachments.length+' 份分享附件；'+data.exclusions.length+' 份运行/数据入口明确排除。'+count+'。','',
@@ -91,7 +92,7 @@ export function renderIndexes(data) {
     '4. 更新后生成：`node scripts/design-assets.mjs --write`；验收：`node scripts/design-assets.mjs --check`。校验不自动更改指纹。','',
     '扫描范围：根 HTML，docs/、.preview/、日期目录、截图日期目录、.trae-html-share-packages/，及明确排除的 desktop/overlay/ 与补充数据/ HTML。依赖、构建、worktree、运行时源码内 HTML 不作为项目设计稿。漏登会校验失败。',''].join('\n');
   const used=['# 已采用与当前设计稿','',intro,'“已采用”仅指明确采用部分；旧稿可曾经落地而现在被替代，见归档索引。不凭“定稿”文件名推定上线。','',...groups.flatMap(([title,select])=>['## '+title,'',...data.assets.filter(select).map(a=>entry(a,data))])].join('\n');
-  const archive=['# 历史设计稿归档索引','',intro,'原位归档，不移动、不删除。被替代有后续稿/实现；未实现有具体功能缺项，不表示取消；待核实不作为实现依据。','',...['已被替代','未实现','待核实','评审附件'].flatMap(s=>['## '+s,'',...data.assets.filter(a=>a.status===s).map(a=>entry(a,data))]),'## 分享附件','',...data.attachments.map(f=>'- '+link(f.path)+' → '+data.assets.find(a=>a.id===f.relatedTo).title+'（仅包装副本，无独立采用结论）。'),'','## 排除项','',...data.exclusions.map(f=>'- '+link(f.path)+'：'+f.reason),''].join('\n');
+  const archive=['# 历史设计稿归档索引','',intro,'登记在台账中的历史稿按原位归档；本分支获授权删除的页面见[朋友改页面-资源清单](朋友改页面-资源清单.md)。被替代有后续稿/实现；未实现有具体功能缺项，不表示取消；待核实不作为实现依据。','',...['已被替代','未实现','待核实','评审附件'].flatMap(s=>['## '+s,'',...data.assets.filter(a=>a.status===s).map(a=>entry(a,data))]),'## 分享附件','',...data.attachments.map(f=>'- '+link(f.path)+' → '+data.assets.find(a=>a.id===f.relatedTo).title+'（仅包装副本，无独立采用结论）。'),'','## 排除项','',...data.exclusions.map(f=>'- '+link(f.path)+'：'+f.reason),''].join('\n');
   return new Map([['README.md',readme],['已采用与当前稿.md',used],['归档索引.md',archive]]);
 }
 function main() {

@@ -6,11 +6,14 @@ import {
   classifyGrade,
   classifyMother,
   computeFacetCounts,
+  DEFAULT_HEIGHT_RANGE,
   filterByTags,
   gradeLabel,
   groupMothersByEgg,
+  matchesHeightRange,
 } from './petFilters';
 import { species as realSpecies } from '../data/catalog';
+import { bodyGradeOf, breedingBodyGradeOf } from '../shared/bodySize.js';
 import type { OwnedPet, SpeciesEntry } from './types';
 
 const speciesByGameId = new Map<number, SpeciesEntry>([
@@ -60,6 +63,8 @@ describe('buildTagIndex', () => {
     expect(result.index['gender:母']).toEqual([1]);
     expect(result.index['gender:未知']).toBeUndefined(); // 2026-10-04 去掉「未知」性别标签
     expect(result.index['shiny:异色']).toEqual([]); // 无命中但标签仍存在
+    expect(result.index['shiny:炫彩']).toEqual([]);
+    expect(result.index['shiny:异色炫彩']).toEqual([]);
   });
 
   test('粗嗓门标签命中 ≤-96 分贝，且 -100 单独成一档（2026-10-05 修正过宽）', () => {
@@ -83,7 +88,21 @@ describe('buildTagIndex', () => {
     // 没到顶 / 到底的不进这两个标签，避免把「接近满身高」也当成满身高
     expect(result.index['body:满身高']).not.toContain(5);
     const bodyLabels = result.tags.filter((tag) => tag.kind === 'body').map((tag) => tag.label);
-    expect(new Set(bodyLabels)).toEqual(new Set(['大块头', '小不点', '满身高', '零身高']));
+    expect(new Set(bodyLabels)).toEqual(
+      new Set(['大块头', '小不点', '满体重', '零体重', '满身高', '零身高']),
+    );
+  });
+
+  test('体型和声音的极限标签只命中对应最大 / 最小值', () => {
+    const bigMax = pet({ gender: '公', medalBody: '大块头', weightPercent: 100, voiceDb: 100 });
+    const smallMin = pet({ gender: '母', medalBody: '小不点', weightPercent: 0, voiceDb: -100 });
+    const near = pet({ gender: '母', medalBody: '大块头', weightPercent: 99.99, voiceDb: 99 });
+    const result = buildTagIndex([...owned, bigMax, smallMin, near], speciesByGameId, eggGroupNames);
+
+    expect(result.index['body:满体重']).toEqual([3]);
+    expect(result.index['body:零体重']).toEqual([4]);
+    expect(result.index['voice:+100']).toEqual([0, 3]);
+    expect(result.index['voice:-100']).toEqual([4]);
   });
 
   test('双蛋组精灵在两个蛋组标签都命中', () => {
@@ -134,6 +153,30 @@ describe('filterByTags', () => {
     const result = buildTagIndex(owned, speciesByGameId, eggGroupNames);
     expect(filterByTags(result.index, ['eggGroup:5', 'eggGroup:6'])).toEqual([1]);
   });
+
+  test('母本跳转的体型并集：奖牌与身高到顶 / 到底都能命中', () => {
+    // 有奖牌但身高不是极端的（真实数据里存在），以及无奖牌但身高 100% / 0% 的，
+    // 都要被同一组筛选（大块头 + 满身高）收进来。
+    const medalNear = pet({
+      gender: '母',
+      voiceDb: 100,
+      medalBody: '大块头',
+      heightPercent: 98.48,
+      weightPercent: 98.4,
+    });
+    const heightFull = pet({
+      gender: '母',
+      voiceDb: 100,
+      medalBody: '',
+      heightPercent: 100,
+      weightPercent: 95,
+    });
+    const result = buildTagIndex([medalNear, heightFull], speciesByGameId, eggGroupNames);
+
+    expect(
+      filterByTags(result.index, ['gender:母', 'body:大块头', 'body:满身高', 'voice:+100']),
+    ).toEqual([0, 1]);
+  });
 });
 
 describe('computeFacetCounts（动态标签数量）', () => {
@@ -165,9 +208,36 @@ describe('computeFacetCounts（动态标签数量）', () => {
     expect(counts['gender:母']).toBe(1);
     expect(counts['body:小不点']).toBe(1);
   });
+
+  test('身高范围限制其他筛选项的计数', () => {
+    const counts = computeFacetCounts(result.index, [], [0, 2]);
+    expect(counts['gender:公']).toBe(1);
+    expect(counts['gender:母']).toBe(0);
+    expect(counts['body:小不点']).toBe(1);
+  });
+});
+
+describe('matchesHeightRange', () => {
+  test('默认范围不排除缺少身高数据的精灵', () => {
+    expect(matchesHeightRange(undefined, DEFAULT_HEIGHT_RANGE)).toBe(true);
+  });
+
+  test('限制范围时按上下界包含匹配', () => {
+    expect(matchesHeightRange(0, { min: 0, max: 0 })).toBe(true);
+    expect(matchesHeightRange(0.01, { min: 0, max: 0 })).toBe(false);
+    expect(matchesHeightRange(75, { min: 25, max: 75 })).toBe(true);
+    expect(matchesHeightRange(undefined, { min: 25, max: 75 })).toBe(false);
+  });
 });
 
 describe('classifyMother（母本分级）', () => {
+  test('奖牌 / 展示口径仍要求身高与体重同时满足，只有孵蛋口径才只看身高', () => {
+    expect(bodyGradeOf({ heightPercent: 100, weightPercent: 60 })).toBe('');
+    expect(bodyGradeOf({ heightPercent: 100, weightPercent: 96 })).toBe('大块头');
+    expect(bodyGradeOf({ heightPercent: 0, weightPercent: 6 })).toBe('');
+    expect(breedingBodyGradeOf({ heightPercent: 100, weightPercent: 60 })).toBe('大块头');
+    expect(breedingBodyGradeOf({ heightPercent: 0, weightPercent: 40 })).toBe('小不点');
+  });
   test('大块头 + 100dB、追满分 = 大婉', () => {
     expect(classifyMother(pet({ gender: '母', medalBody: '大块头', voiceDb: 100 }), 'perfect')).toBe(
       '大婉',
@@ -192,6 +262,27 @@ describe('classifyMother（母本分级）', () => {
     expect(classifyMother(pet({ gender: '母', medalBody: '大块头', voiceDb: 97 }), 'medal')).toBe('大婉');
     expect(classifyMother(pet({ gender: '母', medalBody: '小不点', voiceDb: 96 }), 'medal')).toBe('小婉');
     expect(classifyMother(pet({ gender: '母', medalBody: '大块头', voiceDb: -99 }), 'medal')).toBe('大粗');
+  });
+
+  test('档位用孵蛋口径：无奖牌时身高到顶 / 到底即可，不再要求体重', () => {
+    expect(
+      classifyMother(
+        pet({ gender: '母', medalBody: '', heightPercent: 100, weightPercent: 55, voiceDb: 100 }),
+        'perfect',
+      ),
+    ).toBe('大婉');
+    expect(
+      classifyMother(
+        pet({ gender: '母', medalBody: '', heightPercent: 0, weightPercent: 45, voiceDb: 100 }),
+        'perfect',
+      ),
+    ).toBe('小婉');
+    expect(
+      classifyMother(
+        pet({ gender: '母', medalBody: '', heightPercent: 99, weightPercent: 100, voiceDb: 100 }),
+        'perfect',
+      ),
+    ).toBe('其他');
   });
 
   test('只有单牌或没有牌的算其他', () => {
@@ -247,34 +338,28 @@ describe('classifyGrade（档位判定随模式）', () => {
     expect(classifyGrade(noBody, 'perfect')).toBeNull();
   });
 
-  test('身高 100% 且体重 ≥95% 才算大块头档位；已有奖牌时以奖牌为准', () => {
-    // 没有奖牌：身高 100% + 体重 95% 同时满足 → 能生大块头蛋，算大婉
+  test('没有体型奖牌时身高 100% / 0% 等效体型；已有奖牌时以奖牌为准', () => {
+    // 无奖牌时精确的身高极值直接等效体型，不再校验体重。
     expect(
       classifyGrade(
-        pet({ medalBody: '', heightPercent: 100, weightPercent: 95, voiceDb: 100 }),
+        pet({ medalBody: '', heightPercent: 100, weightPercent: 1, voiceDb: 100 }),
         'perfect',
       ),
     ).toBe('大婉');
     expect(
       classifyGrade(
-        pet({ medalBody: '', heightPercent: 0, weightPercent: 5, voiceDb: -100 }),
+        pet({ medalBody: '', heightPercent: 0, weightPercent: 99, voiceDb: -100 }),
         'perfect',
       ),
     ).toBe('小粗');
-    // 身高在中间、或身高 100% 但体重不足 95%，都不算
+    // 身高不在极值时不等效体型。
     expect(
       classifyGrade(
         pet({ medalBody: '', heightPercent: 96.4, weightPercent: 99, voiceDb: 100 }),
         'perfect',
       ),
     ).toBeNull();
-    expect(
-      classifyGrade(
-        pet({ medalBody: '', heightPercent: 100, weightPercent: 94.9, voiceDb: 100 }),
-        'perfect',
-      ),
-    ).toBeNull();
-    // 奖牌仍是体重口径：真·小不点不会因为身高 100% 变成大婉
+    // 奖牌仍优先：小不点奖牌不会因身高 100% 变成大块头。
     expect(
       classifyGrade(
         pet({ medalBody: '小不点', heightPercent: 100, weightPercent: 100, voiceDb: 100 }),

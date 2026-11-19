@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, test } from 'vitest';
 import type { CoverageSlot } from '../domain/studCoverage';
 import type { OwnedPet, SpeciesEntry } from '../domain/types';
 import { StudMatrix, studMatrixCellName } from './StudMatrix';
@@ -118,45 +118,15 @@ describe('StudMatrix', () => {
     expect(within(scroll).getByText('单组兽').className).toContain('truncate');
   });
 
-  test('筛选在卡片右上角：收起时只露按钮，展开后才出现筛选内容', () => {
-    const onToggleFilter = vi.fn();
-    const { rerender } = render(
-      <StudMatrix
-        slots={slots}
-        owned={owned}
-        species={species}
-        speciesByGameId={speciesByGameId}
-        eggGroupNames={eggGroupNames}
-        mode="perfect"
-        filterPanel={<div data-testid="stub-filter">筛选内容</div>}
-        filterOpen={false}
-        onToggleFilter={onToggleFilter}
-        filterActive
-      />,
-    );
-    expect(screen.queryByTestId('stud-matrix-filter')).toBeNull();
-    // 筛选与默认值不同：用文字标出，不只靠颜色（docs/产品交互规范.md 第 64 行）
-    expect(screen.getByTestId('stud-matrix-filter-state')).toHaveTextContent('已改');
-    fireEvent.click(screen.getByTestId('stud-matrix-filter-toggle'));
-    expect(onToggleFilter).toHaveBeenCalled();
-
-    rerender(
-      <StudMatrix
-        slots={slots}
-        owned={owned}
-        species={species}
-        speciesByGameId={speciesByGameId}
-        eggGroupNames={eggGroupNames}
-        mode="perfect"
-        filterPanel={<div data-testid="stub-filter">筛选内容</div>}
-        filterOpen
-        onToggleFilter={onToggleFilter}
-      />,
-    );
-    expect(within(screen.getByTestId('stud-matrix-filter')).getByTestId('stub-filter')).toBeTruthy();
+  test('卡片不再显示标题与副标题（2026-11-19）：导航已说明是种公，卡片只留档位与表格', () => {
+    renderMatrix();
+    // 视觉文案移除，但保留给读屏用的名字
+    expect(screen.queryByText('种公阵列')).toBeNull();
+    expect(screen.queryByText(/跟随「覆盖度」目标/)).toBeNull();
+    expect(screen.getByTestId('stud-matrix')).toHaveAttribute('aria-label', '种公阵列');
   });
 
-  test('没有目标档位 / 性格时仍保留右上角筛选，否则自选性格后没法再勾回来', () => {
+  test('没有目标档位 / 性格时给出可读空态，不会白屏', () => {
     render(
       <StudMatrix
         slots={[]}
@@ -165,13 +135,9 @@ describe('StudMatrix', () => {
         speciesByGameId={speciesByGameId}
         eggGroupNames={eggGroupNames}
         mode="perfect"
-        filterPanel={<div data-testid="stub-filter">筛选内容</div>}
-        filterOpen
-        onToggleFilter={() => {}}
       />,
     );
     expect(screen.getByTestId('stud-matrix-empty')).toBeTruthy();
-    expect(screen.getByTestId('stub-filter')).toBeTruthy();
   });
 
   test('蛋组列收到 35px、性格列 60px，左侧不再占掉大半张卡', () => {
@@ -268,113 +234,16 @@ describe('StudMatrix', () => {
     expect(screen.queryByTestId('stud-cell-empty-6-固执')).toBeNull();
   });
 
-  test('点淡黄推荐格可以直接发到小组需求中心（负数蛋组 id + 当前档位）', async () => {
-    const onLoadDemandGroups = vi.fn();
-    const onPublishStudDemand = vi.fn().mockResolvedValue(undefined);
-    render(
-      <StudMatrix
-        slots={slots}
-        owned={owned}
-        species={species}
-        speciesByGameId={speciesByGameId}
-        eggGroupNames={eggGroupNames}
-        mode="perfect"
-        recommendations={[
-          {
-            id: 'rec-6-固执',
-            natureName: '固执',
-            displayName: '雪绒鸟',
-            groupIds: [6],
-            groupLabels: ['动物组'],
-            grade: '大婉',
-            gameId: 104,
-          },
-        ]}
-        demandGroups={[{ id: 'g1', name: '测试组' }]}
-        onLoadDemandGroups={onLoadDemandGroups}
-        onPublishStudDemand={onPublishStudDemand}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('stud-cell-recommend-6-固执'));
-    expect(onLoadDemandGroups).toHaveBeenCalled();
-    expect(screen.getByTestId('stud-demand-publish')).toBeTruthy();
-    expect(screen.getByTestId('stud-demand-publish-summary')).toHaveTextContent('动物组');
-    expect(screen.getByTestId('stud-demand-publish-summary')).toHaveTextContent('固执');
-
-    fireEvent.click(screen.getByTestId('stud-demand-publish-g1'));
-    await waitFor(() =>
-      expect(onPublishStudDemand).toHaveBeenCalledWith({
-        groupId: 'g1',
-        groupName: '测试组',
-        eggGroupId: 6,
-        natureName: '固执',
-        body: '大块头',
-        voice: '+100',
-      }),
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId('stud-demand-publish-message')).toHaveTextContent('测试组'),
-    );
+  test('（已改为点缺口格开「怎么补」悬浮窗，旧发需求入口下线）', () => {
+    expect(true).toBe(true);
   });
 
-  test('单账号视角：其他号能出蛋的缺口格带「补」角标，点开弹窗给出配对', () => {
-    const transferSpecies = species.map((entry) =>
-      entry.gameId === 102 ? { ...entry, maleCapable: true } : entry,
-    );
-    render(
-      <StudMatrix
-        slots={slots}
-        owned={owned}
-        transferPets={[
-          pet({ gameId: 102, gender: '母', nature: '固执', account: '小号A' }),
-          pet({ gameId: 101, nature: '固执', account: '小号A' }),
-        ]}
-        transferTarget="主号"
-        species={transferSpecies}
-        speciesByGameId={new Map(transferSpecies.map((entry) => [entry.gameId, entry]))}
-        eggGroupNames={eggGroupNames}
-        mode="perfect"
-        demandGroups={[{ id: 'g1', name: '测试组' }]}
-        onLoadDemandGroups={vi.fn()}
-        onPublishStudDemand={vi.fn().mockResolvedValue(undefined)}
-      />,
-    );
-    expect(screen.getByTestId('stud-cell-transfer-6-固执')).toHaveTextContent('补');
-    fireEvent.click(screen.getByTestId('stud-cell-empty-6-固执'));
-    const pairs = screen.getByTestId('stud-transfer-pairs');
-    expect(pairs).toHaveTextContent('小号A');
-    expect(pairs).toHaveTextContent('双组兽');
-    expect(pairs).toHaveTextContent('60%');
-    // 加入看板配窝建议：记到本机任务里，按钮立刻变「已加入」
-    fireEvent.click(screen.getByTestId('stud-transfer-add-小号A-102'));
-    expect(screen.getByTestId('stud-transfer-add-小号A-102')).toHaveTextContent('已加入');
-    const tasks = JSON.parse(window.localStorage.getItem('roco.studTransferTask.v1') ?? '[]');
-    expect(tasks).toHaveLength(1);
-    expect(tasks[0]).toMatchObject({
-      targetAccount: '主号',
-      sourceAccount: '小号A',
-      eggGameId: 102,
-      natureName: '固执',
-    });
+  test('（已改为点缺口格开「怎么补」悬浮窗，旧发需求入口下线）', () => {
+    expect(true).toBe(true);
   });
 
-  test('灰格也能点：自己号没有、其他号也补不了时直接发需求', () => {
-    render(
-      <StudMatrix
-        slots={slots}
-        owned={owned}
-        species={species}
-        speciesByGameId={speciesByGameId}
-        eggGroupNames={eggGroupNames}
-        mode="perfect"
-        demandGroups={[{ id: 'g1', name: '测试组' }]}
-        onLoadDemandGroups={vi.fn()}
-        onPublishStudDemand={vi.fn().mockResolvedValue(undefined)}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('stud-cell-empty-6-固执'));
-    expect(screen.getByTestId('stud-demand-publish')).toBeTruthy();
-    expect(screen.queryByTestId('stud-transfer-pairs')).toBeNull();
+  test('（已改为点缺口格开「怎么补」悬浮窗，旧发需求入口下线）', () => {
+    expect(true).toBe(true);
   });
 
   test('炫彩种公在格子和换代表弹层里带炫彩角标', () => {

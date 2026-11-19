@@ -124,7 +124,7 @@ export interface CoverageMatrixProps {
   groupNatures?: Record<number, string[]>;
   onToggleGroupNature?: (groupId: number, natureName: string) => void;
   /** 自选性格模式下隐藏组内性格开关（性格由全局面板统管） */
-  natureMode?: 'recommended' | 'custom';
+  natureMode?: 'eight' | 'recommended' | 'custom';
 }
 
 /** 一行精灵：左侧角色标签 + 名字 + 性别 + 性格 + 位置（位置淡色，不抢视线） */
@@ -246,7 +246,7 @@ export function CoverageMatrix({
 
             {open ? (
               <ul className="space-y-1 border-t border-slate-100 p-3">
-                {/* 自选性格模式下不显示组内性格开关（由覆盖度页顶部的全局面板统管） */}
+                {/* 只有推荐模式才显示组内性格开关；八大 / 自选模式由顶部的全局筛选统管 */}
                 {naturePool && onToggleGroupNature && natureMode === 'recommended' ? (
                   <li className="pb-1">
                     <p className="text-xs text-slate-400">

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>换蛋任务卡 · 来源角标 / 旧提示下线 · 预览</title>
+<style>
+  :root{--slate-900:#0f172a;--slate-600:#475569;--slate-500:#64748b;--slate-400:#94a3b8;--slate-200:#e2e8f0;--slate-100:#f1f5f9;--emerald-50:#ecfdf5;--emerald-700:#047857;--amber-50:#fffbeb;--amber-700:#b45309;--bg:#f8fafc}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--slate-900)}
+  .bar{position:sticky;top:0;z-index:9;display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 16px;background:#fff;border-bottom:1px solid var(--slate-200)}
+  .bar b{font-size:13px}
+  .seg{display:flex;border:1px solid var(--slate-200);border-radius:10px;overflow:hidden}
+  .seg button{border:0;background:#fff;padding:7px 12px;font-size:12px;color:var(--slate-600);cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--emerald-50);color:var(--emerald-700);font-weight:600}
+  .note{font-size:12px;color:var(--slate-500)}
+  .stage{display:flex;flex-wrap:wrap;gap:24px;padding:24px 16px;align-items:flex-start}
+  .phone{background:#fff;border:1px solid var(--slate-200);border-radius:22px;padding:12px;box-shadow:0 8px 24px rgba(15,23,42,.06)}
+  .phone .w{font-size:11px;color:var(--slate-400);margin:0 0 8px 2px}
+  .card{border:1px solid var(--slate-200);border-radius:14px;padding:10px;background:#fff}
+  .row{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+  .peer{font-weight:700}
+  .badge{background:var(--amber-50);color:var(--amber-700);border-radius:6px;padding:2px 6px;font-size:10px}
+  .trade{display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr);align-items:center;gap:4px;margin-top:8px}
+  .side{display:flex;gap:6px;align-items:center;min-width:0}
+  .egg{width:34px;height:34px;flex:0 0 34px;border-radius:50% 50% 46% 46%;background:linear-gradient(160deg,#fef3c7,#fcd34d)}
+  .meta{min-width:0}
+  .name{display:block;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sub{display:flex;gap:4px;align-items:center;font-size:10px;color:var(--slate-400);flex-wrap:wrap}
+  .src{font-size:9px;line-height:1;padding:2px 4px;border-radius:4px;font-weight:600;white-space:nowrap}
+  .src.bag{background:var(--slate-100);color:var(--slate-600)}
+  .src.line{background:var(--emerald-50);color:var(--emerald-700)}
+  .arrow{text-align:center;color:var(--slate-400);font-size:16px;line-height:1}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:8px 0 0;padding:0;list-style:none}
+  .steps li{position:relative;border-top:2px solid var(--slate-100);padding-top:4px;text-align:center;font-size:10px;color:var(--slate-400)}
+  .steps li.done{border-color:#34d399;color:var(--emerald-700)}
+  .patrol{margin-top:6px;border-top:1px solid var(--slate-100);padding-top:5px;font-size:10px;color:var(--slate-500)}
+  .notice{background:var(--amber-50);color:#92400e;border-radius:12px;padding:10px 12px;margin-bottom:10px}
+  .notice p{margin:0}
+  .notice .t{font-size:13px;font-weight:700}
+  .notice .d{font-size:11px;opacity:.9;margin-top:2px}
+  .notice button{margin-top:6px;border:0;background:rgba(255,255,255,.7);color:#92400e;font-size:11px;padding:5px 10px;border-radius:8px}
+  .hidden{display:none}
+  .tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:999px;background:#e0f2fe;color:#0369a1;margin-left:6px}
+</style>
+</head>
+<body>
+<div class="bar">
+  <b>换蛋任务卡预览</b>
+  <div class="seg" id="mode">
+    <button data-v="before" aria-pressed="false">改版前</button>
+    <button data-v="after" aria-pressed="true">改版后</button>
+  </div>
+  <div class="seg" id="width">
+    <button data-w="375" aria-pressed="true">375</button>
+    <button data-w="390" aria-pressed="false">390</button>
+  </div>
+  <span class="note">改动：① 两侧标注「现蛋 / 产线·等孵化」；② 下线旧需求中心的「需求被取消」提示</span>
+</div>
+
+<div class="stage">
+  <div class="phone">
+    <p class="w" id="w1">375</p>
+    <div id="frame1"></div>
+  </div>
+  <div class="phone">
+    <p class="w" id="w2">390</p>
+    <div id="frame2"></div>
+  </div>
+</div>
+
+<script>
+const task = { peer:'测试222', status:'待分配现蛋',
+  give:{ egg:'3215', nature:'固执', body:'大块头', voice:'+100', src:'bag', srcText:'现蛋' },
+  receive:{ egg:'3436', nature:'平和', body:'大块头', voice:'婉转声', src:'line', srcText:'产线 · 等孵化' },
+  steps:['已提出','已接受','已上窝','已收到'], step:2,
+  patrol:'夜间暂停 · 08:00 恢复' };
+
+let mode = 'after', width = 375;
+
+function card(m){
+  const s = task;
+  const side = (d,label)=>`
+    <div class="side">
+      <div class="egg"></div>
+      <div class="meta">
+        <span class="name">蛋 ${d.egg}</span>
+        <span class="sub">${label} · ${d.nature}
+          ${m==='after'?`<span class="src ${d.src}">${d.srcText}</span>`:''}
+        </span>
+      </div>
+    </div>`;
+  return `
+  <div class="card">
+    <div class="row"><span class="peer">与 ${s.peer} 的换蛋</span><span class="badge">${s.status}</span></div>
+    <div class="trade">${side(s.give,'给出')}<div class="arrow">⇄</div>${side(s.receive,'收到')}</div>
+    <ol class="steps">${s.steps.map((t,i)=>`<li class="${i<=s.step?'done':''}">${t}</li>`).join('')}</ol>
+    <div class="patrol">${s.patrol}</div>
+  </div>`;
+}
+
+function notice(m){
+  if(m!=='before') return '';
+  return `
+  <div class="notice">
+    <p class="t">你接的 1 条需求已被取消</p>
+    <p class="d">需求方已离开小组，这条单不会再出现在需求列表里</p>
+    <button>知道了</button>
+  </div>`;
+}
+
+function render(){
+  const html = notice(mode) + card(mode);
+  const f1 = document.getElementById('frame1');
+  const f2 = document.getElementById('frame2');
+  f1.style.width = width + 'px';
+  f2.style.width = width + 'px';
+  f1.innerHTML = html;
+  f2.innerHTML = html;
+  document.getElementById('w1').textContent = width;
+  document.getElementById('w2').textContent = width;
+}
+
+document.querySelectorAll('#mode button').forEach(b=>b.onclick=()=>{
+  mode = b.dataset.v;
+  document.querySelectorAll('#mode button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  render();
+});
+document.querySelectorAll('#width button').forEach(b=>b.onclick=()=>{
+  width = Number(b.dataset.w);
+  document.querySelectorAll('#width button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,1390 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>手机端悬浮窗原型 · 375 / 390</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 18px 344px 48px 18px;
+    background: #0b1120;
+    color: #e2e8f0;
+    font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  h1 { font-size: 16px; margin: 0 0 6px; }
+  .lead { font-size: 12px; line-height: 1.75; color: #94a3b8; margin: 0 0 12px; max-width: 860px; }
+  .lead b { color: #e2e8f0; }
+  .lead code { background: #1e293b; border-radius: 3px; padding: 0 4px; font-size: 11px; }
+
+  /* ── 顶部控制条 ───────────────────────────── */
+  .bar {
+    display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+    background: #111c33; border: 1px solid #1e293b; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 12px;
+  }
+  .group { display: flex; align-items: center; gap: 8px; }
+  .group > .lbl { font-size: 11px; color: #64748b; white-space: nowrap; }
+  .seg { display: flex; border: 1px solid #1e293b; border-radius: 7px; overflow: hidden; }
+  .seg button {
+    border: 0; background: #0f172a; color: #94a3b8; font-size: 11px;
+    padding: 5px 9px; cursor: pointer; white-space: nowrap;
+  }
+  .seg button + button { border-left: 1px solid #1e293b; }
+  .seg button.on { background: #0ea5e9; color: #06202e; font-weight: 600; }
+  .check { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #94a3b8; cursor: pointer; }
+  .check input { accent-color: #0ea5e9; }
+
+  /* ── 两种画法对比 ─────────────────────────── */
+  .compare { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cmp {
+    background: #111c33; border: 1px solid #1e293b; border-radius: 10px;
+    padding: 10px 12px; width: 300px;
+  }
+  .cmp.on { border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e955 inset; }
+  .cmp-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .cmp-h b { font-size: 12px; }
+  .cmp-h button {
+    border: 1px solid #334155; background: #0f172a; color: #cbd5e1;
+    font-size: 11px; border-radius: 6px; padding: 3px 8px; cursor: pointer;
+  }
+  .cmp.on .cmp-h button { background: #0ea5e9; border-color: #0ea5e9; color: #06202e; font-weight: 600; }
+  .cmp p { font-size: 11px; line-height: 1.65; color: #94a3b8; margin: 8px 0 0; }
+  .cmp-map { display: flex; gap: 10px; align-items: flex-start; }
+  .cmp-map .mm { flex: 0 0 auto; }
+
+  .cmp .picked {
+    font-size: 9px; color: #06202e; background: #0ea5e9; border-radius: 4px;
+    padding: 1px 5px; margin-left: 6px; font-weight: 600;
+  }
+  .cmp .note-b { font-size: 10.5px; color: #38bdf8; margin-top: 6px; line-height: 1.5; }
+
+  /* ── 三种组合观感 ─────────────────────────── */
+  .combo-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .combo-card {
+    background: #111c33; border: 1px solid #1e293b; border-radius: 10px;
+    padding: 10px 12px 12px; width: 296px;
+  }
+  .combo-card.on { border-color: #0ea5e9; box-shadow: 0 0 0 1px #0ea5e955 inset; }
+  .combo-card h3 { font-size: 12px; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .combo-card h3 button {
+    border: 1px solid #334155; background: #0f172a; color: #cbd5e1;
+    font-size: 10.5px; border-radius: 6px; padding: 2px 7px; cursor: pointer; white-space: nowrap;
+  }
+  .combo-card.on h3 button { background: #0ea5e9; border-color: #0ea5e9; color: #06202e; font-weight: 600; }
+  .combo-card p { font-size: 10.5px; line-height: 1.6; color: #94a3b8; margin: 8px 0 0; }
+  .pv {
+    --panel-bg: rgba(17, 28, 51, .97);
+    --line: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --row: #111c33;
+    --alert-bg: #2a1220; --alert-line: #be123c; --rare-line: #b45309;
+    --tag: #f87171; --head-bg: rgba(15, 23, 42, .55);
+    --hit-bg: rgba(15, 23, 42, .5);
+    --chip-bg: rgba(148, 163, 184, .18); --chip-fg: #cbd5e1;
+    --chip-primary-bg: #e2e8f0; --chip-primary-fg: #0f172a;
+    --chip-hot-bg: rgba(245, 158, 11, .22); --chip-hot-fg: #fbbf24;
+    background: linear-gradient(180deg, #23503f 0%, #17352c 100%);
+    border-radius: 9px; padding: 10px; display: flex; justify-content: center;
+    font-family: 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  }
+  .pv-panel {
+    background: var(--panel-bg); border: 1px solid var(--line); border-radius: 12px;
+    color: var(--text); overflow: hidden;
+  }
+  .pv-inner { padding: 6px 8px 8px; }
+  .pv-body { display: flex; gap: 8px; margin-top: 6px; }
+  .pv-body .p-list { flex: 1; height: auto; }
+
+  /* ── 设置态（附近页里的勾选项） ─────────────── */
+  .sheet-mask { position: absolute; inset: 0; background: rgba(2, 6, 23, .55); }
+  .sheet {
+    position: absolute; left: 12px; right: 12px; bottom: 12px;
+    background: var(--panel-bg); border: 1px solid var(--line); border-radius: 14px;
+    color: var(--text); padding: 10px 12px 12px; box-shadow: 0 18px 44px rgba(0, 0, 0, .55);
+    font-family: 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  }
+  .sheet .h { font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
+  .sheet .h span { font-size: 9.5px; color: var(--muted); font-weight: 400; }
+  .sheet .sub { font-size: 10px; color: var(--muted); line-height: 1.5; margin: 3px 0 8px; }
+  .opt {
+    display: flex; gap: 8px; align-items: flex-start; padding: 7px 8px;
+    border: 1px solid var(--line); border-radius: 9px; background: var(--row);
+    cursor: pointer; text-align: left;
+  }
+  .opt + .opt { margin-top: 6px; }
+  .opt .box {
+    width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--muted);
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    font-size: 10px; line-height: 1; color: #fff; margin-top: 1px;
+  }
+  .opt.on .box { background: #0ea5e9; border-color: #0ea5e9; }
+  .opt .t { font-size: 11.5px; font-weight: 600; }
+  .opt .d { font-size: 9.5px; color: var(--muted); line-height: 1.5; margin-top: 1px; }
+  .sheet .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 9px; }
+  .sheet .foot em { font-size: 9.5px; color: #f59e0b; font-style: normal; }
+  .sheet .done {
+    border: 0; background: #0ea5e9; color: #06202e; font-size: 11px; font-weight: 600;
+    border-radius: 7px; padding: 5px 13px; cursor: pointer;
+  }
+
+  /* ── 手机画布 ─────────────────────────────── */
+  .wrap { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .stage-h { font-size: 11px; color: #64748b; margin-bottom: 6px; }
+  .stage-h b { color: #cbd5e1; font-weight: 600; }
+  .phone {
+    position: relative; overflow: hidden; background: #0f172a;
+    border: 4px solid #1e293b; border-radius: 26px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
+    user-select: none;
+  }
+  .phone[data-w="375"] { width: 383px; height: 820px; }
+  .phone[data-w="390"] { width: 398px; height: 852px; }
+
+  /* 游戏画面示意 */
+  .game { position: absolute; inset: 0; overflow: hidden; }
+  .game .sky { position: absolute; inset: 0; background: linear-gradient(180deg, #2a5b4d 0%, #23503f 38%, #17352c 100%); }
+  .game .hill { position: absolute; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #2c6450, #1a4235); }
+  .game .h1 { width: 300px; height: 210px; left: -80px; top: 30px; }
+  .game .h2 { width: 260px; height: 180px; right: -60px; top: 130px; background: radial-gradient(circle at 60% 40%, #2b5f4b, #173d31); }
+  .game .lake { position: absolute; left: 40px; top: 300px; width: 210px; height: 120px; border-radius: 46% 54% 52% 48% / 55% 45% 55% 45%; background: radial-gradient(circle at 45% 40%, #2c6f86, #1c4a5c); opacity: .85; }
+  .game .road { position: absolute; left: -20px; right: -20px; top: 470px; height: 46px; background: #4a4433; opacity: .55; transform: rotate(-6deg); }
+  .game .tree { position: absolute; width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #2f7a52, #123528); box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+  .game .t1 { left: 36px; top: 168px; }
+  .game .t2 { left: 96px; top: 214px; width: 20px; height: 20px; }
+  .game .t3 { right: 54px; top: 250px; width: 30px; height: 30px; }
+  .game .t4 { right: 120px; top: 196px; width: 18px; height: 18px; }
+  .game .t5 { left: 62px; top: 556px; }
+  .game .hud-top { position: absolute; left: 10px; right: 10px; top: 10px; display: flex; align-items: center; gap: 7px; }
+  .game .hud-avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(160deg, #7dd3fc, #38bdf8); border: 2px solid rgba(255,255,255,.35); }
+  .game .hud-hp { flex: 1; height: 8px; border-radius: 5px; background: rgba(0,0,0,.45); overflow: hidden; }
+  .game .hud-hp i { display: block; width: 68%; height: 100%; background: linear-gradient(90deg, #22c55e, #84cc16); }
+  .game .hud-lv { font-size: 9px; color: #e2e8f0; opacity: .85; }
+  .game .hud-quest {
+    position: absolute; left: 10px; top: 48px; font-size: 9px; color: #cbd5e1;
+    background: rgba(15, 23, 42, .5); border-radius: 5px; padding: 3px 6px;
+  }
+  .game .joy { position: absolute; left: 22px; bottom: 26px; width: 76px; height: 76px; border-radius: 50%; border: 2px solid rgba(255,255,255,.18); background: rgba(15,23,42,.28); }
+  .game .joy::after { content: ''; position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: rgba(255,255,255,.22); }
+  .game .skills { position: absolute; right: 18px; bottom: 22px; width: 118px; height: 104px; }
+  .game .skills i { position: absolute; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); background: rgba(15,23,42,.35); }
+  .game .skills i:nth-child(1) { width: 52px; height: 52px; right: 0; bottom: 0; background: rgba(56,189,248,.25); }
+  .game .skills i:nth-child(2) { width: 40px; height: 40px; right: 56px; bottom: 4px; }
+  .game .skills i:nth-child(3) { width: 40px; height: 40px; right: 30px; bottom: 50px; }
+  .game .skills i:nth-child(4) { width: 34px; height: 34px; right: 76px; bottom: 48px; }
+  .game .game-tag { position: absolute; left: 10px; bottom: 8px; font-size: 9px; color: rgba(226,232,240,.45); }
+
+  /* 参考线 */
+  .guide { position: absolute; pointer-events: none; display: none; z-index: 40; }
+  .phone.guides .guide { display: block; }
+  .g-safe { inset: 8px; border: 1px dashed rgba(34, 211, 238, .5); border-radius: 18px; }
+  .g-v { left: 50%; top: 0; bottom: 0; border-left: 1px dashed rgba(167, 139, 250, .35); }
+  .g-h { top: 50%; left: 0; right: 0; border-top: 1px dashed rgba(167, 139, 250, .35); }
+
+  /* ── 悬浮层（明暗主题变量与 PC 小窗同源） ───── */
+  .overlay {
+    position: absolute; inset: 0; pointer-events: none; z-index: 20;
+    --panel-bg: rgba(17, 28, 51, .94);
+    --line: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --row: #111c33;
+    --alert-bg: #2a1220; --alert-line: #be123c; --rare-line: #b45309;
+    --tag: #f87171; --ok: #34d399; --head-bg: rgba(15, 23, 42, .55);
+    --hit-bg: rgba(15, 23, 42, .5);
+    --chip-bg: rgba(148, 163, 184, .18); --chip-fg: #cbd5e1;
+    --chip-primary-bg: #e2e8f0; --chip-primary-fg: #0f172a;
+    --chip-hot-bg: rgba(245, 158, 11, .22); --chip-hot-fg: #fbbf24;
+    font-family: 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  }
+  .overlay[data-theme="light"] {
+    --panel-bg: rgba(255, 255, 255, .96);
+    --line: #e2e8f0; --text: #0f172a; --muted: #64748b; --row: #f8fafc;
+    --alert-bg: #fef2f2; --alert-line: #fecdd3; --rare-line: #fcd34d;
+    --tag: #be123c; --ok: #059669; --head-bg: rgba(241, 245, 249, .8);
+    --hit-bg: #f8fafc;
+    --chip-bg: #f1f5f9; --chip-fg: #475569;
+    --chip-primary-bg: #1e293b; --chip-primary-fg: #ffffff;
+    --chip-hot-bg: #fef3c7; --chip-hot-fg: #b45309;
+  }
+  .overlay [data-el] { position: absolute; pointer-events: auto; touch-action: none; }
+  .overlay .sheet-mask, .overlay .sheet, .overlay .sheet * { pointer-events: auto; }
+  .overlay.outlines [data-el] { outline: 1px dotted rgba(56, 189, 248, .75); }
+  .overlay [data-el].sel { outline: 1.5px solid #22d3ee; outline-offset: 1px; }
+  .overlay .hidden { display: none !important; }
+
+  /* 悬浮球 */
+  .orb {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: rgba(51, 65, 85, .88);
+    border: 2px solid rgba(255, 255, 255, .28);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; cursor: grab;
+  }
+  .orb.hit { background: rgba(190, 18, 60, .92); animation: pulse 1.6s ease-in-out infinite; }
+  .orb .o-l { font-size: 7.5px; line-height: 1; opacity: .8; letter-spacing: .5px; }
+  .orb .o-n { font-size: 15px; line-height: 1.15; font-weight: 700; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 0 rgba(244, 63, 94, .55); }
+    50% { box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 13px rgba(244, 63, 94, 0); }
+  }
+
+  /* 首次提示气泡 */
+  .hint {
+    background: #0ea5e9; color: #04202e; font-size: 11px; font-weight: 600;
+    padding: 6px 9px; border-radius: 9px; white-space: nowrap;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, .4);
+  }
+  .hint::after {
+    content: ''; position: absolute; right: 10px; bottom: -5px;
+    width: 9px; height: 9px; background: #0ea5e9; transform: rotate(45deg); border-radius: 2px;
+  }
+
+  /* 展开面板 */
+  .panel {
+    background: var(--panel-bg); border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: 0 14px 36px rgba(0, 0, 0, .45);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    color: var(--text); overflow: hidden;
+  }
+  .p-title { font-size: 11px; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+  .p-title .est {
+    font-size: 9px; font-weight: 500; color: #f59e0b; border: 1px solid #f59e0b55;
+    background: #f59e0b1a; border-radius: 4px; padding: 0 3px; line-height: 13px;
+  }
+  .p-foot { font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* 小地图 */
+  .mm { position: relative; border-radius: 8px; overflow: hidden; background: #0d1a26; }
+  .mm .mm-art, .mm .mm-img { position: absolute; }
+  .mm .mm-img { max-width: none; display: block; }
+  .mm .mm-grid {
+    position: absolute; inset: 0; opacity: .16;
+    background-image: linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  .mm .mm-ring {
+    position: absolute; border: 1px dashed rgba(255, 255, 255, .75); border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, .35);
+  }
+  .mm .mm-n {
+    position: absolute; left: 50%; top: 2px; transform: translateX(-50%);
+    font-size: 8px; color: rgba(255, 255, 255, .85); background: rgba(15, 23, 42, .6);
+    border-radius: 3px; padding: 0 3px; line-height: 12px;
+  }
+  .mm .pt { position: absolute; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  .mm .pt.rare { width: 9px; height: 9px; }
+  .mm .pt.norm { width: 7px; height: 7px; }
+  .mm .pt .alert-ring { position: absolute; left: 50%; top: 50%; width: 17px; height: 17px; margin: -8.5px 0 0 -8.5px; border: 1.5px solid #f43f5e; border-radius: 50%; }
+  .mm .me {
+    position: absolute; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%;
+    background: #0ea5e9; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.6);
+  }
+  .mm .me.est { background: transparent; border: 1.5px dashed #f59e0b; width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; }
+
+  .p-hit {
+    display: flex; flex-direction: column; gap: 3px; padding: 5px 8px 6px;
+    height: 64px; box-sizing: border-box; overflow: hidden;
+    background: var(--hit-bg); border-bottom: 1px solid var(--line);
+  }
+  .p-hit.plain { height: auto; }
+  .p-hit .h { display: flex; align-items: center; justify-content: space-between; gap: 6px; height: 16px; font-size: 11px; font-weight: 600; }
+  .p-hit .h .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .p-hit .h .chev { font-size: 13px; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 2px; }
+  .p-hit .chips { display: flex; flex-wrap: wrap; gap: 3px; }
+  .p-hit .chip {
+    font-size: 10px; line-height: 15px; padding: 0 4px; border-radius: 4px;
+    background: var(--chip-bg); color: var(--chip-fg); white-space: nowrap;
+  }
+  .p-hit .chip.primary { background: var(--chip-primary-bg); color: var(--chip-primary-fg); font-weight: 600; }
+  .p-hit .chip.hot { background: var(--chip-hot-bg); color: var(--chip-hot-fg); font-weight: 600; }
+  .p-hit .chip.hit { background: #f43f5e; color: #fff; font-weight: 600; }
+  .p-hit .empty { font-size: 9.5px; color: var(--muted); line-height: 1.5; }
+
+  /* 列表 */
+  .p-list { overflow: hidden; display: flex; flex-direction: column; gap: 2px; }
+  .row {
+    height: 30px; flex: 0 0 30px; border-radius: 6px; background: var(--row);
+    border: 1px solid var(--line); padding: 2px 6px;
+    display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  }
+  .row.alert { background: var(--alert-bg); border-color: var(--alert-line); }
+  .row.rare { border-color: var(--rare-line); }
+  .row .l1 { display: flex; align-items: baseline; gap: 3px; min-width: 0; }
+  .row .nm {
+    font-size: 11px; font-weight: 600; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .row .lv { font-size: 8.5px; color: var(--muted); flex: 0 0 auto; }
+  .row .l2 { display: flex; align-items: center; gap: 3px; min-width: 0; }
+  .row .meta { font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .tag {
+    margin-left: auto; font-size: 8px; line-height: 11px; padding: 0 3px; border-radius: 3px;
+    white-space: nowrap; flex: 0 0 auto;
+  }
+  .p-empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; text-align: center; font-size: 10px; color: var(--muted); line-height: 1.5;
+  }
+  .panel.no-map .p-map { display: none; }
+
+  /* ── 右下编辑台 ───────────────────────────── */
+  .console {
+    position: fixed; right: 14px; bottom: 14px; width: 312px; max-height: calc(100vh - 28px);
+    overflow: auto; background: #111c33; border: 1px solid #1e293b; border-radius: 11px;
+    padding: 11px 12px; font-size: 12px; box-shadow: 0 16px 44px rgba(0,0,0,.55); z-index: 999;
+  }
+  .console.folded { width: 148px; }
+  .console.folded .c-body { display: none; }
+  .console h2 { font-size: 12px; margin: 0; color: #cbd5e1; display: flex; justify-content: space-between; align-items: center; }
+  .console h2 button {
+    border: 1px solid #334155; background: #0f172a; color: #94a3b8; font-size: 10px;
+    border-radius: 5px; padding: 2px 7px; cursor: pointer;
+  }
+  .console .tip { font-size: 10.5px; color: #64748b; line-height: 1.6; margin: 7px 0 9px; }
+  .console .tip b { color: #94a3b8; }
+  .el-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    font-size: 11.5px; padding: 4px 6px; border-radius: 5px; cursor: pointer; color: #94a3b8;
+  }
+  .el-row + .el-row { margin-top: 1px; }
+  .el-row.on { background: #0e3a4d; color: #7dd3fc; }
+  .el-row span:last-child { font-size: 10px; color: #64748b; }
+  .el-row.on span:last-child { color: #38bdf8; }
+  .field { display: flex; gap: 5px; align-items: center; margin-top: 8px; font-size: 11px; flex-wrap: wrap; color: #94a3b8; }
+  .field label { min-width: 40px; }
+  .field input[type=number] {
+    width: 58px; padding: 3px 5px; border: 1px solid #334155; border-radius: 5px;
+    background: #0f172a; color: #e2e8f0; font-size: 11px;
+  }
+  .btns { display: flex; gap: 7px; margin-top: 9px; flex-wrap: wrap; }
+  .btns button {
+    font-size: 11px; padding: 5px 9px; border-radius: 6px; border: 1px solid #334155;
+    background: #0f172a; color: #cbd5e1; cursor: pointer;
+  }
+  .btns button.primary { background: #0ea5e9; border-color: #0ea5e9; color: #06202e; font-weight: 600; }
+  .console textarea {
+    width: 100%; height: 128px; margin-top: 8px; font-size: 10.5px; line-height: 1.5;
+    font-family: Consolas, ui-monospace, monospace; background: #0b1120; color: #7dd3fc;
+    border: 1px solid #1e293b; border-radius: 6px; padding: 7px; resize: vertical;
+  }
+  .toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    background: #059669; color: #fff; padding: 7px 16px; border-radius: 8px;
+    font-size: 12px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 1000;
+  }
+  .toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+
+<h1>手机端悬浮窗原型 · 375 / 390 真机尺寸</h1>
+<p class="lead">
+  两个画布都是 <b>1:1 真实像素</b>（不是等比缩放），底下是深色游戏画面示意块，用来判断悬浮面板遮掉多少视野。
+  上面切换状态 / 明暗主题 / 小地图画法，<b>两个画布同步</b>；右下编辑台可以拖动元素、滚轮缩放、双击改字、复制布局 JSON。<br />
+  口径已定：只有一个球（收起是球、展开是面板），面板 = 小地图 + 紧凑列表，最多 8 条，排序「提醒 &gt; 稀有 &gt; 距离」，
+  不自动展开、首次给一次「点我展开」提示，停止采集立即收起隐藏，不做点击穿透，暗色默认 / 可切明色，
+  视野 150m + 单个 120m 圈（带缩放记忆），无地图场景回退列表。<br />
+  <b>2026-11-08 新拍板</b>：小地图先按 <b>B（内嵌网页地图）</b> 做，A 保留作备选（真机掉帧再退 A）；
+  悬浮球展开后显示哪些面板改成<b>用户可配置</b>（战斗命中 / 附近面板，至少选一个，默认两个都开）。<br />
+  <b>本轮（第三版）</b>：战斗命中改成照搬 PC 的<b>两排 chip 表</b>；地图去掉地名 / 圈说明 / 图例，精灵类型只看<b>列表标签颜色</b>；
+  <b>面板跟随悬浮球</b>——球拖到哪，面板就贴着球所在的那个角展开；为避免出屏，面板朝<b>屏幕内侧</b>铺开
+  （球在右下 → 面板在球的左上；球在左上 → 面板在球的右下）。
+</p>
+
+<div class="bar">
+  <div class="group">
+    <span class="lbl">状态</span>
+    <div class="seg" id="stateSeg"></div>
+  </div>
+  <div class="group">
+    <span class="lbl">主题</span>
+    <div class="seg" id="themeSeg">
+      <button data-theme="dark" class="on">暗色</button>
+      <button data-theme="light">明色</button>
+    </div>
+  </div>
+  <div class="group">
+    <span class="lbl">小地图画法</span>
+    <div class="seg" id="mapSeg">
+      <button data-map="A">A 原生裁剪</button>
+      <button data-map="B" class="on">B 网页地图</button>
+    </div>
+  </div>
+  <div class="group">
+    <span class="lbl">展开后显示</span>
+    <div class="seg" id="comboSeg">
+      <button data-combo="hit">只战斗命中</button>
+      <button data-combo="nearby">只附近面板</button>
+      <button data-combo="both" class="on">两个都开</button>
+    </div>
+  </div>
+  <div class="group">
+    <span class="lbl">球位置</span>
+    <div class="seg" id="cornerSeg">
+      <button data-corner="tl">左上</button>
+      <button data-corner="tr">右上</button>
+      <button data-corner="bl">左下</button>
+      <button data-corner="br">右下</button>
+    </div>
+  </div>
+  <label class="check"><input type="checkbox" id="cbGuides" /> 参考线</label>
+  <label class="check"><input type="checkbox" id="cbOutlines" /> 元素边框</label>
+</div>
+
+<div class="wrap">
+  <div>
+    <div class="stage-h"><b>375 × 812</b>（iPhone SE3 / 小屏安卓）</div>
+    <div class="phone" data-w="375" data-h="812">
+      <div class="game">
+        <div class="sky"></div>
+        <div class="hill h1"></div>
+        <div class="hill h2"></div>
+        <div class="tree t1"></div><div class="tree t2"></div><div class="tree t3"></div>
+        <div class="tree t4"></div><div class="tree t5"></div>
+        <div class="lake"></div>
+        <div class="road"></div>
+        <div class="hud-top"><span class="hud-avatar"></span><span class="hud-hp"><i></i></span><span class="hud-lv">Lv 42</span></div>
+        <div class="hud-quest">主线 · 前往卡洛西亚平原</div>
+        <div class="joy"></div>
+        <div class="skills"><i></i><i></i><i></i><i></i></div>
+        <div class="game-tag">游戏画面示意</div>
+      </div>
+      <div class="guide g-safe"></div><div class="guide g-v"></div><div class="guide g-h"></div>
+      <div class="overlay" data-theme="dark"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="stage-h"><b>390 × 844</b>（主流安卓 / iPhone 14）</div>
+    <div class="phone" data-w="390" data-h="844">
+      <div class="game">
+        <div class="sky"></div>
+        <div class="hill h1"></div>
+        <div class="hill h2"></div>
+        <div class="tree t1"></div><div class="tree t2"></div><div class="tree t3"></div>
+        <div class="tree t4"></div><div class="tree t5"></div>
+        <div class="lake"></div>
+        <div class="road"></div>
+        <div class="hud-top"><span class="hud-avatar"></span><span class="hud-hp"><i></i></span><span class="hud-lv">Lv 42</span></div>
+        <div class="hud-quest">主线 · 前往卡洛西亚平原</div>
+        <div class="joy"></div>
+        <div class="skills"><i></i><i></i><i></i><i></i></div>
+        <div class="game-tag">游戏画面示意</div>
+      </div>
+      <div class="guide g-safe"></div><div class="guide g-v"></div><div class="guide g-h"></div>
+      <div class="overlay" data-theme="dark"></div>
+    </div>
+  </div>
+</div>
+
+<div class="stage-h" style="margin:18px 0 8px;font-size:12px;color:#cbd5e1">小地图两种画法（同一份数据分别渲染，已选 B）</div>
+<div class="compare">
+  <div class="cmp" id="cmpA">
+    <div class="cmp-h"><b>A · 原生裁剪观感<span class="picked" id="pickA" style="display:none">已选</span></b><button data-pick="A">选这个</button></div>
+    <div class="cmp-map" id="cmpMapA"></div>
+    <p>纯色块地形 + 标注圈，安卓 <b>ImageView / Canvas 裁剪</b>就能还原；省电、首帧快，但地图观感与 PC 不一致，UI 改一次要改两遍。</p>
+  </div>
+  <div class="cmp" id="cmpB">
+    <div class="cmp-h"><b>B · 内嵌网页地图观感<span class="picked" id="pickB">已选</span></b><button data-pick="B">选这个</button></div>
+    <div class="cmp-map" id="cmpMapB"></div>
+    <p>直接贴 <code>public/maps/10003.webp</code>（与 PC / 网页同一份底图与标定），观感完全一致、只维护一份；<b>WebView 内存与首帧更重</b>。</p>
+    <p class="note-b">已选 B：先在原生侧内嵌 WebView 复用网页地图；真机掉帧 / 内存吃紧再退回 A。</p>
+  </div>
+</div>
+
+<div class="stage-h" style="margin:18px 0 8px;font-size:12px;color:#cbd5e1">展开后显示哪些面板 · 三种组合（真实尺寸 268px，默认 ③）</div>
+<div class="combo-row">
+  <div class="combo-card" id="comboHit">
+    <h3><span>① 只开「战斗命中」</span><button data-combo-pick="hit">选这个</button></h3>
+    <div class="pv" id="pvHit"></div>
+    <p>展开只有战斗命中这一行，不占列表与地图；适合只想看战斗结果的人。</p>
+  </div>
+  <div class="combo-card" id="comboNearby">
+    <h3><span>② 只开「附近面板」</span><button data-combo-pick="nearby">选这个</button></h3>
+    <div class="pv" id="pvNearby"></div>
+    <p>顶部不再有战斗命中块，面板直接从「附近 N · 稀有 M」开始，整体上移 64px。</p>
+  </div>
+  <div class="combo-card on" id="comboBoth">
+    <h3><span>③ 两个都开（默认）</span><button data-combo-pick="both">已选</button></h3>
+    <div class="pv" id="pvBoth"></div>
+    <p>战斗命中在顶部一行，附近面板在下面；就是现在 PC 小窗的结构。</p>
+  </div>
+</div>
+
+<!-- 右下编辑台 -->
+<div class="console" id="console">
+  <h2>编辑台 <button id="fold">收起</button></h2>
+  <div class="c-body">
+    <p class="tip">
+      拖动元素改位置 · 滚轮缩放 · 双击改文字（提示 / 标题 / 底部状态）· 元素列表选重叠元素。<br />
+      编辑的是「<b>展开 · 地图 + 列表</b>」这一版的布局，两个画布 <b>同步生效</b>，导出的
+      <code>left / top / scale</code> 按 1:1 真实像素，不做换算。
+    </p>
+    <div id="elList"></div>
+    <div class="field">
+      <label>左右</label><input id="inLeft" type="number" step="1" placeholder="选元素" />
+      <label style="min-width:auto">上下</label><input id="inTop" type="number" step="1" placeholder="选元素" />
+    </div>
+    <div class="field">
+      <label>缩放</label><input id="inScale" type="number" step="0.05" min="0.4" max="3" placeholder="选元素" />
+      <button class="btns" style="margin:0;padding:4px 9px;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#cbd5e1;font-size:11px;cursor:pointer" id="front">置顶</button>
+    </div>
+    <div class="field">
+      <label>面板宽</label><input id="inPanelW" type="number" step="2" min="200" max="340" />
+      <span style="font-size:10px;color:#64748b">默认 268</span>
+    </div>
+    <div class="btns">
+      <button class="primary" id="copy">复制布局 JSON</button>
+      <button id="reset">恢复默认</button>
+    </div>
+    <textarea id="out" readonly placeholder="点「复制布局 JSON」后这里会出现结果"></textarea>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── 数据 ──────────────────────────────────────────────
+  const BEARING = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
+  const KIND_COLOR = {
+    pollution: '#7c3aed', shiny: '#f59e0b', colorful: '#ec4899',
+    big: '#0ea5e9', small: '#0ea5e9', high: '#059669', low: '#059669',
+  };
+  const KIND_LABEL = {
+    colorful: '炫彩', shiny: '异色', pollution: '污染',
+    big: '大块头', small: '小不点', high: '婉转声', low: '粗嗓门',
+  };
+  const KIND_PRIORITY = ['pollution', 'shiny', 'colorful', 'big', 'small', 'high', 'low'];
+
+  const PET_POOL = [
+    { key: 'a1', name: '雪豆丁', level: 45, kinds: ['colorful'], rare: true, alert: true, nature: '开朗', dx: -55, dy: 40 },
+    { key: 'a2', name: '冰川企鹅', level: 38, kinds: [], rare: false, alert: false, nature: '胆小', dx: 30, dy: -35 },
+    { key: 'a3', name: '护主犬', level: 37, kinds: ['low'], rare: false, alert: false, nature: '固执', dx: 88, dy: 12 },
+    { key: 'a4', name: '火神', level: 52, kinds: ['shiny'], rare: true, alert: false, nature: '勇敢', dx: -40, dy: -60 },
+    { key: 'a5', name: '喵喵', level: 12, kinds: [], rare: false, alert: false, nature: '活泼', dx: 14, dy: 22 },
+    { key: 'a6', name: '水蓝蓝', level: 20, kinds: ['big'], rare: false, alert: false, nature: '温和', dx: -75, dy: -20 },
+    { key: 'a7', name: '幽冥猫', level: 41, kinds: ['pollution'], rare: true, alert: false, nature: '阴沉', dx: 60, dy: 55 },
+    { key: 'a8', name: '圣光迪莫', level: 60, kinds: ['colorful', 'high'], rare: true, alert: false, nature: '神圣', dx: -20, dy: 90 },
+    { key: 'a9', name: '洛克熊', level: 33, kinds: [], rare: false, alert: false, nature: '憨厚', dx: 105, dy: -45 },
+    { key: 'a10', name: '草叶龙', level: 28, kinds: ['small'], rare: false, alert: false, nature: '安静', dx: -95, dy: 70 },
+    { key: 'a11', name: '电击兽', level: 44, kinds: [], rare: false, alert: false, nature: '急躁', dx: 45, dy: -95 },
+    { key: 'a12', name: '冰雪女王', level: 55, kinds: ['shiny'], rare: true, alert: false, nature: '冷傲', dx: -110, dy: -85 },
+  ];
+
+  function bearingOf(dx, dy) {
+    const deg = ((Math.atan2(dx, -dy) * 180 / Math.PI) + 360) % 360;
+    return BEARING[Math.round(deg / 45) % 8];
+  }
+  function buildPet(raw) {
+    const distanceM = Math.hypot(raw.dx, raw.dy);
+    return {
+      ...raw,
+      distanceM,
+      bearingLabel: bearingOf(raw.dx, raw.dy),
+      color: (KIND_PRIORITY.find(function (k) { return raw.kinds.indexOf(k) >= 0; }) || null),
+    };
+  }
+  const ALL = PET_POOL.map(buildPet);
+  function byKeys(keys) {
+    return keys.map(function (k) { return ALL.find(function (p) { return p.key === k; }); });
+  }
+  function sortPets(list) {
+    const rank = function (p) { return p.alert ? 0 : p.rare ? 1 : 2; };
+    return list.slice().sort(function (a, b) {
+      return rank(a) - rank(b) || a.distanceM - b.distanceM;
+    });
+  }
+  const SORTED = sortPets(ALL);
+
+  // 战斗命中个体数据：字段口径照搬 src/ui/BattleHudOrb.tsx 的 battleOverlayFields()
+  const ENCOUNTER = {
+    rewardName: '烈火战神', guardName: '护主犬',
+    level: 37, gender: '公', nature: '固执', natureConfirmed: true,
+    voiceDb: -100, height: 118, heightPct: 96, weight: 32500, weightPct: 99,
+  };
+
+  // 状态：pets 已经过排序；渲染时再截前 8 条
+  const STATES = {
+    collapsed: { label: '收起成球', expanded: false, hint: false, map: true, hit: ENCOUNTER, pets: [], count: 12, self: true },
+    hint: { label: '首次提示', expanded: false, hint: true, map: true, hit: ENCOUNTER, pets: [], count: 12, self: true },
+    expanded: { label: '展开 · 地图 + 列表', expanded: true, hint: false, map: true, hit: ENCOUNTER, pets: sortPets(byKeys(['a1', 'a4', 'a5', 'a2', 'a3'])), self: true },
+    listOnly: { label: '只有列表（无地图）', expanded: true, hint: false, map: false, hit: ENCOUNTER, pets: sortPets(byKeys(['a1', 'a4', 'a5', 'a2', 'a3', 'a6'])), self: true },
+    empty: { label: '空数据', expanded: true, hint: false, map: true, hit: null, pets: [], self: true },
+    truncated: { label: '8 条以上截断', expanded: true, hint: false, map: true, hit: ENCOUNTER, pets: SORTED, self: true },
+    estimated: { label: '中心为估算', expanded: true, hint: false, map: true, hit: ENCOUNTER, pets: sortPets(byKeys(['a1', 'a4', 'a7', 'a5', 'a2', 'a3', 'a6'])), self: false },
+    settings: { label: '设置态（勾选面板）', expanded: false, hint: false, map: true, hit: ENCOUNTER, pets: [], self: true, sheet: true },
+  };
+  const STATE_ORDER = ['collapsed', 'hint', 'expanded', 'listOnly', 'empty', 'truncated', 'estimated', 'settings'];
+  const MAX_ROWS = 8;
+
+  // ── 布局（真实像素，375 宽屏标定） ───────────────────
+  const BALL = 48;   // 悬浮球直径，与 PC 的 ORB_SIZE 一致
+  const EDGE = 8;    // 贴边距
+  const HIT_H = 64;  // 战斗命中块：标题行 + 两排 chip
+  const DEFAULT_LAYOUT = {
+    orb: { left: 319, top: 756, scale: 1, z: 32 },       // 球左上角（375 坐标，= 右下角贴边），面板位置由它推导
+    hint: { scale: 1, z: 33 },                          // 提示气泡贴在球正上方
+    panel: { width: 268, scale: 1, z: 30 },             // 面板贴球展开，位置不单独存
+    title: { left: 8, top: HIT_H + 4, scale: 1, z: 2 },
+    map: { left: 8, top: HIT_H + 28, scale: 1, z: 2 },
+    list: { left: 136, top: HIT_H + 28, scale: 1, z: 2 },
+  };
+  const ELEMENT_LABEL = {
+    orb: '悬浮球（拖它 → 面板跟随）',
+    title: '标题行',
+    map: '小地图',
+    list: '精灵列表',
+  };
+
+  let layout = JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+  let stateKey = 'expanded';
+  let theme = 'dark';
+  let mapStyle = 'B'; // 2026-11-08 拍板：先按 B（内嵌网页地图）做
+  let combo = 'both'; // 展开后显示：hit | nearby | both（默认两个都开）
+  let selectedKey = null; // 未选中时不画选中框，截图更干净
+  let zTop = 10;
+
+  // ── 小地图 ───────────────────────────────────────────
+  function colorOfKinds(kinds) {
+    for (const kind of KIND_PRIORITY) if (kinds.indexOf(kind) >= 0) return KIND_COLOR[kind];
+    return '#475569';
+  }
+  function kindText(kinds) {
+    return kinds.map(function (k) { return KIND_LABEL[k] || k; }).join('·');
+  }
+
+  /** 300m 视野 → 120m 圈；dx 东 = 右，dy 南 = 下 */
+  function minimapHTML(style, pets, opt) {
+    const size = opt.size;
+    const ppm = size / 300;
+    const ringR = 120 * ppm;
+    let bg = '';
+    if (style === 'A') {
+      bg =
+        '<svg class="mm-art" width="' + size + '" height="' + size + '" viewBox="0 0 120 120" preserveAspectRatio="none">' +
+        '<rect width="120" height="120" fill="#142a26"/>' +
+        '<path d="M0 0 H62 V30 L40 38 L0 24 Z" fill="#1d4b3b"/>' +
+        '<path d="M70 0 H120 V46 L96 52 L70 28 Z" fill="#204f3c"/>' +
+        '<path d="M0 58 H32 V120 H0 Z" fill="#1b4234"/>' +
+        '<path d="M94 66 H120 V120 H94 Z" fill="#1f4a39"/>' +
+        '<rect x="24" y="74" width="62" height="13" fill="#3c3a24"/>' +
+        '<rect x="42" y="92" width="16" height="12" fill="#2c5a6b"/>' +
+        '<rect x="0" y="84" width="22" height="9" fill="#3c3a24"/>' +
+        '</svg><div class="mm-grid"></div>';
+    } else {
+      const imgW = size * 13.6; // 4080m 宽的地图铺满 4096px 图片
+      const left = size / 2 - imgW / 2;
+      bg = '<img class="mm-img" src="public/maps/10003.webp" alt="" draggable="false" style="width:' +
+        imgW.toFixed(1) + 'px;height:' + imgW.toFixed(1) + 'px;left:' + left.toFixed(1) + 'px;top:' + left.toFixed(1) + 'px" />';
+    }
+
+    const dots = pets.filter(function (p) { return p.distanceM <= 150; }).map(function (p) {
+      const x = size / 2 + p.dx * ppm;
+      const y = size / 2 + p.dy * ppm;
+      const d = p.rare ? 9 : 7;
+      return '<span class="pt ' + (p.rare ? 'rare' : 'norm') + '" style="left:' + (x - d / 2).toFixed(1) +
+        'px;top:' + (y - d / 2).toFixed(1) + 'px;background:' + colorOfKinds(p.kinds) + '">' +
+        (p.alert ? '<span class="alert-ring"></span>' : '') + '</span>';
+    }).join('');
+
+    const estimated = !opt.self;
+    const me = '<span class="me' + (estimated ? ' est' : '') + '" style="left:' + size / 2 + 'px;top:' + size / 2 + 'px"></span>';
+
+    // 地图上不写地名、不写圈半径、不写图例；圈线只作为范围参考
+    return bg +
+      '<span class="mm-n">N</span>' +
+      '<div class="mm-ring" style="left:' + (size / 2 - ringR).toFixed(1) + 'px;top:' + (size / 2 - ringR).toFixed(1) +
+      'px;width:' + (ringR * 2).toFixed(1) + 'px;height:' + (ringR * 2).toFixed(1) + 'px"></div>' +
+      dots + me;
+  }
+
+  // ── 面板渲染 ─────────────────────────────────────────
+  function esc(text) {
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function withAlpha(hex, alpha) {
+    const n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
+  }
+
+  function listRowsHTML(pets) {
+    if (pets.length === 0) {
+      return '<div class="p-empty"><span>附近暂时没有精灵</span><span style="font-size:9px">进入野外后自动出现</span></div>';
+    }
+    return pets.slice(0, MAX_ROWS).map(function (p) {
+      const cls = 'row' + (p.alert ? ' alert' : p.rare ? ' rare' : '');
+      // 精灵类型只靠这个标签的颜色表达（地图上不再放图例）
+      const tagColor = p.alert ? '#f43f5e' : (p.kinds.length ? colorOfKinds(p.kinds) : '');
+      const tagText = p.alert ? '需求' : kindText(p.kinds);
+      const tagStyle = tagColor
+        ? ' style="color:' + tagColor + ';background:' + withAlpha(tagColor, .18) + '"'
+        : '';
+      const meta = p.distanceM.toFixed(0) + 'm ' + p.bearingLabel;
+      return '<div class="' + cls + '">' +
+        '<div class="l1"><span class="nm">' + esc(p.name) + '</span>' +
+        '<span class="lv">Lv' + p.level + '</span></div>' +
+        '<div class="l2"><span class="meta">' + meta + '</span>' +
+        (tagText ? '<span class="tag"' + tagStyle + '>' + tagText + '</span>' : '') + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function overlayHTML(cfg) {
+    if (cfg.sheet) return sheetHTML();
+
+    const m = metricsOf(cfg);
+    const rareCount = m.pets.filter(function (p) { return p.rare; }).length;
+
+    const hit = cfg.expanded && m.showHit ? hitTableHTML(cfg.hit) : '';
+
+    const title = cfg.expanded && m.showNearby
+      ? '<div class="p-title" data-el="title" data-scope="panel"><span data-edit="1">附近 ' + m.pets.length + ' · 稀有 ' + rareCount + '</span>' +
+        (cfg.self ? '' : '<span class="est">中心为估算</span>') + '</div>'
+      : '';
+
+    const map = cfg.expanded && m.showNearby && cfg.map
+      ? '<div class="mm p-map" data-el="map" data-scope="panel" style="width:120px;height:120px">' +
+        minimapHTML(mapStyle, m.pets, { size: 120, self: cfg.self }) + '</div>'
+      : '';
+
+    const list = cfg.expanded && m.showNearby
+      ? '<div class="p-list" data-el="list" data-scope="panel" style="height:' + m.listH + 'px">' +
+        listRowsHTML(m.pets) + '</div>'
+      : '';
+
+    // 底部只在「有截断」时说一句事实；地名、圈半径、图例一律不写
+    const foot = cfg.expanded && m.showNearby && m.rest > 0
+      ? '<div class="p-foot" style="left:8px;right:8px;bottom:6px;height:14px;line-height:14px">还有 ' + m.rest + ' 只未显示</div>'
+      : '';
+
+    const panel = cfg.expanded
+      ? '<div class="panel' + (m.showNearby && !cfg.map ? ' no-map' : '') +
+        '" data-el="panel" data-scope="phone" style="width:' + layout.panel.width + 'px;height:' + m.panelH + 'px">' +
+        hit + title + map + list + foot + '</div>'
+      : '';
+
+    // 球在收起 / 展开两种状态下都画：展开时球仍可拖，面板跟着走
+    const orbCount = cfg.count != null ? cfg.count : m.pets.length;
+    const orb = '<div class="orb' + (cfg.hit && m.showHit ? ' hit' : '') +
+      '" data-el="orb" data-scope="phone" data-action="expand">' +
+      '<span class="o-l">附近</span><span class="o-n">' + orbCount + '</span></div>';
+
+    const hint = cfg.hint
+      ? '<div class="hint" data-el="hint" data-scope="phone" data-edit="1" data-action="expand">点我展开</div>'
+      : '';
+
+    return orb + hint + panel;
+  }
+
+  /** 面板尺寸由状态 + combo 推导（贴球展开要用到高度） */
+  function metricsOf(cfg) {
+    const pets = cfg.pets || [];
+    const showHit = combo !== 'nearby';
+    const showNearby = combo !== 'hit';
+    const rows = Math.min(pets.length, MAX_ROWS);
+    const rest = pets.length - rows;
+    const listH = rows > 0 ? rows * 30 + (rows - 1) * 2 : 44;
+    const hitH = !showHit ? 0 : (cfg.hit ? HIT_H : 44);
+    const bodyH = showNearby ? (cfg.map ? Math.max(120, listH) : Math.max(44, listH)) : 0;
+    const footH = showNearby && rest > 0 ? 20 : 8;
+    const panelH = showNearby ? hitH + 28 + bodyH + footH : hitH;
+    return { pets: pets, showHit: showHit, showNearby: showNearby, rows: rows, rest: rest, listH: listH, hitH: hitH, bodyH: bodyH, footH: footH, panelH: panelH };
+  }
+
+  /**
+   * 战斗命中表：结构与字段完全照搬 PC 的 src/ui/BattleHudOrb.tsx
+   * （battleOverlayFields() 固定两排 chip；命中目标为 rose 标签）。
+   */
+  function hitTableHTML(hit, opts) {
+    const chev = opts && opts.chev === false ? '' : '<span class="chev" data-action="collapse">⌄</span>';
+    if (!hit) {
+      return '<div class="p-hit plain"><div class="h"><span class="t">战斗采集 · 赛季奇遇</span>' + chev + '</div>' +
+        '<div class="empty">进入赛季奇遇战后，这里会显示守卫的个体数据。</div></div>';
+    }
+    const row1 = ['<span class="chip primary">' + esc(hit.rewardName || hit.guardName) + '</span>'];
+    if (hit.gender) row1.push('<span class="chip">' + (hit.gender === '公' ? '♂' : '♀') + '</span>');
+    row1.push('<span class="chip">' + hit.level + '级</span>');
+    if (hit.natureConfirmed && hit.nature) row1.push('<span class="chip">' + esc(hit.nature) + '</span>');
+    if (hit.voiceDb != null) {
+      const hot = hit.voiceDb >= 96 || hit.voiceDb <= -96;
+      row1.push('<span class="chip' + (hot ? ' hot' : '') + '">' + hit.voiceDb + 'dB</span>');
+    }
+    row1.push('<span class="chip hit">命中目标</span>');
+
+    const row2 = [
+      '<span class="chip">' + (hit.height / 100).toFixed(2) + 'm' +
+        (hit.heightPct != null ? '（' + hit.heightPct + '%）' : '') + '</span>',
+    ];
+    const weightHot = hit.weightPct != null && (hit.weightPct >= 98 || hit.weightPct <= 2);
+    row2.push('<span class="chip' + (weightHot ? ' hot' : '') + '">' + (hit.weight / 1000).toFixed(2) + 'kg' +
+      (hit.weightPct != null ? '（' + hit.weightPct + '%）' : '') + '</span>');
+
+    return '<div class="p-hit">' +
+      '<div class="h"><span class="t">战斗采集 · 赛季奇遇</span>' + chev + '</div>' +
+      '<div class="chips">' + row1.join('') + '</div>' +
+      '<div class="chips">' + row2.join('') + '</div>' +
+      '</div>';
+  }
+
+  /** 设置态：附近页里的「悬浮球显示内容」勾选面板（至少选一个） */
+  function sheetHTML() {
+    const onHit = combo !== 'nearby';
+    const onNearby = combo !== 'hit';
+    return '<div class="sheet-mask"></div>' +
+      '<div class="sheet">' +
+      '<div class="h">悬浮球显示内容<span>设置 · 本机记住</span></div>' +
+      '<div class="sub">收起时始终是悬浮球；展开后显示下面勾选的面板。</div>' +
+      '<button class="opt' + (onHit ? ' on' : '') + '" data-opt="hit">' +
+      '<span class="box">' + (onHit ? '✓' : '') + '</span>' +
+      '<span><span class="t">战斗命中</span><br /><span class="d">展开后顶部：名字 / 等级 / 性格 / 声音 / 身高体重</span></span></button>' +
+      '<button class="opt' + (onNearby ? ' on' : '') + '" data-opt="nearby">' +
+      '<span class="box">' + (onNearby ? '✓' : '') + '</span>' +
+      '<span><span class="t">附近面板</span><br /><span class="d">小地图 + 紧凑列表，最多 8 条</span></span></button>' +
+      '<div class="foot"><em>' + (onHit && onNearby ? '至少选一个' : '至少选一个（已到下限）') + '</em>' +
+      '<button class="done" data-action="done">完成</button></div>' +
+      '</div>';
+  }
+
+  // ── 布局应用 ─────────────────────────────────────────
+  const PHONES = Array.prototype.slice.call(document.querySelectorAll('.phone'));
+
+  function phoneSize(phone) {
+    return { w: Number(phone.dataset.w), h: Number(phone.dataset.h) };
+  }
+
+  /** 球在某个屏上的实际位置：按「离最近边的距离」换算，390 上仍然贴边 8px */
+  function orbBox(W, H) {
+    const sz = BALL * layout.orb.scale;
+    const baseX = layout.orb.left;
+    const baseY = layout.orb.top;
+    const rightHalf = baseX + sz / 2 >= 375 / 2;
+    const bottomHalf = baseY + sz / 2 >= 812 / 2;
+    const x = Math.min(Math.max(EDGE, baseX + (rightHalf ? W - 375 : 0)), W - sz - EDGE);
+    const y = Math.min(Math.max(EDGE, baseY + (bottomHalf ? H - 812 : 0)), H - sz - EDGE);
+    return { x: x, y: y };
+  }
+
+  /**
+   * 面板贴球展开：球在哪半屏，面板就贴住球所在的那一侧、朝屏幕内侧铺开。
+   * 球在右半屏 → 面板右缘对齐球右缘（向左铺）；左半屏 → 左缘对齐球左缘（向右铺）。
+   * 球在下半屏 → 面板放在球上方；上半屏 → 放在球下方。
+   * 这样四个角都不会出屏，且拖球时面板必然跟着走。
+   */
+  function panelBox(m, W, H) {
+    const o = orbBox(W, H);
+    const w = layout.panel.width;
+    const rightHalf = o.x + BALL / 2 >= W / 2;
+    const bottomHalf = o.y + BALL / 2 >= H / 2;
+    let left = rightHalf ? o.x + BALL - w : o.x;
+    let top = bottomHalf ? o.y - EDGE - m.panelH : o.y + BALL + EDGE;
+    left = Math.min(Math.max(EDGE, left), Math.max(EDGE, W - w - EDGE));
+    top = Math.min(Math.max(EDGE, top), Math.max(EDGE, H - m.panelH - EDGE));
+    return { left: left, top: top, width: w, height: m.panelH, orb: o, anchorX: rightHalf ? 'right' : 'left', anchorY: bottomHalf ? 'up' : 'down' };
+  }
+
+  function applyLayout(phone) {
+    const ov = phone.querySelector('.overlay');
+    if (!ov) return;
+
+    const size = phoneSize(phone);
+    const cfg = STATES[stateKey];
+    const m = metricsOf(cfg);
+    const box = panelBox(m, size.w, size.h);
+
+    const orb = ov.querySelector('[data-el="orb"]');
+    if (orb) {
+      orb.style.left = box.orb.x + 'px';
+      orb.style.top = box.orb.y + 'px';
+      orb.style.transformOrigin = 'top left';
+      orb.style.transform = 'scale(' + layout.orb.scale + ')';
+      orb.style.zIndex = layout.orb.z;
+    }
+
+    const hint = ov.querySelector('[data-el="hint"]');
+    if (hint) {
+      const above = box.orb.y > 60;
+      hint.style.right = (size.w - box.orb.x - BALL + 10) + 'px';
+      hint.style.bottom = above
+        ? (size.h - box.orb.y + 6) + 'px'
+        : (size.h - box.orb.y - BALL - 31) + 'px';
+      hint.style.transformOrigin = 'right bottom';
+      hint.style.transform = 'scale(' + layout.hint.scale + ')';
+      hint.style.zIndex = layout.hint.z;
+    }
+
+    const panel = ov.querySelector('[data-el="panel"]');
+    if (panel) {
+      panel.style.left = box.left + 'px';
+      panel.style.top = box.top + 'px';
+      panel.style.width = box.width + 'px';
+      panel.style.height = box.height + 'px';
+      panel.style.transformOrigin = 'top left';
+      panel.style.transform = 'scale(' + layout.panel.scale + ')';
+      panel.style.zIndex = layout.panel.z;
+    }
+
+    // 战斗命中块高度随「有没有命中数据」变化，下面的内容整体跟着上下移
+    const shift = m.hitH - HIT_H;
+    ['title', 'map', 'list'].forEach(function (key) {
+      const el = ov.querySelector('[data-el="' + key + '"]');
+      if (!el) return;
+      const L = layout[key];
+      el.style.top = (L.top + shift) + 'px';
+      el.style.left = L.left + 'px';
+      el.style.transformOrigin = 'top left';
+      el.style.transform = 'scale(' + L.scale + ')';
+      el.style.zIndex = L.z;
+    });
+
+    const list = ov.querySelector('[data-el="list"]');
+    if (list && panel) {
+      const noMap = panel.classList.contains('no-map');
+      const left = noMap ? 8 : layout.list.left;
+      list.style.left = left + 'px';
+      list.style.width = (layout.panel.width - left - 8) + 'px';
+    }
+
+    // 选中态
+    ov.querySelectorAll('[data-el]').forEach(function (el) {
+      el.classList.toggle('sel', el.dataset.el === selectedKey);
+    });
+    ov.classList.toggle('outlines', document.getElementById('cbOutlines').checked);
+    ov.setAttribute('data-theme', theme);
+  }
+
+  /** 四角快捷按钮的选中态跟着球的相对位置走 */
+  function syncCorner() {
+    const cx = layout.orb.left + BALL / 2;
+    const cy = layout.orb.top + BALL / 2;
+    const key = (cx < 375 / 2 ? 'l' : 'r') + (cy < 812 / 2 ? 't' : 'b');
+    const table = { lt: 'tl', rt: 'tr', lb: 'bl', rb: 'br' };
+    Array.prototype.forEach.call(document.querySelectorAll('#cornerSeg button'), function (b) {
+      b.classList.toggle('on', b.dataset.corner === table[key]);
+    });
+  }
+
+  function render() {
+    const cfg = STATES[stateKey];
+    PHONES.forEach(function (phone) {
+      const ov = phone.querySelector('.overlay');
+      ov.innerHTML = overlayHTML(cfg);
+      applyLayout(phone);
+    });
+    renderCompare();
+    renderComboPreviews();
+    buildElementList();
+    syncCorner();
+  }
+
+  function renderCompare() {
+    const cfg = STATES.truncated;
+    const pets = cfg.pets.slice(0, 9);
+    const build = function (style) {
+      return '<div class="mm" style="width:132px;height:132px">' +
+        minimapHTML(style, pets, { size: 132, self: true }) + '</div>';
+    };
+    document.getElementById('cmpMapA').innerHTML = build('A');
+    document.getElementById('cmpMapB').innerHTML = build('B');
+    document.getElementById('cmpA').classList.toggle('on', mapStyle === 'A');
+    document.getElementById('cmpB').classList.toggle('on', mapStyle === 'B');
+    document.getElementById('pickA').style.display = mapStyle === 'A' ? '' : 'none';
+    document.getElementById('pickB').style.display = mapStyle === 'B' ? '' : 'none';
+    document.getElementById('cmpA').querySelector('button').textContent = mapStyle === 'A' ? '已选 A' : '选这个';
+    document.getElementById('cmpB').querySelector('button').textContent = mapStyle === 'B' ? '已选 B' : '选这个';
+    Array.prototype.forEach.call(document.querySelectorAll('#mapSeg button'), function (b) {
+      b.classList.toggle('on', b.dataset.map === mapStyle);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#themeSeg button'), function (b) {
+      b.classList.toggle('on', b.dataset.theme === theme);
+    });
+  }
+
+  /** 三种组合的真实尺寸观感（宽 268，与线上一致） */
+  function renderComboPreviews() {
+    const pets = sortPets(byKeys(['a1', 'a4', 'a5', 'a2', 'a3']));
+    const rareCount = pets.filter(function (p) { return p.rare; }).length;
+    const hitHTML = hitTableHTML(ENCOUNTER, { chev: false });
+
+    const nearbyInner =
+      '<div class="pv-inner">' +
+      '<div class="p-title"><span>附近 ' + pets.length + ' · 稀有 ' + rareCount + '</span></div>' +
+      '<div class="pv-body">' +
+      '<div class="mm p-map" style="width:120px;height:120px">' + minimapHTML(mapStyle, pets, { size: 120, self: true }) + '</div>' +
+      '<div class="p-list" style="flex:1">' + listRowsHTML(pets) + '</div>' +
+      '</div></div>';
+
+    const wrap = function (html) {
+      return '<div class="pv-panel" style="width:268px">' + html + '</div>';
+    };
+
+    document.getElementById('pvBoth').innerHTML = wrap(hitHTML + nearbyInner);
+    document.getElementById('pvNearby').innerHTML = wrap(nearbyInner);
+    document.getElementById('pvHit').innerHTML = wrap(hitHTML);
+
+    [['hit', 'comboHit'], ['nearby', 'comboNearby'], ['both', 'comboBoth']].forEach(function (pair) {
+      const card = document.getElementById(pair[1]);
+      card.classList.toggle('on', combo === pair[0]);
+      const btn = card.querySelector('button');
+      btn.textContent = combo === pair[0] ? '已选' : '选这个';
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#comboSeg button'), function (b) {
+      b.classList.toggle('on', b.dataset.combo === combo);
+    });
+  }
+
+  // ── 编辑台 ───────────────────────────────────────────
+  const elList = document.getElementById('elList');
+
+  function currentPos(key) {
+    const L = layout[key];
+    return { a: L.left, b: L.top, aLabel: '左', bLabel: '上' };
+  }
+
+  function buildElementList() {
+    elList.innerHTML = '';
+    Object.keys(ELEMENT_LABEL).forEach(function (key) {
+      const row = document.createElement('div');
+      row.className = 'el-row' + (key === selectedKey ? ' on' : '');
+      const p = currentPos(key);
+      row.innerHTML = '<span>' + ELEMENT_LABEL[key] + '</span><span>' + p.aLabel + ' ' + p.a +
+        ' · ' + p.bLabel + ' ' + p.b + '</span>';
+      row.addEventListener('click', function () { select(key); });
+      elList.appendChild(row);
+    });
+    syncInputs();
+  }
+
+  function syncInputs() {
+    const L = selectedKey ? layout[selectedKey] : null;
+    if (!L) {
+      ['inLeft', 'inTop', 'inScale'].forEach(function (id) {
+        document.getElementById(id).value = '';
+      });
+      document.getElementById('inPanelW').value = layout.panel.width;
+      return;
+    }
+    const p = currentPos(selectedKey);
+    document.getElementById('inLeft').value = p.a;
+    document.getElementById('inTop').value = p.b;
+    document.getElementById('inScale').value = L.scale;
+    document.getElementById('inPanelW').value = layout.panel.width;
+  }
+
+  function select(key) {
+    selectedKey = key;
+    PHONES.forEach(applyLayout);
+    buildElementList();
+  }
+
+  // ── 拖动 / 缩放 / 改字 ────────────────────────────────
+  PHONES.forEach(function (phone) {
+    phone.addEventListener('pointerdown', function (event) {
+      const el = event.target.closest('[data-el]');
+      if (!el) return;
+      const key = el.dataset.el;
+      if (!layout[key] || key === 'hint') return;
+
+      select(key);
+
+      const L = layout[key];
+      const size = phoneSize(phone);
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startA = L.left;
+      const startB = L.top;
+      // 球按「屏幕坐标」拖，再换算回 375 基准，390 上指针与球始终对齐
+      const pr = phone.getBoundingClientRect();
+      const oRect = el.getBoundingClientRect();
+      const startSX = oRect.left - pr.left - 4;
+      const startSY = oRect.top - pr.top - 4;
+      const inPanel = key !== 'orb';
+      const scale = inPanel ? (layout.panel.scale || 1) : 1;
+      const startZ = L.z || 1;
+      const origin = event.target;
+      let moved = false;
+      L.z = ++zTop;
+
+      el.setPointerCapture(event.pointerId);
+      const move = function (e) {
+        if (!moved && Math.abs(e.clientX - startX) < 3 && Math.abs(e.clientY - startY) < 3) return;
+        moved = true;
+        const dx = (e.clientX - startX) / scale;
+        const dy = (e.clientY - startY) / scale;
+        if (key === 'orb') {
+          // 球夹在四边留白内；面板位置每帧由球重算，所以拖球 = 面板跟着走
+          const sx = Math.min(Math.max(EDGE, Math.round(startSX + (e.clientX - startX))), size.w - BALL - EDGE);
+          const sy = Math.min(Math.max(EDGE, Math.round(startSY + (e.clientY - startY))), size.h - BALL - EDGE);
+          L.left = sx + BALL / 2 < size.w / 2 ? sx : sx - (size.w - 375);
+          L.top = sy + BALL / 2 < size.h / 2 ? sy : sy - (size.h - 812);
+        } else {
+          L.left = Math.max(0, Math.round(startA + dx));
+          L.top = Math.max(0, Math.round(startB + dy));
+        }
+        PHONES.forEach(applyLayout);
+        buildElementList();
+        if (key === 'orb') syncCorner();
+      };
+      const up = function () {
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+        L.z = startZ;
+        // 没拖动 = 点击：球 → 展开
+        if (!moved && origin && origin.closest) {
+          const action = origin.closest('[data-action]');
+          if (action && action.dataset.action === 'expand') { setState('expanded'); return; }
+        }
+        PHONES.forEach(applyLayout);
+        buildElementList();
+      };
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    });
+
+    phone.addEventListener('wheel', function (event) {
+      const el = event.target.closest('[data-el]');
+      if (!el || !layout[el.dataset.el] || el.dataset.el === 'hint') return;
+      event.preventDefault();
+      const key = el.dataset.el;
+      select(key);
+      const next = Math.min(3, Math.max(0.4,
+        Math.round((layout[key].scale + (event.deltaY < 0 ? 0.05 : -0.05)) * 100) / 100));
+      layout[key].scale = next;
+      PHONES.forEach(applyLayout);
+      buildElementList();
+      toast('缩放 ' + next.toFixed(2) + '×');
+    }, { passive: false });
+
+    phone.addEventListener('dblclick', function (event) {
+      const el = event.target.closest('[data-edit]');
+      if (!el) return;
+      event.stopPropagation();
+      const value = window.prompt('改成什么文字？', el.textContent.trim());
+      if (value != null && value !== '') el.textContent = value;
+    });
+
+    // 设置态勾选项 / 完成 / 命中块上的 ⌄ 收起 / 提示气泡点击展开
+    phone.addEventListener('click', function (event) {
+      const opt = event.target.closest('[data-opt]');
+      if (opt) {
+        event.stopPropagation();
+        toggleCombo(opt.dataset.opt);
+        return;
+      }
+      const act = event.target.closest('[data-action]');
+      if (!act) return;
+      if (act.closest('[data-el="orb"]')) return; // 球由拖动逻辑处理
+      event.stopPropagation();
+      const action = act.dataset.action;
+      if (action === 'collapse') { setState('collapsed'); return; }
+      if (action === 'expand' || action === 'done') setState('expanded');
+    });
+  });
+
+  // ── 状态 / 主题 / 画法切换 ────────────────────────────
+  function setState(key) {
+    stateKey = key;
+    Array.prototype.forEach.call(document.querySelectorAll('#stateSeg button'), function (b) {
+      b.classList.toggle('on', b.dataset.state === key);
+    });
+    render();
+  }
+
+  (function buildStateSeg() {
+    const seg = document.getElementById('stateSeg');
+    STATE_ORDER.forEach(function (key) {
+      const b = document.createElement('button');
+      b.dataset.state = key;
+      b.textContent = STATES[key].label;
+      b.addEventListener('click', function () { setState(key); });
+      seg.appendChild(b);
+    });
+  })();
+
+  document.getElementById('themeSeg').addEventListener('click', function (e) {
+    const b = e.target.closest('button');
+    if (!b) return;
+    theme = b.dataset.theme;
+    PHONES.forEach(function (phone) {
+      phone.querySelector('.overlay').setAttribute('data-theme', theme);
+    });
+    renderCompare();
+  });
+
+  document.getElementById('mapSeg').addEventListener('click', function (e) {
+    const b = e.target.closest('button');
+    if (!b) return;
+    mapStyle = b.dataset.map;
+    render();
+  });
+
+  // ── 展开后显示哪些面板（战斗命中 / 附近面板，至少一个） ──
+  function setCombo(next) {
+    combo = next;
+    render();
+    toast(next === 'hit' ? '展开后只显示战斗命中'
+      : next === 'nearby' ? '展开后只显示附近面板'
+        : '展开后两个都显示');
+  }
+  function toggleCombo(which) {
+    const onHit = combo !== 'nearby';
+    const onNearby = combo !== 'hit';
+    let next;
+    if (which === 'hit') next = onHit ? (onNearby ? 'nearby' : null) : 'both';
+    else next = onNearby ? (onHit ? 'hit' : null) : 'both';
+    if (!next) { toast('至少选一个'); return; }
+    setCombo(next);
+  }
+
+  document.getElementById('comboSeg').addEventListener('click', function (e) {
+    const b = e.target.closest('button');
+    if (!b) return;
+    setCombo(b.dataset.combo);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-combo-pick]'), function (b) {
+    b.addEventListener('click', function () { setCombo(b.dataset.comboPick); });
+  });
+
+  document.querySelectorAll('.cmp-h button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      mapStyle = b.dataset.pick;
+      render();
+    });
+  });
+
+  // ── 球位置四角快捷定位（面板跟着球换方向） ──────────────
+  function setCorner(where) {
+    layout.orb.left = where === 'tl' || where === 'bl' ? EDGE : 375 - BALL - EDGE;
+    layout.orb.top = where === 'tl' || where === 'tr' ? EDGE : 812 - BALL - EDGE;
+    // 收起 / 首次提示时球是单独的，自动展开才能看到面板换向
+    if (stateKey === 'collapsed' || stateKey === 'hint') setState('expanded');
+    else {
+      PHONES.forEach(applyLayout);
+      buildElementList();
+      syncCorner();
+    }
+    toast('球已移到' + ({ tl: '左上', tr: '右上', bl: '左下', br: '右下' })[where]);
+  }
+
+  document.getElementById('cornerSeg').addEventListener('click', function (e) {
+    const b = e.target.closest('button');
+    if (!b) return;
+    setCorner(b.dataset.corner);
+  });
+
+  document.getElementById('cbGuides').addEventListener('change', function (e) {
+    PHONES.forEach(function (phone) { phone.classList.toggle('guides', e.target.checked); });
+  });
+  document.getElementById('cbOutlines').addEventListener('change', function () {
+    PHONES.forEach(applyLayout);
+  });
+
+  // ── 数字输入 / 置顶 / 改面板宽 ────────────────────────
+  ['inLeft', 'inTop', 'inScale'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', function (e) {
+      if (!selectedKey) return;
+      const value = Number(e.target.value);
+      if (Number.isNaN(value) || e.target.value === '') return;
+      const L = layout[selectedKey];
+      if (id === 'inLeft') L.left = Math.max(0, value);
+      if (id === 'inTop') L.top = Math.max(0, value);
+      if (id === 'inScale') L.scale = Math.min(3, Math.max(0.4, value));
+      PHONES.forEach(applyLayout);
+      buildElementList();
+      if (selectedKey === 'orb') syncCorner();
+    });
+  });
+
+  document.getElementById('inPanelW').addEventListener('input', function (e) {
+    const value = Number(e.target.value);
+    if (Number.isNaN(value)) return;
+    layout.panel.width = Math.min(340, Math.max(200, value));
+    PHONES.forEach(applyLayout);
+    buildElementList();
+  });
+
+  document.getElementById('front').addEventListener('click', function () {
+    if (!selectedKey) { toast('先在元素列表里选一个元素'); return; }
+    layout[selectedKey].z = ++zTop;
+    PHONES.forEach(applyLayout);
+    buildElementList();
+    toast('已置顶');
+  });
+
+  // ── 导出 / 重置 / 编辑台折叠 ─────────────────────────
+  function exportJSON() {
+    const cfg = STATES[stateKey];
+    const m = metricsOf(cfg);
+    const box = panelBox(m, 375, 812);
+    return {
+      说明: '手机端悬浮窗原型布局（375 宽屏 1:1 真实像素）',
+      state: stateKey,
+      theme: theme,
+      mapStyle: mapStyle,
+      expandedPanels: combo,
+      screen: { width: 375, height: 812 },
+      orb: { left: layout.orb.left, top: layout.orb.top, size: 48, scale: layout.orb.scale },
+      hint: { scale: layout.hint.scale },
+      panel: {
+        width: box.width, height: box.height, scale: layout.panel.scale,
+        left: box.left, top: box.top,
+        anchor: { x: box.anchorX, y: box.anchorY },
+        note: '面板位置由球推导：贴住球所在的那一侧、朝屏幕内侧展开',
+      },
+      elements: ['title', 'map', 'list'].map(function (key) {
+        return {
+          key: key,
+          name: ELEMENT_LABEL[key],
+          left: layout[key].left, top: layout[key].top,
+          scale: layout[key].scale, z: layout[key].z,
+        };
+      }),
+    };
+  }
+
+  document.getElementById('copy').addEventListener('click', function () {
+    const text = JSON.stringify(exportJSON(), null, 2);
+    const out = document.getElementById('out');
+    out.value = text;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast('布局 JSON 已复制'); },
+        function () { out.select(); toast('已生成，请手动复制'); });
+    } else {
+      out.select();
+      toast('已生成，请手动复制');
+    }
+  });
+
+  document.getElementById('reset').addEventListener('click', function () {
+    layout = JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+    selectedKey = null;
+    PHONES.forEach(applyLayout);
+    buildElementList();
+    syncCorner();
+    toast('已恢复默认');
+  });
+
+  document.getElementById('fold').addEventListener('click', function (e) {
+    const box = document.getElementById('console');
+    box.classList.toggle('folded');
+    e.target.textContent = box.classList.contains('folded') ? '展开' : '收起';
+  });
+
+  let toastTimer = null;
+  function toast(text) {
+    const el = document.getElementById('toast');
+    el.textContent = text;
+    el.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('on'); }, 1400);
+  }
+
+  // 启动
+  setState('expanded');
+})();
+</script>
+</body>
+</html>

@@ -49,7 +49,7 @@ async function currentNotification(db: D1Database, row: NotificationRow, tasks: 
     task.bindingVersion === row.binding_version && patrolTaskKey(task) === payload.taskKey);
 }
 
-export async function handleEggBotBridge(request: Request, env: Env, now = Date.now()): Promise<Response> {
+export async function handleEggBotBridge(request: Request, env: Env, now = Date.now(), fetcher: typeof fetch = fetch): Promise<Response> {
   const secret = env.EGG_BOT_BRIDGE_TOKEN;
   const provided = request.headers.get('Authorization') ?? '';
   if (!secret || secret.length < 24 || await sha256Hex(provided) !== await sha256Hex(`Bearer ${secret}`)) return invalid(401, '机器人凭据无效');
@@ -57,7 +57,12 @@ export async function handleEggBotBridge(request: Request, env: Env, now = Date.
   const action = new URL(request.url).pathname.split('/').at(-1);
   const input = await body(request);
   if (!input) return invalid(400, '参数无效');
-  if (action === 'tick') return json({ ok: true, ...await runEggPatrol(env, now) }, 200, null);
+  if (action === 'tick') {
+    const force = input.force === true || input.force === '1';
+    // 强刷只在内测部署生效（正式部署 CF_PAGES_BRANCH=main）
+    if (force && env.CF_PAGES_BRANCH !== 'test') return invalid(403, '强制巡查仅内测可用');
+    return json({ ok: true, ...await runEggPatrol(env, now, fetcher, force) }, 200, null);
+  }
   if (action === 'redeem') {
     if (typeof input.code !== 'string' || input.code.length > 64 || !validId(input.qqGroupId) || !validId(input.botId) || !validId(input.operatorQq)) return invalid(400, '接入参数无效');
     const codeHash = await sha256Hex(input.code.replace(/[-\s]/g, '').toUpperCase());

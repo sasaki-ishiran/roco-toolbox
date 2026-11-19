@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="zh-Hans-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>补全计划 · 母本配窝建议（预览）</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #f1f5f9; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { padding: 20px 16px 32px; }
+  h1 { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
+  .lede { margin: 0; max-width: 760px; font-size: 12px; line-height: 1.8; color: #64748b; }
+  .lede b { color: #0f766e; }
+  .rules { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 18px; }
+  .rule { border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; padding: 4px 9px; font-size: 11px; color: #475569; }
+  .stage { display: flex; align-items: flex-start; gap: 28px; flex-wrap: wrap; }
+  .device { background: #0f172a; border-radius: 26px; padding: 8px; box-shadow: 0 18px 40px rgba(15, 23, 42, .18); }
+  .device .label { margin: 2px 0 6px; text-align: center; font-size: 10px; letter-spacing: .04em; color: #94a3b8; }
+  .screen { background: #f1f5f9; border-radius: 19px; overflow: hidden; }
+  .screen-inner { padding: 12px; }
+
+  /* —— 卡片本体（与看板现有视觉同一套） —— */
+  .card { border-radius: 16px; background: #fff; padding: 16px; box-shadow: 0 1px 3px rgba(15, 23, 42, .08); }
+  .card h2 { margin: 0; font-size: 13px; font-weight: 500; color: #64748b; }
+  .gap-line { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: #475569; }
+  .gap-line .acc { color: #334155; font-weight: 500; }
+  .gap-line b { color: #e11d48; }
+  .gap-note { display: block; margin-top: 2px; font-size: 11px; color: #94a3b8; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .pill { border-radius: 999px; padding: 2px 8px; font-size: 11px; line-height: 1.5; }
+  .pill b { font-weight: 700; }
+  .p100 { background: #ecfdf5; color: #047857; }
+  .p60 { background: #f0f9ff; color: #0369a1; }
+  .p30 { background: #f1f5f9; color: #475569; }
+  .pdual { background: #f5f3ff; color: #6d28d9; }
+  .pmom { background: #fffbeb; color: #b45309; }
+  .ptask { background: #f0f9ff; color: #0369a1; }
+
+  .tabs { display: flex; gap: 6px; margin: 8px -4px 6px; padding: 0 4px 4px; overflow-x: auto; }
+  .tab { flex-shrink: 0; border: 0; border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 500; background: #f1f5f9; color: #475569; }
+  .tab.on { background: #059669; color: #fff; }
+  .tab .n { margin-left: 4px; font-size: 10px; color: #94a3b8; }
+  .tab.on .n { color: #a7f3d0; }
+  .acc-title { margin: 2px 0 6px; font-size: 13px; font-weight: 500; color: #334155; }
+  .acc-title .small { font-size: 11px; font-weight: 400; color: #64748b; }
+  .acc-title .small b { color: #e11d48; }
+
+  /* 配方行：一对 = 两张背包卡 */
+  .pair { border-left: 4px solid #059669; border-radius: 12px; background: #f8fafc; padding: 8px; }
+  .pair-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .dot { width: 8px; height: 8px; border-radius: 999px; background: #059669; flex-shrink: 0; }
+  .tier { border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 500; line-height: 1.2; color: #fff; background: #059669; }
+  .tier.gray { background: #94a3b8; }
+  .tag { border-radius: 4px; padding: 2px 6px; font-size: 10px; line-height: 1.2; }
+  .tag.gray { background: #f1f5f9; color: #475569; }
+  .tag.violet { background: #f5f3ff; color: #6d28d9; }
+  .tag.sky { background: #f0f9ff; color: #0369a1; }
+  .tag.amber { background: #fffbeb; color: #b45309; font-weight: 500; }
+  .tag.green { background: #ecfdf5; color: #047857; }
+  .tag.rose { background: #fff1f2; color: #be123c; }
+  .tag.muted { color: #94a3b8; font-size: 10px; padding: 2px 0; }
+  .pair-cards { display: grid; gap: 4px; margin-top: 6px; }
+  .pair-cards.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .petcard { position: relative; height: 124px; overflow: hidden; border-radius: 12px; border: 1px solid #6ee7b7; background: #ecfdf5; padding: 6px; box-shadow: 0 1px 2px rgba(15, 23, 42, .06); }
+  .petcard .no { position: absolute; left: 6px; top: 6px; font-size: 9px; line-height: 12px; font-weight: 600; color: #64748b; }
+  .petcard .groups { position: absolute; left: 6px; top: 19px; display: flex; flex-direction: column; gap: 1px; max-width: 58%; }
+  .petcard .g { border-radius: 3px; padding: 0 3px; font-size: 9px; line-height: 12px; background: #e0f2fe; color: #075985; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .petcard .g.done { background: #d1fae5; color: #047857; font-weight: 500; }
+  .petcard .medals { position: absolute; left: 6px; top: 47px; display: flex; gap: 3px; }
+  .petcard .medals img { width: 14px; height: 14px; object-fit: contain; filter: drop-shadow(0 1px 1px rgba(15, 23, 42, .12)); }
+  .petcard .ava { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: 64px; height: 64px; object-fit: contain; }
+  .petcard .ava-fb { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 12px; background: #e2e8f0; color: #64748b; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; }
+  .petcard .name { position: absolute; left: 6px; right: 6px; top: 78px; margin: 0; font-size: 12px; line-height: 16px; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .petcard .box { position: absolute; left: 6px; right: 6px; top: 98px; margin: 0; font-size: 9px; line-height: 12px; text-align: center; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .petcard .right { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: 10px; line-height: 13px; color: #64748b; }
+  .petcard .right .nat { display: flex; align-items: center; gap: 2px; }
+  .petcard .gmark { display: inline-flex; width: 12px; height: 12px; align-items: center; justify-content: center; border-radius: 999px; font-size: 9px; line-height: 1; }
+  .petcard .g-f { background: #fce7f3; color: #db2777; }
+  .petcard .g-m { background: #e0f2fe; color: #0369a1; }
+  .petcard .natb { display: inline-flex; border-radius: 2px; background: #fef3c7; color: #78350f; padding: 0 3px; font-size: 10px; line-height: 12px; font-weight: 500; white-space: nowrap; }
+
+  .pair-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 11px; }
+  .pair-foot .left { min-width: 0; color: #b45309; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pair-foot .val { flex-shrink: 0; font-weight: 600; color: #0f766e; }
+  .pair-note { margin: 3px 0 0; font-size: 10px; line-height: 1.5; color: #94a3b8; }
+  .pair-note b { color: #b45309; font-weight: 600; }
+
+  /* 母本配窝：和种公配对区分开 */
+  .mom-section { margin-top: 12px; border-top: 1px dashed #e2e8f0; padding-top: 10px; }
+  .mom-head { display: flex; align-items: center; gap: 6px; }
+  .mom-head h3 { margin: 0; font-size: 12px; font-weight: 600; color: #334155; }
+  .mom-count { border-radius: 999px; background: #fffbeb; color: #b45309; padding: 1px 7px; font-size: 10px; font-weight: 600; }
+  .mom-head .hint { margin-left: auto; font-size: 10px; color: #94a3b8; }
+  .mom-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .mom-item { border-left: 4px solid #f59e0b; border-radius: 12px; background: #fffbeb; padding: 8px; }
+  .mom-item .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .mom-item .why { margin: 4px 0 0; font-size: 10px; line-height: 1.5; color: #92400e; }
+  .gain { border-radius: 4px; padding: 2px 6px; font-size: 10px; line-height: 1.2; font-weight: 600; background: #fef3c7; color: #92400e; }
+  .gain.stud { background: #ccfbf1; color: #0f766e; }
+  .mom-item.transfer { border-left: 4px dashed #7dd3fc; background: #f0f9ff; }
+  .mom-item.transfer .why { color: #0369a1; }
+  .transfer-row { display: flex; align-items: center; gap: 4px; margin-top: 5px; font-size: 11px; color: #334155; flex-wrap: wrap; }
+  .transfer-row .who { font-weight: 600; color: #0369a1; }
+  .transfer-row .arrow { color: #94a3b8; }
+  .transfer-row .pct { font-size: 9px; color: #0369a1; }
+  .flow { margin: 5px 0 0; text-align: center; font-size: 11px; font-weight: 600; color: #0369a1; }
+  .nestmap { width: 100%; height: 62px; background: #f8fafc; border-radius: 8px; margin: 6px 0 2px; }
+  .map-note { margin: 0 0 4px; text-align: center; font-size: 10px; color: #b45309; }
+  .transfer-note { margin: 3px 0 0; font-size: 10px; line-height: 1.5; color: #64748b; }
+  .transfer-note b { color: #b45309; }
+  .task-btn { margin-top: 6px; border: 1px solid #bae6fd; border-radius: 8px; background: #fff; color: #0369a1; font-size: 11px; font-weight: 500; padding: 4px 9px; }
+
+  .delegated { margin-top: 6px; border: 1px dashed #bae6fd; border-radius: 10px; background: #f0f9ff; color: #075985; padding: 6px 10px; font-size: 11px; display: flex; justify-content: space-between; gap: 8px; }
+
+  .foot-note { margin: 18px 0 0; max-width: 760px; font-size: 11px; line-height: 1.8; color: #64748b; }
+  .foot-note code { background: #e2e8f0; border-radius: 4px; padding: 0 4px; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>补全计划 · 母本配窝（新增段）</h1>
+  <p class="lede">
+    现状：补全计划只排「补种公」的线，母本缺口不在评分里，也没有按号给建议。
+    本稿在**看板补全计划卡**里加一段「母本配窝」：本号能配的就地排，配不出的走跨号传蛋；
+    <b>未收集母本和种公是同一个精灵时，一窝同时记母本 + 种公两份收益</b>，排在同档前面。
+    母本进度仍是全设备合并（顶部「母本全收集」卡不变）。跨号母本待办并进「跨号补缺（种公 / 母本）」；每条取该源号最高概率的一对，按「对性母」概率（推荐性格 × 出母率）排，不再用固定的 15% / 30%。以下数字 / 精灵为示例。
+  </p>
+  <div class="rules">
+    <span class="rule">① 本号有目标档位母本、只是性格不对 → 用带推荐性格的公补；这条线占窝</span>
+    <span class="rule">② 同种（母本蛋血脉 = 种公蛋血脉）→ 母本 + 种公双收</span>
+    <span class="rule">③ 本号连母本都没有 → 别的号配蛋传过来，并进同一个跨号待办；按「对性母」实际概率排</span>
+  </div>
+
+  <div class="stage">
+    <!-- 375 -->
+    <div class="device" id="frame-375">
+      <p class="label">375 · 账号甲：本号内「同种 · 双收」</p>
+      <div class="screen" style="width:375px">
+        <div class="screen-inner">
+          <section class="card">
+            <h2>补全计划</h2>
+            <p class="gap-line">
+              每个号各差种公目标：<br>
+              <span class="acc">账号甲</span> <b>4</b><span style="color:#cbd5e1"> · </span><span class="acc">账号乙</span> <b>7</b>
+              
+            </p>
+            <div class="pills">
+              <span class="pill p100">学院100% <b>2</b></span>
+              <span class="pill p60">性格60% <b>2</b></span>
+              <span class="pill p30">性格30% <b>2</b></span>
+              <span class="pill pdual">双组 <b>1</b></span>
+              <span class="pill pmom">母本 <b>1</b></span>
+              <span class="pill ptask">需传蛋 <b>1</b></span>
+            </div>
+
+            <div class="tabs">
+              <button class="tab on">账号甲 <span class="n">2 对</span></button>
+              <button class="tab">账号乙 <span class="n">待补</span></button>
+            </div>
+            <p class="acc-title">账号甲 · 用 4/11 个窝 <span class="small">· 种公 2 + 母本 2 · 差 <b>4</b> 个种公目标</span></p>
+            <svg class="nestmap" viewBox="0 0 100 54" role="img" aria-label="摆位图示意：黄线是母本配窝">
+              <text x="6" y="17" font-size="5" fill="#64748b">种公</text>
+              <text x="6" y="43" font-size="5" fill="#b45309">母本</text>
+              <rect x="28" y="6" width="18" height="18" rx="3" fill="#ffffff" stroke="#cbd5e1"/>
+              <rect x="54" y="6" width="18" height="18" rx="3" fill="#ffffff" stroke="#cbd5e1"/>
+              <line x1="37" y1="15" x2="63" y2="15" stroke="#059669" stroke-width="1.2"/>
+              <rect x="28" y="32" width="18" height="18" rx="3" fill="#fffbeb" stroke="#f59e0b"/>
+              <rect x="54" y="32" width="18" height="18" rx="3" fill="#fffbeb" stroke="#f59e0b"/>
+              <line x1="37" y1="41" x2="63" y2="41" stroke="#f59e0b" stroke-width="1.2"/>
+            </svg>
+            <p class="map-note">摆位图示意：绿线 = 种公；黄线 = 母本（虚线 = 还没摆一起）</p>
+
+            <!-- 现有：种公配对（示意一条） -->
+            <div class="pair">
+              <div class="pair-head">
+                <span class="dot"></span>
+                <span class="tier">普通</span>
+                <span class="tag gray">性格 60%</span>
+                <span class="tag sky">出公 50%</span>
+                <span class="tag violet">双组</span>
+                <span class="tag muted">补</span>
+                <span class="tag gray">巨灵组</span>
+                <span class="tag gray">拟人组</span>
+                <span class="tag amber">胆小</span>
+                <span class="tag muted">种公</span>
+              </div>
+              <div class="pair-cards two">
+                <article class="petcard">
+                  <span class="no">No.393</span>
+                  <span class="groups">
+                    <span class="g">巨灵组</span>
+                    <span class="g done">拟人组</span>
+                  </span>
+                  <span class="medals">
+                    <img src="../../public/ui/medals/1001-max.png" alt="大块头">
+                    <img src="../../public/ui/medals/1026-max.png" alt="婉转声">
+                  </span>
+                  <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3754/icon.png" alt="">
+                  <h4 class="name">火豆丁</h4>
+                  <p class="box">盒子 8 第 5 位</p>
+                  <div class="right">
+                    <span class="nat"><i class="gmark g-f">♀</i><b class="natb">胆小</b></span>
+                    <span>100dB</span>
+                    <span>高 100%</span>
+                    <span>重 100%</span>
+                  </div>
+                </article>
+                <article class="petcard">
+                  <span class="no">No.005</span>
+                  <span class="groups">
+                    <span class="g">魔力组</span>
+                    <span class="g">巨灵组</span>
+                  </span>
+                  <span class="medals">
+                    <img src="../../public/ui/medals/1001-max.png" alt="大块头">
+                    <img src="../../public/ui/medals/1026-max.png" alt="婉转声">
+                  </span>
+                  <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3003/icon.png" alt="">
+                  <h4 class="name">火花</h4>
+                  <p class="box">盒子 3 第 1 位</p>
+                  <div class="right">
+                    <span class="nat"><i class="gmark g-m">♂</i><b class="natb">胆小</b></span>
+                    <span>100dB</span>
+                    <span>高 100%</span>
+                    <span>重 100%</span>
+                  </div>
+                </article>
+              </div>
+              <div class="pair-foot">
+                <span class="left"></span>
+                <span class="val">期望 1.2</span>
+              </div>
+            </div>
+
+            <!-- 新增：母本配窝 -->
+            <div class="mom-section">
+              <div class="mom-head">
+                <h3>母本配窝</h3>
+                <span class="mom-count">未收集 1 · 可补 1</span>
+                <span class="hint">本号能配 · 占 2 窝</span>
+              </div>
+              <ul class="mom-list">
+                <li class="mom-item">
+                  <div class="head">
+                    <span class="dot" style="background:#f59e0b"></span>
+                    <span class="tag green">同种 · 双收</span>
+                    <span class="gain">母本 +0.15</span>
+                    <span class="gain stud">种公 +0.60</span>
+                    <span class="tag amber">踏实</span>
+                    <span class="tag gray">占 2 个窝</span>
+                  </div>
+                  <div class="pair-cards two">
+                    <article class="petcard">
+                      <span class="no">No.002</span>
+                      <span class="groups">
+                        <span class="g done">动物组</span>
+                        <span class="g">拟人组</span>
+                      </span>
+                      <span class="medals">
+                        <img src="../../public/ui/medals/1001-max.png" alt="大块头">
+                        <img src="../../public/ui/medals/1026-max.png" alt="婉转声">
+                      </span>
+                      <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3001/icon.png" alt="">
+                      <h4 class="name">喵喵</h4>
+                      <p class="box">盒子 12 第 8 位</p>
+                      <div class="right">
+                        <span class="nat"><i class="gmark g-f">♀</i><b class="natb">开朗</b></span>
+                        <span>100dB</span>
+                        <span>高 100%</span>
+                        <span>重 100%</span>
+                      </div>
+                    </article>
+                    <article class="petcard">
+                      <span class="no">No.002</span>
+                      <span class="groups">
+                        <span class="g done">动物组</span>
+                        <span class="g">拟人组</span>
+                      </span>
+                      <span class="medals">
+                        <img src="../../public/ui/medals/1001-max.png" alt="大块头">
+                        <img src="../../public/ui/medals/1026-max.png" alt="婉转声">
+                      </span>
+                      <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3001/icon.png" alt="">
+                      <h4 class="name">喵喵</h4>
+                      <p class="box">盒子 4 第 2 位</p>
+                      <div class="right">
+                        <span class="nat"><i class="gmark g-m">♂</i><b class="natb">踏实</b></span>
+                        <span>100dB</span>
+                        <span>高 100%</span>
+                        <span>重 100%</span>
+                      </div>
+                    </article>
+                  </div>
+                  <p class="why">母本不达标的是<b>性格</b>（开朗），不是体型 / 声音：这对能同时补「未收集母本」和「动物组 / 拟人组 踏实 种公」。</p>
+                  <div class="pair-foot">
+                    <span class="left">出母 50% × 推荐性格 30%</span>
+                    <span class="val">期望 0.75</span>
+                  </div>
+                  <p class="pair-note">同种配对：蛋是喵喵，母和公是同一个精灵；母本 +0.15、种公 +0.60，合计 0.75。这条线要占 2 个窝（公已经在种公方案里就只占 1 个）。</p>
+                </li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- 390 -->
+    <div class="device" id="frame-390">
+      <p class="label">390 · 账号乙：本号没有母本 → 跨号传蛋</p>
+      <div class="screen" style="width:390px">
+        <div class="screen-inner">
+          <section class="card">
+            <h2>补全计划</h2>
+            <p class="gap-line">
+              每个号各差种公目标：<br>
+              <span class="acc">账号甲</span> <b>4</b><span style="color:#cbd5e1"> · </span><span class="acc">账号乙</span> <b>7</b>
+              
+            </p>
+            <div class="pills">
+              <span class="pill p100">学院100% <b>2</b></span>
+              <span class="pill p60">性格60% <b>2</b></span>
+              <span class="pill p30">性格30% <b>2</b></span>
+              <span class="pill pdual">双组 <b>1</b></span>
+              <span class="pill pmom">母本 <b>1</b></span>
+              <span class="pill ptask">需传蛋 <b>2</b></span>
+            </div>
+
+            <div class="tabs">
+              <button class="tab">账号甲 <span class="n">2 对</span></button>
+              <button class="tab on">账号乙 <span class="n">1 对</span></button>
+            </div>
+            <p class="acc-title">账号乙 · 用 2/11 个窝 <span class="small">· 差 <b>7</b> 个种公目标</span></p>
+
+            <div class="pair">
+              <div class="pair-head">
+                <span class="dot" style="background:#0369a1"></span>
+                <span class="tier">普通</span>
+                <span class="tag gray">性格 60%</span>
+                <span class="tag sky">出公 50%</span>
+                <span class="tag violet">双组</span>
+                <span class="tag muted">补</span>
+                <span class="tag gray">巨灵组</span>
+                <span class="tag gray">拟人组</span>
+                <span class="tag amber">固执</span>
+                <span class="tag muted">种公</span>
+              </div>
+              <div class="pair-cards two">
+                <article class="petcard">
+                  <span class="no">No.393</span>
+                  <span class="groups">
+                    <span class="g">巨灵组</span>
+                    <span class="g done">拟人组</span>
+                  </span>
+                  <span class="medals">
+                    <img src="../../public/ui/medals/1001-max.png" alt="大块头">
+                    <img src="../../public/ui/medals/1026-max.png" alt="婉转声">
+                  </span>
+                  <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3754/icon.png" alt="">
+                  <h4 class="name">火豆丁</h4>
+                  <p class="box">盒子 8 第 5 位</p>
+                  <div class="right">
+                    <span class="nat"><i class="gmark g-f">♀</i><b class="natb">固执</b></span>
+                    <span>100dB</span>
+                    <span>高 100%</span>
+                    <span>重 100%</span>
+                  </div>
+                </article>
+                <article class="petcard">
+                  <span class="no">No.007</span>
+                  <span class="groups">
+                    <span class="g">巨灵组</span>
+                    <span class="g">魔力组</span>
+                  </span>
+                  <span class="medals">
+                    <img src="../../public/ui/medals/1001-max.png" alt="大块头">
+                    <img src="../../public/ui/medals/1026-max.png" alt="婉转声">
+                  </span>
+                  <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3006/icon.png" alt="">
+                  <h4 class="name">火神</h4>
+                  <p class="box">盒子 3 第 1 位</p>
+                  <div class="right">
+                    <span class="nat"><i class="gmark g-m">♂</i><b class="natb">固执</b></span>
+                    <span>100dB</span>
+                    <span>高 100%</span>
+                    <span>重 100%</span>
+                  </div>
+                </article>
+              </div>
+              <div class="pair-foot">
+                <span class="left"></span>
+                <span class="val">期望 1.2</span>
+              </div>
+            </div>
+
+            <div class="mom-section">
+              <div class="mom-head">
+                <h3>母本配窝</h3>
+                <span class="mom-count">未收集 1 · 可补 1</span>
+                <span class="hint">本号没有母本</span>
+              </div>
+              <ul class="mom-list">
+                <li class="mom-item transfer">
+                  <div class="head">
+                    <span class="dot" style="background:#0ea5e9"></span>
+                    <span class="tag sky">跨号 · 传蛋</span>
+                    <span class="tag green">同种可续配</span>
+                    <span class="tag amber">对性母 6%</span>
+                    <span class="tag gray">魔力组</span>
+                    <span class="tag gray">巨灵组</span>
+                  </div>
+                  <div class="pair-cards two">
+                    <article class="petcard">
+                      <span class="no">No.005</span>
+                      <span class="groups"><span class="g">魔力组</span><span class="g">巨灵组</span></span>
+                      <span class="medals">
+                        <img src="../../public/ui/medals/1001-max.png" alt="大块头">
+                        <img src="../../public/ui/medals/1026-max.png" alt="婉转声">
+                      </span>
+                      <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3003/icon.png" alt="">
+                      <h4 class="name">火花</h4>
+                      <p class="box">甲 · 盒子 2 第 4 位</p>
+                      <div class="right">
+                        <span class="nat"><i class="gmark g-f">♀</i><b class="natb">开朗</b></span>
+                        <span>100dB</span><span>高 100%</span><span>重 100%</span>
+                      </div>
+                    </article>
+                    <article class="petcard">
+                      <span class="no">No.007</span>
+                      <span class="groups"><span class="g">巨灵组</span><span class="g">魔力组</span></span>
+                      <span class="medals">
+                        <img src="../../public/ui/medals/1001-max.png" alt="大块头">
+                        <img src="../../public/ui/medals/1026-max.png" alt="婉转声">
+                      </span>
+                      <img class="ava" src="https://game.gtimg.cn/images/rocom/rocodata/jingling/3006/icon.png" alt="">
+                      <h4 class="name">火神</h4>
+                      <p class="box">甲 · 盒子 3 第 1 位</p>
+                      <div class="right">
+                        <span class="nat"><i class="gmark g-m">♂</i><b class="natb">固执</b></span>
+                        <span>100dB</span><span>高 100%</span><span>重 100%</span>
+                      </div>
+                    </article>
+                  </div>
+                  <p class="flow">账号甲 → 账号乙</p>
+                  <p class="transfer-note">
+                    蛋传过来孵好，和乙的 <b>火花 种公</b> 配窝（同一个精灵，到手就能续配）；
+                    火花开 8:2，<b>出母 20%</b>，约 5 颗蛋一只母。
+                  </p>
+                  <button class="task-btn">加入传蛋待办</button>
+                </li>
+                <p style="margin:10px 0 4px;font-size:11px;color:#94a3b8">跨号补缺（种公 / 母本）</p>
+                <li class="delegated">
+                  <span>魔力组 · 固执 · 大婉</span>
+                  <span>由 账号甲 出蛋，孵好传过来</span>
+                </li>
+                <li class="delegated" style="border-color:#fcd34d;background:#fffbeb;color:#92400e">
+                  <span><b>补母本</b> · 账号甲 → 账号乙 · 火花(开朗) × 火神(固执)</span>
+                  <span>对性母 6%</span>
+                </li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot-note">
+    计算口径（示例）：母本收益 = 出母率 × 子代拿到该蛋「推荐性格」的概率（公带 30% / 双方同性格 60%）；种公收益仍按现有
+    <code>期望 = 性格概率 × 组数 × 母方性别折算</code>。只有「体型 / 声音已达标、只差性格」的母本能在本号内补；
+    体型或声音不达标时换个公也补不回来，所以本号内不给线，只能跨号传蛋或换一只达标母本。
+  </p>
+</div>
+<script>
+  // 头像加载失败 → 首字占位（预览离线时也不出现破图）
+  document.querySelectorAll('.petcard .ava').forEach((img) => {
+    img.addEventListener('error', () => {
+      const fb = document.createElement('span');
+      fb.className = 'ava-fb';
+      fb.textContent = (img.closest('.petcard').querySelector('.name')?.textContent || '?').slice(0, 1);
+      img.replaceWith(fb);
+    });
+  });
+</script>
+</body>
+</html>

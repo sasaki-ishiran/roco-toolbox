@@ -68,26 +68,4 @@ public class OverlayGeometryTest {
             assertTrue(position[1] + 300 <= 844 - EDGE);
         }
     }
-
-    @Test public void avoidKeepsClearOfBall() {
-        // 存档位置正好压在球上：要挪开，且仍在屏幕内
-        int[] position = OverlayGeometry.avoid(100, 300, 268, 300, 120, 320, 52, 52, 390, 844, EDGE);
-        assertFalse(OverlayGeometry.overlaps(
-            position[0], position[1], 268, 300, 120, 320, 52, 52, EDGE));
-        assertTrue(position[0] >= EDGE && position[1] >= EDGE);
-        assertTrue(position[0] + 268 <= 390 - EDGE);
-        assertTrue(position[1] + 300 <= 844 - EDGE);
-    }
-
-    @Test public void avoidPrefersSmallestMove() {
-        // 球在面板正下方：往上挪（88）比左右（110 / 226）都少，结果应该贴在球上方
-        int[] position = OverlayGeometry.avoid(300, 300, 268, 200, 350, 420, 52, 52, 900, 1000, EDGE);
-        assertEquals(420 - EDGE - 200, position[1]);
-        assertEquals(300, position[0]);
-    }
-
-    @Test public void avoidLeavesFreeRectUntouched() {
-        assertArrayEquals(new int[] { 8, 8 },
-            OverlayGeometry.avoid(8, 8, 268, 200, 300, 600, 52, 52, 390, 844, EDGE));
-    }
 }

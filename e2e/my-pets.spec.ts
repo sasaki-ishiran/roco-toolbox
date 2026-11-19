@@ -1,4 +1,3 @@
-﻿import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 test('我的精灵页：卡片展示与标签叠加筛选', async ({ page }) => {
@@ -18,12 +17,12 @@ test('我的精灵页：卡片展示与标签叠加筛选', async ({ page }) => 
   await expect(page.getByText('鸭吉吉_等一等鸭')).toBeVisible();
   await expect(page.getByText('鸭吉吉 等一等鸭')).toHaveCount(0);
 
-  // 筛选区默认展开（2026-10-05 拍板）：维度是手风琴瓦片（第一行 性别/体型/声音）
+  // 筛选区默认展开（2026-10-05 拍板）：性别 / 体型 / 声音是常显行（2026-11-18 起不再是手风琴瓦片）
   await expect(page.getByTestId('pet-filters-toggle')).toHaveText(/筛选/);
-  await expect(page.getByTestId('filter-tile-gender')).toBeVisible();
+  await expect(page.getByTestId('filter-row-gender')).toBeVisible();
+  await expect(page.getByTestId('filter-row-body')).toBeVisible();
 
-  // 手风琴：展开「体型」→ 点「大块头」→ 只剩大块头精灵（点选项不自动收起，可连点多选）
-  await page.getByTestId('filter-tile-body').click();
+  // 点「大块头」→ 只剩大块头精灵（点选项不自动收起，可连点多选）
   await page.getByTestId('filter-opt-body-body:大块头').click();
   await expect(page.getByText('机械方方')).toBeVisible();
   await expect(page.getByText('鸭吉吉')).toHaveCount(0);
@@ -70,72 +69,62 @@ test('种公阵列：性格筛选决定阵列的列，清空后回到未选提�
   await expect(page.getByTestId('collection-kind-studs')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('stud-matrix')).toBeVisible();
 
-  // 筛收取在阵列右上角：切自选性格 → 勾「固执」→ 阵列出现「固执」列；取消 → 回到未选提示
-  await page.getByTestId('stud-matrix-filter-toggle').click();
-  await page.getByTestId('nature-mode-custom').click();
-  await page.getByTestId('custom-nature-固执').click();
+  // 2026-11-19：筛选常显、性格默认八大 → 阵列直接出「固执」列
+  await expect(page.getByTestId('nature-mode-eight')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('columnheader', { name: '固执' })).toBeVisible();
 
-  await page.getByTestId('custom-nature-固执').click();
+  // 切自选（预选八大，下拉默认收起）→ 点开 → 全部取消 → 回到未选提示；勾回「固执」列再出现
+  await page.getByTestId('nature-mode-custom').click();
+  await page.getByTestId('custom-nature-toggle').click();
+  await page.getByTestId('custom-nature-select-all').click();
   await expect(page.getByTestId('stud-matrix-empty')).toBeVisible();
+
+  await page.getByTestId('custom-nature-固执').click();
+  await expect(page.getByRole('columnheader', { name: '固执' })).toBeVisible();
 });
 
-test('母本页：链清单一链一行（按蛋组分区），搜索即答已收集/未收集，计划不误判已达成', async ({ page }) => {
+test('母本页：四列卡片；已收集点卡跳背包筛选，未收集点卡看怎么补，无计划入口', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles('src/domain/__fixtures__/backup-sample.json');
   await expect(page.getByText('还没有数据')).toHaveCount(0);
   await page.getByRole('button', { name: '收集', exact: true }).click();
-  await page.getByTestId('collection-kind-inventory').click();
   // 2026-11-01：页签是「收集 · 母本」的卡片按钮，不再是页内的「母本」文字按钮
   await page.getByTestId('collection-kind-mothers').click();
   await expect(page.getByTestId('collection-kind-mothers')).toHaveAttribute('aria-pressed', 'true');
 
-  // 链清单：一链一行（按蛋组分区），顶部给整体进度；默认停在「未收集」
+  // 链清单四列卡片，顶部给整体进度；默认停在「未收集」
   await expect(page.getByTestId('mother-chain-summary')).toContainText('共');
-  const rows = page.getByTestId('mother-chain-row');
-  expect(await rows.count()).toBeGreaterThan(10);
   await expect(page.getByTestId('mother-chain-filter-uncollected')).toHaveAttribute('aria-pressed', 'true');
 
-  // 开关切到「已收集」：机械方方（大块头 + 100dB 母）默认达标 = 已收集
+  // 「计划收集」整段与卡底「计划 / 已计划」按钮已移除（2026-11-20）
+  await expect(page.getByTestId('mother-plan')).toHaveCount(0);
+  await expect(page.getByTestId('mother-plan-toggle')).toHaveCount(0);
+
+  // 切「已收集」：机械方方（大块头 + 100dB 母）默认达标 = 已收集
   await page.getByTestId('mother-chain-filter-collected').click();
   await expect(page.getByTestId('mother-chain-filter-collected')).toHaveAttribute('aria-pressed', 'true');
-  const search = page.getByTestId('mother-search');
-  await search.fill('机械方方');
+  await page.getByTestId('mother-search').fill('机械方方');
+  const rows = page.getByTestId('mother-chain-row');
   await expect(rows).toHaveCount(1);
-  const row = rows.first();
-  await expect(row).toContainText('机械方方');
-  // 两行式：状态灯（绿）+ 精灵名 + 已收集 N 只；第二行是推荐性格 + 蛋组标签
-  await expect(row.getByTestId('mother-chain-status')).toHaveAttribute('data-status', 'collected');
-  await expect(row.getByTestId('mother-chain-detail')).toContainText('已收集');
-  await expect(row.getByTestId('mother-egg-group').first()).toBeVisible();
-  // 展开 → 显示实际母本及其信息（性格/分贝/体型/账号/盒子）
-  await row.getByTestId('mother-chain-expand').click();
-  const motherRow = row.getByTestId('mother-chain-mother');
-  await expect(motherRow).toContainText('机械方方');
-  await expect(motherRow).toContainText('100dB');
-  // 性格按是否命中推荐上色：推荐=翠绿(text-emerald-600)、非推荐=浅灰(text-slate-400)
-  await expect(motherRow.getByText('大胆', { exact: true })).toHaveClass(/text-(emerald-600|slate-400)/);
-  await row.getByTestId('mother-chain-expand').click();
-  await expect(row.getByTestId('mother-chain-mother')).toHaveCount(0);
+  await expect(rows.first()).toContainText('机械方方');
 
-  // 收窄达标条件（只留「小不点」）→ 同一颗蛋立刻变未收集：已从「已收集」里消失，切回「未收集」才看得到（灰灯）
-  await page.getByTestId('filter-tile-body').click();
-  await page.getByTestId('filter-opt-body-大块头').click();
-  await expect(rows).toHaveCount(0);
-  await page.getByTestId('mother-chain-filter-uncollected').click();
-  await expect(rows).toHaveCount(1);
-  await expect(rows.first().getByTestId('mother-chain-status')).toHaveAttribute('data-status', 'uncollected');
+  // 已收集卡没有「查看」按钮：点整卡跳精灵背包并带筛选
+  await expect(rows.first().getByTestId('mother-chain-open')).toHaveCount(0);
+  await rows.first().getByRole('button').click();
+  await expect(page.getByTestId('collection-kind-inventory')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('pet-name-search')).toHaveValue('机械方方');
 
-  // 点「计划」→ 进入计划收集；未达标不应显示「已达成」（噼啪鸟 bug 回归：旧实现用档位口径判定达成）
-  await rows.first().getByTestId('mother-plan-toggle').click();
-  const plan = page.getByTestId('mother-plan');
-  await expect(plan.getByTestId('mother-plan-row')).toHaveCount(1);
-  await expect(plan.getByTestId('mother-plan-done')).toHaveCount(0);
-  await plan.getByTestId('mother-plan-remove').click();
-  await expect(page.getByTestId('mother-plan')).toHaveCount(0);
+  // 回到母本切「未收集」，点未收集卡 → 看「怎么补」悬浮窗
+  await page.getByTestId('collection-kind-mothers').click();
+  await expect(page.getByTestId('mother-chain-filter-uncollected')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('mother-search').fill('');
+  await page.getByTestId('mother-chain-row').first().getByRole('button').click();
+  await expect(page.getByRole('dialog', { name: '怎么补' })).toBeVisible();
+  await page.getByTestId('gap-fill-close').click();
+  await expect(page.getByTestId('gap-fill-dialog')).toHaveCount(0);
 
   // 搜索不存在的名字 → 空态
-  await search.fill('不存在的名字XYZ');
+  await page.getByTestId('mother-search').fill('不存在的名字XYZ');
   await expect(page.getByTestId('mother-chain-empty')).toBeVisible();
 });
 
@@ -156,60 +145,9 @@ test('母本页：搜索支持进化链全员命中（搜同链其它形态名�
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('火花');
   // 推荐性格取「该蛋物种进化链的推荐」：排除首领形态后，火花链取火神 → 固执/开朗
-  await expect(rows.first().getByTestId('mother-rec-nature').first()).toBeVisible();
-  await expect(rows.first()).toContainText('固执');
-  await expect(rows.first()).toContainText('开朗');
-});
-
-test('分页：每页 20 只，不再整页渲染', async ({ page }) => {
-  const items = Array.from({ length: 500 }, (_, i) => ({
-    name: `测试精灵${i}`,
-    speciesPetId: 3001 + (i % 20),
-    gender: i % 2 === 0 ? '母' : '公',
-    nature: '固执',
-    voiceDb: 100,
-    medalBody: '大块头',
-    isShiny: false,
-    group: `盒子${String((i % 9) + 1).padStart(2, '0')}`,
-    boxNumber: (i % 9) + 1,
-    slotOrder: (i % 30) + 1,
-  }));
-  const fixture = {
-    meta: { type: 'hatch-backup', playerName: '压测账号', gameId: 1, exportedAt: '2026-09-26T00:00:00.000Z' },
-    collections: { petBackpack: { items }, eggInventory: { eggs: [] } },
-  };
-  mkdirSync('test-results', { recursive: true });
-  const fixturePath = 'test-results/perf-fixture.json';
-  writeFileSync(fixturePath, JSON.stringify(fixture), 'utf8');
-
-  await page.goto('/');
-  await page.getByTestId('import-input').setInputFiles(fixturePath);
-  await expect(page.getByText('还没有数据')).toHaveCount(0);
-  await page.getByRole('button', { name: '收集', exact: true }).click();
-  await page.getByTestId('collection-kind-inventory').click();
-
-  // 500 只 → 25 页，每页 20 张卡
-  await expect(page.getByTestId('page-indicator')).toHaveText('共 500 只 · 第 1 / 25 页（每页 20 只）');
-  await expect(page.locator('article')).toHaveCount(20);
-  const firstPageFirstCard = await page.locator('article').first().textContent();
-
-  await page.getByRole('button', { name: '下一页' }).click();
-  await expect(page.getByTestId('page-indicator')).toHaveText('共 500 只 · 第 2 / 25 页（每页 20 只）');
-  await expect(page.locator('article')).toHaveCount(20);
-  const secondPageFirstCard = await page.locator('article').first().textContent();
-  expect(secondPageFirstCard).not.toBe(firstPageFirstCard);
-
-  await page.getByRole('button', { name: '上一页' }).click();
-  await expect(page.getByTestId('page-indicator')).toHaveText('共 500 只 · 第 1 / 25 页（每页 20 只）');
-
-  // 每页档位可切换：50 → 10 页
-  await page.getByRole('button', { name: '50', exact: true }).click();
-  await expect(page.getByTestId('page-indicator')).toHaveText('共 500 只 · 第 1 / 10 页（每页 50 只）');
-  await expect(page.locator('article')).toHaveCount(50);
-
-  // 100 → 5 页
-  await page.getByRole('button', { name: '100', exact: true }).click();
-  await expect(page.getByTestId('page-indicator')).toHaveText('共 500 只 · 第 1 / 5 页（每页 100 只）');
+  await expect(rows.first().getByTestId('mother-card-natures')).toBeVisible();
+  await expect(rows.first().getByTestId('mother-card-natures')).toContainText('固执');
+  await expect(rows.first().getByTestId('mother-card-natures')).toContainText('开朗');
 });
 
 test('精灵背包搜索：按进化链全员命中，搜不到给空态', async ({ page }) => {
@@ -245,7 +183,7 @@ test('精灵背包搜索：按进化链全员命中，搜不到给空态', async
   await expect(page.getByText('火花')).toHaveCount(0);
 });
 
-test('账号同类取并集；标签数量随选择动态更新且为 0 时置灰', async ({ page }) => {
+test('账号同类取并集；大块头筛选与零命中档位置灰', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('import-input').setInputFiles([
     'src/domain/__fixtures__/backup-sample.json',
@@ -255,30 +193,18 @@ test('账号同类取并集；标签数量随选择动态更新且为 0 时置�
   await page.getByRole('button', { name: '收集', exact: true }).click();
   await page.getByTestId('collection-kind-inventory').click();
 
-  // 账号筛选在页面顶部 AccountFilterBar（2026-10-05 起默认展开，排除制：点 chip = 取消该账号）；
-  // 下方筛选面板不再有账号标签。
-  // 初始全选 6 只；排除「测试乙」→ 只剩测试甲 4 只
-  await page.getByTestId('account-chip-测试乙').click();
+  // 账号筛选在页面顶部 AccountFilterBar，点开面板后排除 / 选回账号（同类取并集，非交集）
+  await page.getByTestId('account-filter-summary').click();
+  await page.getByTestId('account-filter-测试乙').click();
   await expect(page.locator('article')).toHaveCount(4);
 
-  // 点回「测试乙」→ 并集 6 只（旧实现取交集会变成 0 只）
-  await page.getByTestId('account-chip-测试乙').click();
+  await page.getByTestId('account-filter-测试乙').click();
   await expect(page.locator('article')).toHaveCount(6);
 
-  // 取消两个账号（全排除）→ 0 只；再点「全选」回来，改选「大块头」
-  await page.getByTestId('account-filter-toggle-all').click(); // 全不选
-  await expect(page.locator('article')).toHaveCount(0);
-  await page.getByTestId('account-filter-toggle-all').click(); // 全选
-  await page.getByTestId('filter-tile-body').click();
+  // 改选「大块头」→ 6 只里 3 只大块头
   await page.getByTestId('filter-opt-body-body:大块头').click();
   await expect(page.locator('article')).toHaveCount(3);
 
-  // 性别选项带动态计数：点「体型」同时展开一个维度（手风琴互斥），开「性别」看公/母计数
-  await page.getByTestId('filter-tile-gender').click();
-  await expect(page.getByTestId('filter-opt-gender-gender:公')).toContainText('公 (2)');
-  await expect(page.getByTestId('filter-opt-gender-gender:母')).toContainText('母 (1)');
-
-  // 粗嗓门 0 计数置灰（在这个 fixture 里没有负分贝 = 不是粗嗓门）
-  await page.getByTestId('filter-tile-voice').click();
+  // 粗嗓门零命中 → 档位置灰（这个 fixture 里没有负分贝）
   await expect(page.getByTestId('filter-opt-voice-voice:粗嗓门')).toBeDisabled();
 });

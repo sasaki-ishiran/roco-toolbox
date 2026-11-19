@@ -75,7 +75,7 @@ test('首次进入看板自动弹一次；跳过后再进不再自动弹', async
   await expect(page.getByTestId('tour-root')).toHaveCount(0);
   await page.getByRole('button', { name: '看板', exact: true }).click();
   await expect(page.getByTestId('tour-root')).toBeVisible();
-  await expect(page.getByTestId('tour-title')).toHaveText('先定目标档位');
+  await expect(page.getByTestId('tour-title')).toHaveText('先定种公目标');
   await expect(page.getByTestId('tour-progress')).toHaveText('第 1 / 4 步');
   await expect(page.getByTestId('tour-spotlight')).toBeVisible();
 
@@ -133,7 +133,8 @@ test('家园段会真的切到「接单上窝」并框到接单内容', async ({
   await page.getByTestId('tour-next').click();
 
   await expect(page.getByTestId('tour-title')).toHaveText('接单上窝');
-  await expect(page.getByTestId('home-view-demands')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('home-title')).toHaveText('接单上窝');
+  await expect(page.getByTestId('home-view-nests')).toBeVisible();
   await expect(page.getByTestId('home-demand-placements')).toBeVisible();
   await expect(
     page.getByTestId('home-demand-row').or(page.getByTestId('home-demand-skip')).first(),

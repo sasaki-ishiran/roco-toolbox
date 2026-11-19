@@ -39,6 +39,6 @@ export async function readCaptureFile(file: File): Promise<unknown> {
     return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
   } catch {
     // JSON.parse 的 SyntaxError 是英文原文，直接透出用户看不懂；导入页只显示 message
-    throw new Error('文件不是有效的 JSON 备份：请确认选的是抓包文件（.pcap）或工具箱导出的 JSON');
+    throw new Error('文件不是有效的 JSON 备份：请确认选的是抓包文件（.pcap）或小布助手导出的 JSON');
   }
 }

@@ -8,9 +8,13 @@
  *   GET  /api/health
  *   POST /api/event                     埋点（匿名 deviceId 即可）
  *   GET  /api/stats?days=7&exclude=id  看板数据（账号口径；exclude 剔掉测试号；令牌走 Authorization 头）
- *   POST /api/auth/register             开号（返回一次性恢复码 + 令牌）
- *   POST /api/auth/recover              用恢复码换令牌（换手机）
- *   POST /api/auth/rotate               重新生成恢复码（需登录）
+ *   POST /api/auth/signup               注册（用户名 + 密码）
+ *   POST /api/auth/login                登录（用户名 + 密码换令牌）
+ *   POST /api/auth/setup                老账号补设用户名密码（需登录）
+ *   POST /api/auth/password             修改密码（需登录）
+ *   POST /api/auth/register             旧 APK 的开号（返回一次性恢复码 + 令牌）
+ *   POST /api/auth/recover              旧 APK 用恢复码换令牌
+ *   POST /api/auth/rotate               旧 APK 重新生成恢复码（需登录）
  *   POST /api/auth/logout               撤销当前令牌
  *   GET  /api/me                        账号信息（需登录）
  *   DELETE /api/account                 注销账号（清空该账号全部云端数据）
@@ -19,7 +23,18 @@
  *   GET  /api/mother-groups             我加入的母本共享小组（需登录，只含母本组）
  *   GET  /api/collection-groups         我加入的小组（母本组 / 种公组，需登录）
  */
-import { handleDeleteAccount, handleLogout, handleMe, handleRecover, handleRegister, handleRotate } from './auth';
+import {
+  handleChangePassword,
+  handleDeleteAccount,
+  handleLogin,
+  handleLogout,
+  handleMe,
+  handleRecover,
+  handleRegister,
+  handleRotate,
+  handleSetup,
+  handleSignup,
+} from './auth';
 import { handleCollectionGroups } from './collectionGroups';
 import { handleEggBotBridge } from './eggBotBridge';
 import { handleEvent, handleStats } from './events';
@@ -42,6 +57,10 @@ export async function route(request: Request, env: Env): Promise<Response> {
   if (pathname === '/api/stats' && method === 'GET') return handleStats(request, env);
   if (pathname === '/api/event' && method === 'POST') return handleEvent(request, env, origin);
 
+  if (pathname === '/api/auth/signup' && method === 'POST') return handleSignup(request, env, origin);
+  if (pathname === '/api/auth/login' && method === 'POST') return handleLogin(request, env, origin);
+  if (pathname === '/api/auth/setup' && method === 'POST') return handleSetup(request, env, origin);
+  if (pathname === '/api/auth/password' && method === 'POST') return handleChangePassword(request, env, origin);
   if (pathname === '/api/auth/register' && method === 'POST') return handleRegister(request, env, origin);
   if (pathname === '/api/auth/recover' && method === 'POST') return handleRecover(request, env, origin);
   if (pathname === '/api/auth/rotate' && method === 'POST') return handleRotate(request, env, origin);

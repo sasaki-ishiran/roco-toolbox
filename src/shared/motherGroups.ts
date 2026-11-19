@@ -10,24 +10,24 @@
 /**
  * 一期固定口径：母 + 大块头 + +100dB，不限制性格。
  *
- * v2（2026-10-26）：合格判定加入身高极端值；2026-10-28 进一步改为
- * 「身高 100% / 0% 且体重 ≥95% / ≤5% 同时满足」。
+ * v2（2026-10-26）：合格判定加入身高极端值；2026-10-28 进一步要求体重阈值。
+ * v3（2026-11-17）：无体型奖牌时，身高正好 100% / 0% 单独等效对应体型。
  * 判据变了就必须换版本：旧摘要按旧阈值算出的产线不能再当成可比，
  * 否则组内会把实际已有的资源当成「已确认缺口」。旧摘要统一显示「需更新」。
  */
-export const MOTHER_CRITERIA_ID = 'female-huge-voice100-v2' as const;
+export const MOTHER_CRITERIA_ID = 'female-huge-voice100-v3' as const;
 
 /**
- * 口径标识是稳定字符串：一期固定值 + 二期自选的 `mother-v2-<8hex>`。
+ * 口径标识是稳定字符串：一期固定值 + 二期自选的 `mother-v3-<8hex>`。
  */
 export type MotherCriteriaId = string;
 
 /**
  * 母本资源的口径版本（2026-10-29 代码审查 B2-H01）。
  *
+ * - v4（2026-11-17）：无体型奖牌时，身高 100% / 0% 单独等效对应体型；
+ * - v3（2026-10-29）：产线档位依赖目标模式（追满分要 ±100、追双牌 ≥96），模式编进 criteriaId；
  * - v2（2026-10-28 晚）：合格体型改为「身高 100% + 体重 ≥95%」同时满足，产线会因此变化；
- * - v3（2026-10-29）：产线档位依赖目标模式（追满分要 ±100、追双牌 ≥96），模式必须跟着摘要走，
- *   否则组长切换模式后组内会混用两种产线口径。
  *
  * D1 没有 mode 列、本轮也不改迁移，所以把模式编进 criteriaId：服务端原样存储，客户端
  * `isMotherResourceComparable` 用「期望 criteriaId」比较，切模式后全员自动变成「需更新」。
@@ -35,7 +35,7 @@ export type MotherCriteriaId = string;
 export type MotherResourceMode = 'perfect' | 'medal';
 
 export const motherResourceCriteriaIdOf = (mode: MotherResourceMode): MotherCriteriaId =>
-  mode === 'medal' ? 'all-mothers-v3-medal' : 'all-mothers-v3-perfect';
+  mode === 'medal' ? 'all-mothers-v4-medal' : 'all-mothers-v4-perfect';
 
 export const MOTHER_RESOURCE_SCHEMA_VERSION = 1 as const;
 

@@ -1,6 +1,7 @@
-import { bodyGradeOf } from '../shared/bodySize.js';
+import { breedingBodyGradeOf } from '../shared/bodySize.js';
 import type { DemandBody, DemandCriteria, DemandVoice } from '../shared/collectionGroups';
 import { isBreedableGroup } from './eggs';
+import { genderShareOf } from './genderRatio';
 import { matchesVoiceOption } from './petFilters';
 import type { AccountSnapshot } from './parseBackup';
 import { defaultEggNatures } from './recommendedNatures';
@@ -41,7 +42,7 @@ export interface DemandSupply {
 const accountKeyOfSnapshot = (snapshot: AccountSnapshot): string =>
   snapshot.accountKey ?? `uid:${snapshot.gameId}`;
 
-const bodyOfPet = (pet: OwnedPet): string => bodyGradeOf(pet);
+const bodyOfPet = (pet: OwnedPet): string => breedingBodyGradeOf(pet);
 
 /**
  * 体型口径是否命中（2026-11-01 新增满体重 / 零体重）：
@@ -276,6 +277,16 @@ export function pairOptionsForEgg(
     picked.push(option);
     if (picked.length >= cap) break;
   }
+  // 只有一只母本时，上面的限流会用不满名额（cap=3 只取 2 条），
+  // 后两只同样合法的公被静默丢掉；补位到 cap（2026-11-19）。
+  if (picked.length < cap) {
+    const seen = new Set(picked);
+    for (const option of options) {
+      if (seen.has(option)) continue;
+      picked.push(option);
+      if (picked.length >= cap) break;
+    }
+  }
   return picked;
 }
 
@@ -326,7 +337,7 @@ export interface StudHatchOption extends DemandPairOption {
   name: string;
   /** 这颗蛋的可配蛋组 id（双蛋组时有两个）。 */
   groupIds: number[];
-  /** 命中需求的整体概率 = 性格概率 × 性别概率（挑性别 50%）。 */
+  /** 命中需求的整体概率 = 性格概率 × 出目标性别的比例（按蛋物种性别比例，缺数据 5:5）。 */
   chance: number;
 }
 
@@ -358,9 +369,12 @@ export function studHatchOptions(
       entry.maleCapable === true &&
       (entry.eggGroups ?? []).some((group) => group === groupId && isBreedableGroup(group)),
   );
-  const genderFactor = demand.gender ? 0.5 : 1;
   const options: StudHatchOption[] = [];
   for (const egg of eggs) {
+    const genderFactor =
+      demand.gender === '公' || demand.gender === '母'
+        ? genderShareOf(egg, demand.gender)
+        : 1;
     const [best] = pairOptionsForEgg(
       snapshots,
       {

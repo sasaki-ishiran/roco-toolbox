@@ -32,7 +32,7 @@ describe('App', () => {
   test('首页显示看板标题', () => {
     presetFirstRunSeen();
     render(<App />);
-    expect(screen.getByRole('heading', { name: '洛克工具箱' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: '小布助手' })).toBeDefined();
   });
 
   test('顶部有手动刷新按钮（卡在旧缓存时的兜底）', () => {
@@ -102,7 +102,7 @@ describe('App', () => {
     });
     try {
       render(<App />);
-      expect(screen.getByRole('heading', { name: '洛克工具箱' })).toBeDefined();
+      expect(screen.getByRole('heading', { name: '小布助手' })).toBeDefined();
     } finally {
       spy.mockRestore();
     }

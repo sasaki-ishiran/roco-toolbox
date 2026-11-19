@@ -6,7 +6,7 @@
  *   1. 正式站（--branch main）只读：只有用户明确说「放量 / 发正式」时才允许部署，
  *      并且必须显式带 --approve-production，否则脚本直接中止。
  *   2. 部署前必须打印并核对 bundle 文件名与 SHA-256；可加 --expect-hash 做严格比对。
- *   3. 正式站 bundle 里不允许出现「收集计划」文案（那是内测批次的功能）；
+ *   3. 已下线功能的文案（如「收集计划」）不允许出现在任何通道的 bundle 里；
  *      凡是主线功能不该进正式的，都在这里加一条断言，不要靠记忆。
  *   4. 任何一条断言不通过，脚本以非 0 退出，不会调用 wrangler。
  *
@@ -66,7 +66,8 @@ const text = bundle.toString('utf8');
 
 const checks = [
   { name: '切服桥 RocoServer', ok: text.includes('RocoServer'), need: true },
-  { name: '内测批次文案「收集计划」', ok: text.includes('收集计划'), need: branch === 'test' },
+  // 收集计划已下线（2026-11-17 起 test 线不再带该功能），两个通道都不应再出现这四个字
+  { name: '已下线的「收集计划」文案', ok: !text.includes('收集计划'), need: true },
 ];
 
 // 正式清单校验（2026-11-11）：清单跟着 dist 一起发，所以每次发正式都必须确认

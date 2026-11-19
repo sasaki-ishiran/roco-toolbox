@@ -7,6 +7,8 @@
  * 攒批上报：满 20 条 / 每 15 秒 / 页面切到后台时各发一次；失败就留在队列里下次重试
  * （不影响任何功能，网络不通时静默丢弃）。
  */
+import { newUuid } from '../shared/uuid';
+
 const DEVICE_KEY = 'roco.deviceId';
 const OPT_OUT_KEY = 'roco.analyticsOff';
 const TOKEN_KEY = 'roco.deviceToken';
@@ -31,7 +33,7 @@ export function deviceId(): string {
   if (typeof window === 'undefined') return '';
   let id = window.localStorage.getItem(DEVICE_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = newUuid();
     window.localStorage.setItem(DEVICE_KEY, id);
   }
   return id;
