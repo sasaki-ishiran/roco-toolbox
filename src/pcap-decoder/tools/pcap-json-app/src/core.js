@@ -3096,6 +3096,7 @@ function buildItem(raw, gameId) {
   const voiceDb = firstSignedInt(raw, 93);
   const medalVoice = voiceMedal(voiceDb);
   const individualBonuses = protocolIndividualBonuses(raw);
+  const individualStats = individualBonuses.map((bonus) => bonus.name);
   const baseStats = protocolBaseStats(raw) || [];
   const currentWeightPercent = weightPercent(entry, weightKg);
   const shinyAvailable = Boolean(entry && entry.hasShiny);
@@ -3131,8 +3132,9 @@ function buildItem(raw, gameId) {
     weightKg,
     weightPercent: currentWeightPercent,
     weightPercentText: currentWeightPercent === null ? "" : `${currentWeightPercent}%`,
+    individualStats,
     individualBonuses,
-    individualText: individualBonuses.map((bonus) => bonus.name).join(" · "),
+    individualText: individualStats.join(" · "),
     medalBody: body.medal,
     medalVoice,
     voiceDb,

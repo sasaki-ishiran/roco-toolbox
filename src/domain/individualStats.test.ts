@@ -3,7 +3,7 @@ import {
   individualBonusesFromRawHex,
   individualBonusesOfItem,
   sanitizeIndividualBonuses,
-} from './individualBonuses';
+} from './individualStats';
 import { parseBackup } from './parseBackup';
 
 /**

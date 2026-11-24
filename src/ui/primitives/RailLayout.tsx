@@ -1,7 +1,12 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import './rail.css';
 
-/* 横屏三栏骨架：主区 + 可收起的功能列 + 最右纵向标题栏；竖屏不套这一层。 */
+/**
+ * 横屏三栏骨架（2026-11-22 从家园蛋仓抽出来，见 docs/设计系统/横屏布局规范）。
+ *
+ * 主区在左；功能列（搜索 + 条件）在右、可整列收起；纵向标题栏永远在最右。
+ * 竖屏不套这一层（调用方按 useLandscape 分支），保持原来的上下顺序。
+ */
 export interface RailTestIds {
   scope?: string;
   main?: string;
@@ -56,7 +61,10 @@ export function RailLayout({
 export interface RailAsideProps {
   /** 页面标题（只用于标题栏的 aria-label；是否画出来见 hideTitle） */
   title: string;
-  /** 不画页面标题（页名由左侧页签表达），标题仍留给 aria-label。 */
+  /**
+   * 不画页面标题（2026-11-22 用户口径：「我的」「换蛋」的页名由左侧页签表达，
+   * 右侧栏不再重复）。标题仍留给 aria-label。
+   */
   hideTitle?: boolean;
   /** 折叠开关；不传 = 这页没有可收起的列 */
   collapse?: { collapsed: boolean; toggle: () => void };
@@ -64,12 +72,14 @@ export interface RailAsideProps {
   back?: { label: string; onClick: () => void };
   /** 标题下方追加的内容（分区导航等） */
   children?: ReactNode;
+  /** 新手引导锚点（data-tour）：横屏把顶栏收进标题栏的页，锚点跟着搬过来 */
+  tour?: string;
   testIds?: RailTestIds;
 }
 
-export function RailAside({ title, hideTitle = false, collapse, back, children, testIds }: RailAsideProps) {
+export function RailAside({ title, hideTitle = false, collapse, back, children, tour, testIds }: RailAsideProps) {
   return (
-    <aside className="rail-aside" data-testid={testIds?.aside} aria-label={`${title}标题栏`}>
+    <aside className="rail-aside" data-testid={testIds?.aside} data-tour={tour} aria-label={`${title}标题栏`}>
       {back ? (
         <button
           type="button"
@@ -159,7 +169,10 @@ export function saveRailCollapsed(key: string, collapsed: boolean): void {
   }
 }
 
-/* 折叠偏好按设备存 localStorage，不跟账号、不进云同步。 */
+/**
+ * 折叠偏好按设备存（`localStorage`），不跟账号、不进云同步。
+ * 键由页面给：`roco.eggStockRailCollapsed` / `roco.swapRailCollapsed`。
+ */
 export function useRailCollapsed(key: string): { collapsed: boolean; toggle: () => void } {
   const [collapsed, setCollapsed] = useState(() => readRailCollapsed(key));
   const toggle = useCallback(() => {

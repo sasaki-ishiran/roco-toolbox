@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { Profile } from './Profile';
 import type { ProfileSection } from './navigation';
@@ -180,5 +180,68 @@ describe('Profile（我的）', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('Profile 横屏（2026-11-22 三栏）', () => {
+  const original = window.matchMedia;
+  const setOrientation = (landscape: boolean) => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('landscape') ? landscape : false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+  };
+  afterEach(() => {
+    if (original) window.matchMedia = original;
+    else delete (window as unknown as { matchMedia?: typeof window.matchMedia }).matchMedia;
+  });
+
+  test('分区与游戏数据子视图移进右侧纵向标题栏，正文不再占顶部一排', () => {
+    setOrientation(true);
+    const onNavigate = vi.fn();
+    render(<Profile section="data" returnToGroups={false} onNavigate={onNavigate} />);
+
+    const rail = screen.getByTestId('profile-rail');
+    // 页名由左侧页签表达，右侧栏不再重复（2026-11-22 用户口径）
+    expect(within(rail).queryByTestId('profile-rail-title')).toBeNull();
+    expect(rail).toHaveAttribute('aria-label', '我的标题栏');
+    // 三个分区在标题栏里都是一行两个字
+    expect(within(rail).getByTestId('profile-section-groups')).toHaveTextContent('小组');
+    expect(within(rail).getByTestId('profile-section-identity')).toHaveTextContent('身份');
+    expect(within(rail).getByTestId('profile-section-data')).toHaveTextContent('数据');
+    expect(within(rail).getByTestId('profile-section-data')).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(within(rail).getByTestId('profile-section-identity'));
+    expect(onNavigate).toHaveBeenCalledWith({ type: 'open-profile', section: 'identity' });
+
+    // 游戏数据下的「导入 / 附近」也在标题栏，正文不再出现顶部切换
+    expect(within(rail).getByTestId('data-view-import')).toHaveTextContent('导入');
+    fireEvent.click(within(rail).getByTestId('data-view-nearby'));
+    expect(onNavigate).toHaveBeenCalledWith({ type: 'tab', page: 'nearby' });
+    expect(screen.getByTestId('import-input')).toBeTruthy();
+  });
+
+  test('从小组返回「我的」时，返回动作并入标题栏', () => {
+    setOrientation(true);
+    const onNavigate = vi.fn();
+    render(<Profile section="identity" returnToGroups onNavigate={onNavigate} />);
+
+    fireEvent.click(screen.getByTestId('profile-rail-back'));
+    expect(onNavigate).toHaveBeenCalledWith({ type: 'open-groups' });
+    expect(screen.queryByTestId('profile-return-groups')).toBeNull();
+  });
+
+  test('竖屏不出现标题栏，分区仍在页面顶部', () => {
+    setOrientation(false);
+    render(<Profile section="data" returnToGroups={false} onNavigate={vi.fn()} />);
+    expect(screen.queryByTestId('profile-rail')).toBeNull();
+    expect(screen.getByTestId('profile-section-groups')).toHaveTextContent('小组');
+    expect(screen.getByTestId('data-view-import')).toHaveTextContent('导入');
   });
 });

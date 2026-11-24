@@ -1,0 +1,7 @@
+/* 蛋详情里的实际父母：用配窝精灵卡，但固定卡宽、auto-fill 排几列，不随栏宽拉伸 */
+.egg-parent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 6.5rem);
+  gap: 0.25rem;
+  justify-content: start;
+}

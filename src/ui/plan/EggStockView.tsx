@@ -30,23 +30,41 @@ function forgetEggStockView(): void {
 }
 
 /** 空态在横屏下复用蛋仓的纵向标题栏（竖屏顶栏有「返回家园」，不重复给）。 */
-function EmptyStockState({ testId, reason, action, onBack }: {
+function EmptyStockState({ testId, reason, action, onBack, hideReason = false }: {
   testId: string;
   reason: string;
   action?: { label: string; onClick: () => void };
   onBack?: () => void;
+  /** 横屏只留动作（未登录这种一句话说得清的空态，不再占两行说明） */
+  hideReason?: boolean;
 }) {
   const landscape = useLandscape();
+  /** 横屏说明只占 16rem、按钮 1/3 宽；hideReason 的空态把按钮居中。 */
+  const hideText = landscape && hideReason;
   const body = (
-    <div className="flex flex-col gap-2" data-testid={testId}>
-      <p className="text-xs text-slate-600">{reason}</p>
-      {action ? <Button size="sm" onClick={action.onClick}>{action.label}</Button> : null}
+    <div
+      className={`flex flex-col gap-2${landscape ? (hideText ? ' items-center' : ' items-start') : ''}`}
+      data-testid={testId}
+    >
+      {hideText ? null : (
+        <p className={`text-xs text-slate-600${landscape ? ' max-w-[16rem]' : ''}`}>{reason}</p>
+      )}
+      {action ? (
+        <Button
+          size="sm"
+          className={landscape ? `w-1/3${hideText ? ' mx-auto' : ''}` : undefined}
+          onClick={action.onClick}
+        >
+          {action.label}
+        </Button>
+      ) : null}
     </div>
   );
   if (!landscape || !onBack) return body;
   return (
     <div className="egg-stock-layout" data-collapsed="true">
-      <div className="egg-stock-main flex min-w-0 flex-col gap-2">{body}</div>
+      {/* 横屏空态（未登录 / 未入组 / 读失败）：卡片在整个内容区正中，不贴着左上角 */}
+      <div className="egg-stock-main stock-empty-center flex min-w-0 flex-col gap-2">{body}</div>
       <aside className="egg-stock-rail" data-testid="egg-stock-rail" aria-label="蛋仓标题栏">
         <button
           type="button"
@@ -187,6 +205,7 @@ export function EggStockView({ snapshots, onGoGroups, onGoAccount, onBack, heade
           reason="蛋仓跟着账号走：先登录，蛋仓才会和组内广场那边对得上。"
           action={onGoAccount ? { label: '去登录', onClick: onGoAccount } : undefined}
           onBack={onBack}
+          hideReason
         />
       ) : groupId ? (
         <StockBody

@@ -199,6 +199,20 @@ test('横屏 + 未登录：空态也能回到家园', () => {
   expect(onBack).toHaveBeenCalledTimes(1);
 });
 
+test('横屏未登录空态：不留说明，只放居中的去登录按钮', () => {
+  setLandscape(true);
+  window.localStorage.removeItem('roco.accountId');
+  render(<EggStockView snapshots={[]} onGoAccount={() => {}} onBack={() => {}} />);
+
+  const empty = screen.getByTestId('egg-stock-need-account');
+  // 2026-11-24 用户口径：文案移除、按钮缩到 1/3 宽并居中
+  expect(empty.querySelector('p')).toBeNull();
+  expect(empty.className).toContain('items-center');
+  const button = within(empty).getByRole('button', { name: '去登录' });
+  expect(button.className).toContain('w-1/3');
+  expect(button.className).toContain('mx-auto');
+});
+
 test('横屏 + 服务端没有小组：空态也能回到家园', async () => {
   setLandscape(true);
   vi.mocked(motherGroupsApi.listMotherGroups).mockResolvedValue([]);

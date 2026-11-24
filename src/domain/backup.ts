@@ -1,6 +1,6 @@
 import type { TargetMode } from './petFilters';
 import { accountKeyOf, parseHomeSnapshot, type AccountSnapshot } from './parseBackup';
-import { individualBonusesOfItem } from './individualBonuses';
+import { individualBonusesOfItem } from './individualStats';
 import type { OwnedPet } from './types';
 
 type UnknownRecord = Record<string, unknown>;

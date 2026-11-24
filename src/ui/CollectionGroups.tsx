@@ -8,6 +8,8 @@ import {
 } from '../shared/collectionGroups';
 import { motherResourceCriteriaIdOf } from '../shared/motherGroups';
 import { useNatureOverrides } from './natureOverrideStore';
+import { useLandscape } from './useWideLandscape';
+import { RailLayout, RailAside } from './primitives/RailLayout';
 import { CollectionGroupSetup } from './CollectionGroupSetup';
 import { useCollectionGroups } from './useCollectionGroups';
 import { MotherGroupMembers } from './MotherGroupMembers';
@@ -68,6 +70,7 @@ export function CollectionGroups({
   onGoProfileGroups,
   embedded = false,
 }: CollectionGroupsProps) {
+  const landscape = useLandscape();
   const { snapshots } = useSnapshots();
   const summary = useCollectionSummary();
   const personalNatures = useNatureOverrides();
@@ -516,7 +519,16 @@ export function CollectionGroups({
             />
           </div>
         )
-      ) : inGroup || groupLoading ? null : (
+      ) : inGroup || groupLoading ? null : variant === 'feed' && landscape ? (
+        // 换蛋页的空态（未登录 / 未入组）也保留右侧纵向标题栏，页名不因为没数据消失
+        <RailLayout
+          collapsed={false}
+          aside={<RailAside title="换蛋" hideTitle testIds={{ aside: 'groups-rail', title: 'groups-rail-title' }} />}
+          testIds={{ scope: 'groups-rail-scope', main: 'groups-rail-main' }}
+        >
+          <GroupFeedHint loggedIn={hook.accountId != null} onGo={() => onGoProfileGroups?.()} />
+        </RailLayout>
+      ) : (
         <GroupFeedHint loggedIn={hook.accountId != null} onGo={() => onGoProfileGroups?.()} />
       )}
       {leaveConfirmation}

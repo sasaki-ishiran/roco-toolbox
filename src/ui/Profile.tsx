@@ -15,6 +15,8 @@ import { serverEnvOf } from './serverEnv';
 import { StateNotice } from './primitives/StateNotice';
 import { setSyncConflict, useSyncFeedback } from './syncNoticeStore';
 import { useSnapshots } from './useSnapshots';
+import { useLandscape } from './useWideLandscape';
+import { RailLayout, RailAside, RailNav, RailNavItem } from './primitives/RailLayout';
 
 export type ProfileDataView = 'import' | 'nearby';
 
@@ -41,6 +43,13 @@ const DATA_VIEWS = [
   { value: 'nearby', label: '附近' },
 ];
 
+/** 横屏右栏只放两字：小组 / 身份 / 数据（完整叫法走 aria-label / title）。 */
+const SECTION_SHORT: Record<ProfileSection, string> = {
+  groups: '小组',
+  identity: '身份',
+  data: '数据',
+};
+
 /** 内测入口：2 秒内连点版本号 5 次，在测试站 / 正式站之间互切 */
 const VERSION_TAPS = 5;
 const TAP_WINDOW_MS = 2000;
@@ -60,6 +69,8 @@ export function Profile({
   onDraftDirtyChange,
 }: ProfileProps) {
   // 导入后的自动上传冲突仍以 syncNoticeStore 为准，交给 AccountPanel 二选一
+  // 横屏三栏：分区 / 子视图挪到右边缘纵向标题栏，高度留给内容（2026-11-22 规范）
+  const landscape = useLandscape();
   const { conflict: autoConflict } = useSyncFeedback();
   // 入门卡只在「本机还没有任何导入数据」时出现：导入过一次就不再打扰（2026-11-01）
   const { snapshots, loaded } = useSnapshots();
@@ -118,17 +129,81 @@ export function Profile({
     </span>
   );
 
-  return (
-    <main className="mx-auto max-w-md space-y-3 p-4">
-      <SegmentedControl
-        label="我的分区"
-        value={section}
-        options={SECTIONS}
-        onValueChange={(next) =>
-          onNavigate({ type: 'open-profile', section: next as ProfileSection })
-        }
-        optionTestId={(value) => `profile-section-${value}`}
-      />
+  const sectionControl = (
+    <SegmentedControl
+      label="我的分区"
+      value={section}
+      options={SECTIONS}
+      onValueChange={(next) =>
+        onNavigate({ type: 'open-profile', section: next as ProfileSection })
+      }
+      optionTestId={(value) => `profile-section-${value}`}
+    />
+  );
+  const dataControl = section === 'data' ? (
+    <SegmentedControl
+      label="游戏数据视图"
+      value={dataView}
+      options={DATA_VIEWS}
+      onValueChange={(next) =>
+        next === 'nearby'
+          ? onNavigate({ type: 'tab', page: 'nearby' })
+          : onNavigate({ type: 'open-profile', section: 'data' })
+      }
+      optionTestId={(value) => `data-view-${value}`}
+    />
+  ) : null;
+  const rail = landscape ? (
+    <RailAside
+      title="我的"
+      hideTitle
+      back={
+        returnToGroups
+          ? { label: '返回小组', onClick: () => onNavigate({ type: 'open-groups' }) }
+          : undefined
+      }
+      testIds={{ aside: 'profile-rail', title: 'profile-rail-title', back: 'profile-rail-back' }}
+    >
+      <RailNav label="我的分区">
+        {SECTIONS.map((item) => (
+          <RailNavItem
+            key={item.value}
+            active={section === item.value}
+            title={item.label}
+            testId={`profile-section-${item.value}`}
+            onClick={() =>
+              onNavigate({ type: 'open-profile', section: item.value as ProfileSection })
+            }
+          >
+            {SECTION_SHORT[item.value as ProfileSection]}
+          </RailNavItem>
+        ))}
+      </RailNav>
+      {section === 'data' ? (
+        <RailNav label="游戏数据视图">
+          {DATA_VIEWS.map((item) => (
+            <RailNavItem
+              key={item.value}
+              active={dataView === item.value}
+              title={item.label}
+              testId={`data-view-${item.value}`}
+              onClick={() =>
+                item.value === 'nearby'
+                  ? onNavigate({ type: 'tab', page: 'nearby' })
+                  : onNavigate({ type: 'open-profile', section: 'data' })
+              }
+            >
+              {item.label}
+            </RailNavItem>
+          ))}
+        </RailNav>
+      ) : null}
+    </RailAside>
+  ) : null;
+
+  const content = (
+    <>
+      {!landscape ? sectionControl : null}
 
       {serverNotice ? (
         <p
@@ -140,7 +215,7 @@ export function Profile({
         </p>
       ) : null}
 
-      {returnToGroups ? (
+      {returnToGroups && !landscape ? (
         <Button
           variant="secondary"
           onClick={() => onNavigate({ type: 'open-groups' })}
@@ -177,17 +252,7 @@ export function Profile({
 
       {section === 'data' ? (
         <>
-          <SegmentedControl
-            label="游戏数据视图"
-            value={dataView}
-            options={DATA_VIEWS}
-            onValueChange={(next) =>
-              next === 'nearby'
-                ? onNavigate({ type: 'tab', page: 'nearby' })
-                : onNavigate({ type: 'open-profile', section: 'data' })
-            }
-            optionTestId={(value) => `data-view-${value}`}
-          />
+          {!landscape ? dataControl : null}
           {dataView === 'nearby' ? (
             <NearbyErrorBoundary>
               <Nearby embedded onNavigate={onNavigate} />
@@ -268,6 +333,22 @@ export function Profile({
         <span className="text-[10px] text-slate-300">版本 {__APP_BUILD__}</span>
         {updateSupported ? null : envBadge}
       </div>
+    </>
+  );
+
+  return (
+    <main className="mx-auto max-w-md space-y-3 p-4" data-testid="profile-page">
+      {landscape ? (
+        <RailLayout
+          collapsed={false}
+          aside={rail}
+          testIds={{ scope: 'profile-rail-scope', main: 'profile-main' }}
+        >
+          {content}
+        </RailLayout>
+      ) : (
+        content
+      )}
 
       {serverPanelOpen ? (
         <ServerAddressPanel onClose={() => setServerPanelOpen(false)} />

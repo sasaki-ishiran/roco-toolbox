@@ -56,6 +56,38 @@ describe('parseBackup', () => {
     expect(parsed.pets.map((pet) => pet.heightPercent)).toEqual([100, 0, 50, undefined, 100]);
   });
 
+  test('个体三维：读采集器导出的 individualBonuses；旧 JSON 从 rawFields 的 field 14 解出来', () => {
+    const rawHex = '0a023800120238081a023809220238002a0238003202380a';
+    const items = [
+      {
+        speciesPetId: 3200,
+        name: '机械方方',
+        individualBonuses: [
+          { name: '物攻', value: 8 },
+          { name: '生命', value: 9 },
+          { name: '速度', value: 10 },
+        ],
+      },
+      { speciesPetId: 3200, name: '机械方方', rawFields: { bytes: { '14': [rawHex] } } },
+      { speciesPetId: 3200, name: '机械方方' },
+    ];
+    const parsed = parseBackup(
+      { meta: { type: 'hatch-backup', gameId: 1001 }, collections: { petBackpack: { items } } },
+      'now',
+    );
+    expect(parsed.pets[0].individualBonuses).toEqual([
+      { name: '生命', value: 9 },
+      { name: '物攻', value: 8 },
+      { name: '速度', value: 10 },
+    ]);
+    expect(parsed.pets[1].individualBonuses).toEqual([
+      { name: '物攻', value: 8 },
+      { name: '魔攻', value: 9 },
+      { name: '速度', value: 10 },
+    ]);
+    expect(parsed.pets[2].individualBonuses).toBeUndefined();
+  });
+
   test('正常解析：账号名、精灵数、字段、蛋仓', () => {
     const snapshot = parseBackup(fixture, '2026-09-26T00:00:00.000Z');
     expect(snapshot.accountName).toBe('测试甲');

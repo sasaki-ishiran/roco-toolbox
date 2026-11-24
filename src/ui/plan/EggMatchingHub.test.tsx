@@ -202,24 +202,90 @@ describe('EggMatchingHub 横屏（2026-11-22 三栏）', () => {
     window.localStorage.clear();
   });
 
-  test('搜索收进右侧折叠栏，视角与页面入口进标题栏，收起后主区加宽', () => {
+  test('搜索与视图切换收进右侧折叠栏，收起后主区加宽且按设备记住', () => {
     setOrientation(true);
     render(<EggMatchingHub {...props} />);
+
     const rail = screen.getByTestId('egg-hub-rail');
+    // 页名由左侧页签表达，右侧栏不再重复（2026-11-22 用户口径）
     expect(within(rail).queryByTestId('egg-hub-rail-title')).toBeNull();
+    expect(rail).toHaveAttribute('aria-label', '换蛋标题栏');
+    // 我的收集 / 组内广场在标题栏里，不再占功能列
+    expect(within(rail).getByTestId('egg-hub-tab-mine')).toHaveTextContent('我的收集');
     expect(within(rail).getByTestId('egg-hub-tab-mine')).toHaveAttribute('aria-pressed', 'true');
     expect(within(rail).getByTestId('egg-hub-tab-square')).toHaveTextContent('组内广场');
     const filters = screen.getByTestId('egg-hub-filters');
+    // 视角与页面入口都在标题栏，功能列只留搜索与条件
     expect(within(filters).getByRole('searchbox')).toBeTruthy();
     expect(within(filters).queryByText('组内广场')).toBeNull();
+    expect(within(filters).queryByText('蛋仓')).toBeNull();
+    expect(within(rail).getByText('我的收集')).toBeTruthy();
+    expect(within(rail).getByText('组内广场')).toBeTruthy();
     expect(within(rail).getByTestId('egg-hub-page-stock')).toBeTruthy();
     expect(within(rail).getByTestId('egg-hub-page-tasks')).toBeTruthy();
+    // 需求卡留在主区，不跟筛选挤在一起
     expect(within(screen.getByTestId('egg-hub-main')).getByText('菊花梨')).toBeTruthy();
 
     fireEvent.click(within(rail).getByTestId('egg-hub-rail-toggle'));
     expect(screen.queryByTestId('egg-hub-filters')).toBeNull();
     expect(screen.getByTestId('egg-hub-scope')).toHaveAttribute('data-collapsed', 'true');
     expect(window.localStorage.getItem('roco.swapRailCollapsed')).toBe('1');
+    expect(within(screen.getByTestId('egg-hub-rail')).getByTestId('egg-hub-rail-toggle'))
+      .toHaveAttribute('aria-expanded', 'false');
 
+    // 收起筛选后仍能在标题栏切换视角
+    fireEvent.click(within(screen.getByTestId('egg-hub-rail')).getByTestId('egg-hub-tab-square'));
+    expect(within(screen.getByTestId('egg-hub-main')).getByText('组内需求')).toBeTruthy();
+    expect(within(screen.getByTestId('egg-hub-rail')).getByTestId('egg-hub-tab-square'))
+      .toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('我的收集不再写「想收」，去计划添加在搜索框下方', () => {
+    setOrientation(true);
+    const onGoPlan = vi.fn();
+    render(<EggMatchingHub {...props} onGoPlan={onGoPlan} />);
+
+    expect(screen.queryByText('想收')).toBeNull();
+    const filters = screen.getByTestId('egg-hub-filters');
+    fireEvent.click(within(filters).getByRole('button', { name: '去计划添加' }));
+    expect(onGoPlan).toHaveBeenCalledTimes(1);
+    // 不进右侧标题栏
+    expect(within(screen.getByTestId('egg-hub-rail')).queryByRole('button', { name: '去计划添加' })).toBeNull();
+
+    // 组内广场没有「去计划添加」这项动作
+    fireEvent.click(within(screen.getByTestId('egg-hub-rail')).getByTestId('egg-hub-tab-square'));
+    expect(within(screen.getByTestId('egg-hub-filters')).queryByRole('button', { name: '去计划添加' })).toBeNull();
+    expect(screen.getByText('组内需求')).toBeTruthy();
+  });
+
+  test('蛋仓与我的换蛋都从标题栏进入，且不是按钮样式', () => {
+    setOrientation(true);
+    render(<EggMatchingHub {...props} />);
+
+    const rail = screen.getByTestId('egg-hub-rail');
+    const stock = within(rail).getByTestId('egg-hub-page-stock');
+    const tasks = within(rail).getByTestId('egg-hub-page-tasks');
+    // 纯文本项：用统一的 rail-nav-item，不用按钮外框
+    expect(stock.className).toContain('rail-nav-item');
+    expect(tasks.className).toContain('rail-nav-item');
+    expect(within(rail).getByTestId('egg-hub-rail-toggle').className).toContain('rail-toggle');
+
+    fireEvent.click(tasks);
+    expect(screen.getByText('暂无进行中任务')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '‹ 返回' }));
+    expect(within(screen.getByTestId('egg-hub-rail')).getByTestId('egg-hub-page-stock')).toBeTruthy();
+  });
+
+  test('蛋仓子页沿用同一套标题栏，返回动作回到换蛋主区', () => {
+    setOrientation(true);
+    render(<EggMatchingHub {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /蛋仓/ }));
+    const stockRail = screen.getByTestId('egg-stock-rail');
+    expect(within(stockRail).getByTestId('egg-stock-rail-title')).toHaveTextContent('我的蛋仓');
+
+    fireEvent.click(within(stockRail).getByRole('button', { name: '返回换蛋' }));
+    expect(screen.getByTestId('egg-hub-rail')).toBeTruthy();
+    expect(screen.getByTestId('egg-hub-filters')).toBeTruthy();
   });
 });

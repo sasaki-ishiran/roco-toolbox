@@ -437,3 +437,54 @@ describe('家园页', () => {
     expect(screen.queryByTestId('home-pair-card-list')).toBeNull();
   });
 });
+
+describe('家园横屏（2026-11-24 右侧纵向标题栏）', () => {
+  const original = window.matchMedia;
+  const setOrientation = (landscape: boolean) => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('landscape') ? landscape : false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+  };
+  afterEach(() => {
+    if (original) window.matchMedia = original;
+    else delete (window as unknown as { matchMedia?: typeof window.matchMedia }).matchMedia;
+    window.localStorage.removeItem('roco.homeView');
+  });
+
+  test('账号 / 接单上窝 / 蛋仓进右侧标题栏，刷新家园留在主区标题行', () => {
+    setOrientation(true);
+    h.snapshots = [snapshotWithHome()];
+    render(<HomeLand />);
+
+    const rail = screen.getByTestId('home-rail');
+    // 顶栏整行让给内容：竖屏那排按钮不再出现
+    expect(screen.queryByTestId('home-header')).toBeNull();
+    expect(within(rail).getByTestId('home-account-summary')).toHaveTextContent('测试甲');
+    expect(within(rail).getByTestId('home-rail-demands')).toHaveTextContent('接单上窝');
+    expect(within(rail).getByTestId('home-rail-stock')).toHaveTextContent('蛋仓');
+    // 2026-11-24 用户口径：刷新家园留在家园页，不进右侧栏
+    expect(within(rail).queryByTestId('home-refresh')).toBeNull();
+    expect(screen.getByTestId('home-refresh')).toBeTruthy();
+    expect(screen.getByTestId('home-pair-cards')).toBeTruthy();
+  });
+
+  test('右侧标题栏的蛋仓入口仍是页内一屏，返回家园回到家园', () => {
+    setOrientation(true);
+    h.snapshots = [snapshotWithHome()];
+    render(<HomeLand />);
+
+    fireEvent.click(screen.getByTestId('home-rail-stock'));
+    expect(screen.getByTestId('home-page')).toHaveAttribute('data-view', 'stock');
+    expect(screen.getByTestId('home-title')).toHaveTextContent('我的蛋仓');
+
+    fireEvent.click(screen.getByTestId('egg-stock-rail-back'));
+    expect(screen.getByTestId('home-page')).toHaveAttribute('data-view', 'nests');
+  });
+});

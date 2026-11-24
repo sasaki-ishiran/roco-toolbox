@@ -1,5 +1,6 @@
 /* 横屏三栏骨架（2026-11-22）：主区 + 功能列 + 纵向标题栏。
-   RailLayout 自己 import；页面只负责主区 / 功能列内容，竖屏不生效。 */
+   由 RailLayout 自己 import；页面只负责主区 / 功能列内容。
+   竖屏不生效，调用方用 useLandscape() 决定是否渲染这一层。 */
 @media (orientation: landscape) {
   .rail-layout {
     display: grid;
@@ -61,20 +62,32 @@
   .rail-layout[data-has-filters="false"] .rail-aside,
   .rail-layout[data-collapsed="true"] .rail-aside { grid-column: 2; }
 
-  .rail-layout[data-has-filters="false"],
-  .rail-layout[data-collapsed="true"] { grid-template-columns: minmax(0, 1fr) 2.6rem; }
-}
-
 @media (orientation: landscape) and (min-width: 1000px) {
   .rail-layout { grid-template-columns: minmax(0, 1fr) 14rem 2.6rem; }
   .rail-layout[data-has-filters="false"],
   .rail-layout[data-collapsed="true"] { grid-template-columns: minmax(0, 1fr) 2.6rem; }
 }
+
 @media (orientation: landscape) {
+  /* 进入这类屏时顶栏整行隐藏：内容从最上面开始，页面标题与返回动作移交标题栏 */
+  header[data-testid="home-header"][data-view="stock"] { display: none; }
+  [data-testid="home-page"][data-view="stock"] { padding-top: 0.35rem; }
+  [data-testid="home-page"][data-view="stock"] [data-testid="home-egg-stock-view"] { padding-top: 0.45rem; }
+  main[data-testid="profile-page"],
+  section[data-testid="collection-groups"][data-variant="feed"] { padding-top: 0.35rem; }
+
+  /* 卡片保持竖屏同宽，不随横屏拉宽（2026-11-22 用户口径）；
+     能排几列由可用宽度决定：收起筛选列后自然多出一列。 */
+  .rail-layout .egg-stock-grid {
+    --egg-card-w: 5.1rem;
+    grid-template-columns: repeat(auto-fill, var(--egg-card-w));
+    justify-content: start;
+  }
   /* 换蛋页的需求卡：竖屏三列 ≈ 7.6rem，横屏保持这个宽度、多出来的宽度换列数 */
   .rail-layout .egg-demand-grid {
     --demand-card-w: 7.6rem;
     grid-template-columns: repeat(auto-fill, var(--demand-card-w));
     justify-content: start;
   }
+}
 }

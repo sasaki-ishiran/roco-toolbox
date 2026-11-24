@@ -3,7 +3,7 @@ import { eggGroupNames, species, targetNatureNames } from '../data/catalog';
 import { heightMetersOf, weightKgOf } from '../domain/petFilters';
 import { petBodyMedalIcon, petVoiceMedalIcon } from '../domain/petIcons';
 import type { NestPairing, NestPet, NestPlan } from '../domain/nestPlan';
-import { sortIndividualBonuses } from '../domain/individualBonuses';
+import { sortIndividualBonuses } from '../domain/individualStats';
 import type { IndividualBonus } from '../domain/types';
 import {
   recommendedNatureChance,
