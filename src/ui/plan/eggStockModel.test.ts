@@ -40,6 +40,41 @@ describe('egg stock snapshots', () => {
     expect(setEggListed(state, 'me', 'e1', true).eggs[0].listed).toBe(true);
     expect(setEggListed(state, 'me', 'manual', true).eggs[1].listed).toBe(true);
   });
+  test('picked-up home egg hands its annotation to the new bag egg (1:1)', () => {
+    const parents = { mother: { id: 'm1', gameId: 1, name: '妈', nature: '', body: '', voice: '' }, fathers: [], confirmed: false, stale: false };
+    const state = reconcileEggStock(emptyEggStock(), { accountId: 'me', capturedAt: 10,
+      home: part([egg({ id: 'h1', provenance: 'self-bred', nature: '冷静', body: '大块头', voice: '+100', greenNest: true, parents })]) });
+    const after = reconcileEggStock(state, { accountId: 'me', capturedAt: 20,
+      home: part([]), bag: part([egg({ id: 'b1', provenance: 'unknown', nature: '', body: 'unknown', voice: 'unknown' })]) });
+    expect(after.eggs.map(e => e.id)).toEqual(['b1']);
+    expect(after.eggs[0]).toMatchObject({ provenance: 'self-bred', nature: '冷静', body: '大块头', voice: '+100', greenNest: true, parents });
+  });
+  test('several eggs of one species are only marked self-bred, labels are not guessed', () => {
+    const state = reconcileEggStock(emptyEggStock(), { accountId: 'me', capturedAt: 10,
+      home: part([egg({ id: 'h1', nature: '冷静' }), egg({ id: 'h2', nature: '开朗' })]) });
+    const after = reconcileEggStock(state, { accountId: 'me', capturedAt: 20,
+      home: part([]), bag: part([egg({ id: 'b1', provenance: 'unknown', nature: '' }), egg({ id: 'b2', provenance: 'unknown', nature: '' })]) });
+    expect(after.eggs.map(e => e.nature)).toEqual(['', '']);
+    expect(after.eggs.every(e => e.provenance === 'self-bred')).toBe(true);
+  });
+  test('partial home capture never hands over: eggs stay home and nothing is guessed', () => {
+    const state = reconcileEggStock(emptyEggStock(), { accountId: 'me', capturedAt: 10,
+      home: part([egg({ id: 'h1', nature: '冷静' })]) });
+    const after = reconcileEggStock(state, { accountId: 'me', capturedAt: 20,
+      home: part([], false), bag: part([egg({ id: 'b1', provenance: 'unknown', nature: '' })]) });
+    expect(after.eggs.map(e => e.id).sort()).toEqual(['b1', 'h1']);
+    expect(after.eggs.find(e => e.id === 'b1')).toMatchObject({ provenance: 'unknown', nature: '' });
+  });
+  test('re-capture keeps earlier annotation: empty capture fields never erase 自产/性格/体型/声音', () => {
+    const initial = reconcileEggStock(emptyEggStock(), { accountId: 'me', capturedAt: 1,
+      bag: part([egg({ confidence: 'manual', labelSource: 'manual', nature: '冷静', body: '大块头', voice: '+100', greenNest: true })]) });
+    const again = reconcileEggStock(initial, { accountId: 'me', capturedAt: 2,
+      bag: part([egg({ provenance: 'unknown', confidence: 'system', labelSource: 'unknown', nature: '', body: 'unknown', voice: 'unknown' })]) });
+    expect(again.eggs[0]).toMatchObject({
+      provenance: 'self-bred', nature: '冷静', body: '大块头', voice: '+100',
+      greenNest: true, labelSource: 'manual', confidence: 'manual',
+    });
+  });
   test('listing is account scoped; source history is factual and no longer blocks circulation', () => {
     const initial = reconcileEggStock(emptyEggStock(), { accountId: 'me', capturedAt: 1, bag: part([egg()]) });
     expect(() => setEggListed(initial, 'other', 'e1', true)).toThrow(/不存在/);
