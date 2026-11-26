@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { OwnedPet, SpeciesEntry } from '../domain/types';
 import { PetCard } from './PetCard';
 
@@ -26,10 +26,19 @@ const THREE_COLUMN_ZOOM = 1.35;
  *
  * 口径仍是「全部展示、不分页」（2026-11-18 用户要求），但 500 只的账号一进页面
  * 就建 500 张卡会把安卓 WebView 卡住；按可视区逐步追加，滚动体验和全量渲染一致。
+ *
+ * P5（2026-11-27）：滚动追加不再一次性同步插入 RENDER_CHUNK 张卡，
+ * 改用 requestIdleCallback 空闲分片（每批 IDLE_BATCH 张），批之间让出主线程。
+ *
+ * 滚动检测用 IntersectionObserver 监听底部哨兵（2026-11-27 修复横屏无法加载）：
+ * 横屏时 window 不滚动（内部容器 overflow-y:auto 自己滚），window scroll 事件
+ * 收不到；IntersectionObserver 以视口为 root，无论哪个祖先容器在滚动都能触发。
  */
-const RENDER_CHUNK = 60;
-/** 距底部还有这么多像素时预加载下一屏，用户滚到底不会先看到空白 */
-const LOAD_MORE_THRESHOLD_PX = 400;
+const RENDER_CHUNK = 20;
+/** 每次空闲回调最多追加的卡片数 */
+const IDLE_BATCH = 20;
+/** 哨兵进入视口下方这么多像素时就开始加载下一批 */
+const SENTINEL_ROOT_MARGIN = '400px 0px';
 
 export function PetList({
   pets,
@@ -42,23 +51,87 @@ export function PetList({
     columns === 3 ? { zoom: THREE_COLUMN_ZOOM } : undefined;
 
   const [limit, setLimit] = useState(RENDER_CHUNK);
-  // 搜索 / 筛选改变结果集时从头开始渲染，避免旧窗口把新结果截掉
-  useEffect(() => {
-    setLimit(RENDER_CHUNK);
-  }, [pets]);
+  const idleHandleRef = useRef<number | null>(null);
+  const pendingAppendRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  const cancelIdle = useCallback(() => {
+    if (idleHandleRef.current !== null) {
+      const scope = globalThis as unknown as {
+        cancelIdleCallback?: (handle: number) => void;
+        clearTimeout?: (handle: number) => void;
+      };
+      if (typeof scope.cancelIdleCallback === 'function') {
+        scope.cancelIdleCallback(idleHandleRef.current);
+      } else if (typeof scope.clearTimeout === 'function') {
+        scope.clearTimeout(idleHandleRef.current);
+      }
+      idleHandleRef.current = null;
+    }
+    pendingAppendRef.current = false;
+  }, []);
+
+  // 搜索 / 筛选改变结果集时从头开始渲染，取消未完成的空闲追加
+  useEffect(() => {
+    cancelIdle();
+    setLimit(RENDER_CHUNK);
+  }, [pets, cancelIdle]);
+
+  /** 调度一次空闲追加：每批 IDLE_BATCH 张 */
+  const scheduleIdleAppend = useCallback(() => {
+    if (idleHandleRef.current !== null || pendingAppendRef.current) return;
+    pendingAppendRef.current = true;
+    const run = () => {
+      idleHandleRef.current = null;
+      pendingAppendRef.current = false;
+      setLimit((current) => Math.min(current + IDLE_BATCH, pets.length));
+    };
+    const scope = globalThis as unknown as {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (typeof scope.requestIdleCallback === 'function') {
+      idleHandleRef.current = scope.requestIdleCallback(run, { timeout: 300 });
+    } else {
+      idleHandleRef.current = window.setTimeout(run, 0);
+    }
+  }, [pets.length]);
+
+  // IntersectionObserver 监听底部哨兵：进入视口附近就调度空闲追加。
+  // root 用 null（视口），所以横屏内部容器滚动也能触发；不支持时退回 window scroll。
   useEffect(() => {
     if (limit >= pets.length) return;
+    const sentinel = sentinelRef.current;
+    if (sentinel && typeof IntersectionObserver !== 'undefined') {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) scheduleIdleAppend();
+        },
+        { root: null, rootMargin: SENTINEL_ROOT_MARGIN },
+      );
+      observer.observe(sentinel);
+      return () => {
+        observer.disconnect();
+        cancelIdle();
+      };
+    }
+    // 兜底：无 IntersectionObserver 时仍监听 window scroll（竖屏）
     const onScroll = () => {
       const doc = document.documentElement;
       const viewportBottom = window.scrollY + window.innerHeight;
-      if (viewportBottom >= doc.scrollHeight - LOAD_MORE_THRESHOLD_PX) {
-        setLimit((current) => Math.min(current + RENDER_CHUNK, pets.length));
-      }
+      if (viewportBottom >= doc.scrollHeight - 400) scheduleIdleAppend();
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [limit, pets.length]);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      cancelIdle();
+    };
+  }, [limit, pets.length, scheduleIdleAppend, cancelIdle]);
+
+  // 组件卸载时清理未完成的空闲任务
+  useEffect(() => {
+    return () => cancelIdle();
+  }, [cancelIdle]);
 
   const renderedPets = limit >= pets.length ? pets : pets.slice(0, limit);
 
@@ -88,9 +161,13 @@ export function PetList({
         ))}
       </ul>
       {limit < pets.length ? (
-        <p className="text-center text-[11px] text-slate-400" data-testid="pet-list-more">
-          已显示 {renderedPets.length} / {pets.length} 只，继续下滑加载更多
-        </p>
+        <>
+          {/* 哨兵：进入视口附近触发加载更多；也承担原有的提示文案 */}
+          <div ref={sentinelRef} aria-hidden />
+          <p className="text-center text-[11px] text-slate-400" data-testid="pet-list-more">
+            已显示 {renderedPets.length} / {pets.length} 只，继续下滑加载更多
+          </p>
+        </>
       ) : null}
     </div>
   );
