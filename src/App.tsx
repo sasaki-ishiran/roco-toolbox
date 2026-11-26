@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { installFlushOnHide, platform, track } from './api/analytics';
 import { CHANGELOG, markChangelogSeen, pendingChangelog, readChangelogSeen } from './data/changelog';
+import { saveHomeView } from './ui/homeView';
 import { refreshApp } from './pwa/hardRefresh';
 import { ChangelogModal } from './ui/ChangelogModal';
 import { TourOverlay } from './ui/TourOverlay';
+import { TabNav } from './ui/TabNav';
 import {
   TOUR_SEGMENTS,
   anyTourPending,
@@ -17,14 +19,9 @@ import {
   type TourSegment,
   type TourStep,
 } from './ui/tour';
-import { Dashboard } from './ui/Dashboard';
-import { HomeLand, saveHomeView } from './ui/Home';
-import { Collection } from './ui/Collection';
-import { CollectionGroups } from './ui/CollectionGroups';
 import { BattleHudOrb } from './ui/BattleHudOrb';
+import { PageErrorBoundary } from './ui/PageErrorBoundary';
 import { useNearbyOverlayPush } from './nearby/useNearbyOverlayPush';
-import { Profile } from './ui/Profile';
-import { TabNav } from './ui/TabNav';
 import {
   eggStockPending,
   focusPending,
@@ -43,6 +40,16 @@ import { useSnapshots } from './ui/useSnapshots';
 import { useDraftLeaveGuard } from './ui/useDraftLeaveGuard';
 import { useTabViewTracking } from './ui/useTabViewTracking';
 import { SnapshotRefreshNotice } from './ui/SnapshotRefreshNotice';
+
+const Dashboard = lazy(() =>
+  import('./ui/Dashboard').then((m) => ({ default: m.Dashboard })),
+);
+const HomeLand = lazy(() => import('./ui/Home').then((m) => ({ default: m.HomeLand })));
+const Profile = lazy(() => import('./ui/Profile').then((m) => ({ default: m.Profile })));
+const CollectionGroups = lazy(() =>
+  import('./ui/CollectionGroups').then((m) => ({ default: m.CollectionGroups })),
+);
+const Collection = lazy(() => import('./ui/Collection').then((m) => ({ default: m.Collection })));
 
 export default function App() {
   const [navigation, setNavigation] = useState<AppNavigation>(() =>
@@ -243,56 +250,68 @@ export default function App() {
         <TabNav active={activeTab} onChange={(page) => navigate({ type: 'tab', page })} />
       </div>
       <SnapshotRefreshNotice error={refreshError} refreshedAt={refreshedAt} />
-      {/* 2026-10-06 修复（M3）：不要在渲染体里用「每次渲染都是新引用」的内联箭头组件
-          拼 Record<TabId, ComponentType>——App 任何 state 变化（比如开关更新弹窗）都会
-          让 React 认为页面组件类型变了，把整个页面卸载重挂，页内状态全部丢失。
-          改成条件渲染：组件引用稳定，只有切页签才挂/卸。 */}
-      {navigation.page === 'dashboard' ? (
-        <Dashboard onNavigate={navigate} />
-      ) : navigation.page === 'home' ? (
-        <HomeLand
-          onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
-          onGoGroups={() => navigate({ type: 'open-groups' })}
-          onGoAccount={() => navigate({ type: 'open-profile', section: 'identity', returnToGroups: true })}
-        />
-      ) : navigation.page === 'profile' || navigation.page === 'nearby' ? (
-        <Profile
-          section={navigation.page === 'nearby' ? 'data' : navigation.profileSection}
-          dataView={navigation.page === 'nearby' ? 'nearby' : 'import'}
-          returnToGroups={navigation.returnToGroups}
-          onNavigate={navigate}
-          onStartTour={startTour}
-          onDraftDirtyChange={setGroupsDraftDirty}
-        />
-      ) : navigation.page === 'groups' ? (
-        <CollectionGroups
-          onDraftDirtyChange={setGroupsDraftDirty}
-          onNavigate={navigate}
-          focus={{ groupType: navigation.groupType }}
-          onGoProfileGroups={() => navigate({ type: 'open-profile', section: 'groups' })}
-          onGoAccount={() =>
-            navigate({ type: 'open-profile', section: 'identity', returnToGroups: true })
-          }
-          openEggStock={eggStockPending(navigation)}
-          onEggStockOpened={() =>
-            navigate({ type: 'consume-egg-stock', revision: navigation.eggStockRevision })
-          }
-          // 从「我的 → 蛋仓」进来时，蛋仓的「返回」要回「我的」（2026-11-25 U3）；
-          // 普通从换蛋页进蛋仓不传，仍是回换蛋页。
-          onEggStockBack={
-            navigation.eggStockFromProfile
-              ? () => navigate({ type: 'tab', page: 'profile' })
-              : undefined
-          }
-        />
-      ) : (
-        <Collection
-          location={collection}
-          onNavigate={navigate}
-          expandedGroupId={expandedGroupId}
-          onToggleGroup={setExpandedGroupId}
-        />
-      )}
+      <Suspense fallback={<div className="mx-auto mt-24 p-4 text-center text-slate-500">载入中…</div>}>
+        {/* 2026-10-06 修复（M3）：不要在渲染体里用「每次渲染都是新引用」的内联箭头组件
+            拼 Record<TabId, ComponentType>——App 任何 state 变化（比如开关更新弹窗）都会
+            让 React 认为页面组件类型变了，把整个页面卸载重挂，页内状态全部丢失。
+            改成条件渲染：组件引用稳定，只有切页签才挂/卸。 */}
+        {navigation.page === 'dashboard' ? (
+          <PageErrorBoundary pageName="看板页">
+            <Dashboard onNavigate={navigate} />
+          </PageErrorBoundary>
+        ) : navigation.page === 'home' ? (
+          <PageErrorBoundary pageName="家园页">
+            <HomeLand
+              onGoImport={() => navigate({ type: 'open-profile', section: 'data' })}
+              onGoGroups={() => navigate({ type: 'open-groups' })}
+              onGoAccount={() => navigate({ type: 'open-profile', section: 'identity', returnToGroups: true })}
+            />
+          </PageErrorBoundary>
+        ) : navigation.page === 'profile' || navigation.page === 'nearby' ? (
+          <PageErrorBoundary pageName="我的页">
+            <Profile
+              section={navigation.page === 'nearby' ? 'data' : navigation.profileSection}
+              dataView={navigation.page === 'nearby' ? 'nearby' : 'import'}
+              returnToGroups={navigation.returnToGroups}
+              onNavigate={navigate}
+              onStartTour={startTour}
+              onDraftDirtyChange={setGroupsDraftDirty}
+            />
+          </PageErrorBoundary>
+        ) : navigation.page === 'groups' ? (
+          <PageErrorBoundary pageName="换蛋页">
+            <CollectionGroups
+              onDraftDirtyChange={setGroupsDraftDirty}
+              onNavigate={navigate}
+              focus={{ groupType: navigation.groupType }}
+              onGoProfileGroups={() => navigate({ type: 'open-profile', section: 'groups' })}
+              onGoAccount={() =>
+                navigate({ type: 'open-profile', section: 'identity', returnToGroups: true })
+              }
+              openEggStock={eggStockPending(navigation)}
+              onEggStockOpened={() =>
+                navigate({ type: 'consume-egg-stock', revision: navigation.eggStockRevision })
+              }
+              // 从「我的 → 蛋仓」进来时，蛋仓的「返回」要回「我的」（2026-11-25 U3）；
+              // 普通从换蛋页进蛋仓不传，仍是回换蛋页。
+              onEggStockBack={
+                navigation.eggStockFromProfile
+                  ? () => navigate({ type: 'tab', page: 'profile' })
+                  : undefined
+              }
+            />
+          </PageErrorBoundary>
+        ) : (
+          <PageErrorBoundary pageName="收集页">
+            <Collection
+              location={collection}
+              onNavigate={navigate}
+              expandedGroupId={expandedGroupId}
+              onToggleGroup={setExpandedGroupId}
+            />
+          </PageErrorBoundary>
+        )}
+      </Suspense>
       {changelog.length > 0 ? <ChangelogModal entries={changelog} onClose={closeChangelog} /> : null}
       {/* 首启自动走「先导入一次」主线；其余分段在第一次进入对应页时弹，顶部「教程」重播当前页 */}
       {tour ? (

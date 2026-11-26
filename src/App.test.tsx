@@ -1,4 +1,4 @@
-﻿﻿import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+﻿import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import App from './App';
 import { CHANGELOG } from './data/changelog';
@@ -41,11 +41,11 @@ describe('App', () => {
     expect(screen.getByTestId('app-refresh')).toHaveTextContent('刷新');
   });
 
-  test('重开应用回到上次停留的页签（关后台不会掉回导入页）', () => {
+  test('重开应用回到上次停留的页签（关后台不会掉回导入页）', async () => {
     presetFirstRunSeen();
     window.localStorage.setItem('roco.lastTab', 'swap');
     render(<App />);
-    expect(screen.getByTestId('collection-groups')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('collection-groups')).toBeTruthy());
   });
 
   test('壳把分享内容注入时自动切到「导入数据」页（否则分享会被静默搁置）', async () => {
@@ -72,18 +72,19 @@ describe('App', () => {
 
     render(<App />);
     // 2026-11-21：登录与管理入口搬到「我的 · 小组」，小组页签只剩广场的空态引导
-    expect(screen.getByTestId('group-feed-hint')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('group-feed-hint')).toBeTruthy());
     expect(screen.queryByTestId('group-login-hint')).toBeNull();
     fireEvent.click(screen.getByTestId('group-go-profile'));
-    expect(screen.getByTestId('group-login-hint')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('group-login-hint')).toBeTruthy());
     expect(screen.queryByTestId('personal-eggs')).toBeNull();
     expect(screen.queryByTestId('group-personal')).toBeNull();
   });
 
-  test('顶部「教程」重播当前页引导，关闭后仍停在原页面', () => {
+  test('顶部「教程」重播当前页引导，关闭后仍停在原页面', async () => {
     presetFirstRunSeen();
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: '收集' }));
+    await waitFor(() => expect(screen.getByTestId('collection-kind-studs')).toBeTruthy());
     fireEvent.click(screen.getByTestId('collection-kind-studs'));
     expect(screen.getByTestId('collection-kind-studs')).toHaveAttribute('aria-pressed', 'true');
 
