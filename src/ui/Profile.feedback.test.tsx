@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { Profile } from './Profile';
 import { resetMeCacheForTest } from './accountMe';
@@ -66,11 +66,9 @@ describe('② 页内跳转不被顶栏盖住', () => {
     try {
       renderData();
 
-      fireEvent.click(screen.getByTestId('profile-entry-collect'));
-
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
-      // 96px > 顶栏 88px：滚动目标自己让出头部高度，不再靠调用点各减一次
+      // 卡片化后没有「采集数据」格子：落点块本身必须带 scroll-mt-24
       const target = screen.getByTestId('profile-collect');
+      expect(scrollIntoView).not.toHaveBeenCalled();
       expect(target.className).toContain('scroll-mt-24');
       // 落点块里的标题「本机采集」在这个块内，跟着一起让位
       expect(within(target).getByRole('heading', { name: '本机采集' })).toBeTruthy();
@@ -148,10 +146,8 @@ describe('① 概览卡不再有伪同步按钮', () => {
 
       expect(screen.queryByTestId('profile-header-action')).toBeNull();
       expect(screen.getByTestId('profile-header')).not.toHaveTextContent('同步');
-      // 真正执行同步的按钮仍在下面那张卡里
-      expect(
-        within(screen.getByTestId('profile-sync-block')).getByTestId('account-sync'),
-      ).toHaveTextContent('立即同步');
+      // 同步不再出现在首页
+      expect(screen.queryByText('立即同步')).toBeNull();
     } finally {
       window.localStorage.clear();
     }

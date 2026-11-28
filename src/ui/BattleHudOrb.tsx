@@ -227,7 +227,7 @@ export function BattleHudOrb() {
           }
         >
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold text-slate-800">战斗采集 · 赛季奇遇</p>
+            <p className="text-xs font-semibold text-slate-800">战斗 · 赛季奇遇</p>
             <button
               type="button"
               aria-label="关闭悬浮球详情"

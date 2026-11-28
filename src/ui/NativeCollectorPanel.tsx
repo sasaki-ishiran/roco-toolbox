@@ -27,7 +27,12 @@ const CLOUD_LABEL: Record<ImportOutcome['cloud'], string> = {
   failed: '私有云同步失败（本机数据已保存）',
   conflict: '私有云有另一份更新，到「我的 · 私有同步」处理',
 };
-export function NativeCollectorPanel() {
+export interface NativeCollectorPanelProps {
+  /** 紧凑卡（2026-11-28 UX1）：「我的」页只留标题+?、状态、一个动作、一行文件数 */
+  compact?: boolean;
+}
+
+export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelProps = {}) {
   const [state, setState] = useState<CollectorState | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** 桌面版（Electron）：底层是 Npcap 抓本机网卡，需要选网卡 → 见下方 desktop 分支 */
@@ -42,6 +47,7 @@ export function NativeCollectorPanel() {
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [requestedImport, setRequestedImport] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   /** 2026-11-07：自动停止 / 保存 / 导入在模块级 autoImportFlow 里跑，这里只订阅它的状态做展示；
    *  附近页触发的也是同一流程，所以等待期间切页不会中断，回来也不会重复导入。 */
   const flow = useAutoImport();
@@ -151,6 +157,14 @@ export function NativeCollectorPanel() {
   };
   if (!checked) {
     // 有采集桥但状态还没读完：先撑住卡片高度，避免切进「我的」时整块从无到有闪一下
+    if (compact) {
+      return (
+        <section data-testid="native-collector" data-compact="true" aria-busy="true" className="space-y-s2">
+          <h2 className="text-title font-semibold text-ink-strong">本机采集</h2>
+          <p className="text-caption text-ink-muted" data-testid="native-collector-status">读取采集状态…</p>
+        </section>
+      );
+    }
     return (
       <section
         className="rounded-2xl bg-white p-3 shadow-sm"
@@ -165,6 +179,19 @@ export function NativeCollectorPanel() {
     );
   }
   if (!state && !error) {
+    if (compact) {
+      return (
+        <section data-testid="native-collector" data-compact="true" className="space-y-s2">
+          <h2 className="text-title font-semibold text-ink-strong">本机采集</h2>
+          <p className="text-caption text-ink-muted" data-testid="native-collector-status">
+            {desktop
+              ? '桌面版采集组件没有加载成功，请重启小布助手；仍不行请更新到最新安装包。'
+              : '当前环境没有内置采集（只在安卓版小布助手安装包内提供）。网页版只做查看：到电脑版 / 安卓版采集，或登录同一账号同步；装了安卓版仍看不到，请更新安装包。'}
+          </p>
+          <p className="text-caption text-ink-muted" data-testid="native-collector-files">采集文件 0 个</p>
+        </section>
+      );
+    }
     return (
       <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="native-collector-fallback">
         <h2 className="text-base font-semibold text-slate-900">本机采集</h2>
@@ -187,6 +214,95 @@ export function NativeCollectorPanel() {
   /** 这路采集是附近页发起的（雷达导向）：不自动停止 / 导入，给一行说明 */
   const nearbyOwned = busy && captureOrigin.origin === 'nearby'
     && (captureOrigin.session == null || captureOrigin.session === state?.fileId);
+  if (compact) {
+    const lastFile = visibleFiles[0];
+    return (
+      <section data-testid="native-collector" data-compact="true" className="space-y-s2">
+        <div className="flex items-center justify-between gap-s2">
+          <h2 className="text-title font-semibold text-ink-strong">本机采集</h2>
+          <button
+            type="button"
+            aria-expanded={helpOpen}
+            aria-label="本机采集说明"
+            data-testid="native-collector-help"
+            onClick={() => setHelpOpen((open) => !open)}
+            className="flex min-h-8 min-w-8 items-center justify-center rounded-full border border-line bg-surface text-meta font-semibold text-ink-muted transition-colors active:bg-surface-sunken"
+          >
+            ?
+          </button>
+        </div>
+
+        {/* 边界与错误不收起：没有桥 / 系统过低 / 桥报错直接可见 */}
+        {error ? <StateNotice kind="error" title={error} action={<Button variant="secondary" onClick={refresh}>重试读取状态</Button>} /> : null}
+        {actionError ? <StateNotice kind="error" title={actionError} /> : null}
+        {flow.error ? <StateNotice kind="error" title={flow.error} /> : null}
+        {state && !state.supported ? (
+          <StateNotice
+            kind="unknown"
+            title={desktop ? '没有找到 Npcap' : '内置采集需要 Android 8 或以上'}
+            description={desktop
+              ? '实时采集依赖 Npcap 抓本机网卡。请先安装 Npcap（安装时勾选 WinPcap API 兼容模式），装完重启小布助手。'
+              : '当前手机系统版本过低，无法使用内置采集；换一台系统版本更高的手机，或登录同一账号同步。'}
+          />
+        ) : null}
+
+        <p className="text-caption text-ink-muted" data-testid="native-collector-status">
+          {busy ? '采集中' : '已停止'}
+          {lastFile ? ` · 上次 ${new Date(lastFile.createdAt).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
+        </p>
+
+        <div className="flex flex-wrap gap-s2">
+          {busy ? (
+            <Button disabled={state?.phase === 'stopping'} onClick={() => void action('stopCapture')}>
+              停止并保存
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              disabled={importing || !!error || (desktop && !devices?.ok)}
+              onClick={() => void action('startCapture')}
+              data-testid="native-collector-start"
+            >
+              采集并导入
+            </Button>
+          )}
+        </div>
+
+        <p className="text-caption text-ink-muted" data-testid="native-collector-files">
+          采集文件 {visibleFiles.length} 个
+        </p>
+
+        {helpOpen ? (
+          <div className="space-y-s2 rounded-tile bg-surface-sunken p-s3" data-testid="native-collector-help-body">
+            <p className="text-caption text-ink-soft">
+              {desktop
+                ? '在你自己的电脑上用 Npcap 抓取游戏流量，只在本地保存与解析，不上传任何数据。'
+                : '仅在手机本地保存与解析，不上传任何数据。'}
+            </p>
+            <ol className="list-decimal space-y-s1 pl-5 text-caption text-ink-muted">
+              <li>关闭其他 VPN 或游戏加速器，开始采集并同意系统 VPN 授权。</li>
+              <li>打开游戏，重新登录，依次查看精灵仓库、背包与蛋仓。</li>
+              <li>{liveMode ? '持续获取已开启：数据会边玩边更新，不收齐也不自动停止；想结束时点「停止并保存」。' : '查看数据进度；内容稳定（进度条走满）后会自动停止、保存并开始导入。'}</li>
+            </ol>
+            <div className="flex items-center justify-between gap-s2">
+              <span className="text-caption text-ink-soft">持续获取模式</span>
+              <Button size="sm" variant={liveMode ? 'primary' : 'secondary'} aria-pressed={liveMode} onClick={() => toggleLiveMode()}>
+                {liveMode ? '已开启' : '已关闭'}
+              </Button>
+            </div>
+            <div className="flex items-center justify-between gap-s2">
+              <span className="text-caption text-ink-soft">稀有提醒</span>
+              <Button size="sm" variant={rareAlertOn ? 'primary' : 'secondary'} aria-pressed={rareAlertOn} onClick={() => toggleRareAlert()}>
+                {rareAlertOn ? '已开启' : '已关闭'}
+              </Button>
+            </div>
+            <p className="text-caption text-ink-muted">最多保留 10 个原包，每次上限 128 MiB；导入后仍保留，不会自动清理。</p>
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm" data-testid="native-collector">
       <h2 className="text-base font-semibold text-slate-900">本机采集</h2>

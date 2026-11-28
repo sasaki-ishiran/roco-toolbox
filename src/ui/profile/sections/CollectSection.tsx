@@ -1,26 +1,22 @@
-import { AccountPanel } from '../../AccountPanel';
+import { Card } from '../../kit';
 import { ImportOutcomeNotice } from '../../ImportOutcomeNotice';
 import { NativeCollectorPanel } from '../../NativeCollectorPanel';
 import type { SectionProps } from '../types';
 
 /**
- * 采集与同步（2026-11-28 重排 + CLEAN2）。
+ * 本机采集卡（2026-11-28 UX1 方案 A）。
  *
- * 数据入口收敛为「壳内采集 + 同账号登录同步」：本区块只留这三块——
- * 入库三阶段反馈、壳内采集卡、私有同步；文件导入 UI 已删除（导出收在设置里）。
+ * 卡面只留：标题 + `?`、一行状态、一个动作、一行文件数；
+ * 说明与设置收进 `?`（不用 tooltip，手机没有 hover）。
+ * 边界与错误（没有采集桥 / 系统过低 / 桥报错）由面板自己始终展示，不藏在 `?` 里。
  */
 export function CollectSection({ ctx }: SectionProps) {
   return (
     <div data-section="collect" data-testid="profile-collect" className="scroll-mt-24 space-y-s3">
       <ImportOutcomeNotice onOpenGroups={ctx.onOpenGroups} />
-      {ctx.snapshots.length > 0 ? <NativeCollectorPanel /> : null}
-      <div data-testid="profile-sync-block" data-tour="profile-sync">
-        <AccountPanel
-          section="sync"
-          autoConflict={ctx.autoConflict}
-          onAutoConflictHandled={ctx.onAutoConflictHandled}
-        />
-      </div>
+      <Card testId="profile-collect-card">
+        <NativeCollectorPanel compact />
+      </Card>
     </div>
   );
 }

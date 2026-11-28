@@ -373,29 +373,28 @@ describe('附近页', () => {
   test('网页端 / 旧壳没有 updateNearbyOverlay 时不显示展开内容开关', () => {
     feed();
     render(<Nearby onNavigate={vi.fn()} />);
-    expect(screen.queryByTestId('nearby-panel-settings')).toBeNull();
+    expect(screen.getByTestId('nearby-alert-card')).toBeTruthy();
+    expect(screen.queryByTestId('nearby-alert-panels')).toBeNull();
   });
 
-  test('有悬浮面板桥时，状态卡里默认两个面板都开启', () => {
+  test('有悬浮面板桥时，强提醒卡里默认两个面板都开启', () => {
     shellWithOverlay();
     feed();
     render(<Nearby onNavigate={vi.fn()} />);
-    expect(screen.getByTestId('nearby-panel-settings')).toBeTruthy();
-    expect(screen.getByTestId('nearby-panel-battle').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('nearby-panel-nearby').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.queryByText('至少保留一项')).toBeNull();
+    expect(screen.getByTestId('nearby-alert-panels')).toBeTruthy();
+    expect(screen.getByTestId('nearby-alert-panel-battle').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('nearby-alert-panel-nearby').getAttribute('aria-pressed')).toBe('true');
   });
 
-  test('关掉附近面板后只剩战斗命中：最后一个开关置灰并提示', () => {
+  test('关掉跑图后只剩战斗：最后一个开关置灰', () => {
     shellWithOverlay();
     feed();
     render(<Nearby onNavigate={vi.fn()} />);
-    fireEvent.click(screen.getByTestId('nearby-panel-nearby'));
+    fireEvent.click(screen.getByTestId('nearby-alert-panel-nearby'));
     expect(readNearbyOverlayPanels()).toEqual({ battle: true, nearby: false });
-    expect(screen.getByTestId('nearby-panel-nearby').getAttribute('aria-pressed')).toBe('false');
-    const battle = screen.getByTestId('nearby-panel-battle') as HTMLButtonElement;
+    expect(screen.getByTestId('nearby-alert-panel-nearby').getAttribute('aria-pressed')).toBe('false');
+    const battle = screen.getByTestId('nearby-alert-panel-battle') as HTMLButtonElement;
     expect(battle.disabled).toBe(true);
-    expect(screen.getByText('至少保留一项')).toBeTruthy();
     fireEvent.click(battle);
     expect(readNearbyOverlayPanels()).toEqual({ battle: true, nearby: false });
   });

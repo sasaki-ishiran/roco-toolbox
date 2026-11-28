@@ -247,7 +247,7 @@ export const TOUR_SEGMENTS: Record<TourSegment, TourStep[]> = {
     {
       id: 'nearby-status',
       title: '附近在哪',
-      body: '在「我的 · 游戏数据 · 附近」：顶部筛选 全部/稀有/需求/目标，可切地图或列表。',
+      body: '在「我的 · 附近精灵」或底部「附近」：顶部筛选 全部/稀有/需求/目标，可切地图或列表。',
       page: 'nearby',
       selector: '[data-testid="nearby-status"]',
     },

@@ -10,7 +10,6 @@ import { readNearbySnapshot } from '../collector/nearbyStore';
 import { useRareAlert } from '../collector/rareAlertStore';
 import { useNearbyFeed } from '../collector/useNearbyFeed';
 import { hasNearbyOverlayShell } from '../nearby/overlayBridge';
-import { isLastEnabledNearbyOverlayPanel, setNearbyOverlayPanel, useNearbyOverlayPanels } from '../nearby/overlayPanels';
 import { buildNearbyOverlayPayload } from '../nearby/overlayPayload';
 import { species, eggGroupNames } from '../data/catalog';
 import { buildRadar, DEFAULT_RADAR_RADIUS_M, type RadarData } from '../pcap/nearbyRadar';
@@ -20,6 +19,7 @@ import { pruneRetained, isHighValuePet, type RetainedEntry } from '../pcap/nearb
 import { KIND_LABELS, rareAlertTitle } from '../pcap/rareRules';
 import type { NavigationIntent } from './navigation';
 import { NearbyBattleCard } from './NearbyBattleCard';
+import { NearbyAlertCard } from './NearbyAlertCard';
 import { MapErrorBoundary } from './NearbyErrorBoundary';
 import { NearbyMap } from './NearbyMap';
 import { NearbyRadar } from './NearbyRadar';
@@ -249,7 +249,6 @@ export function Nearby({ onNavigate, embedded = false }: NearbyProps) {
   const flow = useAutoImport();
   const rareAlertOn = useRareAlert();
   /** 手机悬浮球展开后显示哪些面板（本机记忆，只影响安卓壳，不重排本页） */
-  const overlayPanels = useNearbyOverlayPanels();
   const shellOverlaySupported = hasNearbyOverlayShell();
   /** 悬浮球是否被隐藏（1.3.6）：长按球隐藏，这里负责恢复；null = 旧壳没有这个能力 */
   const [orbHidden, setOrbHiddenState] = useState<boolean | null>(null);
@@ -646,9 +645,10 @@ export function Nearby({ onNavigate, embedded = false }: NearbyProps) {
       className={embedded ? 'space-y-2' : 'mx-auto max-w-md space-y-2 p-3'}
       data-testid="nearby-page"
     >
+      <NearbyAlertCard />
       <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="nearby-status">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-800">大世界采集 · 附近精灵</h2>
+          <h2 className="text-sm font-semibold text-slate-800">跑图 · 附近精灵</h2>
           <div className="flex shrink-0 items-center gap-1">
             {overlaySupported ? (
               <button
@@ -718,38 +718,10 @@ export function Nearby({ onNavigate, embedded = false }: NearbyProps) {
         <p className="text-[11px] text-slate-400">
           {snapshot ? `更新于 ${timeText(snapshot.updatedAt)}` : '尚未收到采集数据'}
         </p>
-        {shellOverlaySupported ? (
-          <div className="mt-1 flex flex-wrap items-center gap-1" data-testid="nearby-panel-settings">
-            <span className="text-[11px] text-slate-400">悬浮球展开显示</span>
-            {(['battle', 'nearby'] as const).map((key) => {
-              const on = overlayPanels[key];
-              const locked = isLastEnabledNearbyOverlayPanel(overlayPanels, key);
-              const label = key === 'battle' ? '战斗命中' : '附近面板';
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={on}
-                  disabled={locked}
-                  title={locked ? '至少保留一项' : `展开${on ? '隐藏' : '显示'}${label}`}
-                  onClick={() => setNearbyOverlayPanel(key, !on)}
-                  data-testid={`nearby-panel-${key}`}
-                  className={`min-h-[28px] rounded-lg border px-2 text-xs ${
-                    on ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-400'
-                  } ${locked ? 'opacity-50' : ''}`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-            {!overlayPanels.battle || !overlayPanels.nearby ? (
-              <span className="text-[11px] text-slate-400">至少保留一项</span>
-            ) : null}
-          </div>
-        ) : null}
+
         {captureSupported ? (
           <p className="text-[11px] text-slate-400">
-            这里开始的采集只刷新地图与列表，不会自动停止 / 导入；要入库请到「我的 · 游戏数据」。
+            这里开始的采集只刷新地图与列表，不会自动停止 / 导入；要入库请到「我的 · 本机采集」。
           </p>
         ) : null}
         {error ? <p className="mt-1 text-xs text-rose-600" role="alert">{error}</p> : null}

@@ -29,7 +29,7 @@ export function NearbyBattleCard({ encounter }: { encounter: SeasonEncounter | n
   return (
     <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="nearby-battle-card">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-slate-800">战斗采集 · 赛季奇遇</h2>
+        <h2 className="text-sm font-semibold text-slate-800">战斗 · 赛季奇遇</h2>
         {hit ? (
           <span
             className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700"

@@ -99,73 +99,42 @@ const renderProfile = (section: ProfileSection = 'data') =>
   );
 
 describe('Profile（我的）', () => {
-  test('分区改成列表行：不再有分段控件，profile-section-* 原样挂在行上', async () => {
+  test('设置行仍在：我的身份 / 新手引导；蛋仓与小组是两张小卡', async () => {
     await seedImportedPets();
     const onNavigate = vi.fn();
     render(
       <Profile section="data" returnToGroups={false} onNavigate={onNavigate} />,
     );
-    // 2026-11-25 U2：一级导航从分段控件改成行 → 二级分区
     expect(screen.queryByLabelText('我的分区')).toBeNull();
-    expect(screen.getByTestId('profile-section-groups')).toHaveTextContent('小组');
     expect(screen.getByTestId('profile-section-identity')).toHaveTextContent('我的身份');
+    expect(screen.getByTestId('profile-guide')).toHaveTextContent('新手引导');
 
     fireEvent.click(screen.getByTestId('profile-section-identity'));
     expect(onNavigate).toHaveBeenCalledWith({ type: 'open-profile', section: 'identity' });
-    fireEvent.click(screen.getByTestId('profile-section-groups'));
+    fireEvent.click(screen.getByTestId('profile-group-card'));
     expect(onNavigate).toHaveBeenCalledWith({ type: 'open-profile', section: 'groups' });
+    fireEvent.click(screen.getByTestId('profile-egg-card'));
+    expect(onNavigate).toHaveBeenCalledWith({ type: 'open-egg-stock' });
   });
 
-  test('三个快捷入口：采集滚到采集块、蛋仓进换蛋蛋仓、小组进小组分区', async () => {
+  test('附近卡：详情进附近页，战斗/跑图两个开关至少留一项', async () => {
     await seedImportedPets();
-    const scrollIntoView = vi.fn();
-    const original = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = scrollIntoView;
-    try {
-      const onNavigate = vi.fn();
-      render(<Profile section="data" returnToGroups={false} onNavigate={onNavigate} />);
+    const onNavigate = vi.fn();
+    render(<Profile section="data" returnToGroups={false} onNavigate={onNavigate} />);
 
-      fireEvent.click(screen.getByTestId('profile-entry-collect'));
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('profile-nearby-card')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('profile-nearby-detail'));
+    expect(onNavigate).toHaveBeenCalledWith({ type: 'tab', page: 'nearby' });
 
-      fireEvent.click(screen.getByTestId('profile-entry-egg-stock'));
-      expect(onNavigate).toHaveBeenCalledWith({ type: 'open-egg-stock' });
-
-      // 「我的小组」这个格子同时就是小组分区的入口（e2e 点的是同一个 testid）
-      fireEvent.click(screen.getByTestId('profile-section-groups'));
-      expect(onNavigate).toHaveBeenCalledWith({ type: 'open-profile', section: 'groups' });
-    } finally {
-      Element.prototype.scrollIntoView = original;
-    }
-  });
-
-  test('蛋仓入口在未登录时标明需登录，登录后写清它去哪', async () => {
-    await seedImportedPets();
-    window.localStorage.clear();
-    const first = render(<Profile section="data" returnToGroups={false} onNavigate={vi.fn()} />);
-    expect(screen.getByTestId('profile-entry-egg-stock')).toHaveTextContent('需登录');
-    first.unmount();
-
-    window.localStorage.setItem('roco.accountId', 'acc-1');
-    render(<Profile section="data" returnToGroups={false} onNavigate={vi.fn()} />);
-    expect(screen.getByTestId('profile-entry-egg-stock')).toHaveTextContent('换蛋 · 蛋仓');
-  });
-
-  test('已登录：概览卡不再放「同步」按钮，同步只留在「私有同步」卡里', async () => {
-    await seedImportedPets();
-    window.localStorage.setItem('roco.accountId', 'acc-1');
-    try {
-      render(<Profile section="data" returnToGroups={false} onNavigate={vi.fn()} />);
-
-      // 2026-11-28 FX1：概览卡那个「同步」只滚动、不执行同步（UI-01 的临时做法），删掉
-      expect(screen.queryByTestId('profile-header-action')).toBeNull();
-      expect(screen.getByTestId('profile-header')).not.toHaveTextContent('同步');
-      // 真正执行同步的「立即同步」还在下面那张卡里
-      const block = screen.getByTestId('profile-sync-block');
-      expect(within(block).getByTestId('account-sync')).toHaveTextContent('立即同步');
-    } finally {
-      window.localStorage.clear();
-    }
+    const battle = screen.getByTestId('profile-nearby-panel-battle');
+    const nearby = screen.getByTestId('profile-nearby-panel-nearby');
+    expect(battle).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(nearby);
+    expect(nearby).toHaveAttribute('aria-pressed', 'false');
+    // 关掉跑图后，战斗就是最后一项：置灰，不能再关掉
+    expect(battle).toBeDisabled();
+    fireEvent.click(battle);
+    expect(battle).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('概览卡挂在我的首页；分区子视图有「返回我的」并带 profile-section-data', () => {
@@ -246,7 +215,7 @@ describe('Profile（我的）', () => {
     const { rerender } = render(
       <Profile section="data" returnToGroups={false} onNavigate={onNavigate} />,
     );
-    fireEvent.click(screen.getByTestId('data-view-nearby'));
+    fireEvent.click(screen.getByTestId('profile-nearby-detail'));
     expect(onNavigate).toHaveBeenCalledWith({ type: 'tab', page: 'nearby' });
 
     rerender(
@@ -264,7 +233,7 @@ describe('Profile（我的）', () => {
     expect(onNavigate).toHaveBeenCalledWith({ type: 'open-profile', section: 'data' });
   });
 
-  test('游戏数据分区：采集/同步入口与三阶段反馈都在，文件导入入口已删除', async () => {
+  test('本机采集卡：三阶段反馈在，文件导入入口已删除', async () => {
     await seedImportedPets();
     const id = beginImport();
     updateImportOutcome(id, { local: 'saved', cloud: 'failed', message: '新增 1 个账号' });
@@ -272,25 +241,24 @@ describe('Profile（我的）', () => {
 
     expect(screen.queryByTestId('import-input')).toBeNull();
     expect(screen.queryByTestId('import-button')).toBeNull();
-    expect(screen.getByTestId('profile-sync-block')).toBeTruthy();
+    expect(screen.getByTestId('native-collector')).toHaveAttribute('data-compact');
     expect(screen.getByTestId('import-outcome')).toHaveTextContent('已保存到本机');
     expect(screen.getByTestId('import-outcome')).toHaveTextContent('私有云同步失败（本机数据已保存）');
     expect(screen.getByTestId('import-outcome-group')).toHaveTextContent('小组资源未自动更新');
-    // 私有同步已经挪到游戏数据页：本机采集 / 导入之后紧接着就是同步
-    expect(screen.getByTestId('profile-sync-intro')).toHaveTextContent('不会更新小组资源');
-    expect(screen.getByTestId('account-panel')).toHaveTextContent('私有同步');
   });
 
-  test('清空本机数据后回到新用户空态，而不是白屏', async () => {
+  test('清空本机数据后卡片仍在（采集卡是数据入口），不是白屏', async () => {
     await seedImportedPets();
     renderProfile('data');
     expect(screen.getByTestId('profile-collect')).toBeTruthy();
+    expect(screen.getByTestId('profile-egg-card')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('profile-settings-clear'));
     fireEvent.click(screen.getByTestId('clear-local-confirm'));
 
-    await waitFor(() => expect(screen.getByTestId('profile-new-user-empty')).toBeTruthy());
-    expect(screen.queryByTestId('profile-collect')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('profile-egg-card')).toBeNull());
+    expect(screen.getByTestId('profile-collect')).toBeTruthy();
+    expect(screen.getByTestId('profile-header')).toBeTruthy();
   });
 
   test('身份分区的标题与说明写清主语', () => {

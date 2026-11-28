@@ -19,7 +19,7 @@ describe('战斗采集模块卡（NearbyBattleCard）', () => {
   test('没有奇遇战时也常驻显示，给等待提示与目标设置', () => {
     render(<NearbyBattleCard encounter={null} />);
     const card = screen.getByTestId('nearby-battle-card');
-    expect(card.textContent).toContain('战斗采集 · 赛季奇遇');
+    expect(card.textContent).toContain('战斗 · 赛季奇遇');
     expect(card.textContent).toContain('进入赛季奇遇战后，这里会显示守卫的个体数据');
     expect(screen.getByTestId('battle-target-editor')).toBeTruthy();
   });

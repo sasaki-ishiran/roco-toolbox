@@ -1,19 +1,16 @@
 import { CollectSection } from './sections/CollectSection';
-import { EntriesSection } from './sections/EntriesSection';
+import { EggGroupSection } from './sections/EggGroupSection';
 import { IdentitySection } from './sections/IdentitySection';
-import { NewUserSection } from './sections/NewUserSection';
+import { NearbySection } from './sections/NearbySection';
 import { SettingsSection } from './sections/SettingsSection';
-import { TodosSection } from './sections/TodosSection';
-import { hasData, isNewUser, type SectionDef } from './types';
+import { hasData, type SectionDef } from './types';
 
 /**
- * 「我的」页配方（2026-11-28）。
+ * 「我的」页配方（2026-11-28 UX1 方案 A）。
  *
- * 回退 = 只改 `PROFILE_ACTIVE` 这一行，不动任何组件：
- * - `PROFILE_REORDER_V2`：重排后（身份 → 待处理 → 三个入口 → 采集 → 更多/设置）；
- * - `PROFILE_STABLE_V1`：重排前的结构快照（身份 → 三个入口 → 采集 → 更多/设置）。
- *
- * 区块之间不互相 import；共享数据从 `ProfilePageContext` 进。
+ * 一列卡片：身份 → 附近精灵 → 本机采集 → 蛋仓 / 小组两张小卡 → 设置（行列表）。
+ * 待办数字折进卡片（蛋仓待认领 / 小组待确认 / 附近卡的蹲守数），不再单独一块三格。
+ * 回退一行：`PROFILE_ACTIVE = PROFILE_STABLE_V1`。
  */
 const IDENTITY: SectionDef = {
   id: 'identity',
@@ -21,63 +18,40 @@ const IDENTITY: SectionDef = {
   render: IdentitySection,
 };
 
-const TODOS: SectionDef = {
-  id: 'todos',
-  title: '待处理',
-  render: TodosSection,
-  // 有数据、取数结束，且至少一项已知（或本机有蹲守目标）才出现；
-  // 不知道时不写「没有要处理的」，避免把「没取到」当「没有」。
-  when: (ctx) =>
-    hasData(ctx) &&
-    ctx.todos.loaded &&
-    (ctx.todos.known || ctx.todos.nearbyTargets > 0),
-};
-
-const ENTRIES: SectionDef = {
-  id: 'entries',
-  title: '三个入口',
-  render: EntriesSection,
-  // 不设 when：入口是**导航**，未登录/无数据时也要能进（小组页自己会给"请先登录"）。
-  // 有没有内容由各入口内部决定，不靠整块隐藏——隐藏会让未登录用户找不到进组入口。
-};
-
-const NEW_USER: SectionDef = {
-  id: 'new-user',
-  title: '新用户空态',
-  render: NewUserSection,
-  when: isNewUser,
+const NEARBY: SectionDef = {
+  id: 'nearby',
+  title: '附近精灵',
+  render: NearbySection,
 };
 
 const COLLECT: SectionDef = {
   id: 'collect',
-  title: '采集与同步',
+  title: '本机采集',
   render: CollectSection,
+  // 采集卡就是数据入口：新用户也要能开始采集，所以不设 when
+};
+
+const EGG_GROUP: SectionDef = {
+  id: 'egg-group',
+  title: '蛋仓与小组',
+  render: EggGroupSection,
   when: hasData,
 };
 
 const SETTINGS: SectionDef = {
   id: 'settings',
-  title: '更多与设置',
+  title: '设置',
   render: SettingsSection,
-  // 不设 when：身份 / 引导 / 设置对所有状态都必须可达（新用户也要能登录、看引导）。
-  // 「不进首屏」靠配方顺序实现（排在最后），不靠隐藏——隐藏会让新用户永远进不去。
 };
 
-/** 重排前的「我的」页结构（拆块后的稳定快照，可整体回退用）。 */
-export const PROFILE_STABLE_V1: SectionDef[] = [IDENTITY, ENTRIES, COLLECT, SETTINGS];
+/** 上一版结构（卡片化之前），留作一行回退。 */
+export const PROFILE_STABLE_V1: SectionDef[] = [IDENTITY, COLLECT, EGG_GROUP, SETTINGS];
 
-/** 重排后的结构：首屏先回答「我现在什么状态 / 有什么要处理」。 */
-export const PROFILE_REORDER_V2: SectionDef[] = [
-  IDENTITY,
-  TODOS,
-  ENTRIES,
-  NEW_USER,
-  COLLECT,
-  SETTINGS,
-];
+/** 现行：卡片化（UX1 方案 A）。 */
+export const PROFILE_CARDS_V3: SectionDef[] = [IDENTITY, NEARBY, COLLECT, EGG_GROUP, SETTINGS];
 
 /** 线上使用哪份配方。回退一行：改成 PROFILE_STABLE_V1。 */
-export const PROFILE_ACTIVE: SectionDef[] = PROFILE_REORDER_V2;
+export const PROFILE_ACTIVE: SectionDef[] = PROFILE_CARDS_V3;
 
 export type SectionId = (typeof PROFILE_ACTIVE)[number]['id'];
 

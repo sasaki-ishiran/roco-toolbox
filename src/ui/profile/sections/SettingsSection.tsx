@@ -69,22 +69,13 @@ export function SettingsSection({ ctx }: SectionProps) {
 
   return (
     <div data-section="settings" className="space-y-s3">
-      <SettingsList title="更多">
-        <SettingsRow
-          testId="data-view-nearby"
-          label="附近精灵"
-          value="采集时实时看"
-          onClick={ctx.onGoNearby}
-        />
+      <SettingsList title="设置与帮助">
         <SettingsRow
           testId="profile-section-identity"
           label="我的身份"
           value={ctx.accountId ? ctx.accountName || '已登录' : '未登录'}
           onClick={ctx.onGoIdentity}
         />
-      </SettingsList>
-
-      <SettingsList title="设置与帮助">
         <SettingsRow testId="profile-guide" label="新手引导" value="重看一遍" onClick={ctx.onStartTour} />
         <SettingsRow
           testId="profile-settings-more"
