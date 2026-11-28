@@ -132,6 +132,29 @@ async function main() {
       await page.screenshot({ path: `${OUT}/UX1-实现-${size.width}-4-附近详情.png` });
       console.log(size.width, '4-附近详情', await page.getByTestId('nearby-alert-card').isVisible());
 
+      // 自动完成态：开发专用的 ?mockComplete=1 强制展示一次性完成态
+      const completePage = await context.newPage();
+      await completePage.goto(`${BASE}?mock=group&mockComplete=1`, { waitUntil: 'load' });
+      await completePage.waitForSelector('nav[data-tour="tab-nav"]', { timeout: 60_000 });
+      await completePage.waitForTimeout(900);
+      const skip2 = completePage.getByRole('button', { name: '跳过' });
+      await skip2.waitFor({ state: 'visible', timeout: 4000 }).catch(() => {});
+      if (await skip2.isVisible().catch(() => false)) { await skip2.click({ force: true }).catch(() => {}); }
+      await completePage.evaluate(() => {
+        const tab = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === '我的');
+        tab?.click();
+      });
+      await completePage.waitForSelector('[data-testid="profile-collect-card"]', { timeout: 30_000 });
+      await completePage.waitForTimeout(500);
+      for (const name of ['跳过', '知道了']) {
+        const b = completePage.getByRole('button', { name });
+        if (await b.isVisible().catch(() => false)) { await b.first().click({ force: true }).catch(() => {}); await completePage.waitForTimeout(300); break; }
+      }
+      await completePage.waitForTimeout(400);
+      await completePage.screenshot({ path: `${OUT}/UX1-实现-${size.width}-5-自动完成.png` });
+      console.log(size.width, '5-自动完成', await completePage.getByTestId('profile-collect-complete').isVisible());
+      await completePage.close();
+
       await context.close();
     }
   } finally {

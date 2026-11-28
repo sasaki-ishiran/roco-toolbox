@@ -63,6 +63,10 @@ export function NativeCollectorPanel({
    *  附近页触发的也是同一流程，所以等待期间切页不会中断，回来也不会重复导入。 */
   const flow = useAutoImport();
   const completed = flow.completion;
+  // 仅开发/截图：?mockComplete=1 强制展示一次性完成态（生产构建会摇掉）
+  const forceComplete = import.meta.env.DEV && typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).has('mockComplete');
+  const showComplete = completed != null || forceComplete;
   const autoStage = flow.stage;
   const completionError = flow.completionError;
   /** 采集归属：这路采集是从附近页还是本页发起的（决定要不要自动停止 / 导入） */
@@ -294,6 +298,13 @@ export function NativeCollectorPanel({
       <section data-testid="native-collector" data-compact="true" className="space-y-s2">
         <div className="flex items-center justify-between gap-s2">
           <h2 className="text-title font-semibold text-ink-strong">采集</h2>
+          <div className="flex items-center gap-s1">
+            <span
+              className="rounded-chip border border-line px-s2 py-s1 text-meta text-ink-muted"
+              data-testid="profile-collect-state"
+            >
+              {showComplete ? '已完成' : busy ? '采集中' : '已停止'}
+            </span>
           <button
             type="button"
             aria-expanded={helpOpen}
@@ -304,6 +315,7 @@ export function NativeCollectorPanel({
           >
             ?
           </button>
+          </div>
         </div>
 
         {/* 边界与错误不收起：没有桥 / 系统过低 / 桥报错直接可见 */}
@@ -362,15 +374,34 @@ export function NativeCollectorPanel({
           />
         </div>
 
-        {busy ? (
+        {showComplete && !busy ? (
+          <div
+            className="space-y-s2 rounded-tile border border-accent-line bg-accent-soft p-s3"
+            data-testid="profile-collect-complete"
+          >
+            <div>
+              <p className="text-body font-semibold text-accent-strong">已采集并导入</p>
+              <p className="text-caption text-ink-soft">这次采集的数据已经保存到本机，看板可直接使用。</p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => clearAutoImportCompletion()}
+              data-testid="profile-collect-complete-dismiss"
+            >
+              知道了
+            </Button>
+          </div>
+        ) : busy ? (
           <div className="space-y-s2" data-testid="profile-collect-busy">
             <Button
+              variant="danger"
               className="w-full"
               disabled={state?.phase === 'stopping'}
               onClick={() => void action('stopCapture')}
               data-testid="profile-collect-stop"
             >
-              停止并保存
+              {'停止并保存 ' + (state?.packets ?? 0) + ' 包 · ' + ((state?.bytes ?? 0) / 1024 / 1024).toFixed(1) + ' MiB'}
             </Button>
             {nearbyOwnedNow ? (
               <p className="text-caption text-ink-muted" data-testid="profile-collect-nearby-owned">
@@ -384,24 +415,27 @@ export function NativeCollectorPanel({
             ) : null}
           </div>
         ) : (
-          <div className="space-y-s2">
-            <Button
-              variant="secondary"
-              className="w-full"
+          <div className="grid grid-cols-2 gap-s2" data-testid="profile-collect-actions">
+            <button
+              type="button"
               disabled={importing || !!error || (desktop && !devices?.ok)}
               onClick={() => void peek()}
               data-testid="profile-collect-peek"
+              className="flex min-h-14 flex-col items-start justify-center rounded-card border border-line bg-surface px-s3 py-s2 text-left transition-colors active:bg-surface-sunken disabled:opacity-50"
             >
-              开始采集
-            </Button>
-            <Button
-              className="w-full"
+              <span className="text-[13px] font-semibold text-ink-strong">开始采集</span>
+              <span className="text-[11px] text-ink-muted">只看附近，不导入</span>
+            </button>
+            <button
+              type="button"
               disabled={importing || !!error || (desktop && !devices?.ok)}
               onClick={() => void action('startCapture')}
               data-testid="profile-collect-import"
+              className="flex min-h-14 flex-col items-start justify-center rounded-card bg-accent px-s3 py-s2 text-left text-white transition-colors active:bg-accent-strong disabled:opacity-50"
             >
-              采集并导入
-            </Button>
+              <span className="text-[13px] font-semibold">采集并导入</span>
+              <span className="text-[11px] text-white/85">走满自动停止并导入</span>
+            </button>
           </div>
         )}
 
