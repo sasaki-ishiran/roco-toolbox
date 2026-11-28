@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { collectorAction, isDesktopShell, readCaptureDevices, readCollectorState, selectCaptureDevice, type CaptureDeviceList, type CollectorAction, type CollectorState } from '../collector/nativeCollector';
+import { collectorAction, isDesktopShell, readCaptureDevices, readCollectorState, selectCaptureDevice, startCollectorCapture, type CaptureDeviceList, type CollectorAction, type CollectorState } from '../collector/nativeCollector';
 import { clearAutoImportCompletion, requestAutoImport, useAutoImport, type AutoImportStage } from '../collector/autoImportFlow';
 import { markCaptureOrigin, observeCollectorState, useCaptureOrigin } from '../collector/captureOriginStore';
 import { Button } from './primitives/Button';
 import { ModalSurface } from './primitives/ModalSurface';
 import { StateNotice } from './primitives/StateNotice';
+import { SegmentedControl } from './primitives/SegmentedControl';
 import { useImportOutcome } from './importOutcomeStore';
 import type { ImportOutcome } from './importOutcomeStore';
 import { CaptureProgressView } from './CaptureProgressView';
@@ -28,11 +29,21 @@ const CLOUD_LABEL: Record<ImportOutcome['cloud'], string> = {
   conflict: '私有云有另一份更新，到「我的 · 私有同步」处理',
 };
 export interface NativeCollectorPanelProps {
-  /** 紧凑卡（2026-11-28 UX1）：「我的」页只留标题+?、状态、一个动作、一行文件数 */
+  /** 卡片模式（2026-11-28 UX1 v3）：一张「采集」卡，同时管附近与导入 */
   compact?: boolean;
+  nearby?: { pets: number; rare: number; targets: number; encounter: { guardName: string; level: number } | null; hit: boolean; updatedAt: number | null };
+  focus?: 'battle' | 'nearby';
+  onFocusChange?: (focus: 'battle' | 'nearby') => void;
+  onOpenNearby?: () => void;
 }
 
-export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelProps = {}) {
+export function NativeCollectorPanel({
+  compact = false,
+  nearby,
+  focus = 'nearby',
+  onFocusChange,
+  onOpenNearby,
+}: NativeCollectorPanelProps = {}) {
   const [state, setState] = useState<CollectorState | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** 桌面版（Electron）：底层是 Npcap 抓本机网卡，需要选网卡 → 见下方 desktop 分支 */
@@ -155,6 +166,11 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
     }
     finally { await refresh(); }
   };
+  const cardStats = nearby ?? { pets: 0, rare: 0, targets: 0, encounter: null, hit: false, updatedAt: null };
+  const cardTimeText = (ms: number | null) => (ms
+    ? new Date(ms).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '还没采集');
+
   if (!checked) {
     // 有采集桥但状态还没读完：先撑住卡片高度，避免切进「我的」时整块从无到有闪一下
     if (compact) {
@@ -182,13 +198,53 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
     if (compact) {
       return (
         <section data-testid="native-collector" data-compact="true" className="space-y-s2">
-          <h2 className="text-title font-semibold text-ink-strong">本机采集</h2>
+          <h2 className="text-title font-semibold text-ink-strong">采集</h2>
           <p className="text-caption text-ink-muted" data-testid="native-collector-status">
             {desktop
               ? '桌面版采集组件没有加载成功，请重启小布助手；仍不行请更新到最新安装包。'
               : '当前环境没有内置采集（只在安卓版小布助手安装包内提供）。网页版只做查看：到电脑版 / 安卓版采集，或登录同一账号同步；装了安卓版仍看不到，请更新安装包。'}
           </p>
+          <div className="rounded-tile bg-surface-sunken p-s3" data-testid="profile-collect-result" data-focus={focus}>
+            {focus === 'battle' ? (
+              <>
+                <p className="text-hero font-semibold text-ink-strong">最近一场</p>
+                <p className="mt-s1 text-caption text-ink-muted">
+                  {cardStats.encounter
+                    ? `${cardStats.encounter.guardName} L${cardStats.encounter.level}${cardStats.hit ? ' · 目标命中' : ''} · 更新 ${cardTimeText(cardStats.updatedAt)}`
+                    : `还没有战斗数据 · 更新 ${cardTimeText(cardStats.updatedAt)}`}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-hero font-semibold tabular-nums text-ink-strong">{cardStats.pets} 只</p>
+                <p className="mt-s1 text-caption text-ink-muted">
+                  稀有 {cardStats.rare}{cardStats.targets > 0 ? ` · 蹲守 ${cardStats.targets}` : ''} · 更新 {cardTimeText(cardStats.updatedAt)}
+                </p>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-s2">
+            <span className="shrink-0 text-meta text-ink-muted">采集目标</span>
+            <SegmentedControl
+              label="采集目标"
+              value={focus}
+              options={[{ value: 'battle', label: '战斗' }, { value: 'nearby', label: '跑图' }]}
+              onValueChange={(value) => onFocusChange?.(value === 'battle' ? 'battle' : 'nearby')}
+              optionTestId={(value) => `profile-capture-focus-${value}`}
+              className="min-w-0 flex-1"
+            />
+          </div>
           <p className="text-caption text-ink-muted" data-testid="native-collector-files">采集文件 0 个</p>
+          {onOpenNearby ? (
+            <button
+              type="button"
+              onClick={onOpenNearby}
+              data-testid="profile-collect-detail"
+              className="min-h-8 rounded-tile px-s2 text-left text-meta font-medium text-accent-strong transition-colors active:bg-surface-sunken"
+            >
+              {focus === 'battle' ? '完整战斗与强提醒 ›' : '完整附近与强提醒 ›'}
+            </button>
+          ) : null}
         </section>
       );
     }
@@ -214,16 +270,34 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
   /** 这路采集是附近页发起的（雷达导向）：不自动停止 / 导入，给一行说明 */
   const nearbyOwned = busy && captureOrigin.origin === 'nearby'
     && (captureOrigin.session == null || captureOrigin.session === state?.fileId);
+  const peek = async () => {
+    // 「只想看看」：nearby 归属 + battle 裁剪，永不自动停止 / 不自动导入
+    markCaptureOrigin('nearby');
+    try {
+      await startCollectorCapture('battle');
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : '无法开始采集');
+    } finally {
+      await refresh();
+    }
+  };
+
   if (compact) {
     const lastFile = visibleFiles[0];
+    const stats = nearby ?? { pets: 0, rare: 0, targets: 0, encounter: null, hit: false, updatedAt: null };
+    const timeText = (ms: number | null) => (ms
+      ? new Date(ms).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+      : '还没采集');
+    const nearbyOwnedNow = busy && captureOrigin.origin === 'nearby'
+      && (captureOrigin.session == null || captureOrigin.session === state?.fileId);
     return (
       <section data-testid="native-collector" data-compact="true" className="space-y-s2">
         <div className="flex items-center justify-between gap-s2">
-          <h2 className="text-title font-semibold text-ink-strong">本机采集</h2>
+          <h2 className="text-title font-semibold text-ink-strong">采集</h2>
           <button
             type="button"
             aria-expanded={helpOpen}
-            aria-label="本机采集说明"
+            aria-label="采集说明"
             data-testid="native-collector-help"
             onClick={() => setHelpOpen((open) => !open)}
             className="flex min-h-8 min-w-8 items-center justify-center rounded-full border border-line bg-surface text-meta font-semibold text-ink-muted transition-colors active:bg-surface-sunken"
@@ -246,31 +320,106 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
           />
         ) : null}
 
-        <p className="text-caption text-ink-muted" data-testid="native-collector-status">
-          {busy ? '采集中' : '已停止'}
-          {lastFile ? ` · 上次 ${new Date(lastFile.createdAt).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
-        </p>
-
-        <div className="flex flex-wrap gap-s2">
-          {busy ? (
-            <Button disabled={state?.phase === 'stopping'} onClick={() => void action('stopCapture')}>
-              停止并保存
-            </Button>
+        <div className="rounded-tile bg-surface-sunken p-s3" data-testid="profile-collect-result" data-focus={focus}>
+          {focus === 'battle' ? (
+            stats.encounter ? (
+              <>
+                <p className="text-hero font-semibold text-ink-strong">最近一场</p>
+                <p className="mt-s1 text-caption text-ink-muted">
+                  {stats.encounter.guardName} L{stats.encounter.level}
+                  {stats.hit ? ' · 目标命中' : ''} · 更新 {timeText(stats.updatedAt)}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-hero font-semibold text-ink-strong">最近一场</p>
+                <p className="mt-s1 text-caption text-ink-muted">还没有战斗数据 · 更新 {timeText(stats.updatedAt)}</p>
+              </>
+            )
           ) : (
-            <Button
-              variant="secondary"
-              disabled={importing || !!error || (desktop && !devices?.ok)}
-              onClick={() => void action('startCapture')}
-              data-testid="native-collector-start"
-            >
-              采集并导入
-            </Button>
+            <>
+              <p className="text-hero font-semibold tabular-nums text-ink-strong">{stats.pets} 只</p>
+              <p className="mt-s1 text-caption text-ink-muted">
+                稀有 {stats.rare}
+                {stats.targets > 0 ? ` · 蹲守 ${stats.targets}` : ''} · 更新 {timeText(stats.updatedAt)}
+              </p>
+            </>
           )}
         </div>
 
-        <p className="text-caption text-ink-muted" data-testid="native-collector-files">
-          采集文件 {visibleFiles.length} 个
-        </p>
+        <div className="flex items-center gap-s2">
+          <span className="shrink-0 text-meta text-ink-muted">采集目标</span>
+          <SegmentedControl
+            label="采集目标"
+            value={focus}
+            options={[
+              { value: 'battle', label: '战斗' },
+              { value: 'nearby', label: '跑图' },
+            ]}
+            onValueChange={(value) => onFocusChange?.(value === 'battle' ? 'battle' : 'nearby')}
+            optionTestId={(value) => `profile-capture-focus-${value}`}
+            className="min-w-0 flex-1"
+          />
+        </div>
+
+        {busy ? (
+          <div className="space-y-s2" data-testid="profile-collect-busy">
+            <Button
+              className="w-full"
+              disabled={state?.phase === 'stopping'}
+              onClick={() => void action('stopCapture')}
+              data-testid="profile-collect-stop"
+            >
+              停止并保存
+            </Button>
+            {nearbyOwnedNow ? (
+              <p className="text-caption text-ink-muted" data-testid="profile-collect-nearby-owned">
+                本次由详情页发起，不自动停止、不自动导入
+              </p>
+            ) : null}
+            {onOpenNearby ? (
+              <Button variant="secondary" className="w-full" onClick={onOpenNearby} data-testid="profile-collect-list">
+                查看列表
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="space-y-s2">
+            <Button
+              variant="secondary"
+              className="w-full"
+              disabled={importing || !!error || (desktop && !devices?.ok)}
+              onClick={() => void peek()}
+              data-testid="profile-collect-peek"
+            >
+              开始采集
+            </Button>
+            <Button
+              className="w-full"
+              disabled={importing || !!error || (desktop && !devices?.ok)}
+              onClick={() => void action('startCapture')}
+              data-testid="profile-collect-import"
+            >
+              采集并导入
+            </Button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-s2">
+          <span className="text-caption text-ink-muted" data-testid="native-collector-files">
+            采集文件 {visibleFiles.length} 个{lastFile ? ' · 最近一个已保存' : ''}
+          </span>
+          {onOpenNearby ? (
+            <button
+              type="button"
+              onClick={onOpenNearby}
+              data-testid="profile-collect-detail"
+              className="min-h-8 shrink-0 rounded-tile px-s2 text-meta font-medium text-accent-strong transition-colors active:bg-surface-sunken"
+            >
+              {focus === 'battle' ? '完整战斗与强提醒 ›' : '完整附近与强提醒 ›'}
+            </button>
+          ) : null}
+        </div>
 
         {helpOpen ? (
           <div className="space-y-s2 rounded-tile bg-surface-sunken p-s3" data-testid="native-collector-help-body">
@@ -279,10 +428,13 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
                 ? '在你自己的电脑上用 Npcap 抓取游戏流量，只在本地保存与解析，不上传任何数据。'
                 : '仅在手机本地保存与解析，不上传任何数据。'}
             </p>
+            <p className="text-caption text-ink-soft" data-testid="native-collector-actions-help">
+              「开始采集」只看：不自动停止、不自动导入；「采集并导入」走满自动停止并导入，是入库动作。
+            </p>
             <ol className="list-decimal space-y-s1 pl-5 text-caption text-ink-muted">
               <li>关闭其他 VPN 或游戏加速器，开始采集并同意系统 VPN 授权。</li>
               <li>打开游戏，重新登录，依次查看精灵仓库、背包与蛋仓。</li>
-              <li>{liveMode ? '持续获取已开启：数据会边玩边更新，不收齐也不自动停止；想结束时点「停止并保存」。' : '查看数据进度；内容稳定（进度条走满）后会自动停止、保存并开始导入。'}</li>
+              <li>{liveMode ? '持续获取已开启：数据会边玩边更新，不收齐也不自动停止；想结束时点「停止并保存」。' : '内容稳定（进度条走满）后会自动停止、保存并开始导入。'}</li>
             </ol>
             <div className="flex items-center justify-between gap-s2">
               <span className="text-caption text-ink-soft">持续获取模式</span>
@@ -300,6 +452,7 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
           </div>
         ) : null}
       </section>
+
     );
   }
 

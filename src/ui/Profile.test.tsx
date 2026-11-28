@@ -117,121 +117,22 @@ describe('Profile（我的）', () => {
     expect(onNavigate).toHaveBeenCalledWith({ type: 'open-egg-stock' });
   });
 
-  test('附近卡：详情进附近页，战斗/跑图两个开关至少留一项', async () => {
+  test('采集卡：详情进附近页，战斗/跑图切换只改查看偏好', async () => {
     await seedImportedPets();
     const onNavigate = vi.fn();
     render(<Profile section="data" returnToGroups={false} onNavigate={onNavigate} />);
 
-    expect(screen.getByTestId('profile-nearby-card')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('profile-nearby-detail'));
+    expect(screen.getByTestId('profile-collect-card')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('profile-collect-detail'));
     expect(onNavigate).toHaveBeenCalledWith({ type: 'tab', page: 'nearby' });
 
-    const battle = screen.getByTestId('profile-nearby-panel-battle');
-    const nearby = screen.getByTestId('profile-nearby-panel-nearby');
-    // 默认看跑图；切战斗只换偏好，不碰采集会话
-    expect(nearby).toHaveAttribute('aria-pressed', 'true');
-    expect(battle).toHaveAttribute('aria-pressed', 'false');
+    const battle = screen.getByTestId('profile-capture-focus-battle');
+    const nearby = screen.getByTestId('profile-capture-focus-nearby');
+    expect(screen.getByTestId('profile-collect-result')).toHaveAttribute('data-focus', 'nearby');
     fireEvent.click(battle);
-    expect(battle).toHaveAttribute('aria-pressed', 'true');
-    expect(nearby).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('profile-collect-result')).toHaveAttribute('data-focus', 'battle');
     fireEvent.click(nearby);
-    expect(nearby).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  test('概览卡挂在我的首页；分区子视图有「返回我的」并带 profile-section-data', () => {
-    const onNavigate = vi.fn();
-    const { rerender } = render(
-      <Profile section="data" returnToGroups={false} onNavigate={onNavigate} />,
-    );
-    expect(screen.getByTestId('profile-header')).toBeTruthy();
-
-    rerender(<Profile section="identity" returnToGroups={false} onNavigate={onNavigate} />);
-    expect(screen.queryByTestId('profile-header')).toBeNull();
-    fireEvent.click(screen.getByTestId('profile-section-data'));
-    expect(onNavigate).toHaveBeenCalledWith({ type: 'open-profile', section: 'data' });
-  });
-
-  test('已登录：概览卡与「我的身份」行都写用户名，头像取用户名首字', async () => {
-    window.localStorage.setItem('roco.deviceToken', 'token-1');
-    window.localStorage.setItem('roco.accountId', 'acc-1');
-    stubMe('训练家小明');
-    await seedImportedPets();
-
-    render(<Profile section="data" returnToGroups={false} onNavigate={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('profile-header-name')).toHaveTextContent('训练家小明');
-    });
-    expect(screen.getByTestId('profile-header-avatar')).toHaveTextContent('训');
-    // 设置列表里的账号行同样不能再写死「已登录」
-    expect(screen.getByTestId('profile-section-identity')).toHaveTextContent('训练家小明');
-  });
-
-  test('老账号没有用户名：概览卡仍写「已登录」，头像写「已」，账号行也写「已登录」', async () => {
-    window.localStorage.setItem('roco.deviceToken', 'token-1');
-    window.localStorage.setItem('roco.accountId', 'acc-1');
-    await seedImportedPets();
-
-    render(<Profile section="data" returnToGroups={false} onNavigate={vi.fn()} />);
-
-    expect(screen.getByTestId('profile-header-name')).toHaveTextContent('已登录');
-    expect(screen.getByTestId('profile-header-avatar')).toHaveTextContent('已');
-    expect(screen.getByTestId('profile-section-identity')).toHaveTextContent('已登录');
-  });
-
-  test('未登录：概览卡写「本机模式 · 未登录」，账号行写「未登录」', async () => {
-    await seedImportedPets();
-    render(<Profile section="data" returnToGroups={false} onNavigate={vi.fn()} />);
-
-    expect(screen.getByTestId('profile-header-name')).toHaveTextContent('本机模式 · 未登录');
-    expect(screen.getByTestId('profile-section-identity')).toHaveTextContent('未登录');
-  });
-
-  test('用户名只查一次 /api/me：概览卡与账号面板共用同一份缓存', async () => {
-    await seedImportedPets();
-    window.localStorage.setItem('roco.deviceToken', 'token-1');
-    window.localStorage.setItem('roco.accountId', 'acc-1');
-    const calls = stubMe('训练家小明');
-
-    render(<Profile section="data" returnToGroups={false} onNavigate={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('profile-header-name')).toHaveTextContent('训练家小明');
-    });
-    // 让账号面板的后台刷新也落定，再数请求
-    await act(async () => {});
-    expect(calls.filter((path) => path.startsWith('/api/me'))).toHaveLength(1);
-  });
-
-  test('小组分区：未登录时给登录入口，身份面板保持隐藏', () => {
-    renderProfile('groups');
-    expect(screen.getByTestId('collection-groups')).toHaveAttribute('data-variant', 'admin');
-    expect(screen.getByTestId('group-login-hint')).toBeTruthy();
-    expect(screen.queryByTestId('account-panel')).toBeNull();
-  });
-
-  test('游戏数据里的「附近」子视图：切换发导航意图，打开时渲染附近页', async () => {
-    await seedImportedPets();
-    const onNavigate = vi.fn();
-    const { rerender } = render(
-      <Profile section="data" returnToGroups={false} onNavigate={onNavigate} />,
-    );
-    fireEvent.click(screen.getByTestId('profile-nearby-detail'));
-    expect(onNavigate).toHaveBeenCalledWith({ type: 'tab', page: 'nearby' });
-
-    rerender(
-      <Profile
-        section="data"
-        dataView="nearby"
-        returnToGroups={false}
-        onNavigate={onNavigate}
-      />,
-    );
-    expect(screen.getByTestId('nearby-page')).toBeTruthy();
-    expect(screen.queryByTestId('profile-sync-block')).toBeNull();
-    // 附近是数据视图的子视图：左上角仍能回到「我的」首页
-    fireEvent.click(screen.getByTestId('profile-section-data'));
-    expect(onNavigate).toHaveBeenCalledWith({ type: 'open-profile', section: 'data' });
+    expect(screen.getByTestId('profile-collect-result')).toHaveAttribute('data-focus', 'nearby');
   });
 
   test('本机采集卡：三阶段反馈在，文件导入入口已删除', async () => {

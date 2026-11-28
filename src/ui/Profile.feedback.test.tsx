@@ -71,7 +71,7 @@ describe('② 页内跳转不被顶栏盖住', () => {
       expect(scrollIntoView).not.toHaveBeenCalled();
       expect(target.className).toContain('scroll-mt-24');
       // 落点块里的标题「本机采集」在这个块内，跟着一起让位
-      expect(within(target).getByRole('heading', { name: '本机采集' })).toBeTruthy();
+      expect(within(target).getByRole('heading', { name: '采集' })).toBeTruthy();
     } finally {
       Element.prototype.scrollIntoView = original;
     }

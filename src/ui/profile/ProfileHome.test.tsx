@@ -12,21 +12,20 @@ import type { SectionDef } from './types';
 afterEach(cleanup);
 
 describe('「我的」页配方（卡片化）', () => {
-  test('有数据：身份 → 附近卡 → 本机采集卡 → 蛋仓/小组 → 设置', () => {
+  test('有数据：身份 → 采集卡 → 蛋仓/小组 → 设置', () => {
     render(<ProfileHome ctx={makeCtx()} />);
 
     const home = screen.getByTestId('profile-home');
-    expect(home.getAttribute('data-sections')).toBe('identity,nearby,collect,egg-group,settings');
-    expect(screen.getByTestId('profile-nearby-card')).toBeTruthy();
+    expect(home.getAttribute('data-sections')).toBe('identity,collect,egg-group,settings');
     expect(screen.getByTestId('profile-egg-card')).toBeTruthy();
     expect(screen.getByTestId('profile-group-card')).toBeTruthy();
   });
 
-  test('没有数据：身份 + 附近 + 采集 + 设置（蛋仓/小组不出现，不重复空态）', () => {
+  test('没有数据：身份 + 采集 + 设置（蛋仓/小组不出现，不重复空态）', () => {
     render(<ProfileHome ctx={makeCtx({ snapshots: [] })} />);
 
     expect(screen.getByTestId('profile-home').getAttribute('data-sections')).toBe(
-      'identity,nearby,collect,settings',
+      'identity,collect,settings',
     );
     expect(screen.queryByTestId('profile-egg-card')).toBeNull();
     expect(screen.queryByTestId('profile-group-card')).toBeNull();
@@ -61,7 +60,7 @@ describe('「我的」页配方（卡片化）', () => {
       'egg-group',
       'settings',
     ]);
-    expect(PROFILE_CARDS_V3.length).toBe(5);
+    expect(PROFILE_CARDS_V3.length).toBe(4);
     for (const section of PROFILE_CARDS_V3) {
       expect(typeof section.id).toBe('string');
       expect(typeof section.render).toBe('function');
