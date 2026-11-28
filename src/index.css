@@ -1066,3 +1066,130 @@ main.mx-auto.max-w-md.collection-sim-page {
 @media (prefers-reduced-motion: reduce) {
   .profile-section-fade { animation: none; }
 }
+
+/* ==========================================================================
+   精灵背包 · 16:9 / 16:10 横屏卡（2026-11-28 用户口径）
+   - 版式和仿真背包标准卡一致：编号/蛋组左上、头像居中、性格/奖牌/分贝在右、
+     名字和成长数据全宽居中
+   - 保持 104 高（不再加高）；底部一行放「账号名·背包位置」
+   - 账号名可截断（省略号），背包位置不截断；两段始终同一行
+   - 只作用于精灵背包卡（PetCard 带 pet-card-inventory）；竖屏 / 4:3 横屏不变
+   ========================================================================== */
+@media (orientation: landscape) and (min-width: 1280px) and (min-aspect-ratio: 16/10) {
+  /* 卡头：图鉴号 / 蛋组 9，性格 10.5，奖牌 16，分贝 9.5 */
+  .pet-card-inventory [data-testid="pet-card-header"] {
+    max-height: 56px;
+    font-size: 9px;
+    line-height: 1.15;
+  }
+  .pet-card-inventory [data-testid="pet-card-egg-groups"] > span {
+    font-size: 9px;
+    line-height: 1.25;
+    padding: 0 2px;
+  }
+  .pet-card-inventory [data-testid="pet-card-natures"] > span {
+    height: auto;
+    min-height: 0;
+    font-size: 10.5px;
+    line-height: 1.25;
+    padding: 1px 2px;
+  }
+  .pet-card-inventory [data-testid="pet-card-medals"] {
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .pet-card-inventory [data-testid="pet-card-medals"] img,
+  .pet-card-inventory [data-testid="pet-card-rarity"] {
+    width: 16px;
+    height: 16px;
+  }
+  .pet-card-inventory [data-testid="pet-card-voice"] {
+    font-size: 9.5px;
+    line-height: 11px;
+  }
+
+  /* 头像 58，贴顶；名字紧贴在头像下沿，不留空档 */
+  .pet-card-inventory [data-testid="pet-card-avatar"] {
+    top: 1px;
+    width: 58px;
+    height: 58px;
+    transform: translateX(-50%);
+  }
+  .pet-card-inventory [data-testid="pet-card-avatar"] [data-testid="pet-avatar"],
+  .pet-card-inventory [data-testid="pet-card-avatar"] [data-testid="pet-avatar-fallback"] {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* 名字 12.75 / 56；身高体重 10.5 / 73；底注 9.5、17 高、一行 */
+  .pet-card-inventory h3 {
+    top: 56px;
+    height: 16px;
+    font-size: 12.75px;
+    line-height: 16px;
+  }
+  .pet-card-inventory [data-testid="pet-card-details-row"] {
+    top: 73px;
+    height: 13px;
+  }
+  .pet-card-inventory [data-testid="pet-card-sizes"] {
+    font-size: 10.5px;
+    line-height: 13px;
+  }
+  .pet-card-inventory [data-testid="pet-card-footer"] {
+    height: 17px;
+    font-size: 9.5px;
+    line-height: 11px;
+  }
+  .pet-card-inventory [data-testid="pet-card-footer"] > span {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 100%;
+    color: #64748b;
+    font-size: 9.5px;
+    line-height: 11px;
+  }
+  /* 账号名：可缩可截断，过长出省略号；盒位：不缩、不截断 */
+  .pet-card-inventory [data-testid="pet-card-footer"] > span > span:first-child {
+    display: inline-block;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 62%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pet-card-inventory [data-testid="pet-card-footer"] > span > span:nth-child(2) {
+    display: inline-block;
+    flex: 0 0 auto;
+    min-width: max-content;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+  .pet-card-inventory [data-testid="pet-card-footer"] > span > span + span::before {
+    content: '·';
+    margin-right: 2px;
+    color: #cbd5e1;
+  }
+
+  /* 六列 + 16:10 时卡宽只有 115：整体收一档，避免文字压到精灵上 */
+  @container (max-width: 128px) {
+    .pet-card-inventory [data-testid="pet-card-header"] { font-size: 8px; }
+    .pet-card-inventory [data-testid="pet-card-egg-groups"] > span { font-size: 7.5px; }
+    .pet-card-inventory [data-testid="pet-card-natures"] > span { font-size: 8.5px; }
+    .pet-card-inventory [data-testid="pet-card-medals"] img,
+    .pet-card-inventory [data-testid="pet-card-rarity"] { width: 13px; height: 13px; }
+    .pet-card-inventory [data-testid="pet-card-voice"] { font-size: 8px; line-height: 9px; }
+    .pet-card-inventory [data-testid="pet-card-avatar"] { width: 46px; height: 46px; }
+    .pet-card-inventory h3 { top: 52px; font-size: 11px; }
+    .pet-card-inventory [data-testid="pet-card-details-row"] { top: 69px; }
+    .pet-card-inventory [data-testid="pet-card-sizes"] { font-size: 9.5px; }
+    .pet-card-inventory [data-testid="pet-card-footer"] > span { font-size: 8.5px; line-height: 10px; }
+  }
+}
+
+

@@ -58,6 +58,7 @@ export function PetCard({ pet, species, eggGroupNames }: PetCardProps) {
 
   return (
     <PetCardLayout
+      className="pet-card-inventory"
       name={displayName}
       size="tall"
       gender={pet.gender}
