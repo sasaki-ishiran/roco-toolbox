@@ -38,9 +38,14 @@ class CaptureManager {
     try {
       this.npcapVersion = npcap.version();
       if (!this.npcapVersion) this.npcapError = '未找到 Npcap（wpcap.dll），请先安装 Npcap';
-    } catch {
+    } catch (cause) {
       this.npcapVersion = '';
-      this.npcapError = '未找到 Npcap（wpcap.dll），请先安装 Npcap';
+      // 2026-11-28：区分「Npcap 没装」与「安装包缺原生模块」——
+      // 后者以前也显示成「请安装 Npcap」，用户会白装一遍驱动（本机明明有 Npcap）。
+      const message = cause instanceof Error ? cause.message : String(cause);
+      this.npcapError = cause && cause.code === 'NPCAP_MISSING'
+        ? '未找到 Npcap（wpcap.dll），请先安装 Npcap'
+        : `内置抓包组件不可用：${message}`;
     }
   }
 

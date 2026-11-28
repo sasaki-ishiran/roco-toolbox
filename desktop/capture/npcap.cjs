@@ -38,7 +38,19 @@ let cached = null;
 function loadBindings() {
   if (cached) return cached;
 
-  const koffi = require('koffi');
+  // 2026-11-28：把「koffi 装不上」和「Npcap 没装」分开报，否则打包漏了 native 二进制
+  // 会显示成「请安装 Npcap」，让人白装一遍驱动（本机明明有 Npcap 1.89 却报缺失）。
+  let koffi;
+  try {
+    koffi = require('koffi');
+  } catch (cause) {
+    const error = new Error(
+      `内置抓包组件加载失败（koffi）：${cause instanceof Error ? cause.message : String(cause)}。` +
+      '这是安装包缺少原生模块，请更新到最新安装包。',
+    );
+    error.code = 'KOFFI_LOAD_FAILED';
+    throw error;
+  }
   const dll = DLL_CANDIDATES.find((candidate) => fs.existsSync(candidate));
   if (!dll) {
     throw new NpcapMissingError('未找到 Npcap（wpcap.dll）。请先安装 Npcap 后重试。');
