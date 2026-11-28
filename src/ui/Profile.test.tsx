@@ -128,13 +128,14 @@ describe('Profile（我的）', () => {
 
     const battle = screen.getByTestId('profile-nearby-panel-battle');
     const nearby = screen.getByTestId('profile-nearby-panel-nearby');
-    expect(battle).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(nearby);
-    expect(nearby).toHaveAttribute('aria-pressed', 'false');
-    // 关掉跑图后，战斗就是最后一项：置灰，不能再关掉
-    expect(battle).toBeDisabled();
+    // 默认看跑图；切战斗只换偏好，不碰采集会话
+    expect(nearby).toHaveAttribute('aria-pressed', 'true');
+    expect(battle).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(battle);
     expect(battle).toHaveAttribute('aria-pressed', 'true');
+    expect(nearby).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(nearby);
+    expect(nearby).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('概览卡挂在我的首页；分区子视图有「返回我的」并带 profile-section-data', () => {

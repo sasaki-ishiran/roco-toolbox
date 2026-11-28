@@ -96,6 +96,14 @@ async function main() {
       await page.screenshot({ path: `${OUT}/UX1-实现-${size.width}-1-我的页.png` });
       console.log(size.width, '1-我的页', await page.getByTestId('profile-home').getAttribute('data-sections'));
 
+      // 战斗焦点：只换看哪一类，不重开采集
+      await page.getByTestId('profile-nearby-panel-battle').click({ force: true });
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: `${OUT}/UX1-实现-${size.width}-1b-我的页-战斗.png` });
+      console.log(size.width, '1b-战斗焦点', await page.getByTestId('profile-nearby-status').getAttribute('data-focus'));
+      await page.getByTestId('profile-nearby-panel-nearby').click({ force: true });
+      await page.waitForTimeout(150);
+
       await page.getByTestId('native-collector-help').click();
       await page.waitForTimeout(200);
       await page.screenshot({ path: `${OUT}/UX1-实现-${size.width}-2-采集问号.png` });

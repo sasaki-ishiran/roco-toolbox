@@ -20,6 +20,7 @@ import { KIND_LABELS, rareAlertTitle } from '../pcap/rareRules';
 import type { NavigationIntent } from './navigation';
 import { NearbyBattleCard } from './NearbyBattleCard';
 import { NearbyAlertCard } from './NearbyAlertCard';
+import { useCaptureFocus } from '../collector/captureFocusStore';
 import { MapErrorBoundary } from './NearbyErrorBoundary';
 import { NearbyMap } from './NearbyMap';
 import { NearbyRadar } from './NearbyRadar';
@@ -250,6 +251,7 @@ export function Nearby({ onNavigate, embedded = false }: NearbyProps) {
   const rareAlertOn = useRareAlert();
   /** 手机悬浮球展开后显示哪些面板（本机记忆，只影响安卓壳，不重排本页） */
   const shellOverlaySupported = hasNearbyOverlayShell();
+  const captureFocus = useCaptureFocus();
   /** 悬浮球是否被隐藏（1.3.6）：长按球隐藏，这里负责恢复；null = 旧壳没有这个能力 */
   const [orbHidden, setOrbHiddenState] = useState<boolean | null>(null);
   const [view, setView] = useState<NearbyView>('map');
@@ -648,7 +650,7 @@ export function Nearby({ onNavigate, embedded = false }: NearbyProps) {
       <NearbyAlertCard />
       <section className="rounded-2xl bg-white p-3 shadow-sm" data-testid="nearby-status">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-800">跑图 · 附近精灵</h2>
+          <h2 className="text-sm font-semibold text-slate-800">附近精灵</h2>
           <div className="flex shrink-0 items-center gap-1">
             {overlaySupported ? (
               <button
@@ -729,7 +731,7 @@ export function Nearby({ onNavigate, embedded = false }: NearbyProps) {
         {flow.error ? <p className="mt-1 text-xs text-rose-600" role="alert">{flow.error}</p> : null}
       </section>
 
-      <NearbyBattleCard encounter={encounter} />
+      {captureFocus === 'battle' ? <NearbyBattleCard encounter={encounter} /> : null}
 
       {capturing && progress && !progress.analysis.hasKey ? (
         <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200" data-testid="nearby-waiting-key">
@@ -758,6 +760,7 @@ export function Nearby({ onNavigate, embedded = false }: NearbyProps) {
         </div>
       ) : null}
 
+      <div className={captureFocus === 'battle' ? 'hidden' : 'contents'} data-testid="nearby-list-region">
       {hasAny ? (
         <>
           <div className="space-y-1.5 rounded-2xl bg-white p-3 shadow-sm" data-tour="nearby-filters">
@@ -951,6 +954,7 @@ export function Nearby({ onNavigate, embedded = false }: NearbyProps) {
           }
         />
       )}
+      </div>
 
       {fullscreen ? (
         <div className="fixed inset-0 z-[70] flex flex-col bg-slate-950" data-testid="nearby-fullscreen-view">

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { useAutoImport, requestAutoImport } from '../collector/autoImportFlow';
 import { isNearbyOwnedSession, resetCaptureOriginForTest } from '../collector/captureOriginStore';
+import { resetCaptureFocusForTest, setCaptureFocus } from '../collector/captureFocusStore';
 import type { CaptureProgress } from '../collector/captureProgress';
 import { resetNearbyAlertGateForTest } from '../collector/nearbyAlert';
 import { resetNearbyRetainedForTest } from '../collector/nearbyRetainStore';
@@ -86,6 +87,7 @@ const shellWithOverlay = () => {
 const openList = () => fireEvent.click(screen.getByRole('button', { name: '列表' }));
 
 beforeEach(() => {
+  resetCaptureFocusForTest();
   resetNearbyRetainedForTest();
   resetNearbyAlertGateForTest();
   resetCaptureOriginForTest();
@@ -109,7 +111,8 @@ describe('附近页', () => {
     expect(screen.getByText(/附近 3 只/)).toBeTruthy();
   });
 
-  test('赛季奇遇战显示捕获后的精灵名与百分比', () => {
+  test('赛季奇遇战显示捕获后的精灵名与百分比（焦点=战斗）', () => {
+    setCaptureFocus('battle');
     feed({ ...snapshot, encounter });
     render(<Nearby onNavigate={vi.fn()} />);
     const card = screen.getByTestId('nearby-battle-card');
@@ -121,7 +124,8 @@ describe('附近页', () => {
     expect(card.textContent).toContain('声音 14dB');
   });
 
-  test('还没拿到真实 petId 时不猜精灵名，显示守卫名', () => {
+  test('还没拿到真实 petId 时不猜精灵名，显示守卫名（焦点=战斗）', () => {
+    setCaptureFocus('battle');
     feed({ ...snapshot, encounter: { ...encounter, rewardPetId: null, rewardName: '' } });
     render(<Nearby onNavigate={vi.fn()} />);
     const card = screen.getByTestId('nearby-battle-card');
