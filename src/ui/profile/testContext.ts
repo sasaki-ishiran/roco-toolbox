@@ -39,6 +39,7 @@ export function makeCtx(overrides: Partial<ProfilePageContext> = {}): ProfilePag
     onOpenGroups: vi.fn(),
     onGoIdentity: vi.fn(),
     onGoNearby: vi.fn(),
+    onGoDashboard: vi.fn(),
     onStartTour: vi.fn(),
     autoConflict: null,
     onAutoConflictHandled: vi.fn(),

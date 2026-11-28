@@ -165,6 +165,7 @@ export function Profile({
     onOpenGroups: () => onNavigate({ type: 'open-groups' }),
     onGoIdentity: () => goSection('identity'),
     onGoNearby: () => onNavigate({ type: 'tab', page: 'nearby' }),
+    onGoDashboard: () => onNavigate({ type: 'tab', page: 'dashboard' }),
     onStartTour,
     autoConflict,
     onAutoConflictHandled: () => setSyncConflict(null),

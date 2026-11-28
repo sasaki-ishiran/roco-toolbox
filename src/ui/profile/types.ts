@@ -35,6 +35,8 @@ export interface ProfilePageContext {
   onOpenGroups: () => void;
   onGoIdentity: () => void;
   onGoNearby: () => void;
+  /** 采集完成态里的「看看板」 */
+  onGoDashboard: () => void;
   onStartTour?: () => void;
   autoConflict: import('../../api/session').CloudMeta | null;
   onAutoConflictHandled: () => void;
