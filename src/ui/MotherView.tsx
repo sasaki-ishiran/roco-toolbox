@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { GRADE_BODY, GRADE_VOICE, type MotherGroup, type TargetMode } from '../domain/petFilters';
 import type { OwnedPet } from '../domain/types';
 import { species as catalogSpecies } from '../data/catalog';
@@ -504,6 +504,9 @@ export function MotherView({
    * getBoundingClientRect 量真实高度（≥1200px 宽横屏一次收起筛选要 149.5ms，
    * 因为测量本身便宜但引起整页重排贵）。改用估算高度：分区高度 = header 30px
    * + ceil(链数/4) × 108px，gap 固定 8px，列表顶部按视口 15% 估算。
+   *
+   * 仍然留在 useLayoutEffect：估算只是算术，不读 DOM 就不会强制重排；
+   * 放回 layout 阶段才能保持「收起/展开筛选时列数在第一帧就是对的」，不会 2 列闪一下再跳 3 列。
    */
   const [threeColumns, setThreeColumns] = useState(false);
   const [layoutTick, setLayoutTick] = useState(0);
@@ -513,7 +516,7 @@ export function MotherView({
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!filterCollapsed || chainFilter === 'collecting') {
       setThreeColumns(false);
       return;
