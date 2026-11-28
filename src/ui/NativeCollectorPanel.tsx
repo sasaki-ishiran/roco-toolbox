@@ -12,13 +12,6 @@ import { toggleLiveMode, useLiveMode } from '../collector/liveModeStore';
 import { toggleRareAlert, useRareAlert } from '../collector/rareAlertStore';
 
 const sizeLabel = (size: number) => `${(size / 1024 / 1024).toFixed(2)} MiB`;
-const COMPLETION_DONE_KEY = 'roco.profileImportDone';
-function readCompletionDone(): string | null {
-  try { return window.localStorage.getItem(COMPLETION_DONE_KEY); } catch { return null; }
-}
-function markCompletionDone(session: string): void {
-  try { window.localStorage.setItem(COMPLETION_DONE_KEY, session); } catch { /* 隐私模式忽略 */ }
-}
 /** 自动导入走到哪一步（弹窗只在 done / failed 时出现，2026-10-25 用户要求）。
  *  2026-11-07：自动停止 / 保存 / 导入的流程抽到模块级 autoImportFlow（附近页触发的是同一流程），这里只订阅展示。 */
 const AUTO_STAGE_LABEL: Partial<Record<AutoImportStage, string>> = {
@@ -162,42 +155,6 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
     }
     finally { await refresh(); }
   };
-  const completion = flow.completion;
-  const importFailedNow = flow.completionError != null;
-  // 仅开发/截图：?mockComplete=1 强制展示一次性完成态（生产构建会摇掉）
-  const forceComplete = import.meta.env.DEV && typeof window !== 'undefined'
-    && new URLSearchParams(window.location.search).has('mockComplete');
-  const [completionClosed, setCompletionClosed] = useState(false);
-  const [restartedAfterCompletion, setRestartedAfterCompletion] = useState(false);
-  const [completionAt, setCompletionAt] = useState<string | null>(null);
-  const completionSession = completion?.session ?? null;
-  useEffect(() => {
-    if (forceComplete && !completionAt) {
-      setCompletionAt(new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' }));
-    }
-  }, [forceComplete, completionAt]);
-  useEffect(() => {
-    if (!completionSession) return;
-    setCompletionClosed(readCompletionDone() === completionSession);
-    setCompletionAt(new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' }));
-  }, [completionSession]);
-  // 离开「我的」也算看过：回到页面不再弹这条
-  useEffect(() => () => {
-    if (completionSession && !importFailedNow) markCompletionDone(completionSession);
-  }, [completionSession, importFailedNow]);
-  const dismissCompletion = () => {
-    setCompletionClosed(true);
-    if (completionSession) markCompletionDone(completionSession);
-    clearAutoImportCompletion();
-  };
-  const startFresh = () => {
-    setRestartedAfterCompletion(true);
-    clearAutoImportCompletion();
-  };
-  const showComplete = !restartedAfterCompletion && !completionClosed
-    && ((completion != null && !importFailedNow) || forceComplete);
-  const showImportFailed = !restartedAfterCompletion && !completionClosed
-    && completion != null && importFailedNow;
   if (!checked) {
     // 有采集桥但状态还没读完：先撑住卡片高度，避免切进「我的」时整块从无到有闪一下
     if (compact) {
@@ -263,15 +220,6 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
       <section data-testid="native-collector" data-compact="true" className="space-y-s2">
         <div className="flex items-center justify-between gap-s2">
           <h2 className="text-title font-semibold text-ink-strong">本机采集</h2>
-          <div className="flex items-center gap-s1">
-          {showComplete ? (
-            <span
-              className="rounded-chip border border-accent-line bg-accent-soft px-s2 py-s1 text-meta font-medium text-accent-strong"
-              data-testid="native-collector-state"
-            >
-              已完成
-            </span>
-          ) : null}
           <button
             type="button"
             aria-expanded={helpOpen}
@@ -282,7 +230,6 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
           >
             ?
           </button>
-          </div>
         </div>
 
         {/* 边界与错误不收起：没有桥 / 系统过低 / 桥报错直接可见 */}
@@ -304,44 +251,6 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
           {lastFile ? ` · 上次 ${new Date(lastFile.createdAt).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
         </p>
 
-        {showComplete && !busy ? (
-          <div
-            role="status"
-            className="space-y-s2 rounded-tile border border-accent-line bg-accent-soft p-s3"
-            data-testid="native-collector-complete"
-          >
-            <div>
-              <p className="text-body font-semibold text-accent-strong">已采集并导入</p>
-              <p className="text-caption text-ink-soft">这次采集的数据已经保存到本机，看板可直接使用</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={dismissCompletion}
-              data-testid="native-collector-complete-dismiss"
-            >
-              知道了
-            </Button>
-          </div>
-        ) : showImportFailed ? (
-          <div
-            role="status"
-            className="flex flex-wrap items-center gap-x-s2 gap-y-s1 rounded-tile border border-warn-line bg-warn-soft px-s3 py-s2"
-            data-testid="native-collector-import-failed"
-          >
-            <span className="min-w-0 flex-1 text-body font-medium text-warn">
-              {'已停止，但导入失败'}{flow.completionError ? ' · ' + flow.completionError : ''}
-            </span>
-            <button
-              type="button"
-              onClick={() => { if (completion?.session) requestAutoImport(completion.session); }}
-              data-testid="native-collector-retry"
-              className="min-h-8 shrink-0 rounded-tile px-s2 text-meta font-medium text-warn transition-colors active:bg-surface-sunken"
-            >
-              重试
-            </button>
-          </div>
-        ) : (
         <div className="flex flex-wrap gap-s2">
           {busy ? (
             <Button disabled={state?.phase === 'stopping'} onClick={() => void action('stopCapture')}>
@@ -351,14 +260,13 @@ export function NativeCollectorPanel({ compact = false }: NativeCollectorPanelPr
             <Button
               variant="secondary"
               disabled={importing || !!error || (desktop && !devices?.ok)}
-              onClick={() => { startFresh(); void action('startCapture'); }}
+              onClick={() => void action('startCapture')}
               data-testid="native-collector-start"
             >
               采集并导入
             </Button>
           )}
         </div>
-        )}
 
         <p className="text-caption text-ink-muted" data-testid="native-collector-files">
           采集文件 {visibleFiles.length} 个
