@@ -2,7 +2,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { AccountSnapshot } from '../domain/parseBackup';
 import { clearAccountFilter, toggleAccount } from './accountFilterStore';
-import { HomeLand, saveHomeView } from './Home';
+import { HomeLand } from './Home';
+import { saveHomeView } from './homeView';
 
 const h = vi.hoisted(() => ({
   snapshots: [] as AccountSnapshot[],

@@ -1,13 +1,24 @@
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
+import { registerRoute } from 'workbox-routing';
+import { NetworkFirst } from 'workbox-strategies';
 import { putSharedFile } from './share/shareTarget';
 
 declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>;
 };
 
-// 静态资源（含图鉴 json）预缓存，断网也能打开
+// 静态资源（含图鉴 json）预缓存，断网也能打开。
+// 超过 maximumFileSizeToCacheInBytes（500KB）的文件不在此列表里
+// （2026-11-27 PWA 优化），下面用 NetworkFirst 运行时缓存兜底。
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
+
+// 大文件（pcap-decoder、decodeCapture.worker 等，仅导入/抓包时用到）
+// 运行时 NetworkFirst：有网先拉最新，断网用旧缓存兜底；首次安装不强制下载。
+registerRoute(
+  ({ url }) => url.pathname.endsWith('.js') && url.pathname.includes('/assets/'),
+  new NetworkFirst({ cacheName: 'roco-runtime-js' }),
+);
 
 // 新版本装好就立刻接管，配合 autoUpdate 让手机用户不用自己找"刷新"
 self.addEventListener('install', () => {
