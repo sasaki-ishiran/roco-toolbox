@@ -13,6 +13,13 @@ import { toggleLiveMode, useLiveMode } from '../collector/liveModeStore';
 import { toggleRareAlert, useRareAlert } from '../collector/rareAlertStore';
 
 const sizeLabel = (size: number) => `${(size / 1024 / 1024).toFixed(2)} MiB`;
+const COMPLETION_DONE_KEY = 'roco.profileImportDone';
+function readCompletionDone(): string | null {
+  try { return window.localStorage.getItem(COMPLETION_DONE_KEY); } catch { return null; }
+}
+function markCompletionDone(session: string): void {
+  try { window.localStorage.setItem(COMPLETION_DONE_KEY, session); } catch { /* 隐私模式忽略 */ }
+}
 /** 自动导入走到哪一步（弹窗只在 done / failed 时出现，2026-10-25 用户要求）。
  *  2026-11-07：自动停止 / 保存 / 导入的流程抽到模块级 autoImportFlow（附近页触发的是同一流程），这里只订阅展示。 */
 const AUTO_STAGE_LABEL: Partial<Record<AutoImportStage, string>> = {
@@ -35,6 +42,7 @@ export interface NativeCollectorPanelProps {
   focus?: 'battle' | 'nearby';
   onFocusChange?: (focus: 'battle' | 'nearby') => void;
   onOpenNearby?: () => void;
+  onOpenDashboard?: () => void;
 }
 
 export function NativeCollectorPanel({
@@ -43,6 +51,7 @@ export function NativeCollectorPanel({
   focus = 'nearby',
   onFocusChange,
   onOpenNearby,
+  onOpenDashboard,
 }: NativeCollectorPanelProps = {}) {
   const [state, setState] = useState<CollectorState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,11 +71,42 @@ export function NativeCollectorPanel({
   /** 2026-11-07：自动停止 / 保存 / 导入在模块级 autoImportFlow 里跑，这里只订阅它的状态做展示；
    *  附近页触发的也是同一流程，所以等待期间切页不会中断，回来也不会重复导入。 */
   const flow = useAutoImport();
-  const completed = flow.completion;
+  const completion = flow.completion;
+  const importFailedNow = flow.completionError != null;
   // 仅开发/截图：?mockComplete=1 强制展示一次性完成态（生产构建会摇掉）
   const forceComplete = import.meta.env.DEV && typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).has('mockComplete');
-  const showComplete = completed != null || forceComplete;
+  const [completionClosed, setCompletionClosed] = useState(false);
+  const [restartedAfterCompletion, setRestartedAfterCompletion] = useState(false);
+  const [completionAt, setCompletionAt] = useState<string | null>(null);
+  const completionSession = completion?.session ?? null;
+  useEffect(() => {
+    if (forceComplete && !completionAt) {
+      setCompletionAt(new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' }));
+    }
+  }, [forceComplete, completionAt]);
+  useEffect(() => {
+    if (!completionSession) return;
+    setCompletionClosed(readCompletionDone() === completionSession);
+    setCompletionAt(new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' }));
+  }, [completionSession]);
+  // 离开「我的」也算看过：回到页面不再弹这条
+  useEffect(() => () => {
+    if (completionSession && !importFailedNow) markCompletionDone(completionSession);
+  }, [completionSession, importFailedNow]);
+  const dismissCompletion = () => {
+    setCompletionClosed(true);
+    if (completionSession) markCompletionDone(completionSession);
+    clearAutoImportCompletion();
+  };
+  const startFresh = () => {
+    setRestartedAfterCompletion(true);
+    clearAutoImportCompletion();
+  };
+  const showComplete = !restartedAfterCompletion && !completionClosed
+    && ((completion != null && !importFailedNow) || forceComplete);
+  const showImportFailed = !restartedAfterCompletion && !completionClosed
+    && completion != null && importFailedNow;
   const autoStage = flow.stage;
   const completionError = flow.completionError;
   /** 采集归属：这路采集是从附近页还是本页发起的（决定要不要自动停止 / 导入） */
@@ -288,6 +328,7 @@ export function NativeCollectorPanel({
 
   if (compact) {
     const lastFile = visibleFiles[0];
+    const completionSuffix = [completionAt, outcome.message ?? (forceComplete ? '新增 2 个角色' : null)].filter(Boolean).join(' · ');
     const stats = nearby ?? { pets: 0, rare: 0, targets: 0, encounter: null, hit: false, updatedAt: null };
     const timeText = (ms: number | null) => (ms
       ? new Date(ms).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -300,10 +341,14 @@ export function NativeCollectorPanel({
           <h2 className="text-title font-semibold text-ink-strong">采集</h2>
           <div className="flex items-center gap-s1">
             <span
-              className="rounded-chip border border-line px-s2 py-s1 text-meta text-ink-muted"
+              className={showComplete
+                ? 'rounded-chip border border-accent-line bg-accent-soft px-s2 py-s1 text-meta font-medium text-accent-strong'
+                : showImportFailed
+                  ? 'rounded-chip border border-warn-line bg-warn-soft px-s2 py-s1 text-meta font-medium text-warn'
+                  : 'rounded-chip border border-line px-s2 py-s1 text-meta text-ink-muted'}
               data-testid="profile-collect-state"
             >
-              {showComplete ? '已完成' : busy ? '采集中' : '已停止'}
+              {showComplete ? '已导入' : showImportFailed ? '导入失败' : busy ? '采集中' : '已停止'}
             </span>
           <button
             type="button"
@@ -376,21 +421,57 @@ export function NativeCollectorPanel({
 
         {showComplete && !busy ? (
           <div
-            className="space-y-s2 rounded-tile border border-accent-line bg-accent-soft p-s3"
+            role="status"
+            className="flex flex-wrap items-center gap-x-s2 gap-y-s1 rounded-tile border border-accent-line bg-accent-soft px-s3 py-s2"
             data-testid="profile-collect-complete"
           >
-            <div>
-              <p className="text-body font-semibold text-accent-strong">已采集并导入</p>
-              <p className="text-caption text-ink-soft">这次采集的数据已经保存到本机，看板可直接使用。</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => clearAutoImportCompletion()}
-              data-testid="profile-collect-complete-dismiss"
+            <span className="min-w-0 flex-1 whitespace-nowrap text-caption font-semibold text-accent-strong">
+              {'✓ 已采集并导入'}{completionSuffix ? ' · ' + completionSuffix : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => onOpenDashboard?.()}
+              data-testid="profile-collect-complete-dashboard"
+              className="min-h-8 shrink-0 rounded-tile px-s2 text-meta font-medium text-accent-strong transition-colors active:bg-surface-sunken"
             >
-              知道了
-            </Button>
+              看看板
+            </button>
+            <button
+              type="button"
+              aria-label="关闭完成提示"
+              onClick={dismissCompletion}
+              data-testid="profile-collect-complete-dismiss"
+              className="flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded-full text-meta text-ink-muted transition-colors active:bg-surface-sunken"
+            >
+              ×
+            </button>
+          </div>
+        ) : showImportFailed ? (
+          <div
+            role="status"
+            className="flex flex-wrap items-center gap-x-s2 gap-y-s1 rounded-tile border border-warn-line bg-warn-soft px-s3 py-s2"
+            data-testid="profile-collect-import-failed"
+          >
+            <span className="min-w-0 flex-1 text-body font-medium text-warn">
+              {'已停止，但导入失败'}{flow.completionError ? ' · ' + flow.completionError : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => { if (completion?.session) requestAutoImport(completion.session); }}
+              data-testid="profile-collect-retry"
+              className="min-h-8 shrink-0 rounded-tile px-s2 text-meta font-medium text-warn transition-colors active:bg-surface-sunken"
+            >
+              重试
+            </button>
+            <button
+              type="button"
+              aria-label="关闭导入失败提示"
+              onClick={dismissCompletion}
+              data-testid="profile-collect-failed-dismiss"
+              className="flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded-full text-meta text-warn transition-colors active:bg-surface-sunken"
+            >
+              ×
+            </button>
           </div>
         ) : busy ? (
           <div className="space-y-s2" data-testid="profile-collect-busy">
@@ -419,7 +500,7 @@ export function NativeCollectorPanel({
             <button
               type="button"
               disabled={importing || !!error || (desktop && !devices?.ok)}
-              onClick={() => void peek()}
+              onClick={() => { startFresh(); void peek(); }}
               data-testid="profile-collect-peek"
               className="flex min-h-14 flex-col items-start justify-center rounded-card border border-line bg-surface px-s3 py-s2 text-left transition-colors active:bg-surface-sunken disabled:opacity-50"
             >
@@ -429,7 +510,7 @@ export function NativeCollectorPanel({
             <button
               type="button"
               disabled={importing || !!error || (desktop && !devices?.ok)}
-              onClick={() => void action('startCapture')}
+              onClick={() => { startFresh(); void action('startCapture'); }}
               data-testid="profile-collect-import"
               className="flex min-h-14 flex-col items-start justify-center rounded-card bg-accent px-s3 py-s2 text-left text-white transition-colors active:bg-accent-strong disabled:opacity-50"
             >
@@ -637,7 +718,7 @@ export function NativeCollectorPanel({
           <a className="inline-flex min-h-[32px] items-center text-emerald-700 underline" href="https://github.com/sasaki-ishiran/roco-toolbox/blob/codex/android-collector/android-shell/THIRD_PARTY.md" target="_blank" rel="noreferrer">查看来源、许可证与对应源码</a>
         </details>
       </> : null}
-      <ModalSurface open={completed != null} title={popupTitle} onClose={() => clearAutoImportCompletion()} testId="capture-complete" footer={
+      <ModalSurface open={flow.completion != null} title={popupTitle} onClose={() => clearAutoImportCompletion()} testId="capture-complete" footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => clearAutoImportCompletion()}>取消</Button>
         </div>

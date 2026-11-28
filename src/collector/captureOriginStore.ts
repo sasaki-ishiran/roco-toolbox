@@ -54,6 +54,10 @@ export function useCaptureOrigin(): CaptureOriginState {
 }
 
 /** 测试用：清空归属。 */
+export function readCaptureOrigin(): CaptureOriginState {
+  return store.get();
+}
+
 export function resetCaptureOriginForTest(): void {
   store.set({ origin: null, session: null });
 }

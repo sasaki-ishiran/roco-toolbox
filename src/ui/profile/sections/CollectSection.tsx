@@ -32,6 +32,7 @@ export function CollectSection({ ctx }: SectionProps) {
           focus={focus}
           onFocusChange={setCaptureFocus}
           onOpenNearby={ctx.onGoNearby}
+          onOpenDashboard={ctx.onGoDashboard}
         />
       </Card>
     </div>

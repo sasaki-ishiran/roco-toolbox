@@ -3,19 +3,23 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { CollectSection } from './CollectSection';
 import { makeCtx } from '../testContext';
 import { resetCaptureFocusForTest } from '../../../collector/captureFocusStore';
-import { resetCaptureOriginForTest } from '../../../collector/captureOriginStore';
+import { readCaptureOrigin, resetCaptureOriginForTest } from '../../../collector/captureOriginStore';
 
 /**
- * 失败测试钉住 origin（2026-11-28 UX1）：
- * 「开始采集」= 只看，必须是 nearby 归属 + battle 裁剪；
- * 否则这路采集会被当成导入导向，走满自动导进看板。
+ * 失败测试钉住两条 origin（2026-11-28 UX1）：
+ * 「开始采集」= nearby + battle（只看，不能走自动导入）；
+ * 「采集并导入」= profile + 普通 startCapture（入库）。
  */
-const startCollectorCapture = vi.fn(async (_mode?: 'battle' | 'full') => {});
+const native = vi.hoisted(() => ({
+  start: vi.fn(async (_mode?: 'battle' | 'full') => {}),
+  action: vi.fn(async (_name: string, _id?: string) => {}),
+}));
 vi.mock('../../../collector/nativeCollector', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../collector/nativeCollector')>();
   return {
     ...actual,
-    startCollectorCapture: (mode?: 'battle' | 'full') => startCollectorCapture(mode),
+    startCollectorCapture: (mode?: 'battle' | 'full') => native.start(mode),
+    collectorAction: (name: string) => native.action(name),
   };
 });
 
@@ -30,9 +34,11 @@ const bridgeState = JSON.stringify({
 });
 
 beforeEach(() => {
+  window.localStorage.clear();
   resetCaptureFocusForTest();
   resetCaptureOriginForTest();
-  startCollectorCapture.mockClear();
+  native.start.mockClear();
+  native.action.mockClear();
   (window as unknown as { RocoCapture?: unknown }).RocoCapture = {
     getState: async () => bridgeState,
     startCapture: async () => '',
@@ -46,23 +52,32 @@ afterEach(() => {
 });
 
 describe('采集卡的 origin 语义', () => {
-  test('「开始采集」走 nearby + battle，不按导入导向启动', async () => {
+  test('「开始采集」走 nearby + battle，不调用 collectorAction', async () => {
     render(<CollectSection ctx={makeCtx()} />);
 
     const peek = await screen.findByTestId('profile-collect-peek');
+    await waitFor(() => expect(screen.getByTestId('profile-collect-state')).toHaveTextContent('已停止'));
     expect(peek).toHaveTextContent('开始采集');
+    expect(peek).toHaveTextContent('只看附近，不导入');
     fireEvent.click(peek);
 
-    await waitFor(() => expect(startCollectorCapture).toHaveBeenCalledWith('battle'));
-    expect(screen.getByTestId('profile-collect-import')).toHaveTextContent('采集并导入');
+    await waitFor(() => expect(native.start).toHaveBeenCalledWith('battle'));
+    expect(native.action).not.toHaveBeenCalled();
+    expect(readCaptureOrigin().origin).toBe('nearby');
   });
 
-  test('两个按钮标签只有四个字，第二行说明在 ? 里', async () => {
+  test('「采集并导入」走 collectorAction + profile origin', async () => {
     render(<CollectSection ctx={makeCtx()} />);
 
-    expect(await screen.findByTestId('profile-collect-peek')).toHaveTextContent('开始采集');
-    expect(screen.getByTestId('profile-collect-import')).toHaveTextContent('采集并导入');
-    fireEvent.click(screen.getByTestId('native-collector-help'));
-    expect(screen.getByTestId('native-collector-actions-help')).toHaveTextContent('不自动停止、不自动导入');
+    const download = await screen.findByTestId('profile-collect-import');
+    // 等采集状态读完（action 需要 state），再点
+    await waitFor(() => expect(screen.getByTestId('profile-collect-state')).toHaveTextContent('已停止'));
+    expect(download).toHaveTextContent('采集并导入');
+    expect(download).toHaveTextContent('走满自动停止并导入');
+    fireEvent.click(download);
+
+    await waitFor(() => expect(native.action).toHaveBeenCalledWith('startCapture'));
+    expect(native.start).not.toHaveBeenCalled();
+    expect(readCaptureOrigin().origin).toBe('profile');
   });
 });
