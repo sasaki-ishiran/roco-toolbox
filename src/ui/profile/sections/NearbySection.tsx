@@ -28,7 +28,7 @@ export function NearbySection({ ctx }: SectionProps) {
 
   const start = () => {
     markCaptureOrigin('nearby');
-    void startCollectorCapture('full').catch(() => {
+    void startCollectorCapture('battle').catch(() => {
       // 起不来时交给「附近」详情的错误态；卡片不吞掉入口
       ctx.onGoNearby();
     });
