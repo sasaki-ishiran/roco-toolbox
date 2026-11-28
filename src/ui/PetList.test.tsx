@@ -7,6 +7,22 @@ import { PetList } from './PetList';
 // 这里把等待上限抬到 3s —— 只放宽等待，不放宽任何断言（2026-11-28）。
 configure({ asyncUtilTimeout: 3000 });
 
+// 分批追加拿的是 requestIdleCallback（没有就退回 setTimeout(0)）：全量并行时两者都可能被
+// 拖到几百毫秒，500 只 × 20 一批就会把 waitFor 顶掉。测试里让 rIC **同步**执行，
+// 追加变成确定性的，测的还是「触底会不会继续加载」这件事本身（2026-11-28）。
+beforeEach(() => {
+  vi.stubGlobal('requestIdleCallback', (cb: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void) => {
+    cb({ didTimeout: false, timeRemaining: () => 50 });
+    return 1;
+  });
+  vi.stubGlobal('cancelIdleCallback', () => {});
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+
 const pets: OwnedPet[] = Array.from({ length: 21 }, (_, index): OwnedPet => ({
   gameId: index + 1,
   name: `精灵${index + 1}`,
