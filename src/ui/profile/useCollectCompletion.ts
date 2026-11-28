@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clearAutoImportCompletion, requestAutoImport, useAutoImport } from '../../collector/autoImportFlow';
-import { unmarkAutoStopped } from '../../collector/captureSessionStore';
+import { unmarkAutoImported, unmarkAutoStopped } from '../../collector/captureSessionStore';
 import { useCaptureOrigin } from '../../collector/captureOriginStore';
 import { useImportOutcome } from '../importOutcomeStore';
 
@@ -132,6 +132,7 @@ export function useCollectCompletion(): CollectCompletion {
       // 2026-11-28 修：autoImportFlow 在「等文件/导入失败」两条分支里不会清 autoStopped，
       // 不清就会让 requestAutoImport 直接返回 false —— 重试按钮点了没反应。
       unmarkAutoStopped(session);
+      unmarkAutoImported(session);
       requestAutoImport(session);
     },
     consume,

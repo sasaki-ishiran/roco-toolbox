@@ -18,6 +18,10 @@ export const unmarkAutoStopped = (session: string): void => {
 };
 
 export const hasAutoImported = (session: string): boolean => autoImported.has(session);
+/** 2026-11-28：失败后「重试」要能把「已尝试自动导入」的标记清掉，否则 run() 会直接 return。 */
+export const unmarkAutoImported = (session: string): void => {
+  autoImported.delete(session);
+};
 export const markAutoImported = (session: string): void => {
   autoImported.add(session);
 };
